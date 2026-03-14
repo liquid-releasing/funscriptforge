@@ -98,6 +98,27 @@ If you see this, you are done.
 
 ---
 
+## Try it immediately — no funscript needed
+
+FunscriptForge ships with two example funscripts based on Big Buck Bunny (9:56), a free
+open-source film by the Blender Foundation. They appear in the sidebar dropdown marked
+with 📋 — no path to paste, no file to find.
+
+| File | What it shows |
+| --- | --- |
+| 📋 `big_buck_bunny.raw.funscript` | A deliberately broken script — all 8 behavioral problems present across 16 phrases. |
+| 📋 `big_buck_bunny.forged.funscript` | The same script after forging — each issue corrected. |
+
+Select either one from the sidebar to load it instantly and see the full app in action.
+
+!!! tip "Want the video too?"
+    Download Big Buck Bunny from the
+    [Blender Foundation](https://download.blender.org/demo/movies/BBB/) or
+    [Internet Archive](https://archive.org/details/BigBuckBunny_124) and place it
+    in the `demo/` folder next to the funscripts. The media player detects it automatically.
+
+---
+
 ## Keeping it running
 
 FunscriptForge runs in the background as long as the launcher window is open. Close the terminal or launcher to shut it down.
