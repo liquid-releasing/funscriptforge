@@ -1,5 +1,7 @@
 # FunscriptForge
 
+![FunscriptForge](assets/funscriptforge-logo-wide.png)
+
 **The professional post-processor for haptic script creators.**
 
 FunscriptForge takes a raw `.funscript` file and turns it into something that actually feels good. It analyzes the motion structure, identifies what's wrong, and gives you the tools to fix it — phrase by phrase, with a live before-and-after preview at every step.
