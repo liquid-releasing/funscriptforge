@@ -1,0 +1,94 @@
+site_name: FunscriptForge
+site_description: The professional post-processor for haptic script creators.
+site_url: https://help.funscriptforge.com
+repo_url: https://github.com/liquid-releasing/funscriptforge
+repo_name: liquid-releasing/funscriptforge
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: deep purple
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: deep purple
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Overview: overview.md
+  - Getting Started:
+    - Install: getting-started/install.md
+    - Forge Your First Funscript: getting-started/forge-your-first-funscript.md
+  - Concepts: concepts.md
+  - Guide:
+    - Phrase Editor: guide/phrase-editor.md
+    - Pattern Editor: guide/pattern-editor.md
+    - Export: guide/export.md
+    - Media Player: guide/media-player.md
+    - Transforms: guide/transforms.md
+  - Reference:
+    - CLI: reference/cli.md
+    - Behavioral Tags: reference/behavioral-tags.md
+    - Device Safety: reference/device-safety.md
+    - Definitions: reference/definitions.md
+  - Troubleshooting:
+    - Overview: troubleshooting/index.md
+    - Installation: troubleshooting/install.md
+    - Loading a Script: troubleshooting/loading-a-script.md
+    - Export: troubleshooting/export.md
+    - Media Player: troubleshooting/media-player.md
+    - Transforms: troubleshooting/transforms.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/liquid-releasing/funscriptforge
+  generator: false
+
+copyright: "&copy; 2026 Liquid Releasing. Licensed under the MIT License."
