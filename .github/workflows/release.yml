@@ -10,10 +10,43 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Test gate — runs first; all platform builds depend on this passing
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r ui/streamlit/requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Run unit tests
+        run: python -m unittest discover -s ui/common/tests -v
+
+      - name: Run integration tests
+        run: python cli.py test
+
+  # ---------------------------------------------------------------------------
   # Windows build
   # ---------------------------------------------------------------------------
   build-windows:
     name: Build — Windows
+    needs: [test]
     runs-on: windows-latest
 
     steps:
@@ -30,9 +63,6 @@ jobs:
           python -m pip install --upgrade pip pyinstaller
           pip install -r requirements.txt
           pip install -r ui/streamlit/requirements.txt
-
-      - name: Run tests
-        run: python cli.py test
 
       - name: Build with PyInstaller
         run: pyinstaller funscript_forge.spec --noconfirm
@@ -69,6 +99,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-macos:
     name: Build — macOS
+    needs: [test]
     runs-on: macos-latest
 
     steps:
@@ -85,9 +116,6 @@ jobs:
           python -m pip install --upgrade pip pyinstaller
           pip install -r requirements.txt
           pip install -r ui/streamlit/requirements.txt
-
-      - name: Run tests
-        run: python cli.py test
 
       - name: Generate .icns icon
         run: |
@@ -132,6 +160,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-linux:
     name: Build — Linux
+    needs: [test]
     runs-on: ubuntu-latest
 
     steps:
@@ -148,9 +177,6 @@ jobs:
           python -m pip install --upgrade pip pyinstaller
           pip install -r requirements.txt
           pip install -r ui/streamlit/requirements.txt
-
-      - name: Run tests
-        run: python cli.py test
 
       - name: Build with PyInstaller
         run: pyinstaller funscript_forge.spec --noconfirm
