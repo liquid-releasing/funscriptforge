@@ -44,15 +44,25 @@ jobs:
             exit 1
           }
 
-      - name: Zip artifact
+      - name: Extract version
+        id: version
         run: |
-          Compress-Archive -Path dist\FunscriptForge -DestinationPath dist\FunscriptForge-windows.zip
+          $v = (python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "VERSION=$v" >> $env:GITHUB_OUTPUT
 
-      - name: Upload Windows artifact
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+
+      - name: Build NSIS installer
+        run: |
+          $v = "${{ steps.version.outputs.VERSION }}"
+          makensis /DVERSION=$v installer\funscriptforge.nsi
+
+      - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
           name: FunscriptForge-windows
-          path: dist/FunscriptForge-windows.zip
+          path: installer/FunscriptForge-v${{ steps.version.outputs.VERSION }}-win.exe
 
   # ---------------------------------------------------------------------------
   # macOS build
@@ -171,6 +181,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])" \
+            | xargs -I{} echo "VERSION={}" >> $GITHUB_OUTPUT
+
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
@@ -195,7 +214,7 @@ jobs:
           repository: liquid-releasing/funscriptforge-releases
           token: ${{ secrets.RELEASES_PAT }}
           files: |
-            artifacts/FunscriptForge-windows.zip
+            artifacts/FunscriptForge-v${{ steps.version.outputs.VERSION }}-win.exe
             artifacts/FunscriptForge-macos.zip
             artifacts/FunscriptForge-linux.tar.gz
           generate_release_notes: true

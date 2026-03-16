@@ -1,0 +1,36 @@
+site_name: FunscriptForge
+site_description: Funscript assessment, transformation, and customization
+site_url: https://liquid-releasing.github.io/funscriptforge
+repo_url: https://github.com/liquid-releasing/funscriptforge
+repo_name: liquid-releasing/funscriptforge
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: deep orange
+      accent: orange
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.code.copy
+
+nav:
+  - Home: docs/guide/00-overview/index.md
+  - Concepts: docs/guide/00-overview/concepts.md
+  - Getting Started:
+    - Install: docs/guide/01-getting-started/install.md
+    - Your First Funscript: docs/guide/01-getting-started/your-first-funscript.md
+  - Troubleshooting: docs/guide/troubleshooting
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
