@@ -102,7 +102,7 @@ def _commit_project_to_disk(project: dict | None) -> None:
         elif video_path and Path(video_path).exists():
             source = video_path
         if source:
-            status.update(label="Analyzing beats…")
+            status.update(label=f"Analyzing beats… ({Path(source).name})")
             result, err = _analyze_beats(source, folder)
             if result:
                 beats = len(result.get("beats", []))
@@ -124,12 +124,15 @@ def _commit_project_to_disk(project: dict | None) -> None:
 
             motion = analyze_motion(video_path, folder, progress_callback=_motion_progress)
             if motion:
-                status.write("✅ Motion heatmap generated")
+                n_samples = len(motion.get("scores", []))
+                status.write(f"✅ Motion heatmap: {n_samples:,} samples from {Path(video_path).name}")
 
     # Run funscript assessment (phrase detection, patterns, BPM)
     funscript_path = st.session_state.get("funscript_path", "")
     if funscript_path and Path(funscript_path).exists():
-        status.update(label="Analyzing funscript…")
+        fs_data = load_funscript(funscript_path)
+        action_count = len(fs_data.get("actions", [])) if fs_data else 0
+        status.update(label=f"Analyzing funscript… {action_count:,} actions")
         from ui.common.project import Project
         from assessment.analyzer import AnalyzerConfig
         min_phrase_s = st.session_state.get("min_phrase_s", 20)
