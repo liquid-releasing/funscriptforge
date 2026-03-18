@@ -263,3 +263,13 @@ docs/marketing-plan-internal.md
 docs/cost-estimates.md
 docs/vision-agentic.md
 docs/deployment-architecture.md
+
+# Media files - never commit
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.webm
+*.mp3
+*.wav
+*.m4v
