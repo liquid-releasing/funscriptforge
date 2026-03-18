@@ -10,3 +10,9 @@ import streamlit as st
 
 def render():
     st.info("Tone tab — coming next commit.")
+
+    st.divider()
+    st.caption(
+        "For advanced estim channel settings, see "
+        "[Funscript-Tools](https://github.com/edger477/funscript-tools)."
+    )
