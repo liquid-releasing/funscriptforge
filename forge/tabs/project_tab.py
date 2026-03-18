@@ -286,19 +286,16 @@ def _video_section(project: dict):
         label_visibility="collapsed",
     )
     if uploaded:
-        current = st.session_state.get("video_path", "")
-        if Path(current).name != uploaded.name:
-            tmp = Path(tempfile.mkdtemp()) / uploaded.name
-            tmp.write_bytes(uploaded.read())
-            st.session_state["video_path"] = str(tmp)
-            # Also persist into project if output folder is ready
-            if project and project.get("output_folder"):
-                dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
-                import shutil
-                shutil.copy2(str(tmp), str(dest))
-                add_input_file(project, "video", str(dest))
-                save_forge(project)
-            st.rerun()
+        tmp = Path(tempfile.mkdtemp()) / uploaded.name
+        tmp.write_bytes(uploaded.read())
+        st.session_state["video_path"] = str(tmp)
+        if project and project.get("output_folder"):
+            dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
+            import shutil
+            shutil.copy2(str(tmp), str(dest))
+            add_input_file(project, "video", str(dest))
+            save_forge(project)
+        st.rerun()
 
     # Show stats from project path (persistent) or session state (just uploaded)
     video_path = existing or st.session_state.get("video_path", "")
