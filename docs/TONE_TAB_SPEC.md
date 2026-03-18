@@ -239,6 +239,7 @@ One vocabulary. All systems speak it.
 | **Beat weight envelopes** | Each tone defines an envelope shape for beat influence per phrase |
 | **Caption emotion (V2)** | Detected speech emotion maps to a tone → overrides locally |
 | **Export** | Tone label drives haptic output shaping for each device profile |
+| **eTransforms catalog (estim)** | Internal recipe table: Tone → restim channel parameters. Not user-facing. |
 | **Spatial haptics (backlog)** | Same intent record drives body-zone distribution — see below |
 
 ### Tone as spatial haptic intent
@@ -265,6 +266,38 @@ through the body.
 
 This is the same architectural pattern as the device profile expansion — one set of
 decisions, one more output surface.
+
+---
+
+## eTransforms — from UI to catalog
+
+eTransforms was the original estim channel generation system, with its own
+character vocabulary (Gentle, Reactive, etc.) and its own UI. That UI is no
+longer needed.
+
+**Tone replaces eTransforms as the user-facing vocabulary.**
+
+eTransforms survives as the **estim device profile recipe catalog** — an internal
+translation table that maps each Tone label to restim channel parameters
+(alpha, beta, pulse_frequency, pulse_width, pulse_rise, E1–E4, prostate).
+
+```
+User picks: Tease
+    │
+    └── Export: estim profile
+            └── eTransforms catalog lookup: Tease → {
+                    alpha: oscillating envelope,
+                    pulse_frequency: mid-range with retreat,
+                    ...
+                }
+```
+
+The user sees Tone. The export layer uses the eTransforms catalog to produce
+the estim-specific output. The catalog is implementation — not product.
+
+This resolves the prior vocabulary conflict between eTransforms characters and
+Tone labels. They no longer need to align: eTransforms characters become named
+recipes inside the catalog, and Tone is the key used to look them up.
 
 ---
 
