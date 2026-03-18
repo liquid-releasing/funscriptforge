@@ -129,12 +129,12 @@ def render():
     st.caption("Choose which devices to export for. All selected targets are generated automatically at export.")
 
     _TARGETS = [
-        ("estim_foc",    "Estim — Focus",   "Single-channel estim. Classic waveform."),
+        ("estim_foc",    "Estim — FOC",     "Hobbyist single-channel estim, hand-built. Classic waveform."),
         ("estim_stereo", "Estim — Stereo",  "Dual-channel estim. Left/right separation."),
         ("handy",        "The Handy",       "Linear stroker. Industry standard."),
         ("osr2",         "OSR2",            "Multi-axis stroker. Twist + stroke."),
     ]
-    saved_targets = project.get("output_targets", ["estim_foc", "handy"])
+    saved_targets = project.get("output_targets", ["estim_stereo", "handy"])
     selected = []
     cols = st.columns(len(_TARGETS))
     for col, (key, label, desc) in zip(cols, _TARGETS):
