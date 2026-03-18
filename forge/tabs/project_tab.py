@@ -203,7 +203,12 @@ def render():
 
     # ── 7. Navigation ────────────────────────────────────────────────────────
     has_funscript = bool(project and get_input_file(project, "funscript"))
-    col_continue, col_new = st.columns([2, 1])
+    col_new, col_continue = st.columns([1, 2])
+    with col_new:
+        if st.button("New Project", use_container_width=True, disabled=not project):
+            save_forge(project)
+            st.session_state.forge_project = None
+            st.rerun()
     with col_continue:
         if st.button(
             "Continue →",
@@ -213,11 +218,6 @@ def render():
             help=None if has_funscript else "Add a funscript to continue.",
         ):
             _go_next(project)
-    with col_new:
-        if st.button("New Project", use_container_width=True, disabled=not project):
-            save_forge(project)
-            st.session_state.forge_project = None
-            st.rerun()
 
 
 # ── Funscript ────────────────────────────────────────────────────────────────
