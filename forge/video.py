@@ -1,7 +1,8 @@
 """
-Video metadata extraction via pymediainfo.
+Video metadata extraction (pymediainfo) and motion analysis (OpenCV).
 """
 
+import json
 from pathlib import Path
 
 
@@ -72,3 +73,66 @@ def _fmt_size(size_bytes: int) -> str:
             return f"{size_bytes:.1f} {unit}"
         size_bytes /= 1024
     return f"{size_bytes:.1f} TB"
+
+
+def analyze_motion(video_path: str, output_folder: str, sample_fps: float = 1.0) -> dict | None:
+    """Frame-difference motion analysis. Returns dict with times/scores, cached to disk.
+
+    Samples the video at *sample_fps* frames per second, computes the mean absolute
+    pixel difference between consecutive frames, normalises to 0–100, and writes the
+    result to ``_video_motion.json`` inside *output_folder*.
+
+    Returns None if OpenCV is not available or the video cannot be read.
+    """
+    try:
+        import cv2  # type: ignore
+    except ImportError:
+        return None
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return None
+
+    video_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    frame_interval = max(1, int(video_fps / sample_fps))
+
+    times: list[float] = []
+    raw_scores: list[float] = []
+    prev_gray = None
+    frame_idx = 0
+
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        if frame_idx % frame_interval == 0:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            if prev_gray is not None:
+                diff = cv2.absdiff(gray, prev_gray)
+                score = float(diff.mean())
+                times.append(frame_idx / video_fps)
+                raw_scores.append(score)
+            prev_gray = gray
+        frame_idx += 1
+
+    cap.release()
+
+    if not raw_scores:
+        return None
+
+    max_score = max(raw_scores) or 1.0
+    scores = [round(s / max_score * 100, 1) for s in raw_scores]
+
+    result = {
+        "source_path": video_path,
+        "times": times,
+        "scores": scores,
+    }
+
+    cache_path = Path(output_folder) / "_video_motion.json"
+    try:
+        cache_path.write_text(json.dumps(result))
+    except Exception:
+        pass
+
+    return result
