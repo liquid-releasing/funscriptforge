@@ -424,6 +424,12 @@ executed safely.
 Tone recipe output  →  [device safety pass]  →  output file
 ```
 
+We know the capability of every supported device. No matter what choices the user
+made — aggressive Tone, high beat influence, stacked phrase intensities — the
+safety pass ensures the output is within safe bounds. We always do the right thing.
+This guarantee does not depend on the player (restim, Handy app, etc.) applying
+its own limits. We own the safety contract at export time.
+
 Each device has its own constraints:
 
 | Device | Safety constraints |
