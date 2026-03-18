@@ -312,6 +312,26 @@ expressive — it shapes intent. These are separate concerns and do not compose.
 
 ---
 
+## Safety through intent
+
+Safety is not a check added at export. It is built into the architecture.
+
+The system stores **intent** (what the user decided), not **results** (a processed
+signal). Export applies intent once, from a clean source, every time. There is no
+state that can accumulate damage.
+
+- The user sets a Tone globally and optionally per phrase. Those decisions live in
+  `.forge` as data — never as a mutated funscript.
+- Export reads clean source + stored intent → writes output. Same inputs, same output,
+  every run.
+- There is no way to accidentally apply a Tone twice, because the system never stores
+  "this Tone was applied to this funscript." It stores "this is the Tone for this phrase."
+
+By the time the user ships, safety is already in place — not through guards or
+warnings, but because the model never allowed unsafe state to exist.
+
+---
+
 ## Source integrity — the single most important architectural constraint
 
 **The Stage 2 cleaned funscript is the permanent canonical source.
