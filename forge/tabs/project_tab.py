@@ -200,18 +200,6 @@ def _funscript_section():
         st.session_state["funscript_path"] = typed
         st.rerun()
 
-    uploaded = st.file_uploader(
-        "or drag and drop",
-        type=["funscript"],
-        key="funscript_upload",
-        label_visibility="collapsed",
-    )
-    if uploaded:
-        import tempfile
-        tmp = Path(tempfile.mkdtemp()) / uploaded.name
-        tmp.write_bytes(uploaded.read())
-        st.session_state["funscript_path"] = str(tmp)
-        st.rerun()
 
     # Preview
     funscript_path = st.session_state.get("funscript_path", "")
@@ -289,6 +277,19 @@ def _video_section(project: dict):
 
     if video_path and video_path != existing and project.get("output_folder"):
         add_input_file(project, "video", video_path)
+        save_forge(project)
+        st.rerun()
+
+    uploaded_video = st.file_uploader(
+        "or drag and drop",
+        type=["mp4", "mov", "avi", "mkv"],
+        key="video_upload",
+        label_visibility="collapsed",
+    )
+    if uploaded_video and project.get("output_folder"):
+        dest = Path(project["output_folder"]) / f"_input_{uploaded_video.name}"
+        dest.write_bytes(uploaded_video.read())
+        add_input_file(project, "video", str(dest))
         save_forge(project)
         st.rerun()
 
