@@ -113,6 +113,10 @@ def render():
     selected = st.session_state.get("tone_global", None)
     suggested = _suggest_tone()
 
+    # ── Suggestion bubble row (above cards) ─────────────────────────────
+    if suggested and not selected:
+        _render_suggestion_bubble(suggested)
+
     # ── Six cards across ──────────────────────────────────────────────────
     cols = st.columns(6, gap="small")
     for i, tone in enumerate(_TONES):
@@ -218,6 +222,50 @@ def _render_card(tone: dict, selected: str | None, suggested: str | None = None)
         if st.button("Select", key=f"sel_{name}", width="stretch"):
             st.session_state["tone_global"] = name
             st.rerun()
+
+
+# ── Suggestion bubble ─────────────────────────────────────────────────────
+
+
+def _suggestion_reason(tone_name: str) -> str:
+    """Return a short reason why this tone was suggested."""
+    reasons = {
+        "Tender": "Your funscript is slow with a small stroke range — already gentle.",
+        "Build": "Your funscript has rising intensity — a natural arc to enhance.",
+        "Tease": "Your funscript has varied intensity — peaks and valleys to play with.",
+        "Edge": "Your funscript holds high intensity — a sustained plateau to shape.",
+        "Climax": "Your funscript runs hot — full range, fast pacing throughout.",
+        "Dominant": "Your funscript is fast and wide — assertive energy to channel.",
+    }
+    return reasons.get(tone_name, "Based on your funscript's motion profile.")
+
+
+def _render_suggestion_bubble(suggested: str):
+    """Render a speech bubble above the suggested card's column."""
+    tone_names = [t["name"] for t in _TONES]
+    suggested_idx = tone_names.index(suggested) if suggested in tone_names else -1
+    if suggested_idx < 0:
+        return
+
+    tone_data = _TONES[suggested_idx]
+    color = tone_data["color"]
+    reason = _suggestion_reason(suggested)
+
+    # Use 6 columns matching the card layout — bubble goes in the suggested column
+    bubble_cols = st.columns(6, gap="small")
+    with bubble_cols[suggested_idx]:
+        st.markdown(
+            f"<div style='background:{color}22;border:1px solid {color};"
+            f"border-radius:8px;padding:6px 8px;text-align:center;"
+            f"font-size:0.72em;color:#eee;line-height:1.3;margin-bottom:4px;'>"
+            f"★ <strong>Suggested</strong><br>"
+            f"<span style='color:#bbb;font-size:0.9em'>{reason}</span>"
+            f"</div>"
+            f"<div style='width:0;height:0;margin:0 auto;"
+            f"border-left:8px solid transparent;border-right:8px solid transparent;"
+            f"border-top:8px solid {color};'></div>",
+            unsafe_allow_html=True,
+        )
 
 
 # ── Suggestion engine ─────────────────────────────────────────────────────
