@@ -3,3 +3,4 @@ pandas>=2.0
 matplotlib>=3.7
 plotly>=5.18
 pymediainfo>=7.0
+opencv-python-headless>=4.8

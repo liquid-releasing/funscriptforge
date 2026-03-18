@@ -2,7 +2,7 @@
 Tab 1 — Project
 
 Landing page. Output folder = the project.
-Required: project name, output folder, funscript.
+Required: export location + funscript.
 Everything else optional.
 """
 
@@ -21,7 +21,16 @@ from forge.project import (
     save_forge,
 )
 from forge.funscript import funscript_stats, load_funscript, parse_actions
-from forge.video import video_stats
+from forge.video import analyze_motion, video_stats
+
+_APP_ROOT = Path(__file__).parents[2]
+_ASSETS_OUTPUT = _APP_ROOT / "assets" / "output"
+
+
+def _default_output_for(funscript_path: str) -> Path:
+    """Return default output folder derived from funscript filename."""
+    stem = Path(funscript_path).name.split(".")[0]
+    return _ASSETS_OUTPUT / stem
 
 
 def _browse_for_folder() -> str | None:
@@ -39,16 +48,6 @@ def _browse_for_folder() -> str | None:
         return None
 
 
-_APP_ROOT = Path(__file__).parents[2]
-_ASSETS_OUTPUT = _APP_ROOT / "assets" / "output"
-
-
-def _default_output_for(funscript_path: str) -> Path:
-    """Return default output folder derived from funscript filename."""
-    stem = Path(funscript_path).name.split(".")[0]  # big_buck_bunny
-    return _ASSETS_OUTPUT / stem
-
-
 def render():
     # ── session state init ──────────────────────────────────────────────────
     if "forge_project" not in st.session_state:
@@ -56,155 +55,163 @@ def render():
 
     project = st.session_state.forge_project
 
-    if not project and not st.session_state.get("funscript_path"):
-        st.info("Drop a funscript to get started. Output folder will be set automatically.")
+    # ── Two-panel layout ─────────────────────────────────────────────────────
+    left, right = st.columns([1, 2])
 
-    # ── Funscript (required) — inspect only, no saving yet ───────────────────
-    st.subheader("Funscript")
-    _funscript_section()
+    # ════════════════════════════════════════════════════════════════════════
+    # LEFT PANEL — project config (persistent)
+    # ════════════════════════════════════════════════════════════════════════
+    with left:
+        # ── Export location ──────────────────────────────────────────────────
+        st.subheader("Export location")
+        st.caption("All output goes here. Input files are never touched.")
 
-    # Auto-create project from funscript if not yet created
-    funscript_path = st.session_state.get("funscript_path", "")
-    if funscript_path and not project:
-        output_folder = str(_default_output_for(funscript_path))
-        _ASSETS_OUTPUT.mkdir(parents=True, exist_ok=True)
-        existing = load_forge(output_folder)
-        if existing:
-            st.session_state.forge_project = existing
-        else:
-            stem = Path(funscript_path).name.split(".")[0]
-            proj = default_forge(stem, output_folder)
-            Path(output_folder).mkdir(parents=True, exist_ok=True)
-            save_forge(proj)
-            st.session_state.forge_project = proj
-        project = st.session_state.forge_project
-
-    # ── Optional media ───────────────────────────────────────────────────────
-    st.markdown("""<style>
-    div[data-testid="stExpander"] summary p { font-size: 1.25rem; font-weight: 600; }
-    </style>""", unsafe_allow_html=True)
-    with st.expander("Media *(optional)*"):
-        _video_section(project if project else {})
-
-    # ── Output folder (required, last) ───────────────────────────────────────
-    st.subheader("Output folder")
-    st.caption("All output goes here. Input files are never touched.")
-
-    funscript_path = st.session_state.get("funscript_path", "")
-    auto_output = str(_default_output_for(funscript_path)) if funscript_path else ""
-    col_path, col_browse = st.columns([5, 1])
-    with col_path:
+        funscript_path = st.session_state.get("funscript_path", "")
+        auto_output = str(_default_output_for(funscript_path)) if funscript_path else ""
         output_folder = st.text_input(
-            "Output folder path",
+            "Export location path",
             value=project["output_folder"] if project else auto_output,
             placeholder="assets/output/my-project/",
             label_visibility="collapsed",
             key="output_folder_input",
         )
-    with col_browse:
-        if st.button("Browse…", use_container_width=True):
+        if st.button("Browse…", key="output_folder_browse", use_container_width=True):
             picked = _browse_for_folder()
             if picked:
                 st.session_state["output_folder_input"] = picked
                 output_folder = picked
 
-    if output_folder and output_folder != (project or {}).get("output_folder", ""):
-        existing = load_forge(output_folder)
-        if existing:
-            st.session_state.forge_project = existing
-            st.success(f"Resumed project: **{existing['name']}**")
-        else:
-            folder = Path(output_folder)
-            proj_name = folder.name
-            st.session_state.forge_project = default_forge(proj_name, output_folder)
-            save_forge(st.session_state.forge_project)
-            st.success(f"Created project: **{proj_name}**")
-        st.rerun()
+        if output_folder and output_folder != (project or {}).get("output_folder", ""):
+            existing = load_forge(output_folder)
+            if existing:
+                st.session_state.forge_project = existing
+                st.success(f"Resumed: **{existing['name']}**")
+            else:
+                stem = Path(output_folder).name
+                st.session_state.forge_project = default_forge(stem, output_folder)
+                save_forge(st.session_state.forge_project)
+                st.success(f"Created: **{stem}**")
+            st.rerun()
 
-    project = st.session_state.forge_project
-    if not project:
-        return
+        project = st.session_state.forge_project
 
-    # ── Output targets ───────────────────────────────────────────────────────
-    st.subheader("Output targets")
-    st.caption("Choose which devices to export for. All selected targets are generated automatically at export.")
+        # Reconcile funscript into project once export location exists
+        if project:
+            funscript_path = st.session_state.get("funscript_path", "")
+            if funscript_path and funscript_path != get_input_file(project, "funscript"):
+                add_input_file(project, "funscript", funscript_path)
+                save_forge(project)
 
-    _TARGETS = [
-        ("estim_foc",    "Estim — FOC",     "Hobbyist single-channel estim, hand-built. Classic waveform."),
-        ("estim_stereo", "Estim — Stereo",  "Dual-channel estim. Left/right separation."),
-        ("handy",        "The Handy",       "Linear stroker. Industry standard."),
-        ("osr2",         "OSR2",            "Multi-axis stroker. Twist + stroke."),
-    ]
-    saved_targets = project.get("output_targets", ["estim_stereo", "handy"])
-    selected = []
-    cols = st.columns(len(_TARGETS))
-    for col, (key, label, desc) in zip(cols, _TARGETS):
-        with col:
-            checked = col.checkbox(label, value=key in saved_targets, help=desc, key=f"target_{key}")
+        st.divider()
+
+        # ── Output targets ───────────────────────────────────────────────────
+        st.subheader("Output targets")
+        st.caption("All checked targets are generated automatically at export.")
+
+        _TARGETS = [
+            ("estim_foc",    "Estim — FOC",    "Single-channel estim. Classic waveform."),
+            ("estim_stereo", "Estim — Stereo", "Dual-channel estim. Left/right separation."),
+            ("handy",        "The Handy",      "Linear stroker. Industry standard."),
+            ("osr2",         "OSR2",           "Multi-axis stroker. Twist + stroke."),
+        ]
+        saved_targets = (project or {}).get("output_targets", ["estim_foc", "handy"])
+        selected = []
+        for key, label, desc in _TARGETS:
+            checked = st.checkbox(
+                label, value=key in saved_targets,
+                help=desc, key=f"target_{key}",
+                disabled=not project,
+            )
             if checked:
                 selected.append(key)
 
-    if selected != saved_targets:
-        project["output_targets"] = selected
-        save_forge(project)
-
-    # ── Project metadata ────────────────────────────────────────────────────
-    st.divider()
-    with st.expander("Author & credits (optional)"):
-        author = st.text_input("Author", value=project.get("author", ""))
-        website = st.text_input("Website / Patreon URL", value=project.get("website", ""))
-        contributors_raw = st.text_input(
-            "Contributors (comma-separated)",
-            value=", ".join(project.get("contributors", [])),
-        )
-        contributors = [c.strip() for c in contributors_raw.split(",") if c.strip()]
-
-        if (author != project.get("author") or
-                website != project.get("website") or
-                contributors != project.get("contributors")):
-            project["author"] = author
-            project["website"] = website
-            project["contributors"] = contributors
+        if project and selected != saved_targets:
+            project["output_targets"] = selected
             save_forge(project)
 
-    # ── Summary ─────────────────────────────────────────────────────────────
-    st.divider()
-    _summary(project)
+        st.divider()
 
-    # ── Navigation ──────────────────────────────────────────────────────────
-    st.divider()
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        if st.button("→ Next Step", type="primary", use_container_width=True):
+        # ── Author & credits ─────────────────────────────────────────────────
+        with st.expander("Author & credits (optional)"):
+            author = st.text_input("Author", value=(project or {}).get("author", ""), disabled=not project)
+            website = st.text_input("Website / Patreon URL", value=(project or {}).get("website", ""), disabled=not project)
+            contributors_raw = st.text_input(
+                "Contributors (comma-separated)",
+                value=", ".join((project or {}).get("contributors", [])),
+                disabled=not project,
+            )
+            if project:
+                contributors = [c.strip() for c in contributors_raw.split(",") if c.strip()]
+                if (author != project.get("author") or
+                        website != project.get("website") or
+                        contributors != project.get("contributors")):
+                    project["author"] = author
+                    project["website"] = website
+                    project["contributors"] = contributors
+                    save_forge(project)
+
+        st.divider()
+
+        # ── Summary ──────────────────────────────────────────────────────────
+        st.subheader("Summary")
+        _summary(project)
+
+        st.divider()
+
+        # ── Navigation ───────────────────────────────────────────────────────
+        has_funscript = bool(project and get_input_file(project, "funscript"))
+        if st.button(
+            "Continue →",
+            type="primary",
+            use_container_width=True,
+            disabled=not has_funscript,
+            help=None if has_funscript else "Set export location and add a funscript to continue.",
+        ):
             _go_next(project)
-    with col2:
-        if st.button("New Project", use_container_width=True):
+        if st.button("New Project", use_container_width=True, disabled=not project):
             save_forge(project)
             st.session_state.forge_project = None
             st.rerun()
 
+    # ════════════════════════════════════════════════════════════════════════
+    # RIGHT PANEL — content (funscript + media)
+    # ════════════════════════════════════════════════════════════════════════
+    with right:
+        # ── Funscript (required) ─────────────────────────────────────────────
+        st.subheader("Funscript")
+        _funscript_section()
+
+        # Auto-create project from funscript if no project yet
+        funscript_path = st.session_state.get("funscript_path", "")
+        if funscript_path and not project:
+            auto_folder = str(_default_output_for(funscript_path))
+            _ASSETS_OUTPUT.mkdir(parents=True, exist_ok=True)
+            existing = load_forge(auto_folder)
+            if existing:
+                st.session_state.forge_project = existing
+            else:
+                stem = Path(funscript_path).name.split(".")[0]
+                proj = default_forge(stem, auto_folder)
+                Path(auto_folder).mkdir(parents=True, exist_ok=True)
+                save_forge(proj)
+                st.session_state.forge_project = proj
+            st.rerun()
+
+        st.divider()
+
+        # ── Optional media ───────────────────────────────────────────────────
+        with st.expander("Media *(optional)*"):
+            _video_section(project if project else {})
+            _audio_section(project if project else {})
+            _captions_section(project if project else {})
+
 
 # ── Media sections ──────────────────────────────────────────────────────────
 
-def _browse_for_file(title: str, filetypes: list) -> str | None:
-    """Open an OS file picker. filetypes e.g. [('Funscript', '*.funscript')]"""
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.wm_attributes("-topmost", True)
-        path = filedialog.askopenfilename(title=title, filetypes=filetypes)
-        root.destroy()
-        return path or None
-    except Exception:
-        return None
-
-
 def _funscript_section():
-    """Inspect a funscript — drag-drop, chart preview. No saving."""
+    """Inspect a funscript — drag-and-drop only, chart preview. No saving."""
     uploaded = st.file_uploader(
-        "Drag and drop or browse",
+        "Drag and drop your funscript here",
         type=["funscript"],
         key="funscript_upload",
         label_visibility="collapsed",
@@ -215,6 +222,7 @@ def _funscript_section():
             tmp = Path(tempfile.mkdtemp()) / uploaded.name
             tmp.write_bytes(uploaded.read())
             st.session_state["funscript_path"] = str(tmp)
+            st.rerun()
 
     # Preview
     funscript_path = st.session_state.get("funscript_path", "")
@@ -268,52 +276,53 @@ def _funscript_stats_table(data: dict):
 
 
 def _video_section(project: dict):
-    st.markdown("**Source video** *(optional)*")
+    st.subheader("Source video")
+    existing = get_input_file(project, "video") if project else None
 
-    uploaded_video = st.file_uploader(
-        "Drag and drop or browse",
+    uploaded = st.file_uploader(
+        "Drag and drop your video here",
         type=["mp4", "mov", "avi", "mkv"],
         key="video_upload",
         label_visibility="collapsed",
     )
-    if uploaded_video:
-        current = st.session_state.get("video_path", "")
-        if Path(current).name != uploaded_video.name:
-            tmp = Path(tempfile.mkdtemp()) / uploaded_video.name
-            tmp.write_bytes(uploaded_video.read())
-            st.session_state["video_path"] = str(tmp)
-            # persist to project if output folder already exists
-            if project.get("output_folder"):
-                dest = Path(project["output_folder"]) / f"_input_{uploaded_video.name}"
-                import shutil
-                shutil.copy2(str(tmp), str(dest))
-                add_input_file(project, "video", str(dest))
-                save_forge(project)
+    if uploaded:
+        tmp = Path(tempfile.mkdtemp()) / uploaded.name
+        tmp.write_bytes(uploaded.read())
+        st.session_state["video_path"] = str(tmp)
+        if project and project.get("output_folder"):
+            dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
+            import shutil
+            shutil.copy2(str(tmp), str(dest))
+            add_input_file(project, "video", str(dest))
+            save_forge(project)
+        st.rerun()
 
-    video_path = st.session_state.get("video_path", "")
+    # Show stats from project path (persistent) or session state (just uploaded)
+    video_path = existing or st.session_state.get("video_path", "")
     if video_path and Path(video_path).exists():
-        _video_stats_table(video_path, project)
+        stats = video_stats(video_path)
+        if stats:
+            st.caption(f"📹 {Path(video_path).name}")
+            _video_stats_row(stats, project)
+        else:
+            st.caption(f"📹 {Path(video_path).name}")
+        # Motion heatmap only when project + output folder available
+        if project and project.get("output_folder"):
+            _video_heatmap(video_path, project)
 
 
-
-def _video_stats_table(path: str, project: dict):
-    stats = video_stats(path)
-    if not stats:
-        st.caption(f"📹 {Path(path).name}")
-        return
-
-    # Duration match check against funscript
+def _video_stats_row(stats: dict, project: dict):
+    """Show video metadata inline. Duration match checked against funscript."""
     funscript_path = st.session_state.get("funscript_path", "")
     match_icon = ""
     if funscript_path and Path(funscript_path).exists():
         fs_data = load_funscript(funscript_path)
         if fs_data:
             fs_stats = funscript_stats(fs_data)
-            if fs_stats and stats["duration_s"]:
+            if fs_stats and stats.get("duration_s"):
                 diff = abs(stats["duration_s"] - fs_stats["duration_s"])
                 match_icon = " ✅" if diff <= 5 else " ⚠️"
 
-    st.caption(f"📹 {Path(path).name}")
     cols = st.columns(6)
     cols[0].metric("Duration", stats["duration_fmt"] + match_icon)
     cols[1].metric("Resolution", stats["resolution"])
@@ -323,8 +332,122 @@ def _video_stats_table(path: str, project: dict):
     cols[5].metric("Audio", stats["audio_codec"])
 
 
+def _video_heatmap(video_path: str, project: dict):
+    """Analyze video motion and render a heatmap strip. Cached after first run."""
+    output_folder = project.get("output_folder", "")
+    if not output_folder:
+        return
+
+    cache_key = f"motion_{video_path}"
+    data = st.session_state.get(cache_key)
+
+    if data is None:
+        import json as _json
+        cache_file = Path(output_folder) / "_video_motion.json"
+        if cache_file.exists():
+            try:
+                cached = _json.loads(cache_file.read_text())
+                if cached.get("source_path") == video_path:
+                    st.session_state[cache_key] = cached
+                    data = cached
+            except Exception:
+                pass
+
+    if data is None:
+        if st.button("Analyze motion", key="analyze_motion_btn", use_container_width=True):
+            with st.spinner("Analyzing video motion… (runs once, cached after)"):
+                data = analyze_motion(video_path, output_folder)
+                if data:
+                    st.session_state[cache_key] = data
+                else:
+                    st.error("Could not analyze video. Is opencv-python-headless installed?")
+        return
+
+    _video_heatmap_chart(data)
+
+
+def _video_heatmap_chart(data: dict):
+    times = data.get("times", [])
+    scores = data.get("scores", [])
+    if not times:
+        return
+
+    fig = go.Figure()
+    fig.add_trace(go.Heatmap(
+        z=[scores],
+        x=times,
+        colorscale="Plasma",
+        zmin=0,
+        zmax=100,
+        showscale=False,
+        hovertemplate="t=%{x:.1f}s<br>motion=%{z:.0f}<extra></extra>",
+    ))
+    fig.update_layout(
+        height=48,
+        margin=dict(l=0, r=0, t=0, b=0),
+        xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+        yaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+    col_label, col_legend = st.columns([1, 3])
+    col_label.caption("**Video motion**")
+    col_legend.caption("black → purple → orange → yellow")
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+
+def _audio_section(project: dict):
+    st.subheader("Audio")
+    existing = get_input_file(project, "audio") if project else None
+
+    uploaded = st.file_uploader(
+        "Upload audio",
+        type=["mp3", "wav", "flac", "ogg"],
+        key="audio_upload",
+        label_visibility="collapsed",
+    )
+    if uploaded and project and project.get("output_folder"):
+        dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
+        dest.write_bytes(uploaded.read())
+        add_input_file(project, "audio", str(dest))
+        save_forge(project)
+        st.rerun()
+
+    if existing and Path(existing).exists():
+        st.caption(f"♪ {Path(existing).name}")
+        use_for_playback = st.checkbox(
+            "Use this audio for playback in FunScriptForge",
+            value=project.get("audio_playback", False) if project else False,
+            key="audio_playback_checkbox",
+        )
+        if project and use_for_playback != project.get("audio_playback", False):
+            project["audio_playback"] = use_for_playback
+            save_forge(project)
+
+
+def _captions_section(project: dict):
+    st.subheader("Captions")
+    existing = get_input_file(project, "captions") if project else None
+
+    uploaded = st.file_uploader(
+        "Upload captions",
+        type=["srt", "vtt", "ass"],
+        key="captions_upload",
+        label_visibility="collapsed",
+    )
+    if uploaded and project and project.get("output_folder"):
+        dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
+        dest.write_bytes(uploaded.read())
+        add_input_file(project, "captions", str(dest))
+        save_forge(project)
+        st.rerun()
+
+    if existing:
+        st.caption(f"💬 {Path(existing).name}")
+
+
 def _duration_match_check(project: dict, role: str):
-    """Show green check if media duration ≈ funscript duration."""
+    """Show funscript duration for comparison."""
     funscript_path = get_input_file(project, "funscript")
     if not funscript_path:
         return
@@ -338,14 +461,13 @@ def _duration_match_check(project: dict, role: str):
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 
-def _summary(project: dict):
-    st.markdown("**Summary**")
-    p = project.get("progress", {})
+def _summary(project: dict | None):
+    p = (project or {}).get("progress", {})
 
-    has_funscript = bool(get_input_file(project, "funscript"))
+    has_funscript = bool(project and get_input_file(project, "funscript"))
 
     items = [
-        ("Output folder", True),
+        ("Export location", bool(project)),
         ("Funscript", has_funscript),
         ("Tone applied", p.get("tone_applied", False)),
         ("Exported", p.get("exported", False)),
@@ -358,10 +480,5 @@ def _summary(project: dict):
 # ── Navigation ───────────────────────────────────────────────────────────────
 
 def _go_next(project: dict):
-    has_funscript = bool(get_input_file(project, "funscript"))
-    if not has_funscript:
-        st.warning("Add a funscript before continuing.")
-        return
-    # signal to app.py to switch tab
     st.session_state.active_tab = "tone"
     st.rerun()
