@@ -211,6 +211,7 @@ def _funscript_section():
         "or drag and drop",
         type=["funscript"],
         key="funscript_upload",
+        label_visibility="collapsed",
     )
     if uploaded:
         import tempfile
