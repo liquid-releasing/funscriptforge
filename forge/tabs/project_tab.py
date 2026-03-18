@@ -62,10 +62,10 @@ def render():
     st.divider()
 
     # ── Optional media ───────────────────────────────────────────────────────
-    st.markdown("**Media** *(optional)*")
-    _video_section(project if project else {})
-    _audio_section(project if project else {})
-    _captions_section(project if project else {})
+    with st.expander("Media *(optional)*"):
+        _video_section(project if project else {})
+        _audio_section(project if project else {})
+        _captions_section(project if project else {})
 
     st.divider()
 
@@ -207,9 +207,8 @@ def _funscript_section():
         st.session_state["funscript_path"] = typed
         st.rerun()
 
-    # Drag-and-drop
     uploaded = st.file_uploader(
-        "Or drag and drop a funscript here",
+        "or drag and drop",
         type=["funscript"],
         key="funscript_upload",
     )
