@@ -95,6 +95,15 @@ choosing a type, and optionally adding a label.
 
 ## Tabs
 
+### Project (forge tab)
+
+The Project tab is the entry point for creating or resuming a forge project:
+upload a funscript, set the export location, attach media (video + audio + captions),
+fill in author credits, and click **Continue** to proceed to the Tone tab.
+
+Auto-derived metadata (pace, intensity, arc type, mood, Hub tags, tone suggestion)
+is shown in the Author & Credits section once a funscript is loaded.
+
 ### 0. Phrase Selector
 
 Full-funscript interactive chart with phrase bounding boxes. Click any phrase

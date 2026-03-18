@@ -79,6 +79,29 @@ Shown before any funscript is loaded:
 
 ## Tabs
 
+### Project (forge tab)
+
+Entry point for a forge workflow. Single-column layout, top to bottom:
+
+| Section | What you do |
+| --- | --- |
+| **Funscript** | Upload or drop a `.funscript` file |
+| **Export location** | Set the output folder; optional "copy media to folder" checkbox |
+| **Output targets** | Select device targets (Handy, OSR2, estim, custom) |
+| **Media** | Attach video, audio, and caption (SRT/VTT) files |
+| **Author & Credits** | Title, studio, author, tags; auto-derived metadata shown as badges |
+| **Summary** | Progress checklist before continuing |
+| **Navigation** | New Project (left) · Continue → (right, enabled once funscript is loaded) |
+
+Auto-metadata (pace, intensity, arc type, dominant mood, Hub tags, tone suggestion) is
+derived automatically from the funscript assessment and pre-fills the Author & Credits
+section. All fields can be overridden.
+
+The Project tab is implemented in `forge/tabs/project_tab.py` and rendered by `app.py`
+when the **Project** tab is selected.
+
+---
+
 ### 0. Phrase Selector
 
 Full-funscript chart with phrase bounding boxes. When phrase transforms have been
@@ -238,6 +261,9 @@ Each panel is an independent module in `panels/`:
 
 | Module | Responsibility |
 | --- | --- |
+| `forge/tabs/project_tab.py` | Project tab — funscript, export location, media, author & credits |
+| `forge/tabs/tone_tab.py` | Tone tab — tone selection pre-populated from auto-metadata |
+| `forge/tabs/export_tab.py` | Forge export tab — device profile and output generation |
 | `panels/viewer.py` | Phrase Selector tab — full chart + phrase detail |
 | `panels/phrase_detail.py` | Phrase Detail panel (charts, transforms, apply) |
 | `panels/assessment.py` | Assessment details expander content |

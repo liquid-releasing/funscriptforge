@@ -40,3 +40,20 @@ pip install -r ui/streamlit/requirements.txt
 ```
 
 Required: `streamlit`, `pandas`, `plotly`, `pymediainfo`
+
+### Optional — beat detection
+
+The `beats` CLI command and beat-detection panel require two additional packages:
+
+```bash
+pip install av librosa
+```
+
+- `av` (PyAV) — bundles FFmpeg libs; extracts audio from video without an external `ffmpeg` binary
+- `librosa` — beat tracking via `librosa.beat.beat_track()`
+
+When these packages are absent the UI degrades gracefully (the Generate beat data button is hidden) and `cli.py beats` exits with a clear error message.
+
+### Optional — captions
+
+SRT / WebVTT parsing (`forge/captions.py`, `cli.py parse-captions`) uses only the Python standard library. No additional packages required.

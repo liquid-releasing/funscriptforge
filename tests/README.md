@@ -2,7 +2,9 @@
 
 Unit tests for the core pipeline modules, UI-panel split logic, accessibility, and smoke tests.
 
-699 tests in `tests/` + 60 UI-layer tests in `ui/common/tests/` = **759 total**, all using Python's stdlib `unittest` — no extra dependencies required.
+789 tests in `tests/` + 60 UI-layer tests in `ui/common/tests/` = **849 total**, all using Python's stdlib `unittest` — no extra dependencies required.
+
+> `test_beats.py` integration tests are automatically skipped when `av`, `librosa`, or `numpy` are not installed. All other tests run with no optional dependencies.
 
 ## Running
 
@@ -179,6 +181,40 @@ python -m unittest discover -s ui/common/tests -v
 | `TestCliBadInput` | Same inputs via `cli.py assess` — exit code 1 for every bad input, `"Error:"` in stderr, no Python traceback; valid funscript still exits 0 |
 | `TestProjectBadInput` | `Project.from_funscript()` propagates `FileNotFoundError` / `ValueError` for missing, corrupt, truncated, and schema-invalid files |
 
+### `test_metadata.py` — `forge/metadata.py`
+
+| Class | What it covers |
+| --- | --- |
+| `TestDerivePace` | Empty phrases → Unknown; Slow/Medium/Fast/Intense thresholds; average over multiple phrases; phrases without BPM ignored |
+| `TestDeriveIntensity` | Low/Medium/High/Extreme thresholds; missing `avg_speed` defaults to Low |
+| `TestDeriveDepth` | Shallow/Mid/Deep/Full span thresholds; `"0%"/"100%"` string positions parsed; invalid values → Unknown |
+| `TestDeriveDuration` | Short/Medium/Long/Feature thresholds |
+| `TestDeriveMoodVariety` | No phrases → Unknown/Focused; single tone → Focused; two tones → Varied; four tones → Complex; unmapped tags ignored; dominant = most-common |
+| `TestDeriveArc` | Empty → Unknown; <3 phrases → Short; Climactic/Building/Flat detection |
+| `TestSuggestTone` | Climactic → Climax; Building → Build; dominant mood passthrough; high-intensity fallback → Dominant; slow+low → Tender; rationale prefix |
+| `TestBuildTags` | All six dimensions present; mood tag added/omitted; all lowercase |
+| `TestDeriveMetadata` | All keys returned; auto_tags is list; tone is valid label; empty phrases/stats don't crash |
+| `TestFormatMetadataTable` | Returns string; key labels present; Auto tags header present |
+
+### `test_captions.py` — `forge/captions.py`
+
+| Class | What it covers |
+| --- | --- |
+| `TestTimestampHelpers` | SRT and VTT timestamp parsing; zero; one hour; ms→ts zero/hours; round-trip |
+| `TestStripTags` | `<b>`, `<i>`, VTT `<c.color>` removed; plain text unchanged |
+| `TestParseSRT` | Basic parse; multi-line joined; HTML stripped; empty blocks ignored; FileNotFoundError; sample SRT loads |
+| `TestParseVTT` | Basic parse; cue identifiers; VTT tag stripping |
+| `TestSaveLoadCaptions` | File created; valid JSON; human-readable timestamps; round-trip; None when missing; unicode text |
+
+### `test_beats.py` — `forge/beats.py`
+
+| Class | What it covers |
+| --- | --- |
+| `TestSaveHelpers` | `_save_json` creates file and round-trips; `_save_csv` creates file, correct header/rows, index starts at 1, empty list |
+| `TestLoadBeats` | Returns None when missing; returns dict when cached; returns None on corrupt JSON |
+| `TestExtractBeatsMocked` | Writes JSON+CSV with mocked deps; returns None when deps missing; returns None when no audio |
+| `TestExtractBeatsIntegration` | Real WAV via `audio_path` override (skipped without av/librosa) |
+
 ### `test_smoke.py` — integration smoke tests
 
 | Class | What it covers |
@@ -218,9 +254,12 @@ It is intentionally short so tests run in < 0.1 s.
 | `test_input_validation.py` | 23 |
 | `test_media_player.py` | 34 |
 | `test_launcher.py` | 27 |
+| `test_metadata.py` | 45 |
+| `test_captions.py` | 28 |
+| `test_beats.py` | 17 |
 | other modules | *(see `tests/` directory)* |
 | `ui/common/tests/` | 60 |
-| **Total** | **759** |
+| **Total** | **849** |
 
 ---
 
