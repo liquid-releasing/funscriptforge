@@ -17,6 +17,23 @@ click **Continue**. Done. Three steps total. That is the design goal.
 Power users who want per-phrase control use the Phrase Editor's Transform button 4
 (same vocabulary, local scope). That is optional depth, not a requirement.
 
+### What this makes possible
+
+Two layers — global arc and phrase texture — compose into a haptic experience that
+no single-layer system can produce.
+
+The global Tone sets the trajectory: a Build that climbs from 2 to 8, a Tease that
+oscillates and withholds, a Climax that drives all the way through. The phrase Tones
+add local character along that trajectory: a Tender moment in the middle of the climb,
+an Edge plateau just before the peak, a Dominant push in the final third.
+
+The result is a haptic experience with the structure of music — a recognizable arc,
+with texture and variation inside it. Not random, not monotone. Shaped.
+
+And it is explainable. Before the user presses play, they can read what they will
+feel: *"A steady build with a tender passage at phrase 3, then a dominant push to
+the finish."* That is haptic design with language. That is what Tone makes possible.
+
 ---
 
 ## The Six Tones
