@@ -247,6 +247,69 @@ is the only required decision.
 
 ---
 
+## Three-stage application model
+
+Tone is applied at three points in the workflow. The same Tone picked at Stage 1
+is the one used at Stage 3 — by default, unchanged.
+
+| Stage | Where | Scope | What happens |
+|---|---|---|---|
+| **1 — Intent** | Tab 2 (global) | Whole project | Tone is set as creative direction. Drives transform recommendations for Stage 2. No signal processing yet. |
+| **2 — Phrase work** | Phrase editor button 4 | Per phrase (optional) | Per-phrase overrides. Recommendations for Shape/Tempo/Intensity are informed by the phrase's effective Tone. |
+| **3 — Export** | Export pass | All output files | Tone recipe applied once to the clean funscript. Same Tone drives all 6–7 output files simultaneously. |
+
+The default at Stage 3 is always `forge_project["tone"]["global"]` — the Tone
+the user picked in Tab 2. Phrase overrides apply locally. No re-picking at export.
+
+```python
+def effective_tone(phrase_index, forge_project):
+    overrides = forge_project["tone"].get("phrase_overrides", {})
+    return overrides.get(str(phrase_index), forge_project["tone"]["global"])
+```
+
+---
+
+## Source integrity — the single most important architectural constraint
+
+**The Stage 2 cleaned funscript is the permanent canonical source.
+The Stage 3 export pass always reads from it. Export outputs are never
+fed back into the project as a new source.**
+
+This matters because several transforms used in Tone recipes are **not idempotent** —
+applying them more than once degrades the funscript:
+
+| Transform | What happens on repeated application |
+|---|---|
+| `smooth` | Each pass lowers the effective cutoff frequency. Converges toward a flat line at average position. |
+| `amplitude_scale < 1.0` | Amplitude × 0.7ⁿ → 0. Energy drains to zero. |
+| `halve_tempo` | BPM halved each time. 4 applications: 120 BPM → 7.5 BPM. Near stillness. |
+| `boost_contrast` | Converges toward binary 0/100 signal. Loses all mid-range nuance. |
+
+Safe transforms (idempotent — re-running produces no change):
+
+| Transform | Why safe |
+|---|---|
+| `normalize` | Second application: min already 0, max already 100. No-op. |
+| `recenter` | Same target: no movement on second pass. |
+
+**Violation scenario to prevent:**
+
+```
+Day 1: Export → Tone(Tender) applied to clean funscript → tender_output.funscript
+Day 2: tender_output.funscript becomes the project source (wrong)
+       Export again → Tone(Tender) applied again → doubly smoothed, half amplitude
+Day N: Near-flat, near-zero signal. All energy gone.
+```
+
+**Enforcement:**
+
+- Export outputs go to the output folder only — never overwrite the source funscript
+- The source funscript path in `.forge` is set once (in the Project tab) and never
+  changed by an export operation
+- Export is a pure read operation on the source: same input → same output every time
+
+---
+
 ## Open questions
 
 1. **Micro-preview content** — what shape makes each tone visually distinguishable
