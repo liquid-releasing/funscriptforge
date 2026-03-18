@@ -46,20 +46,16 @@ def render():
     project = st.session_state.forge_project
 
     # ── Project name ────────────────────────────────────────────────────────
-    st.markdown("**Project name** *(required)*")
+    st.subheader("Project name")
     name_val = project["name"] if project else ""
     name = st.text_input("Project name", value=name_val, placeholder="my-project", label_visibility="collapsed")
     if project and name and name != project["name"]:
         project["name"] = name
         save_forge(project)
 
-    st.divider()
-
     # ── Funscript (required) — inspect only, no saving yet ───────────────────
-    st.markdown("**Funscript** *(required)*")
+    st.subheader("Funscript")
     _funscript_section()
-
-    st.divider()
 
     # ── Optional media ───────────────────────────────────────────────────────
     with st.expander("Media *(optional)*"):
@@ -67,10 +63,8 @@ def render():
         _audio_section(project if project else {})
         _captions_section(project if project else {})
 
-    st.divider()
-
     # ── Output folder (required, last) ───────────────────────────────────────
-    st.markdown("**Output folder** *(required)*")
+    st.subheader("Output folder")
     st.caption("All output goes here. Input files are never touched.")
 
     col_path, col_browse = st.columns([5, 1])
@@ -108,8 +102,7 @@ def render():
         return
 
     # ── Output targets ───────────────────────────────────────────────────────
-    st.divider()
-    st.markdown("**Output targets**")
+    st.subheader("Output targets")
     st.caption("Choose which devices to export for. All selected targets are generated automatically at export.")
 
     _TARGETS = [
