@@ -120,7 +120,45 @@ def _commit_project_to_disk(project: dict | None) -> None:
             from forge.video import analyze_motion
             motion = analyze_motion(video_path, folder)
             if motion:
-                status.write(f"✅ Motion heatmap generated")
+                status.write("✅ Motion heatmap generated")
+
+    # Run funscript assessment (phrase detection, patterns, BPM)
+    funscript_path = st.session_state.get("funscript_path", "")
+    if funscript_path and Path(funscript_path).exists():
+        status.update(label="Analyzing funscript…")
+        from ui.common.project import Project
+        from assessment.analyzer import AnalyzerConfig
+        min_phrase_s = st.session_state.get("min_phrase_s", 20)
+        amp_tol_map = {"Low (0.35)": 0.35, "Medium (0.30)": 0.30, "High (0.25)": 0.25}
+        amp_sensitivity = st.session_state.get("amp_sensitivity", "Medium (0.30)")
+        analyzer_cfg = AnalyzerConfig(
+            min_phrase_duration_ms=min_phrase_s * 1000,
+            amplitude_tolerance=amp_tol_map.get(amp_sensitivity, 0.30),
+        )
+
+        def _on_stage(stage: str) -> None:
+            status.update(label=f"Analyzing: {stage}")
+
+        import time
+        t0 = time.time()
+        assessed = Project.from_funscript(
+            funscript_path,
+            analyzer_config=analyzer_cfg,
+            progress_callback=_on_stage,
+        )
+        elapsed = time.time() - t0
+        st.session_state.project = assessed
+        st.session_state.last_assessment_elapsed = elapsed
+        st.session_state.last_loaded_cfg = (funscript_path, min_phrase_s, amp_sensitivity)
+        st.session_state.last_loaded_file = Path(funscript_path).name
+
+        s = assessed.summary()
+        status.write(
+            f"✅ Funscript: **{s['phrases']}** phrases, "
+            f"**{s['patterns']}** patterns, "
+            f"~**{s['bpm']:.0f}** BPM "
+            f"({elapsed:.1f}s)"
+        )
 
     status.update(label="Project ready!", state="complete", expanded=False)
 
