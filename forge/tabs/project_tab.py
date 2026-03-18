@@ -38,6 +38,16 @@ def _browse_for_folder() -> str | None:
         return None
 
 
+_APP_ROOT = Path(__file__).parents[2]
+_ASSETS_OUTPUT = _APP_ROOT / "assets" / "output"
+
+
+def _default_output_for(funscript_path: str) -> Path:
+    """Return default output folder derived from funscript filename."""
+    stem = Path(funscript_path).name.split(".")[0]  # big_buck_bunny
+    return _ASSETS_OUTPUT / stem
+
+
 def render():
     # ── session state init ──────────────────────────────────────────────────
     if "forge_project" not in st.session_state:
@@ -48,6 +58,22 @@ def render():
     # ── Funscript (required) — inspect only, no saving yet ───────────────────
     st.subheader("Funscript")
     _funscript_section()
+
+    # Auto-create project from funscript if not yet created
+    funscript_path = st.session_state.get("funscript_path", "")
+    if funscript_path and not project:
+        output_folder = str(_default_output_for(funscript_path))
+        _ASSETS_OUTPUT.mkdir(parents=True, exist_ok=True)
+        existing = load_forge(output_folder)
+        if existing:
+            st.session_state.forge_project = existing
+        else:
+            stem = Path(funscript_path).name.split(".")[0]
+            proj = default_forge(stem, output_folder)
+            Path(output_folder).mkdir(parents=True, exist_ok=True)
+            save_forge(proj)
+            st.session_state.forge_project = proj
+        project = st.session_state.forge_project
 
     # ── Optional media ───────────────────────────────────────────────────────
     st.markdown("""<style>
@@ -85,7 +111,7 @@ def render():
             st.success(f"Resumed project: **{existing['name']}**")
         else:
             folder = Path(output_folder)
-            proj_name = name or folder.name
+            proj_name = folder.name
             st.session_state.forge_project = default_forge(proj_name, output_folder)
             save_forge(st.session_state.forge_project)
             st.success(f"Created project: **{proj_name}**")
