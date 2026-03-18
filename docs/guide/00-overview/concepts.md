@@ -97,6 +97,20 @@ detects these automatically. They often correspond to scene changes in the video
 
 ---
 
+### Tone
+
+A creative decision that shapes the overall feel of your output. FunscriptForge
+offers six tones — each one changes how your funscript is interpreted and
+transformed without altering the underlying structure.
+
+Think of tone like choosing a mood for a playlist. The same notes sound different
+when played gently vs. aggressively. Tone works the same way for haptic motion.
+
+You choose a tone on the **Tone tab** right after setting up your project.
+For most users, this is all you need — pick a tone, export, done.
+
+---
+
 ### Transform
 
 An operation you apply to a phrase to change how it feels. A transform does not
@@ -110,7 +124,7 @@ Examples of transforms:
 - **Break** — makes a calm section feel genuinely quiet
 
 You choose which transform to apply to each phrase. FunscriptForge will also
-suggest transforms based on the phrase's behavioral tag.
+suggest transforms based on the phrase's behavioral tag and your chosen tone.
 
 ---
 
@@ -123,13 +137,14 @@ flowchart TD
     C --> D["Patterns\nRuns of similar cycles"]
     D --> E["Phrases\nMeaningful sections\n★ You work here ★"]
     E --> F["Behavioral Tag\nWhat kind of motion?"]
-    E --> G["Transform\nHow to improve it"]
-    G --> H["Improved funscript\nReady to export"]
+    E --> G["Tone\nHow should it feel?"]
+    G --> H["Transform\nHow to improve it"]
+    H --> I["Improved funscript\nReady to export"]
 ```
 
-FunscriptForge builds this hierarchy automatically when you load a file. You only
-ever need to think about **phrases** and **transforms** — everything below is
-computed for you.
+FunscriptForge builds this hierarchy automatically when you click **Accept**.
+For most users, you only need to think about **tone** — pick one, export, done.
+Power users can go deeper into **phrases** and **transforms**.
 
 ---
 

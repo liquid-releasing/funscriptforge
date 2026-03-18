@@ -6,117 +6,97 @@
 
 ---
 
-## The journey (8 tasks)
+## The journey (7 tasks)
 
 ```
-Get a funscript → Install → Load your script → Read your assessment →
-Select phrases → Apply transforms → Preview → Export
+Set up your project → Accept → Choose a tone →
+Edit phrases → Apply transforms → Preview → Export
 ```
 
 ---
 
 ## Mermaid snippets — one per page
 
-### 00-overview/index.md  (Get a funscript)
+### 01-getting-started/your-first-funscript.md  (Set up your project)
 ```mermaid
 flowchart LR
-    A[Get a funscript]:::here --> B[Install]
-    B --> C[Load your script]
-    C --> D[Read your assessment]
-    D --> E[Select phrases]
-    E --> F[Apply transforms]
-    F --> G[Preview]
-    G --> H[Export]
+    A[Set up project]:::here --> B[Accept]
+    B --> C[Choose tone]
+    C --> D[Edit phrases]
+    D --> E[Apply transforms]
+    E --> F[Preview]
+    F --> G[Export]
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```
 
-### 01-getting-started/install.md  (Install)
+### 01-getting-started/accept.md  (Accept)
 ```mermaid
 flowchart LR
-    A[Get a funscript] --> B[Install]:::here
-    B --> C[Load your script]
-    C --> D[Read your assessment]
-    D --> E[Select phrases]
-    E --> F[Apply transforms]
-    F --> G[Preview]
-    G --> H[Export]
+    A[Set up project] --> B[Accept]:::here
+    B --> C[Choose tone]
+    C --> D[Edit phrases]
+    D --> E[Apply transforms]
+    E --> F[Preview]
+    F --> G[Export]
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```
 
-### 01-getting-started/your-first-funscript.md  (Load your script)
+### 02-tone/choose-a-tone.md  (Choose a tone)
 ```mermaid
 flowchart LR
-    A[Get a funscript] --> B[Install]
-    B --> C[Load your script]:::here
-    C --> D[Read your assessment]
-    D --> E[Select phrases]
-    E --> F[Apply transforms]
-    F --> G[Preview]
-    G --> H[Export]
+    A[Set up project] --> B[Accept]
+    B --> C[Choose tone]:::here
+    C --> D[Edit phrases]
+    D --> E[Apply transforms]
+    E --> F[Preview]
+    F --> G[Export]
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```
 
-### 02-understand-your-script/reading-the-assessment.md  (Read your assessment)
+### 02-understand-your-script/phrases-at-a-glance.md  (Edit phrases)
 ```mermaid
 flowchart LR
-    A[Get a funscript] --> B[Install]
-    B --> C[Load your script]
-    C --> D[Read your assessment]:::here
-    D --> E[Select phrases]
-    E --> F[Apply transforms]
-    F --> G[Preview]
-    G --> H[Export]
-    classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
-```
-
-### 02-understand-your-script/phrases-at-a-glance.md  (Select phrases)
-```mermaid
-flowchart LR
-    A[Get a funscript] --> B[Install]
-    B --> C[Load your script]
-    C --> D[Read your assessment]
-    D --> E[Select phrases]:::here
-    E --> F[Apply transforms]
-    F --> G[Preview]
-    G --> H[Export]
+    A[Set up project] --> B[Accept]
+    B --> C[Choose tone]
+    C --> D[Edit phrases]:::here
+    D --> E[Apply transforms]
+    E --> F[Preview]
+    F --> G[Export]
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```
 
 ### 03-improve-your-script/apply-a-transform.md  (Apply transforms)
 ```mermaid
 flowchart LR
-    A[Get a funscript] --> B[Install]
-    B --> C[Load your script]
-    C --> D[Read your assessment]
-    D --> E[Select phrases]
-    E --> F[Apply transforms]:::here
-    F --> G[Preview]
-    G --> H[Export]
+    A[Set up project] --> B[Accept]
+    B --> C[Choose tone]
+    C --> D[Edit phrases]
+    D --> E[Apply transforms]:::here
+    E --> F[Preview]
+    F --> G[Export]
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```
 
 ### 03-improve-your-script/preview-your-changes.md  (Preview)
 ```mermaid
 flowchart LR
-    A[Get a funscript] --> B[Install]
-    B --> C[Load your script]
-    C --> D[Read your assessment]
-    D --> E[Select phrases]
-    E --> F[Apply transforms]
-    F --> G[Preview]:::here
-    G --> H[Export]
+    A[Set up project] --> B[Accept]
+    B --> C[Choose tone]
+    C --> D[Edit phrases]
+    D --> E[Apply transforms]
+    E --> F[Preview]:::here
+    F --> G[Export]
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```
 
 ### 04-export-and-use/export.md  (Export)
 ```mermaid
 flowchart LR
-    A[Get a funscript] --> B[Install]
-    B --> C[Load your script]
-    C --> D[Read your assessment]
-    D --> E[Select phrases]
-    E --> F[Apply transforms]
-    F --> G[Preview]
-    G --> H[Export]:::here
+    A[Set up project] --> B[Accept]
+    B --> C[Choose tone]
+    C --> D[Edit phrases]
+    D --> E[Apply transforms]
+    E --> F[Preview]
+    F --> G[Export]:::here
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```

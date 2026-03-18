@@ -1,11 +1,11 @@
-# Load Your First Funscript
+# Set Up Your First Project
 
 **Your journey:**
-[Get a funscript](../00-overview/index.md) →
+[Overview](../00-overview/index.md) →
 [Install](./install.md) →
-**Load your script** →
-[Read your assessment](../02-understand-your-script/reading-the-assessment.md) →
-[Select phrases](../02-understand-your-script/phrases-at-a-glance.md) →
+**Set up your project** →
+[Choose a tone](../02-tone/choose-a-tone.md) →
+[Edit phrases](../02-understand-your-script/phrases-at-a-glance.md) →
 [Apply transforms](../03-improve-your-script/apply-a-transform.md) →
 [Preview](../03-improve-your-script/preview-your-changes.md) →
 [Export](../04-export-and-use/export.md)
@@ -14,24 +14,11 @@
 
 ## Overview
 
-In this step you load a funscript into FunscriptForge and see your first assessment.
-By the end you will have a chart showing the full motion structure of your script —
-every phrase highlighted, color-coded by behavior, with a summary of what the analyzer found.
+In this step you create a project in FunscriptForge, add your funscript and optional
+media files, and click **Accept**. FunscriptForge then analyzes everything automatically
+and takes you to the Tone tab to choose how your output should feel.
 
-This is the moment the app earns its keep: for the first time you will see your
-funscript as structure, not just as a waveform.
-
----
-
-## Why do this
-
-A raw funscript is a list of timestamps and positions. FunscriptForge reads that list
-and finds the *shape* inside it — the natural phrases, the tempo changes, the behavioral
-patterns. You need to see this map before you can improve anything.
-
-**What to expect:** Analysis runs in a few seconds for scripts up to an hour long.
-Longer scripts (90+ minutes) may take 10–20 seconds. A progress indicator shows each
-pipeline stage as it runs.
+This is the Easy Button: drop your files, click Accept, watch the progress, done.
 
 ---
 
@@ -40,6 +27,7 @@ pipeline stage as it runs.
 - FunscriptForge is installed and running in your browser
   ([Install FunscriptForge →](./install.md) if you have not done this yet)
 - A `.funscript` file on your computer
+- Optionally: the matching video, audio, or caption file
 
 > **Don't have a funscript?** See the [overview page](../00-overview/index.md) for tools
 > that create funscripts from video. Come back once you have a file to work with.
@@ -48,111 +36,121 @@ pipeline stage as it runs.
 
 ## Steps
 
-### 1. Find the file path to your funscript
+### 1. Drop your funscript
 
-You need the full path to your `.funscript` file. The fastest way:
+Open the **Project** tab (it's the first tab, already selected when you launch).
+Drag and drop your `.funscript` file onto the uploader area.
 
-**Windows:**
-Open File Explorer, navigate to your file, hold **Shift** and right-click it →
-**Copy as path**. The path looks like:
+You'll immediately see:
+- A **waveform chart** showing the full motion structure
+- A **stats row**: duration, action count, average speed, position range
 
-```text
-C:\Users\YourName\Videos\myscript.funscript
-```
-
-**macOS:**
-Right-click the file in Finder → **Get Info** → copy the path from the **Where** field.
-Or drag the file onto a Terminal window to paste its path.
-
-**Linux:**
-Right-click → Properties, or drag the file to a terminal to get the full path.
+> **TODO: insert screenshot — funscript chart and stats row**
 
 ---
 
-### 2. Paste the path into FunscriptForge
+### 2. Check the export location
 
-In the FunscriptForge sidebar, find the **Funscript file** input at the top.
-Paste your full file path and press **Enter** (or click **Load**).
+FunscriptForge auto-fills an export folder based on your funscript's filename.
+The path appears in the **Export location** text box, fully editable.
 
-> **TODO: insert screenshot — sidebar with file path input highlighted, cursor in field**
+- To change it: click at the end, backspace, type your project name, done
+- To browse: click **Browse…** and pick a folder
+- To use a previous project: paste or type the path and click **Set** — if a `.forge` file exists there, FunscriptForge resumes that project
 
----
-
-### 3. Watch the analysis run
-
-A progress indicator appears showing the pipeline stages:
-
-```text
-Parsing → Phases → Cycles → Patterns → Phrases → BPM transitions
-```
-
-This usually completes in 2–5 seconds. For a 10-minute script you might see it
-move through each stage. For a short clip it finishes almost instantly.
-
-> **TODO: insert screenshot — progress indicator mid-run**
+> The output folder is not created yet — nothing is written to disk until you click Accept.
 
 ---
 
-### 4. Read the chart
+### 3. Choose output targets
 
-When analysis finishes the main area shows:
+Check the devices you want to export for. All checked targets are generated at export time:
 
-- **The full funscript chart** — every action plotted as a waveform
-- **Phrase bounding boxes** — colored rectangles overlaid on the chart, one per phrase
-- **Assessment summary** — total phrases, phrase durations, BPM range, behavioral tags found
-
-![Phrase overview chart for Timeline1.funscript — 34 phrases color-coded by BPM](../media/your-first-funscript--phrase-overview.png)
-
-The color of each phrase box indicates its dominant behavior:
-
-| Color | Behavior |
+| Target | Description |
 | --- | --- |
-| Blue / purple | Moderate, rhythmic |
-| Orange / warm | Energetic, frantic, or ramp |
-| Muted / grey | Ambient, break, or low activity |
-
-> The chart above uses the same color scheme — orange phrases are the energetic peak
-> from 1:26–2:10, purple phrases are the rhythmic sections at either end.
+| **Estim — FOC** | Single-channel estim. Classic waveform. |
+| **Estim — Stereo** | Dual-channel estim. Left/right separation. |
+| **The Handy** | Linear stroker. Industry standard. |
+| **OSR2** | Multi-axis stroker. Twist + stroke. |
 
 ---
 
-### 5. Scroll through the phrase list
+### 4. Add media *(optional)*
 
-Below the chart (or in the sidebar depending on your screen size) is a list of every
-phrase detected. Each row shows:
+Expand the **Media** section to add:
 
-- Phrase number and time range
-- Duration
-- Dominant behavioral tag
-- BPM
+- **Source video** — your matching video file. FunscriptForge displays codec, resolution,
+  frame rate, and checks whether the duration matches your funscript.
+- **Alternate audio** — an optional replacement audio track. If not provided,
+  beat data is generated from the video.
+- **Captions** — SRT, VTT, or ASS subtitle files for caption display and
+  future emotion-aware haptics.
 
-Scroll through it. Click any row to jump that phrase's detail in the chart.
-
-> **TODO: insert screenshot — phrase list with one row selected**
-
----
-
-## You should see
-
-- A chart that covers your entire funscript with phrase boxes visible
-- An assessment summary showing at least one phrase detected
-- A phrase list you can scroll and click
-
-If your script is very short (under 30 seconds) or very uniform in tempo, you may see
-only one or two phrases — that is normal. The [concepts page](../../reference/concepts.md)
-explains how phrases are detected.
+Each file shows metadata stats after upload.
 
 ---
 
-## What you did
+### 5. Add author info *(optional)*
 
-FunscriptForge parsed your funscript, broke it into phases (individual up/down movements),
-grouped those into cycles (complete oscillations), recognized repeated cycles as patterns,
-and organized patterns into phrases (meaningful sections). You now have a structural map
-of your script.
+Expand **Author & credits** to fill in your name, website, and contributors.
+Press **Enter** to move between fields. Click **Save** when done.
 
-This map is what everything else in FunscriptForge is built on. Every transform, every
-customization, every export improvement works at the phrase level.
+---
+
+### 6. Review the summary
+
+The **Summary** section shows a checklist of what's ready:
+
+- ✅ Export location
+- ✅ Funscript loaded
+- ⬜ Tone applied *(next step)*
+- ⬜ Exported *(last step)*
+
+---
+
+### 7. Click Accept
+
+Read the info box — it explains your options. Then click **Accept →**.
+
+FunscriptForge shows you a live progress panel:
+
+```
+✅ Saved to my-scene.forge
+✅ Beat data: 142 beats, ~128 BPM
+✅ Motion heatmap: 298 samples from my-video.mp4
+✅ Funscript: 12 phrases, 8 patterns, ~115 BPM (3.2s)
+✅ Assessment saved
+```
+
+Each step updates in real time so you know exactly what's happening. When it's done,
+you're automatically taken to the **Tone** tab.
+
+> **TODO: insert screenshot — Accept progress panel mid-run**
+
+---
+
+## What just happened
+
+When you clicked Accept, FunscriptForge:
+
+1. **Created your output folder** and saved a `.forge` project file
+2. **Detected beats** in your audio/video using librosa — tempo and beat timestamps
+3. **Analyzed video motion** frame by frame using OpenCV — a motion intensity heatmap
+4. **Assessed your funscript** — found phrases, patterns, BPM, and behavioral tags
+5. **Saved everything** to your output folder as cached JSON files
+
+All of this runs once and is cached. If you come back to this project later,
+FunscriptForge picks up where you left off.
+
+---
+
+## What you'll see on the next tabs
+
+The analysis you just ran powers everything:
+
+- **Tone tab** — choose the feel of your output (the beat data and motion heatmap inform suggestions)
+- **Phrases tab** — the phrase structure chart, with every phrase detected and tagged
+- **Export tab** — generates device-specific output files
 
 ---
 
@@ -162,39 +160,18 @@ Something not working? [Troubleshoot loading a script →](../troubleshooting/lo
 
 ## Next step
 
-[Read your assessment →](../02-understand-your-script/reading-the-assessment.md)
-
----
-
-## You might be wondering
-
-- [Why does my script only show one phrase?](https://funscriptforge.com/help?q=Why+does+my+script+only+show+one+phrase)
-- [What do the phrase colors mean?](https://funscriptforge.com/help?q=What+do+the+phrase+colors+mean)
-- [How long should my phrases be?](https://funscriptforge.com/help?q=How+long+should+phrases+be)
-
-[Ask your own question →](https://funscriptforge.com/help)
-
----
-
-## Related concepts
-
-| | |
-| --- | --- |
-| **[Phrases](../../reference/concepts.md#phrase)** | What a phrase is and how FunscriptForge detects them |
-| **[Behavioral tags](../../reference/concepts.md#behavioral-tag)** | The 10 motion types and what they mean |
-| **[Assessment deep dive](../../reference/assessment-deep-dive.md)** | Every number in the assessment panel explained |
+[Choose a tone →](../02-tone/choose-a-tone.md)
 
 ---
 
 ```mermaid
 flowchart LR
-    A[Get a funscript] --> B[Install]
-    B --> C[Load your script]:::here
-    C --> D[Read your assessment]
-    D --> E[Select phrases]
-    E --> F[Apply transforms]
-    F --> G[Preview]
-    G --> H[Export]
+    A[Set up project]:::here --> B[Accept]
+    B --> C[Choose tone]
+    C --> D[Edit phrases]
+    D --> E[Apply transforms]
+    E --> F[Preview]
+    F --> G[Export]
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```
 
