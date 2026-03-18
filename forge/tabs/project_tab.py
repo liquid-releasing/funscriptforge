@@ -167,6 +167,18 @@ def _commit_project_to_disk(project: dict | None) -> None:
             f"({elapsed:.1f}s)"
         )
 
+        # Save assessment to output folder so later tabs load instantly
+        import json as _json
+        assessment_path = Path(folder) / "_assessment.json"
+        try:
+            assessment_path.write_text(
+                _json.dumps(assessed.assessment.to_dict(), indent=2),
+                encoding="utf-8",
+            )
+            status.write("✅ Assessment saved")
+        except Exception:
+            pass
+
     status.update(label="Project ready!", state="complete", expanded=False)
 
 
