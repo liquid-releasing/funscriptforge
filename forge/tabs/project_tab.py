@@ -117,7 +117,7 @@ def render():
     if "output_folder_pending" in st.session_state:
         st.session_state["output_folder_input"] = st.session_state.pop("output_folder_pending")
 
-    col_path, col_browse = st.columns([5, 1])
+    col_path, col_browse, col_set = st.columns([5, 1, 1])
     with col_browse:
         if st.button("Browse…", key="output_folder_browse", use_container_width=True):
             picked = _browse_for_folder()
@@ -125,48 +125,31 @@ def render():
                 st.session_state["output_folder_pending"] = picked
                 st.rerun()
     with col_path:
-        with st.form("export_location_form", border=False):
-            output_folder = st.text_input(
-                "Export location path",
-                placeholder=r"C:\Users\you\Videos\my-scene\  or  assets/output/my-scene/",
-                label_visibility="collapsed",
-                key="output_folder_input",
-            )
-            col_set, col_copy = st.columns([1, 2])
-            with col_set:
-                set_clicked = st.form_submit_button("Set location", use_container_width=True)
-            with col_copy:
-                copy_media = st.form_submit_button(
-                    "Set + copy media to folder",
-                    use_container_width=True,
-                    help="Copies all input files into the export folder on Continue.",
-                )
+        output_folder = st.text_input(
+            "Export location path",
+            placeholder=auto_output or r"C:\Users\you\Videos\my-scene",
+            label_visibility="collapsed",
+            key="output_folder_input",
+        )
+    with col_set:
+        set_clicked = st.button("Set", key="output_folder_set", use_container_width=True)
 
-    if set_clicked or copy_media:
-        if output_folder and output_folder != (project or {}).get("output_folder", ""):
-            existing = load_forge(output_folder)
+    if set_clicked and output_folder:
+        folder = output_folder.strip()
+        if folder != (project or {}).get("output_folder", ""):
+            existing = load_forge(folder)
             if existing:
                 st.session_state.forge_project = existing
                 st.success(f"Resumed: **{existing['name']}**")
             else:
-                stem = Path(output_folder).name
-                new_proj = default_forge(stem, output_folder)
-                if copy_media:
-                    new_proj["copy_media_on_continue"] = True
+                stem = Path(folder).name
+                new_proj = default_forge(stem, folder)
                 st.session_state.forge_project = new_proj
                 save_forge(new_proj)
-                st.success(f"Created: **{stem}**")
+                st.success(f"Project folder set: **{stem}**")
             st.rerun()
-        elif project and copy_media:
-            project["copy_media_on_continue"] = True
-            save_forge(project)
-            st.info("Media will be copied to export folder on Continue.")
 
     project = st.session_state.forge_project
-
-    # Copy media indicator
-    if project and project.get("copy_media_on_continue"):
-        st.caption("📋 Media will be copied to export folder on Continue.")
 
     st.divider()
 
@@ -186,7 +169,7 @@ def render():
     for col, (key, label, desc) in zip(cols, _TARGETS):
         with col:
             if col.checkbox(label, value=key in saved_targets, help=desc,
-                            key=f"target_{key}_{v}", disabled=not project):
+                            key=f"target_{key}_{v}"):
                 selected.append(key)
 
     if project and selected != saved_targets:
@@ -243,7 +226,7 @@ def render():
             f"Video and funscript differ by **{diff:.0f}s**. Double-check your files before continuing."
         )
 
-    has_funscript = bool(project and get_input_file(project, "funscript"))
+    has_funscript = bool(st.session_state.get("funscript_path"))
     col_export, col_phrases = st.columns(2)
     with col_export:
         if st.button(
