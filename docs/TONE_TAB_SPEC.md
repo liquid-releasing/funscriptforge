@@ -262,7 +262,7 @@ Tone state is stored in the `.forge` project file.
     "suggestion": "Tease",
     "rationale": "Suggested based on: dominant mood Tease, building arc",
     "beat_influence": 0.5,
-    "phrase_overrides": {
+    "phrase_tones": {
       "3": "Climax",
       "7": "Tender"
     }
@@ -272,11 +272,11 @@ Tone state is stored in the `.forge` project file.
 
 | Key | Description |
 |---|---|
-| `global` | The tone the user selected (or accepted) |
+| `global` | The tone the user selected (or accepted) — the foundation for the whole funscript |
 | `suggestion` | What auto-metadata recommended (preserved for display) |
 | `rationale` | Human-readable rationale string from `derive_metadata()` |
 | `beat_influence` | Global beat influence slider value (0–1) |
-| `phrase_overrides` | Dict of phrase index → tone label for per-phrase overrides |
+| `phrase_tones` | Dict of phrase index → tone label. These modulate the global tone, they do not replace it. |
 
 ---
 
@@ -306,29 +306,50 @@ No Tone picker appears on the Export tab — the choice was made in Tab 2.
 ## Three-stage application model
 
 **Simple version:** Export uses exactly what the user decided — the global Tone from
-Tab 2, and any per-phrase overrides set in the Phrase Editor. Nothing more.
+Tab 2, and any per-phrase influences set in the Phrase Editor. Nothing more.
 
 | Stage | Where | Scope | What happens |
 |---|---|---|---|
-| **1 — Intent** | Tab 2 (global) | Whole project | User picks (or accepts) a Tone. Stored in `.forge`. Drives transform recommendations. No signal processing yet. |
-| **2 — Phrase work** | Phrase editor button 4 | Per phrase (optional) | Per-phrase overrides stored in `.forge`. Shape/Tempo/Intensity recommendations are Tone-aware. |
-| **3 — Export** | Export pass | All output files | Reads global Tone + phrase overrides from `.forge`. Applies them to the clean source funscript. Writes all device output files. |
+| **1 — Intent** | Tab 2 (global) | Whole project | User picks (or accepts) a Tone. Applied as the foundation across the entire funscript. Stored in `.forge`. |
+| **2 — Phrase work** | Phrase editor button 4 | Per phrase (optional) | Per-phrase Tones stored in `.forge`. These modulate the global foundation — they do not replace it. |
+| **3 — Export** | Export pass | All output files | Global Tone applied first. Phrase Tones layer on top. Writes all device output files. |
 
 Export is a read of stored decisions — it does not re-derive or re-prompt.
 
+### Tone composition — influence, not replacement
+
+A phrase Tone **modulates** the global Tone. It does not replace it.
+
+- **Global Tone** is the foundation. It changes the funscript fundamentally — the
+  character of the whole piece is established here.
+- **Phrase Tone** is a local emphasis. It intensifies, softens, or redirects the
+  global character within a phrase. The global foundation remains underneath.
+- **No phrase Tone set** — the global Tone expresses fully in that phrase. Phrase
+  Tones have the most impact when a strong global Tone is already established.
+
+Example: global = Tease, phrase 3 = Climax.
+Phrase 3 is not purely Climax. It is Tease with Climax urgency applied — the
+oscillating character of Tease is still present, but the phrase pushes harder
+and pulls back less. The user gets a peak moment that fits the overall Tease arc.
+
 ```python
 def effective_tone(phrase_index, forge_project):
-    overrides = forge_project["tone"].get("phrase_overrides", {})
-    return overrides.get(str(phrase_index), forge_project["tone"]["global"])
+    global_tone = forge_project["tone"]["global"]
+    phrase_tone = forge_project["tone"].get("phrase_overrides", {}).get(str(phrase_index))
+    # phrase_tone modulates global_tone — both are passed to the recipe layer
+    return {"global": global_tone, "phrase": phrase_tone or global_tone}
 ```
+
+The recipe layer receives both and composes them. When phrase == global, it is
+equivalent to a single Tone applied fully.
 
 ### One decision set drives all output files
 
 The `.forge` file is the complete record of user intent: global Tone + per-phrase
-overrides. Export applies that intent through each device profile's translation layer.
+influences. Export applies that intent through each device profile's translation layer.
 
 ```
-.forge (global=Tease, phrase_overrides={3: Climax, 7: Tender})
+.forge (global=Tease, phrase_tones={3: Climax, 7: Tender})
     │
     ├── main funscript recipe      → my-scene.funscript
     ├── estim alpha recipe         → estim/alpha.funscript
