@@ -237,6 +237,12 @@ def render():
     st.divider()
 
     # ── 7. Navigation ────────────────────────────────────────────────────────
+    diff = st.session_state.get("duration_mismatch_s")
+    if diff:
+        st.warning(
+            f"Video and funscript differ by **{diff:.0f}s**. Double-check your files before continuing."
+        )
+
     has_funscript = bool(project and get_input_file(project, "funscript"))
     col_export, col_phrases = st.columns(2)
     with col_export:
@@ -381,16 +387,26 @@ def _video_section(project: dict | None, v: int):
             _video_heatmap(video_path, project)
 
 
+_DURATION_WARN_S = 15  # warn if funscript and video differ by more than this
+
+
 def _video_stats_row(stats: dict):
     funscript_path = st.session_state.get("funscript_path", "")
     match_icon = ""
+    st.session_state.pop("duration_mismatch_s", None)
     if funscript_path and Path(funscript_path).exists():
         fs_data = load_funscript(funscript_path)
         if fs_data:
             fs_stats = funscript_stats(fs_data)
             if fs_stats and stats.get("duration_s"):
                 diff = abs(stats["duration_s"] - fs_stats["duration_s"])
-                match_icon = " ✅" if diff <= 5 else " ⚠️"
+                if diff <= 5:
+                    match_icon = " ✅"
+                elif diff <= _DURATION_WARN_S:
+                    match_icon = " ⚠️"
+                else:
+                    match_icon = " ⚠️"
+                    st.session_state["duration_mismatch_s"] = diff
     cols = st.columns(6)
     cols[0].metric("Duration", stats["duration_fmt"] + match_icon)
     cols[1].metric("Resolution", stats["resolution"])
@@ -398,6 +414,13 @@ def _video_stats_row(stats: dict):
     cols[3].metric("File size", stats["size_fmt"])
     cols[4].metric("Video", stats["video_codec"])
     cols[5].metric("Audio", stats["audio_codec"])
+    diff = st.session_state.get("duration_mismatch_s")
+    if diff:
+        st.warning(
+            f"Funscript and video durations differ by **{diff:.0f} seconds** "
+            f"({_DURATION_WARN_S}s limit). Check that you have the right files. "
+            "You can still continue."
+        )
 
 
 def _video_heatmap(video_path: str, project: dict):
