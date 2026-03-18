@@ -58,6 +58,9 @@ def render():
     _funscript_section()
 
     # ── Optional media ───────────────────────────────────────────────────────
+    st.markdown("""<style>
+    div[data-testid="stExpander"] summary p { font-size: 1.25rem; font-weight: 600; }
+    </style>""", unsafe_allow_html=True)
     with st.expander("Media *(optional)*"):
         _video_section(project if project else {})
         _audio_section(project if project else {})
