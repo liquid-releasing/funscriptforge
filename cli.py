@@ -89,6 +89,28 @@ Additional commands:
   python cli.py config --customizer --output cc.json           # dump customizer config
   python cli.py config --analyzer --output analyzer_config.json  # dump analyzer config
   python cli.py test                                            # run all tests
+
+Forge metadata / media analysis:
+
+  python cli.py meta path/to/input.funscript                   # print auto-derived metadata table
+      [--assessment assessment.json]                           # reuse cached assessment
+      [--output metadata.json]                                 # also save as JSON
+      [--format table|json]                                    # output format (default: table)
+
+  Derived fields: Pace (BPM), Intensity (avg_speed), Stroke depth (pos range),
+  Duration category, Dominant mood, Arc type, Variety, auto Hub tags, Tone suggestion.
+
+  python cli.py suggest-tone path/to/input.funscript            # print tone label + rationale
+
+  python cli.py beats path/to/video.mp4                        # extract beat timestamps
+      [--audio path/to/override.wav]                           # use separate audio track instead
+      [--output-dir output/]                                   # where to write _beats.json + _beats.csv
+  Requires: pip install av librosa numpy
+
+  python cli.py parse-captions path/to/captions.srt            # parse SRT or VTT, save _captions.json
+      [--output-dir output/]                                   # destination folder
+      [--print]                                                # also print all cues to stdout
+  Supports: .srt (SubRip), .vtt (WebVTT)
 """
 
 import argparse
@@ -941,6 +963,97 @@ def cmd_project(args):
 
 
 # ------------------------------------------------------------------
+# Forge metadata / beats / captions commands
+# ------------------------------------------------------------------
+
+@_cli_command
+def cmd_meta(args):
+    """Derive and print auto-metadata from a funscript (+ optional assessment)."""
+    from forge.metadata import derive_metadata, format_metadata_table
+    from assessment.analyzer import FunscriptAnalyzer
+
+    analyzer = FunscriptAnalyzer(config=_build_analyzer_config(args))
+    analyzer.load(args.funscript)
+
+    if getattr(args, "assessment", None):
+        result = analyzer.load_assessment_result(args.assessment)
+    else:
+        result = analyzer.analyze()
+
+    stats   = result.to_stats_dict() if hasattr(result, "to_stats_dict") else {}
+    phrases = [p if isinstance(p, dict) else p.to_dict() for p in result.phrases]
+
+    meta = derive_metadata(stats, phrases)
+
+    if getattr(args, "format", "table") == "json":
+        print(json.dumps(meta, indent=2))
+    else:
+        print(format_metadata_table(meta))
+
+    if getattr(args, "output", None):
+        with open(args.output, "w") as f:
+            json.dump(meta, f, indent=2)
+        print(f"\nMetadata saved: {args.output}")
+
+
+@_cli_command
+def cmd_suggest_tone(args):
+    """Suggest a Tone label from funscript analysis."""
+    from forge.metadata import derive_metadata
+    from assessment.analyzer import FunscriptAnalyzer
+
+    analyzer = FunscriptAnalyzer(config=_build_analyzer_config(args))
+    analyzer.load(args.funscript)
+    result  = analyzer.analyze()
+    stats   = result.to_stats_dict() if hasattr(result, "to_stats_dict") else {}
+    phrases = [p if isinstance(p, dict) else p.to_dict() for p in result.phrases]
+
+    meta = derive_metadata(stats, phrases)
+    print(f"Tone suggestion: {meta['tone_suggestion']}")
+    print(f"Rationale:       {meta['tone_rationale']}")
+
+
+@_cli_command
+def cmd_beats(args):
+    """Extract beats from a video file and write _beats.json + _beats.csv."""
+    from forge.beats import extract_beats
+
+    out_dir = args.output_dir or os.path.dirname(os.path.abspath(args.video))
+    result  = extract_beats(
+        video_path=args.video,
+        output_folder=out_dir,
+        audio_path=getattr(args, "audio", None),
+    )
+    if result is None:
+        print("Beat extraction failed (see warnings above).", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Beats extracted:  {result['beat_count']}  ({result['bpm_estimate']:.1f} BPM)")
+    print(f"Output folder:    {out_dir}")
+
+
+@_cli_command
+def cmd_parse_captions(args):
+    """Parse an SRT or VTT caption file and save _captions.json."""
+    from forge.captions import parse_captions, save_captions_json
+
+    captions = parse_captions(args.caption_file)
+    if not captions:
+        print("No captions found.", file=sys.stderr)
+        sys.exit(1)
+
+    out_dir = args.output_dir or os.path.dirname(os.path.abspath(args.caption_file))
+    dest    = save_captions_json(captions, out_dir)
+
+    print(f"Parsed {len(captions)} captions -> {dest}")
+
+    if getattr(args, "print", False):
+        for c in captions:
+            from forge.captions import _ms_to_ts
+            print(f"  [{_ms_to_ts(c['start_ms'])} --> {_ms_to_ts(c['end_ms'])}]  {c['text']}")
+
+
+# ------------------------------------------------------------------
 # Argument parser
 # ------------------------------------------------------------------
 
@@ -1216,6 +1329,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="New value (required for set-name and set-desc)",
     )
 
+    # --- meta ---
+    p_meta = sub.add_parser(
+        "meta",
+        help="Derive auto-metadata (pace, intensity, arc, mood, tags, tone) from a funscript",
+    )
+    p_meta.add_argument("funscript", help="Path to source .funscript file")
+    p_meta.add_argument("--assessment", metavar="PATH",
+                        help="Path to an existing assessment JSON (omit to run fresh)")
+    p_meta.add_argument("--output", metavar="PATH",
+                        help="Save metadata to this JSON file")
+    p_meta.add_argument("--format", choices=["table", "json"], default="table",
+                        help="Output format (default: table)")
+
+    # --- suggest-tone ---
+    p_tone = sub.add_parser(
+        "suggest-tone",
+        help="Print the auto-suggested Tone label for a funscript",
+    )
+    p_tone.add_argument("funscript", help="Path to source .funscript file")
+
+    # --- beats ---
+    p_beats = sub.add_parser(
+        "beats",
+        help="Extract beat timestamps from a video file (requires av + librosa)",
+    )
+    p_beats.add_argument("video", help="Path to video file")
+    p_beats.add_argument("--audio", metavar="PATH",
+                         help="Override: use this audio file instead of the video's audio track")
+    p_beats.add_argument("--output-dir", metavar="DIR",
+                         help="Directory for _beats.json and _beats.csv (default: same as video)")
+
+    # --- parse-captions ---
+    p_caps = sub.add_parser(
+        "parse-captions",
+        help="Parse an SRT or VTT file and save _captions.json",
+    )
+    p_caps.add_argument("caption_file", help="Path to .srt or .vtt file")
+    p_caps.add_argument("--output-dir", metavar="DIR",
+                        help="Output directory (default: same folder as caption file)")
+    p_caps.add_argument("--print", action="store_true",
+                        help="Also print all captions to stdout")
+
     # --- test ---
     sub.add_parser("test", help="Run unit tests")
 
@@ -1246,6 +1401,10 @@ def main():
         "visualize":        cmd_visualize,
         "config":           cmd_config,
         "test":             cmd_test,
+        "meta":             cmd_meta,
+        "suggest-tone":     cmd_suggest_tone,
+        "beats":            cmd_beats,
+        "parse-captions":   cmd_parse_captions,
     }
     dispatch[args.command](args)
 
