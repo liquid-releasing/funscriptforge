@@ -84,8 +84,6 @@ def render():
     </style>""", unsafe_allow_html=True)
     with st.expander("Media *(optional)*"):
         _video_section(project if project else {})
-        _audio_section(project if project else {})
-        _captions_section(project if project else {})
 
     # ── Output folder (required, last) ───────────────────────────────────────
     st.subheader("Output folder")
@@ -289,55 +287,6 @@ def _video_section(project: dict):
         st.caption(f"📹 {Path(existing).name}")
         _duration_match_check(project, "video")
 
-
-def _audio_section(project: dict):
-    st.markdown("**Audio** *(optional)* — beat track or alternative audio")
-    existing = get_input_file(project, "audio")
-
-    uploaded = st.file_uploader(
-        "Upload audio",
-        type=["mp3", "wav", "flac", "ogg"],
-        key="audio_upload",
-        label_visibility="collapsed",
-    )
-    if uploaded:
-        dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
-        dest.write_bytes(uploaded.read())
-        add_input_file(project, "audio", str(dest))
-        save_forge(project)
-        st.rerun()
-
-    if existing and Path(existing).exists():
-        st.caption(f"♪ {Path(existing).name}")
-        use_for_playback = st.checkbox(
-            "Use this audio for playback in FunScriptForge",
-            value=project.get("audio_playback", False),
-            key="audio_playback_checkbox",
-        )
-        if use_for_playback != project.get("audio_playback", False):
-            project["audio_playback"] = use_for_playback
-            save_forge(project)
-
-
-def _captions_section(project: dict):
-    st.markdown("**Captions** *(optional)* — .srt for semantic haptic generation")
-    existing = get_input_file(project, "captions")
-
-    uploaded = st.file_uploader(
-        "Upload captions",
-        type=["srt", "vtt", "ass"],
-        key="captions_upload",
-        label_visibility="collapsed",
-    )
-    if uploaded:
-        dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
-        dest.write_bytes(uploaded.read())
-        add_input_file(project, "captions", str(dest))
-        save_forge(project)
-        st.rerun()
-
-    if existing:
-        st.caption(f"💬 {Path(existing).name}")
 
 
 def _duration_match_check(project: dict, role: str):
