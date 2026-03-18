@@ -506,6 +506,9 @@ python cli.py test
 | [visualizations/README.md](visualizations/README.md) | Matplotlib motion chart components |
 | [tests/README.md](tests/README.md) | Test suite structure and coverage |
 | [internal/ACCESSIBILITY.md](internal/ACCESSIBILITY.md) | WCAG 2.1 AA accessibility assessment — issues, severity, recommended fixes |
+| [docs/TONE_TAB_SPEC.md](docs/TONE_TAB_SPEC.md) | Tone tab design spec — the 6 tones, card UI, beat envelopes, caption emotion, data model |
+| [docs/AUTO_METADATA_SPEC.md](docs/AUTO_METADATA_SPEC.md) | Auto-derived metadata spec — pace/intensity/arc/mood/tags/tone suggestion |
+| [docs/HAPTIC_COMPOSITION_SPEC.md](docs/HAPTIC_COMPOSITION_SPEC.md) | Three-layer haptic composition — base funscript + beats + caption emotion |
 | [docs/INSTALL.md](docs/INSTALL.md) | End-user installation guide (Windows) |
 | [internal/BUILD.md](internal/BUILD.md) | Building a standalone installer on Windows and macOS |
 | [internal/SECURITY.md](internal/SECURITY.md) | Threat analysis (T1–T5), mitigations implemented, Python plugin roadmap decision |
