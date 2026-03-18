@@ -313,33 +313,6 @@ def _sidebar() -> None:
             _desc = _proj.get_description()
             if _desc:
                 st.sidebar.caption(_desc)
-        uploaded = st.sidebar.file_uploader(
-            "Upload a funscript",
-            type=["funscript"],
-            label_visibility="collapsed",
-            help="Upload a .funscript file to analyse it.",
-        )
-        if uploaded is not None:
-            uploads_dir = os.path.join(output_dir, "uploads")
-            os.makedirs(uploads_dir, exist_ok=True)
-            save_path = os.path.join(uploads_dir, uploaded.name)
-            with open(save_path, "wb") as _fh:
-                _fh.write(uploaded.read())
-            st.session_state["last_upload_name"] = uploaded.name
-
-        media_uploaded = st.sidebar.file_uploader(
-            "Upload audio/video for context playback",
-            type=["mp3", "m4a", "wav", "ogg", "mp4", "mkv", "mov"],
-            label_visibility="collapsed",
-            help="Upload audio or video matching this funscript to enable playback while editing.",
-        )
-        if media_uploaded is not None:
-            uploads_dir = os.path.join(output_dir, "uploads")
-            os.makedirs(uploads_dir, exist_ok=True)
-            media_save_path = os.path.join(uploads_dir, media_uploaded.name)
-            with open(media_save_path, "wb") as _mfh:
-                _mfh.write(media_uploaded.read())
-            st.session_state["media_path"] = media_save_path
 
         # Build candidate list: uploaded files first, then test_funscript/.
         _path_for: dict[str, str] = {}
