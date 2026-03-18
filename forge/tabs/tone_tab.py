@@ -174,11 +174,11 @@ def _render_card(tone: dict, selected: str | None):
         st.session_state[flip_key] = not is_flipped
         st.rerun()
 
-    # ── Fixed-height flip area (icon or description) ──
+    # ── Flip area (icon or description) ──
     if is_flipped:
         st.markdown(
-            f"<div style='border:{border_width} solid {border_color};border-radius:10px;"
-            f"padding:8px;opacity:{opacity};height:180px;overflow-y:auto;'>"
+            f"<div style='border:{border_width} solid {border_color};border-radius:0 0 10px 10px;"
+            f"padding:8px;opacity:{opacity};overflow-y:auto;'>"
             f"<div style='font-size:0.72em;color:#ccc;line-height:1.4'>"
             f"{tone['description']}</div>"
             f"</div>",
@@ -186,19 +186,7 @@ def _render_card(tone: dict, selected: str | None):
         )
     else:
         if tone["icon"].exists():
-            st.markdown(
-                f"<div style='border:{border_width} solid {border_color};border-radius:10px;"
-                f"overflow:hidden;opacity:{opacity};height:180px;'>",
-                unsafe_allow_html=True,
-            )
             st.image(str(tone["icon"]), width="stretch")
-            st.markdown("</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(
-                f"<div style='border:{border_width} solid {border_color};border-radius:10px;"
-                f"opacity:{opacity};height:180px;'></div>",
-                unsafe_allow_html=True,
-            )
 
     # ── Select button ──
     if is_selected:
