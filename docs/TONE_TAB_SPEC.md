@@ -327,10 +327,30 @@ A phrase Tone **modulates** the global Tone. It does not replace it.
 - **No phrase Tone set** — the global Tone expresses fully in that phrase. Phrase
   Tones have the most impact when a strong global Tone is already established.
 
-Example: global = Tease, phrase 3 = Climax.
-Phrase 3 is not purely Climax. It is Tease with Climax urgency applied — the
-oscillating character of Tease is still present, but the phrase pushes harder
-and pulls back less. The user gets a peak moment that fits the overall Tease arc.
+**Example — the climb:**
+
+```
+Intensity
+  8 |                                          ·
+    |                                    ·
+    |                           ·
+    |                  [ P3 ]·
+    |           ·
+  2 |·
+    +---------------------------------------------> time
+         global arc: Build (steady climb, 2 → 8)
+```
+
+Phrase 3 sits in the middle of a global Build arc. The user sets phrase 3 to
+Tender. The climb does not stop. The arc does not bend. Phrase 3 still occupies
+its position on the 2→8 trajectory.
+
+What changes is the texture inside phrase 3 — slower, softer strokes. The device
+takes it a little easier for that moment. Then phrase 4 picks up the climb where
+phrase 3 left off.
+
+The global Tone defines the trajectory. The phrase Tone defines how that moment
+feels along the way.
 
 ```python
 def effective_tone(phrase_index, forge_project):
