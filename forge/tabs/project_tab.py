@@ -590,8 +590,8 @@ def _video_heatmap_chart(data: dict):
 
 
 def _audio_section(project: dict | None, v: int):
-    st.subheader("Audio")
-    st.caption("Beat track or alternative audio. Beat data generated from video if not provided.")
+    st.subheader("Alternate audio")
+    st.caption("Optional replacement audio track. Beat data is generated from video by default.")
     existing = get_input_file(project, "audio") if project else None
 
     uploaded = st.file_uploader(
