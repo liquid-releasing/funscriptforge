@@ -532,6 +532,37 @@ Day N: Near-flat, near-zero signal. All energy gone.
 
 ---
 
+## Art backlog — the six Tone cards
+
+Each of the six Tones needs a visual identity that works at card size and
+communicates the sensation before the user reads a word. This is not a chart.
+It is art — something a person feels when they look at it.
+
+| Tone | Color | Visual concept |
+|---|---|---|
+| **Build** | Green | A rising line or ascending form — anticipation gathering, energy accumulating. Never peaks within the frame. |
+| **Climax** | Red | Full expansion — everything at once. A burst, a peak, the moment of arrival. Nothing held back. |
+| **Tease** | Purple | A wave that approaches and retreats. Crests toward the edge of the frame and pulls away just before. |
+| **Edge** | Orange | A plateau — sustained at height, held there. Tension without resolution. The line refuses to fall. |
+| **Tender** | Blue | Soft, slow, close. A gentle curve or unfurling form. Intimate scale — it doesn't fill the card aggressively. |
+| **Dominant** | Dark / Charcoal | Driving, directional, assertive. Bold strokes moving in one direction. The form leads; the viewer follows. |
+
+### What to build
+
+- One artwork per Tone, sized for the card micro-preview (roughly 160×100px)
+- Style: abstract / motion-based — evoke the haptic sensation, not a literal device
+- Each artwork should work in both light and dark mode, or have a dark-mode variant
+- The color listed above is the card accent (border, badge, button highlight) — the
+  art itself may use a full palette
+- Art ships as SVG or high-res PNG, stored in `assets/tone_cards/`
+
+### Acceptance criteria
+
+A user unfamiliar with the vocabulary should be able to match each piece of art
+to its Tone word with better than chance accuracy. That is the bar.
+
+---
+
 ## Related
 
 | File | Contents |
