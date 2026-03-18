@@ -63,7 +63,7 @@ def render():
     # ════════════════════════════════════════════════════════════════════════
     with left:
         # ── Export location ──────────────────────────────────────────────────
-        st.markdown("**Export location** *(required)*")
+        st.subheader("Export location")
         st.caption("All output goes here. Input files are never touched.")
 
         funscript_path = st.session_state.get("funscript_path", "")
@@ -105,7 +105,7 @@ def render():
         st.divider()
 
         # ── Output targets ───────────────────────────────────────────────────
-        st.markdown("**Output targets**")
+        st.subheader("Output targets")
         st.caption("All checked targets are generated automatically at export.")
 
         _TARGETS = [
@@ -153,6 +153,7 @@ def render():
         st.divider()
 
         # ── Summary ──────────────────────────────────────────────────────────
+        st.subheader("Summary")
         _summary(project)
 
         st.divider()
@@ -177,7 +178,7 @@ def render():
     # ════════════════════════════════════════════════════════════════════════
     with right:
         # ── Funscript (required) ─────────────────────────────────────────────
-        st.markdown("**Funscript** *(required)*")
+        st.subheader("Funscript")
         _funscript_section()
 
         # Auto-create project from funscript if no project yet
@@ -275,7 +276,7 @@ def _funscript_stats_table(data: dict):
 
 
 def _video_section(project: dict):
-    st.markdown("**Source video** *(optional)*")
+    st.subheader("Source video")
     existing = get_input_file(project, "video") if project else None
 
     uploaded = st.file_uploader(
@@ -284,24 +285,33 @@ def _video_section(project: dict):
         key="video_upload",
         label_visibility="collapsed",
     )
-    if uploaded and project and project.get("output_folder"):
-        dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
-        dest.write_bytes(uploaded.read())
-        add_input_file(project, "video", str(dest))
-        save_forge(project)
-        st.rerun()
+    if uploaded:
+        current = st.session_state.get("video_path", "")
+        if Path(current).name != uploaded.name:
+            tmp = Path(tempfile.mkdtemp()) / uploaded.name
+            tmp.write_bytes(uploaded.read())
+            st.session_state["video_path"] = str(tmp)
+            # Also persist into project if output folder is ready
+            if project and project.get("output_folder"):
+                dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
+                import shutil
+                shutil.copy2(str(tmp), str(dest))
+                add_input_file(project, "video", str(dest))
+                save_forge(project)
+            st.rerun()
 
-    if existing and Path(existing).exists():
-        # Metadata row
-        stats = video_stats(existing)
+    # Show stats from project path (persistent) or session state (just uploaded)
+    video_path = existing or st.session_state.get("video_path", "")
+    if video_path and Path(video_path).exists():
+        stats = video_stats(video_path)
         if stats:
-            st.caption(f"📹 {Path(existing).name}")
+            st.caption(f"📹 {Path(video_path).name}")
             _video_stats_row(stats, project)
         else:
-            st.caption(f"📹 {Path(existing).name}")
-        # Motion heatmap
+            st.caption(f"📹 {Path(video_path).name}")
+        # Motion heatmap only when project + output folder available
         if project and project.get("output_folder"):
-            _video_heatmap(existing, project)
+            _video_heatmap(video_path, project)
 
 
 def _video_stats_row(stats: dict, project: dict):
@@ -390,7 +400,7 @@ def _video_heatmap_chart(data: dict):
 
 
 def _audio_section(project: dict):
-    st.markdown("**Audio** *(optional)* — beat track or alternative audio")
+    st.subheader("Audio")
     existing = get_input_file(project, "audio") if project else None
 
     uploaded = st.file_uploader(
@@ -419,7 +429,7 @@ def _audio_section(project: dict):
 
 
 def _captions_section(project: dict):
-    st.markdown("**Captions** *(optional)* — .srt for semantic haptic generation")
+    st.subheader("Captions")
     existing = get_input_file(project, "captions") if project else None
 
     uploaded = st.file_uploader(
@@ -455,7 +465,6 @@ def _duration_match_check(project: dict, role: str):
 # ── Summary ──────────────────────────────────────────────────────────────────
 
 def _summary(project: dict | None):
-    st.markdown("**Summary**")
     p = (project or {}).get("progress", {})
 
     has_funscript = bool(project and get_input_file(project, "funscript"))
