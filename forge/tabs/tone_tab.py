@@ -146,10 +146,10 @@ def render():
 
 
 def _render_card(tone: dict, selected: str | None):
-    """Render a single tone card with flip behavior."""
+    """Render a single tone card. Click card to flip (icon ↔ description).
+    Select button underneath stays visible on both sides."""
     name = tone["name"]
     is_selected = selected == name
-    # Track which cards are flipped to show description
     flip_key = f"tone_flip_{name}"
     is_flipped = st.session_state.get(flip_key, False)
 
@@ -157,6 +157,16 @@ def _render_card(tone: dict, selected: str | None):
     border_width = "3px" if is_selected else "1px"
     opacity = "1.0" if (is_selected or selected is None) else "0.5"
     badge = " ✓" if is_selected else ""
+
+    # Whole card is a button that flips
+    if st.button(
+        f"{'ℹ️' if not is_flipped else '🖼️'} {name}",
+        key=f"flip_{name}",
+        width="stretch",
+        help="Click to flip card",
+    ):
+        st.session_state[flip_key] = not is_flipped
+        st.rerun()
 
     if is_flipped:
         # Back of card — description
@@ -170,7 +180,7 @@ def _render_card(tone: dict, selected: str | None):
             unsafe_allow_html=True,
         )
     else:
-        # Front of card — icon
+        # Front of card — icon + tagline
         st.markdown(
             f"<div style='border:{border_width} solid {border_color};border-radius:10px;"
             f"padding:10px;text-align:center;opacity:{opacity};'>"
@@ -182,21 +192,13 @@ def _render_card(tone: dict, selected: str | None):
         if tone["icon"].exists():
             st.image(str(tone["icon"]), width="stretch")
 
-    # Two buttons: flip and select
-    bcol1, bcol2 = st.columns(2)
-    with bcol1:
-        flip_label = "ℹ️" if not is_flipped else "🖼️"
-        if st.button(flip_label, key=f"flip_{name}", width="stretch",
-                     help="Flip card" if not is_flipped else "Show icon"):
-            st.session_state[flip_key] = not is_flipped
+    # Select button — always visible
+    if is_selected:
+        st.button("✓ Selected", key=f"sel_{name}", disabled=True, width="stretch")
+    else:
+        if st.button("Select", key=f"sel_{name}", width="stretch"):
+            st.session_state["tone_global"] = name
             st.rerun()
-    with bcol2:
-        if is_selected:
-            st.button("✓", key=f"sel_{name}", disabled=True, width="stretch")
-        else:
-            if st.button("Select", key=f"sel_{name}", width="stretch"):
-                st.session_state["tone_global"] = name
-                st.rerun()
 
 
 # ── Preview ───────────────────────────────────────────────────────────────
