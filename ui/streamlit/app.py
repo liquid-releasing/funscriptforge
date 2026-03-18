@@ -48,6 +48,7 @@ from ui.streamlit.panels import pattern_editor as pattern_editor_panel
 from ui.streamlit.panels import transform_catalog as transform_catalog_panel
 from ui.streamlit.panels import retransforms as retransforms_panel
 from ui.streamlit.panels import viewer as viewer_panel
+from forge.tabs import project_tab, tone_tab
 
 # ------------------------------------------------------------------
 # Page config (must be the first Streamlit call)
@@ -582,16 +583,30 @@ def _render_sidebar_footer() -> None:
 def _main() -> None:
     project: Project | None = st.session_state.project
 
-    if project is None or not project.is_loaded:
-        _render_welcome()
-        return
-
-    # 4 tabs: Phrase (Selector ↔ Editor), Pattern Editor, Transform Catalog, Export.
-    # The Phrase tab shows the Selector or Editor depending on view_state.has_selection(),
-    # eliminating the need for JS-based programmatic tab navigation.
-    tab_phrase, tab_pattern, tab_transforms, tab_etransforms, tab_export = st.tabs(
-        ["Phrases", "Patterns", "Catalogs", "ReTransform", "Export"]
+    tab_project, tab_tone, tab_phrase, tab_pattern, tab_transforms, tab_etransforms, tab_export = st.tabs(
+        ["Project", "Tone", "Phrases", "Patterns", "Catalogs", "ReTransform", "Export"]
     )
+
+    with tab_project:
+        st.session_state["active_tab"] = -2
+        project_tab.render()
+
+    with tab_tone:
+        st.session_state["active_tab"] = -1
+        tone_tab.render()
+
+    if project is None or not project.is_loaded:
+        with tab_phrase:
+            st.info("Load a project in the **1 · Project** tab to get started.")
+        with tab_pattern:
+            st.info("Load a project in the **1 · Project** tab to get started.")
+        with tab_transforms:
+            st.info("Load a project in the **1 · Project** tab to get started.")
+        with tab_etransforms:
+            st.info("Load a project in the **1 · Project** tab to get started.")
+        with tab_export:
+            st.info("Load a project in the **1 · Project** tab to get started.")
+        return
 
     with tab_phrase:
         st.session_state["active_tab"] = 0
