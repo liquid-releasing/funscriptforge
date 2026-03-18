@@ -1,0 +1,3 @@
+[server]
+# Desktop — no meaningful upload size limit (10 GB)
+maxUploadSize = 10240
