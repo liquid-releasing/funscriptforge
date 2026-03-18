@@ -36,6 +36,23 @@ metadata derivation, beat weight envelopes, caption emotion (V2), and device out
 These six are permanent vocabulary. Adding tones is a breaking change to the
 entire pipeline — treat them as locked.
 
+### Why "Tones" and not "Characters"
+
+The vocabulary was previously called **characters** — names that described device
+behavior (Gentle, Reactive, etc.). It was renamed to **Tones** deliberately.
+
+"Characters" is mechanism-first: it describes what a device does. "Tones" is
+sensation-first: it describes what a user feels. That difference matters because
+the vocabulary needs to apply to any output surface — a single-axis toy, an estim
+device, a multi-zone haptic suit, a spatial audio rig. The mechanism varies. The
+sensation is consistent.
+
+Tease on a Handy oscillates amplitude. Tease on a haptic suit swirls sensation
+toward a zone and pulls away before committing. The same word. The same felt
+experience. Different surfaces, same intent.
+
+The renaming is what makes the vocabulary extensible without modification.
+
 ---
 
 ## Tab 2 — Global Tone Selection
