@@ -128,7 +128,7 @@ def render():
         with st.form("export_location_form", border=False):
             output_folder = st.text_input(
                 "Export location path",
-                placeholder="assets/output/my-project/",
+                placeholder=r"C:\Users\you\Videos\my-scene\  or  assets/output/my-scene/",
                 label_visibility="collapsed",
                 key="output_folder_input",
             )
@@ -180,7 +180,7 @@ def render():
         ("handy",        "The Handy",      "Linear stroker. Industry standard."),
         ("osr2",         "OSR2",           "Multi-axis stroker. Twist + stroke."),
     ]
-    saved_targets = (project or {}).get("output_targets", ["estim_foc", "handy"])
+    saved_targets = (project or {}).get("output_targets", ["handy"])
     selected = []
     cols = st.columns(len(_TARGETS))
     for col, (key, label, desc) in zip(cols, _TARGETS):
@@ -211,15 +211,12 @@ def render():
 
     # ── 5. Author & credits ──────────────────────────────────────────────────
     with st.expander("Author & credits *(optional)*"):
-        author = st.text_input("Author", value=(project or {}).get("author", ""),
-                               disabled=not project)
+        author = st.text_input("Author", value=(project or {}).get("author", ""))
         website = st.text_input("Website / Patreon URL",
-                                value=(project or {}).get("website", ""),
-                                disabled=not project)
+                                value=(project or {}).get("website", ""))
         contributors_raw = st.text_input(
             "Contributors (comma-separated)",
             value=", ".join((project or {}).get("contributors", [])),
-            disabled=not project,
         )
         if project:
             contributors = [c.strip() for c in contributors_raw.split(",") if c.strip()]
@@ -241,22 +238,32 @@ def render():
 
     # ── 7. Navigation ────────────────────────────────────────────────────────
     has_funscript = bool(project and get_input_file(project, "funscript"))
-    col_new, col_continue = st.columns([1, 2])
-    with col_new:
-        if st.button("New Project", use_container_width=True, disabled=not project):
-            if project:
-                save_forge(project)
-            st.session_state.forge_project = None
-            st.rerun()
-    with col_continue:
+    col_export, col_phrases = st.columns(2)
+    with col_export:
         if st.button(
-            "Continue →",
+            "Export Now",
+            use_container_width=True,
+            disabled=not has_funscript,
+            help=None if has_funscript else "Add a funscript first.",
+        ):
+            st.session_state["nav_hint"] = "export"
+            st.rerun()
+    with col_phrases:
+        if st.button(
+            "Continue to Edit Phrases →",
             type="primary",
             use_container_width=True,
             disabled=not has_funscript,
-            help=None if has_funscript else "Add a funscript to continue.",
+            help=None if has_funscript else "Add a funscript first.",
         ):
-            _go_next(project)
+            st.session_state["nav_hint"] = "phrases"
+            st.rerun()
+
+    hint = st.session_state.pop("nav_hint", None)
+    if hint == "export":
+        st.info("Click the **Export** tab above.")
+    elif hint == "phrases":
+        st.info("Click the **Phrases** tab above.")
 
 
 # ── Funscript ────────────────────────────────────────────────────────────────
@@ -334,14 +341,25 @@ def _video_section(project: dict | None, v: int):
         label_visibility="collapsed",
     )
     if uploaded:
-        tmp = Path(tempfile.mkdtemp()) / uploaded.name
-        tmp.write_bytes(uploaded.read())
+        try:
+            tmp = Path(tempfile.mkdtemp()) / uploaded.name
+            tmp.write_bytes(uploaded.read())
+        except OSError as e:
+            if e.errno == 28:
+                st.error("Not enough disk space to load this video. Free up space and try again.")
+            else:
+                st.error(f"Could not save video: {e}")
+            return
         st.session_state["video_path"] = str(tmp)
         if project and project.get("output_folder"):
             import shutil
             Path(project["output_folder"]).mkdir(parents=True, exist_ok=True)
             dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
-            shutil.copy2(str(tmp), str(dest))
+            try:
+                shutil.copy2(str(tmp), str(dest))
+            except OSError as e:
+                st.error(f"Could not copy video to output folder: {e}")
+                return
             add_input_file(project, "video", str(dest))
             save_forge(project)
             st.session_state["video_path"] = str(dest)
@@ -497,8 +515,3 @@ def _summary(project: dict | None):
         st.write(f"{'✅' if done else '⬜'} {label}")
 
 
-# ── Navigation ────────────────────────────────────────────────────────────────
-
-def _go_next(project: dict):
-    st.session_state.active_tab = "tone"
-    st.rerun()
