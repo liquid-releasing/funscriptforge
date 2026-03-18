@@ -139,9 +139,87 @@ Edit the generated JSON, then pass it back with `--config` (or
 
 ---
 
+## Forge metadata
+
+### `meta` — auto-derive project metadata
+
+```bash
+python cli.py meta input.funscript
+python cli.py meta input.funscript --format json
+python cli.py meta input.funscript --output metadata.json
+python cli.py meta input.funscript --assessment assessment.json   # reuse cached assessment
+```
+
+Derives from the funscript + assessment (runs a fresh assessment if none provided):
+
+| Field | Source | Values |
+| --- | --- | --- |
+| Pace | Average BPM across phrases | Slow / Medium / Fast / Intense |
+| Intensity | `avg_speed` from stats | Low / Medium / High / Extreme |
+| Stroke depth | `max_pos − min_pos` position range | Shallow / Mid / Deep / Full |
+| Duration category | `duration_s` | Short / Medium / Long / Feature |
+| Dominant mood | Most frequent phrase tone tag | Build / Climax / Tease / Edge / Tender / Dominant |
+| Arc type | BPM shape across thirds of the script | Climactic / Building / Episodic / Flat / Short |
+| Variety | Count of distinct tone tags | Focused / Varied / Complex |
+| Auto Hub tags | All of the above combined | e.g. `pace:fast`, `mood:tease`, `arc:building` |
+| Tone suggestion | Derived from arc + mood + intensity | One of the 6 Tone labels |
+| Tone rationale | Human-readable explanation | e.g. "Suggested based on: dominant mood tease" |
+
+### `suggest-tone` — tone label only
+
+```bash
+python cli.py suggest-tone input.funscript
+```
+
+Prints two lines, e.g.:
+```
+Tone suggestion: Tease
+Rationale:       Suggested based on: dominant mood tease
+```
+
+---
+
+## Media analysis
+
+### `beats` — beat detection from video
+
+Requires `av` and `librosa`:
+
+```bash
+pip install av librosa
+```
+
+```bash
+python cli.py beats path/to/video.mp4
+python cli.py beats path/to/video.mp4 --output-dir output/
+python cli.py beats path/to/video.mp4 --audio path/to/override.wav
+```
+
+Extracts audio from the video via PyAV (no external FFmpeg binary required), runs
+`librosa.beat.beat_track()`, and writes two files to the output directory:
+
+| File | Contents |
+| --- | --- |
+| `_beats.json` | `source_path`, `bpm_estimate`, `beat_times` (seconds), `beat_count` |
+| `_beats.csv` | `beat_index`, `time_s`, `bpm_estimate` — one row per beat |
+
+### `parse-captions` — SRT / WebVTT parser
+
+```bash
+python cli.py parse-captions path/to/captions.srt
+python cli.py parse-captions path/to/captions.vtt --output-dir output/
+python cli.py parse-captions path/to/captions.srt --print       # also print all cues to stdout
+```
+
+Supports `.srt` (SubRip) and `.vtt` (WebVTT). Strips HTML/VTT markup tags.
+Writes `_captions.json` — an array of objects with `index`, `start`, `end`
+(human-readable timestamps), `start_ms`, `end_ms`, and `text`.
+
+---
+
 ## Tests
 
-Run all 151 tests (core pipeline + CLI + UI common layer):
+Run all tests (core pipeline + CLI + UI common layer):
 
 ```bash
 python cli.py test
@@ -150,10 +228,10 @@ python cli.py test
 Or via unittest directly:
 
 ```bash
-# Core + CLI tests (106)
+# Core + CLI tests
 python -m unittest discover -s tests -v
 
-# UI common-layer tests only (45)
+# UI common-layer tests only
 python -m unittest discover -s ui/common/tests -v
 ```
 

@@ -110,7 +110,11 @@ The **character name is the API** between all three tools: Explorer analysis →
 - `export-plan` — mirror of the UI Export tab; supports `--apply` to write output directly
 - `catalog` — query and manage the cross-funscript pattern catalog
 - `validate-plugins` — validate JSON recipe files and report Python plugin gate status without starting the app
-- `test` — run all 741 tests
+- `meta` — auto-derive pace, intensity, arc, mood, Hub tags, and tone suggestion from a funscript
+- `suggest-tone` — print the auto-suggested Tone label and rationale
+- `beats` — extract beat timestamps from a video file; writes `_beats.json` + `_beats.csv`
+- `parse-captions` — parse SRT or WebVTT captions; writes `_captions.json`
+- `test` — run all tests
 
 ---
 
@@ -385,6 +389,12 @@ funscriptforge/
 │   │   ├── app.py
 │   │   └── panels/
 │   └── web/                  #   FastAPI + frontend (planned)
+├── forge/                    # Forge-layer modules (project, metadata, media analysis)
+│   ├── metadata.py           #   derive_metadata() — auto-derive pace/intensity/arc/mood/tags/tone
+│   ├── beats.py              #   extract_beats() — PyAV + librosa beat detection
+│   ├── captions.py           #   parse_captions() — SRT + WebVTT parser
+│   ├── video.py              #   video_stats(), analyze_motion()
+│   └── tabs/                 #   Streamlit tab modules (project_tab, tone_tab, export_tab)
 ├── docs/                     # MkDocs user documentation site (in progress)
 ├── internal/                 # Internal planning docs (gap analysis, backlogs, build notes)
 ├── media/                    # App images, logos, icons
@@ -441,6 +451,20 @@ python cli.py catalog [--catalog <path>] [--tag TAG] [--remove FUNSCRIPT] [--cle
 
 # Validate user-transform plugins (JSON schema check + Python plugin gate status)
 python cli.py validate-plugins [--verbose] [--recipes-dir <path>] [--plugins-dir <path>]
+
+# Auto-derive metadata (pace, intensity, arc, mood, Hub tags, tone suggestion)
+python cli.py meta <funscript> [--assessment <path>] [--output <json>] [--format table|json]
+
+# Print tone label + rationale only
+python cli.py suggest-tone <funscript>
+
+# Extract beat timestamps from video  (requires: pip install av librosa)
+python cli.py beats <video> [--audio <override>] [--output-dir <dir>]
+# Writes: _beats.json, _beats.csv
+
+# Parse SRT or WebVTT captions
+python cli.py parse-captions <file.srt|.vtt> [--output-dir <dir>] [--print]
+# Writes: _captions.json
 
 # Utilities
 python cli.py visualize <funscript> --assessment <path> [--output <path>]
