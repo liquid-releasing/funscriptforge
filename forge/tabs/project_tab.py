@@ -269,7 +269,6 @@ def _funscript_stats_table(data: dict):
 
 def _video_section(project: dict):
     st.markdown("**Source video** *(optional)*")
-    existing = get_input_file(project, "video")
 
     uploaded_video = st.file_uploader(
         "Drag and drop or browse",
@@ -277,15 +276,23 @@ def _video_section(project: dict):
         key="video_upload",
         label_visibility="collapsed",
     )
-    if uploaded_video and project.get("output_folder"):
-        dest = Path(project["output_folder"]) / f"_input_{uploaded_video.name}"
-        dest.write_bytes(uploaded_video.read())
-        add_input_file(project, "video", str(dest))
-        save_forge(project)
-        st.rerun()
+    if uploaded_video:
+        current = st.session_state.get("video_path", "")
+        if Path(current).name != uploaded_video.name:
+            tmp = Path(tempfile.mkdtemp()) / uploaded_video.name
+            tmp.write_bytes(uploaded_video.read())
+            st.session_state["video_path"] = str(tmp)
+            # persist to project if output folder already exists
+            if project.get("output_folder"):
+                dest = Path(project["output_folder"]) / f"_input_{uploaded_video.name}"
+                import shutil
+                shutil.copy2(str(tmp), str(dest))
+                add_input_file(project, "video", str(dest))
+                save_forge(project)
 
-    if existing and Path(existing).exists():
-        _video_stats_table(existing, project)
+    video_path = st.session_state.get("video_path", "")
+    if video_path and Path(video_path).exists():
+        _video_stats_table(video_path, project)
 
 
 
