@@ -40,15 +40,20 @@ def _browse_for_folder() -> str | None:
     try:
         import tkinter as tk
         from tkinter import filedialog
+        last = st.session_state.get("last_browse_dir", str(_ASSETS_OUTPUT))
         root = tk.Tk()
         root.withdraw()
         root.wm_attributes("-topmost", True)
         folder = filedialog.askdirectory(
             title="Choose project output folder",
-            initialdir=str(_ASSETS_OUTPUT),
+            initialdir=last,
         )
         root.destroy()
-        return folder or None
+        if folder:
+            # Remember the parent so next browse opens in the same neighbourhood
+            st.session_state["last_browse_dir"] = str(Path(folder).parent)
+            return folder
+        return None
     except Exception:
         return None
 
