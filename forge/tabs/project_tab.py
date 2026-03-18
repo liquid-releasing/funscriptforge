@@ -45,14 +45,6 @@ def render():
 
     project = st.session_state.forge_project
 
-    # ── Project name ────────────────────────────────────────────────────────
-    st.subheader("Project name")
-    name_val = project["name"] if project else ""
-    name = st.text_input("Project name", value=name_val, placeholder="my-project", label_visibility="collapsed")
-    if project and name and name != project["name"]:
-        project["name"] = name
-        save_forge(project)
-
     # ── Funscript (required) — inspect only, no saving yet ───────────────────
     st.subheader("Funscript")
     _funscript_section()
@@ -189,10 +181,11 @@ def _funscript_section():
         label_visibility="collapsed",
     )
     if uploaded:
-        tmp = Path(tempfile.mkdtemp()) / uploaded.name
-        tmp.write_bytes(uploaded.read())
-        st.session_state["funscript_path"] = str(tmp)
-        st.rerun()
+        current = st.session_state.get("funscript_path", "")
+        if Path(current).name != uploaded.name:
+            tmp = Path(tempfile.mkdtemp()) / uploaded.name
+            tmp.write_bytes(uploaded.read())
+            st.session_state["funscript_path"] = str(tmp)
 
     # Preview
     funscript_path = st.session_state.get("funscript_path", "")
