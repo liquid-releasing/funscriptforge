@@ -205,6 +205,32 @@ One vocabulary. All systems speak it.
 | **Beat weight envelopes** | Each tone defines an envelope shape for beat influence per phrase |
 | **Caption emotion (V2)** | Detected speech emotion maps to a tone → overrides locally |
 | **Export** | Tone label drives haptic output shaping for each device profile |
+| **Spatial haptics (backlog)** | Same intent record drives body-zone distribution — see below |
+
+### Tone as spatial haptic intent
+
+The same Tone decisions that shape funscript output also describe how sensation
+moves across a haptic suit. Funscript is one axis of motion. A haptic suit is a
+surface — dozens of zones that can receive independent signals simultaneously.
+
+Tone maps naturally to spatial movement:
+
+| Tone | Spatial character |
+|---|---|
+| **Build** | Sensation grows inward — starts at the periphery, converges toward center |
+| **Climax** | Everything activates simultaneously — full body, full intensity |
+| **Tease** | Sensation swirls and retreats — arrives at a zone then pulls away before committing |
+| **Edge** | Sustained activation across a zone — plateau, no release |
+| **Tender** | Soft, slow, spreading — sensation diffuses rather than concentrating |
+| **Dominant** | Driving wave across the body — directional, assertive, one zone leads |
+
+The `.forge` intent record (global Tone + phrase overrides) is already sufficient
+to generate spatial haptic output. No new user decisions required. The same creative
+choice that shaped the main funscript also describes how the experience moves
+through the body.
+
+This is the same architectural pattern as the device profile expansion — one set of
+decisions, one more output surface.
 
 ---
 
