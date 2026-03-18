@@ -21,6 +21,7 @@ from forge.project import (
     save_forge,
 )
 from forge.funscript import funscript_stats, load_funscript, parse_actions
+from forge.video import video_stats
 
 
 def _browse_for_folder() -> str | None:
@@ -283,10 +284,36 @@ def _video_section(project: dict):
         save_forge(project)
         st.rerun()
 
-    if existing:
-        st.caption(f"📹 {Path(existing).name}")
-        _duration_match_check(project, "video")
+    if existing and Path(existing).exists():
+        _video_stats_table(existing, project)
 
+
+
+def _video_stats_table(path: str, project: dict):
+    stats = video_stats(path)
+    if not stats:
+        st.caption(f"📹 {Path(path).name}")
+        return
+
+    # Duration match check against funscript
+    funscript_path = st.session_state.get("funscript_path", "")
+    match_icon = ""
+    if funscript_path and Path(funscript_path).exists():
+        fs_data = load_funscript(funscript_path)
+        if fs_data:
+            fs_stats = funscript_stats(fs_data)
+            if fs_stats and stats["duration_s"]:
+                diff = abs(stats["duration_s"] - fs_stats["duration_s"])
+                match_icon = " ✅" if diff <= 5 else " ⚠️"
+
+    st.caption(f"📹 {Path(path).name}")
+    cols = st.columns(6)
+    cols[0].metric("Duration", stats["duration_fmt"] + match_icon)
+    cols[1].metric("Resolution", stats["resolution"])
+    cols[2].metric("Frame rate", stats["fps_fmt"])
+    cols[3].metric("File size", stats["size_fmt"])
+    cols[4].metric("Video", stats["video_codec"])
+    cols[5].metric("Audio", stats["audio_codec"])
 
 
 def _duration_match_check(project: dict, role: str):
