@@ -413,22 +413,51 @@ def effective_tone(phrase_index, forge_project):
 The recipe layer receives both and composes them. When phrase == global, it is
 equivalent to a single Tone applied fully.
 
+### Device safety pass
+
+After the Tone recipe generates output for a device, a **device-specific safety
+pass** is applied before writing the file. The safety pass enforces the physical
+limits of the device — it does not change intent, it ensures the output can be
+executed safely.
+
+```
+Tone recipe output  →  [device safety pass]  →  output file
+```
+
+Each device has its own constraints:
+
+| Device | Safety constraints |
+|---|---|
+| **Main funscript / Handy** | Max velocity between actions; minimum action interval; position clamped 0–100 |
+| **OSR2 / SR6** | Per-axis velocity limits; mechanical range per axis |
+| **Estim (restim)** | pulse_frequency within safe range; pulse_width limits; amplitude ceiling per channel |
+| **Haptic suit** | Zone activation rate limits; simultaneous zone count ceiling |
+
+The safety pass is a read-and-clamp operation — it never rejects an export, it
+adjusts values to fit within safe bounds. The user is never blocked; the output
+is always within device spec.
+
+This is distinct from source integrity safety (which protects the source funscript
+from being overwritten). Source integrity protects the project. Device safety
+protects the user and the hardware.
+
 ### One decision set drives all output files
 
 The `.forge` file is the complete record of user intent: global Tone + per-phrase
-influences. Export applies that intent through each device profile's translation layer.
+influences. Export applies that intent through each device profile's translation layer,
+then applies the device safety pass before writing.
 
 ```
 .forge (global=Tease, phrase_tones={3: Climax, 7: Tender})
     │
-    ├── main funscript recipe      → my-scene.funscript
-    ├── estim alpha recipe         → estim/alpha.funscript
-    ├── estim beta recipe          → estim/beta.funscript
-    ├── estim pulse_frequency      → estim/pulse_frequency.funscript
-    ├── estim pulse_width          → estim/pulse_width.funscript
-    ├── estim pulse_rise           → estim/pulse_rise.funscript
-    ├── estim E1–E4, prostate      → estim/E1.funscript … prostate.funscript
-    └── Handy funscript            → handy/my-scene.funscript
+    ├── main funscript recipe  →  [safety pass]  →  my-scene.funscript
+    ├── estim alpha recipe     →  [safety pass]  →  estim/alpha.funscript
+    ├── estim beta recipe      →  [safety pass]  →  estim/beta.funscript
+    ├── estim pulse_frequency  →  [safety pass]  →  estim/pulse_frequency.funscript
+    ├── estim pulse_width      →  [safety pass]  →  estim/pulse_width.funscript
+    ├── estim pulse_rise       →  [safety pass]  →  estim/pulse_rise.funscript
+    ├── estim E1–E4, prostate  →  [safety pass]  →  estim/E1.funscript … prostate.funscript
+    └── Handy funscript        →  [safety pass]  →  handy/my-scene.funscript
 ```
 
 The user never re-decides Tone per device. The same Tone choices flow through
