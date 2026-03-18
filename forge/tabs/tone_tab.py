@@ -162,7 +162,7 @@ def _render_card(tone: dict, selected: str | None):
         # Back of card — description
         st.markdown(
             f"<div style='border:{border_width} solid {border_color};border-radius:10px;"
-            f"padding:10px;opacity:{opacity};min-height:160px;'>"
+            f"padding:10px;opacity:{opacity};'>"
             f"<strong style='color:{tone['color']};font-size:0.85em'>{name}{badge}</strong>"
             f"<div style='font-size:0.75em;color:#ccc;margin-top:6px;line-height:1.4'>"
             f"{tone['description']}</div>"
@@ -173,7 +173,7 @@ def _render_card(tone: dict, selected: str | None):
         # Front of card — icon
         st.markdown(
             f"<div style='border:{border_width} solid {border_color};border-radius:10px;"
-            f"padding:10px;text-align:center;opacity:{opacity};min-height:160px;'>"
+            f"padding:10px;text-align:center;opacity:{opacity};'>"
             f"<strong style='color:{tone['color']};font-size:0.85em'>{name}{badge}</strong>"
             f"<div style='font-size:0.7em;color:#888'>{tone['tagline']}</div>"
             f"</div>",
