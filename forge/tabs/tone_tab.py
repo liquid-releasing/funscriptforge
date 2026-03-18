@@ -146,8 +146,8 @@ def render():
 
 
 def _render_card(tone: dict, selected: str | None):
-    """Render a single tone card. Click card to flip (icon ↔ description).
-    Select button underneath stays visible on both sides."""
+    """Render a tone card: title/tagline always visible, fixed-height image
+    area flips to description via ℹ️ button, Select button at bottom."""
     name = tone["name"]
     is_selected = selected == name
     flip_key = f"tone_flip_{name}"
@@ -158,41 +158,46 @@ def _render_card(tone: dict, selected: str | None):
     opacity = "1.0" if (is_selected or selected is None) else "0.5"
     badge = " ✓" if is_selected else ""
 
-    # Whole card is a button that flips
-    if st.button(
-        f"{'ℹ️' if not is_flipped else '🖼️'} {name}",
-        key=f"flip_{name}",
-        width="stretch",
-        help="Click to flip card",
-    ):
+    # ── Title + tagline + ℹ️ toggle (always visible) ──
+    flip_icon = "🖼️" if is_flipped else "ℹ️"
+    st.markdown(
+        f"<div style='text-align:center;opacity:{opacity};'>"
+        f"<strong style='color:{tone['color']};font-size:0.85em'>{name}{badge}</strong>"
+        f"<div style='font-size:0.7em;color:#888'>{tone['tagline']}</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+    if st.button(flip_icon, key=f"flip_{name}", help="Show description" if not is_flipped else "Show icon"):
         st.session_state[flip_key] = not is_flipped
         st.rerun()
 
+    # ── Fixed-height flip area (icon or description) ──
     if is_flipped:
-        # Back of card — description
         st.markdown(
             f"<div style='border:{border_width} solid {border_color};border-radius:10px;"
-            f"padding:10px;opacity:{opacity};'>"
-            f"<strong style='color:{tone['color']};font-size:0.85em'>{name}{badge}</strong>"
-            f"<div style='font-size:0.75em;color:#ccc;margin-top:6px;line-height:1.4'>"
+            f"padding:8px;opacity:{opacity};height:180px;overflow-y:auto;'>"
+            f"<div style='font-size:0.72em;color:#ccc;line-height:1.4'>"
             f"{tone['description']}</div>"
             f"</div>",
             unsafe_allow_html=True,
         )
     else:
-        # Front of card — icon + tagline
-        st.markdown(
-            f"<div style='border:{border_width} solid {border_color};border-radius:10px;"
-            f"padding:10px;text-align:center;opacity:{opacity};'>"
-            f"<strong style='color:{tone['color']};font-size:0.85em'>{name}{badge}</strong>"
-            f"<div style='font-size:0.7em;color:#888'>{tone['tagline']}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
         if tone["icon"].exists():
+            st.markdown(
+                f"<div style='border:{border_width} solid {border_color};border-radius:10px;"
+                f"overflow:hidden;opacity:{opacity};height:180px;'>",
+                unsafe_allow_html=True,
+            )
             st.image(str(tone["icon"]), width="stretch")
+            st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(
+                f"<div style='border:{border_width} solid {border_color};border-radius:10px;"
+                f"opacity:{opacity};height:180px;'></div>",
+                unsafe_allow_html=True,
+            )
 
-    # Select button — always visible
+    # ── Select button ──
     if is_selected:
         st.button("✓ Selected", key=f"sel_{name}", disabled=True, width="stretch")
     else:
