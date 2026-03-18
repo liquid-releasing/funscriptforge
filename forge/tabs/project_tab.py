@@ -55,6 +55,9 @@ def render():
 
     project = st.session_state.forge_project
 
+    if not project and not st.session_state.get("funscript_path"):
+        st.info("Drop a funscript to get started. Output folder will be set automatically.")
+
     # ── Funscript (required) — inspect only, no saving yet ───────────────────
     st.subheader("Funscript")
     _funscript_section()
@@ -88,12 +91,14 @@ def render():
     st.subheader("Output folder")
     st.caption("All output goes here. Input files are never touched.")
 
+    funscript_path = st.session_state.get("funscript_path", "")
+    auto_output = str(_default_output_for(funscript_path)) if funscript_path else ""
     col_path, col_browse = st.columns([5, 1])
     with col_path:
         output_folder = st.text_input(
             "Output folder path",
-            value=project["output_folder"] if project else "",
-            placeholder="/path/to/my-project/",
+            value=project["output_folder"] if project else auto_output,
+            placeholder="assets/output/my-project/",
             label_visibility="collapsed",
             key="output_folder_input",
         )
@@ -119,7 +124,6 @@ def render():
 
     project = st.session_state.forge_project
     if not project:
-        st.info("Enter a project name, funscript, and output folder to get started.")
         return
 
     # ── Output targets ───────────────────────────────────────────────────────
