@@ -75,12 +75,20 @@ def _fmt_size(size_bytes: int) -> str:
     return f"{size_bytes:.1f} TB"
 
 
-def analyze_motion(video_path: str, output_folder: str, sample_fps: float = 1.0) -> dict | None:
+def analyze_motion(
+    video_path: str,
+    output_folder: str,
+    sample_fps: float = 1.0,
+    progress_callback=None,
+) -> dict | None:
     """Frame-difference motion analysis. Returns dict with times/scores, cached to disk.
 
     Samples the video at *sample_fps* frames per second, computes the mean absolute
     pixel difference between consecutive frames, normalises to 0–100, and writes the
     result to ``_video_motion.json`` inside *output_folder*.
+
+    *progress_callback*, if provided, is called with (sampled_count, total_samples)
+    so callers can show progress.
 
     Returns None if OpenCV is not available or the video cannot be read.
     """
@@ -94,12 +102,15 @@ def analyze_motion(video_path: str, output_folder: str, sample_fps: float = 1.0)
         return None
 
     video_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     frame_interval = max(1, int(video_fps / sample_fps))
+    total_samples = max(1, total_frames // frame_interval) if total_frames else 0
 
     times: list[float] = []
     raw_scores: list[float] = []
     prev_gray = None
     frame_idx = 0
+    sampled = 0
 
     while True:
         ok, frame = cap.read()
@@ -113,6 +124,9 @@ def analyze_motion(video_path: str, output_folder: str, sample_fps: float = 1.0)
                 times.append(frame_idx / video_fps)
                 raw_scores.append(score)
             prev_gray = gray
+            sampled += 1
+            if progress_callback and total_samples:
+                progress_callback(sampled, total_samples)
         frame_idx += 1
 
     cap.release()

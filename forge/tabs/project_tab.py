@@ -118,7 +118,11 @@ def _commit_project_to_disk(project: dict | None) -> None:
         if video_path and Path(video_path).exists():
             status.update(label="Analyzing video motion…")
             from forge.video import analyze_motion
-            motion = analyze_motion(video_path, folder)
+
+            def _motion_progress(sampled, total):
+                status.update(label=f"Analyzing video motion… frame {sampled} / {total}")
+
+            motion = analyze_motion(video_path, folder, progress_callback=_motion_progress)
             if motion:
                 status.write("✅ Motion heatmap generated")
 
