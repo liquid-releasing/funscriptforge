@@ -245,27 +245,46 @@ Tone state is stored in the `.forge` project file.
 The **Continue** button is not gated on beat influence or any slider. Tone selection
 is the only required decision.
 
+### Default Tone resolution
+
+A Tone is always set. The system never reaches Export without one.
+
+Resolution order:
+
+1. **User selection** — the user clicked a card in Tab 2. This is the active Tone.
+2. **Auto-metadata suggestion** — `derive_metadata()` produced a `tone_suggestion`. Pre-selected on tab load. Used if the user never changed it.
+3. **System default** — `"Build"`. Used only when auto-metadata returned no suggestion (very short funscript, no detectable arc).
+
+The resolved Tone is stored in `forge_project["tone"]["global"]` before export begins.
+No Tone picker appears on the Export tab — the choice was made in Tab 2.
+
 ---
 
 ## Three-stage application model
 
-Tone is applied at three points in the workflow. The same Tone picked at Stage 1
-is the one used at Stage 3 — by default, unchanged.
+**Simple version:** Export uses exactly what the user decided — the global Tone from
+Tab 2, and any per-phrase overrides set in the Phrase Editor. Nothing more.
 
 | Stage | Where | Scope | What happens |
 |---|---|---|---|
-| **1 — Intent** | Tab 2 (global) | Whole project | Tone is set as creative direction. Drives transform recommendations for Stage 2. No signal processing yet. |
-| **2 — Phrase work** | Phrase editor button 4 | Per phrase (optional) | Per-phrase overrides. Recommendations for Shape/Tempo/Intensity are informed by the phrase's effective Tone. |
-| **3 — Export** | Export pass | All output files | Tone recipe applied once to the clean funscript. Same Tone drives all 6–7 output files simultaneously. |
+| **1 — Intent** | Tab 2 (global) | Whole project | User picks (or accepts) a Tone. Stored in `.forge`. Drives transform recommendations. No signal processing yet. |
+| **2 — Phrase work** | Phrase editor button 4 | Per phrase (optional) | Per-phrase overrides stored in `.forge`. Shape/Tempo/Intensity recommendations are Tone-aware. |
+| **3 — Export** | Export pass | All output files | Reads global Tone + phrase overrides from `.forge`. Applies them to the clean source funscript. Writes all device output files. |
 
-The default at Stage 3 is always `forge_project["tone"]["global"]` — the Tone
-the user picked in Tab 2. Phrase overrides apply locally. No re-picking at export.
+Export is a read of stored decisions — it does not re-derive or re-prompt.
 
 ```python
 def effective_tone(phrase_index, forge_project):
     overrides = forge_project["tone"].get("phrase_overrides", {})
     return overrides.get(str(phrase_index), forge_project["tone"]["global"])
 ```
+
+### Scope: phrases only, not patterns
+
+Tone applies to **phrases** edited in the Phrase Editor. It does not apply to
+behavioral pattern instances fixed in the Pattern Editor. Pattern fixes (normalize,
+recenter, beat_accent, etc.) are corrective — they fix broken motion. Tone is
+expressive — it shapes intent. These are separate concerns and do not compose.
 
 ---
 
