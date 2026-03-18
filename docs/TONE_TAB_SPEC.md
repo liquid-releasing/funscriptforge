@@ -279,6 +279,30 @@ def effective_tone(phrase_index, forge_project):
     return overrides.get(str(phrase_index), forge_project["tone"]["global"])
 ```
 
+### One decision set drives all output files
+
+The `.forge` file is the complete record of user intent: global Tone + per-phrase
+overrides. Export applies that intent through each device profile's translation layer.
+
+```
+.forge (global=Tease, phrase_overrides={3: Climax, 7: Tender})
+    │
+    ├── main funscript recipe      → my-scene.funscript
+    ├── estim alpha recipe         → estim/alpha.funscript
+    ├── estim beta recipe          → estim/beta.funscript
+    ├── estim pulse_frequency      → estim/pulse_frequency.funscript
+    ├── estim pulse_width          → estim/pulse_width.funscript
+    ├── estim pulse_rise           → estim/pulse_rise.funscript
+    ├── estim E1–E4, prostate      → estim/E1.funscript … prostate.funscript
+    └── Handy funscript            → handy/my-scene.funscript
+```
+
+The user never re-decides Tone per device. The same Tone choices flow through
+every device profile automatically. All output files express the same creative intent.
+
+This means Tone decisions made incrementally during phrase editing accumulate in
+`.forge` and are already complete at export time. Export has no new questions to ask.
+
 ### Scope: phrases only, not patterns
 
 Tone applies to **phrases** edited in the Phrase Editor. It does not apply to
