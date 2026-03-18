@@ -41,6 +41,7 @@ def funscript_stats(data: dict) -> dict:
 
     return {
         "duration": duration_s,
+        "duration_s": duration_s,
         "duration_fmt": _fmt_duration(duration_s),
         "action_count": len(times),
         "avg_speed": float(np.mean(speeds)),

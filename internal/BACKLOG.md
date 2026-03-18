@@ -150,6 +150,25 @@ Notes: core pipeline modules are already framework-agnostic — the API layer is
 
 ---
 
+### [v2] Output folder structure redesign
+
+The output folder is accumulating a lot of artifacts: `.forge` project file, cached
+`_video_motion.json`, `_beat_data.json`, copied input files (`_input_*`), and
+eventually exported funscripts and device profiles.
+
+Redesign the output folder layout for v2:
+
+- Separate concerns: inputs / cache / exports / project metadata
+- Consider whether cached analysis (motion, beats) should live alongside exports
+  or in a separate `.forge-cache/` subdirectory
+- Evaluate whether the output folder should be user-visible at all, or if the
+  user just picks an "export to" location and the working state lives elsewhere
+- Background processing: beat analysis, motion heatmap, and assessment should
+  run concurrently while the user fills out the Project tab (v1: user waits)
+- Define cleanup strategy: what gets deleted on "Clear project"?
+
+---
+
 ### [v2 · Pro] Agentic funscript authoring · [#13]
 
 Tier: paid subscription (Pro)

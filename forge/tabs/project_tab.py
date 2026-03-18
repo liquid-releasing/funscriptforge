@@ -37,24 +37,92 @@ def _default_output_for(funscript_path: str) -> Path:
 
 
 def _browse_for_folder() -> str | None:
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        last = st.session_state.get("last_browse_dir", str(_ASSETS_OUTPUT))
-        root = tk.Tk()
-        root.withdraw()
-        root.wm_attributes("-topmost", True)
-        folder = filedialog.askdirectory(
-            title="Choose project output folder",
-            initialdir=last,
-        )
-        root.destroy()
-        if folder:
-            st.session_state["last_browse_dir"] = str(Path(folder).parent)
-            return folder
-        return None
-    except Exception:
-        return None
+    """Open a native folder picker dialog. Runs in a temporary thread to avoid
+    blocking Streamlit, with tkinter mainloop pumped manually so the dialog
+    actually appears on Windows."""
+    import threading
+
+    result: list[str | None] = [None]
+
+    def _pick():
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            last = st.session_state.get("last_browse_dir", str(_ASSETS_OUTPUT))
+            root = tk.Tk()
+            root.withdraw()
+            root.wm_attributes("-topmost", True)
+            root.update()  # pump event loop so the dialog can open
+            folder = filedialog.askdirectory(
+                title="Choose project output folder",
+                initialdir=last,
+                parent=root,
+            )
+            root.destroy()
+            if folder:
+                result[0] = folder
+        except Exception:
+            pass
+
+    t = threading.Thread(target=_pick, daemon=True)
+    t.start()
+    t.join(timeout=120)  # wait up to 2 min for user to pick
+    if result[0]:
+        st.session_state["last_browse_dir"] = str(Path(result[0]).parent)
+    return result[0]
+
+
+def _commit_project_to_disk(project: dict | None) -> None:
+    """Create the output folder, write .forge file, and run post-accept analysis.
+    Called when the user clicks Accept or Export — not before.
+    Shows step-by-step progress so the user knows what's happening."""
+    if not project:
+        return
+    folder = project.get("output_folder", "")
+    if not folder:
+        return
+
+    status = st.status("Preparing your project…", expanded=True)
+
+    status.update(label="Creating output folder…")
+    Path(folder).mkdir(parents=True, exist_ok=True)
+
+    status.update(label="Saving project file…")
+    save_forge(project)
+    status.write(f"✅ Saved to `{Path(folder).name}.forge`")
+
+    # Run beat analysis if we have audio or video
+    beat_cache = Path(folder) / "_beat_data.json"
+    if not beat_cache.exists():
+        audio_path = get_input_file(project, "audio")
+        video_path = get_input_file(project, "video")
+        source = None
+        if audio_path and Path(audio_path).exists():
+            source = audio_path
+        elif video_path and Path(video_path).exists():
+            source = video_path
+        if source:
+            status.update(label="Analyzing beats…")
+            result, err = _analyze_beats(source, folder)
+            if result:
+                beats = len(result.get("beats", []))
+                bpm = result.get("tempo_bpm", 0)
+                status.write(f"✅ Beat data: {beats} beats, ~{bpm:.0f} BPM")
+            elif err:
+                status.write(f"⚠️ Beat analysis skipped: {err}")
+
+    # Run motion analysis if we have video and it hasn't been cached
+    motion_cache = Path(folder) / "_video_motion.json"
+    if not motion_cache.exists():
+        video_path = get_input_file(project, "video")
+        if video_path and Path(video_path).exists():
+            status.update(label="Analyzing video motion…")
+            from forge.video import analyze_motion
+            motion = analyze_motion(video_path, folder)
+            if motion:
+                status.write(f"✅ Motion heatmap generated")
+
+    status.update(label="Project ready!", state="complete", expanded=False)
 
 
 def _ver() -> int:
@@ -73,19 +141,18 @@ def render():
     st.subheader("Funscript")
     _funscript_section(v)
 
-    # Auto-create project from funscript if not yet created
+    # Auto-create project in memory from funscript if not yet created.
+    # Folder and .forge file are NOT written to disk until the user commits
+    # (Export Now / Continue).  This avoids littering empty project folders.
     funscript_path = st.session_state.get("funscript_path", "")
     if funscript_path and not project:
         auto_folder = str(_default_output_for(funscript_path))
-        _ASSETS_OUTPUT.mkdir(parents=True, exist_ok=True)
-        existing = load_forge(auto_folder)
+        existing = load_forge(auto_folder) if Path(auto_folder).exists() else None
         if existing:
             st.session_state.forge_project = existing
         else:
             stem = Path(funscript_path).name.split(".")[0]
             proj = default_forge(stem, auto_folder)
-            Path(auto_folder).mkdir(parents=True, exist_ok=True)
-            save_forge(proj)
             st.session_state.forge_project = proj
         # Seed export location input for the new project
         st.session_state.pop("output_folder_input", None)
@@ -109,17 +176,22 @@ def render():
     funscript_path = st.session_state.get("funscript_path", "")
     auto_output = str(_default_output_for(funscript_path)) if funscript_path else ""
 
-    # Seed once; external changes (browse, funscript drop) pop the key to reseed
+    # Seed once; external changes (browse, funscript drop) pop the key to reseed.
+    # The text_input widget reads its value from session_state[key], so we must
+    # write the default BEFORE the widget renders.
     if "output_folder_input" not in st.session_state:
         st.session_state["output_folder_input"] = (
             project["output_folder"] if project else auto_output
         )
     if "output_folder_pending" in st.session_state:
         st.session_state["output_folder_input"] = st.session_state.pop("output_folder_pending")
+    # If the session key exists but is empty and we have a good default, use it
+    if not st.session_state.get("output_folder_input") and auto_output:
+        st.session_state["output_folder_input"] = auto_output
 
     col_path, col_browse, col_set = st.columns([5, 1, 1])
     with col_browse:
-        if st.button("Browse…", key="output_folder_browse", use_container_width=True):
+        if st.button("Browse…", key="output_folder_browse", width="stretch"):
             picked = _browse_for_folder()
             if picked:
                 st.session_state["output_folder_pending"] = picked
@@ -127,17 +199,16 @@ def render():
     with col_path:
         output_folder = st.text_input(
             "Export location path",
-            placeholder=auto_output or r"C:\Users\you\Videos\my-scene",
             label_visibility="collapsed",
             key="output_folder_input",
         )
     with col_set:
-        set_clicked = st.button("Set", key="output_folder_set", use_container_width=True)
+        set_clicked = st.button("Set", key="output_folder_set", width="stretch")
 
     if set_clicked and output_folder:
         folder = output_folder.strip()
         if folder != (project or {}).get("output_folder", ""):
-            existing = load_forge(folder)
+            existing = load_forge(folder) if Path(folder).exists() else None
             if existing:
                 st.session_state.forge_project = existing
                 st.success(f"Resumed: **{existing['name']}**")
@@ -145,7 +216,6 @@ def render():
                 stem = Path(folder).name
                 new_proj = default_forge(stem, folder)
                 st.session_state.forge_project = new_proj
-                save_forge(new_proj)
                 st.success(f"Project folder set: **{stem}**")
             st.rerun()
 
@@ -180,10 +250,10 @@ def render():
 
     # ── 4. Media ─────────────────────────────────────────────────────────────
     has_media = bool(
-        get_input_file(project, "video") if project else None or
-        st.session_state.get("video_path") or
-        (get_input_file(project, "audio") if project else None) or
-        (get_input_file(project, "captions") if project else None)
+        (get_input_file(project, "video") if project else None)
+        or st.session_state.get("video_path")
+        or (get_input_file(project, "audio") if project else None)
+        or (get_input_file(project, "captions") if project else None)
     )
     with st.expander("Media *(optional)*", expanded=has_media, key="media_expander"):
         _video_section(project, v)
@@ -194,22 +264,22 @@ def render():
 
     # ── 5. Author & credits ──────────────────────────────────────────────────
     with st.expander("Author & credits *(optional)*"):
-        author = st.text_input("Author", value=(project or {}).get("author", ""))
-        website = st.text_input("Website / Patreon URL",
-                                value=(project or {}).get("website", ""))
-        contributors_raw = st.text_input(
-            "Contributors (comma-separated)",
-            value=", ".join((project or {}).get("contributors", [])),
-        )
-        if project:
+        with st.form("author_credits_form", clear_on_submit=False, border=False):
+            author = st.text_input("Author", value=(project or {}).get("author", ""))
+            website = st.text_input("Website / Patreon URL",
+                                    value=(project or {}).get("website", ""))
+            contributors_raw = st.text_input(
+                "Contributors (comma-separated)",
+                value=", ".join((project or {}).get("contributors", [])),
+            )
+            submitted = st.form_submit_button("Save", width="stretch")
+        if submitted and project:
             contributors = [c.strip() for c in contributors_raw.split(",") if c.strip()]
-            if (author != project.get("author") or
-                    website != project.get("website") or
-                    contributors != project.get("contributors")):
-                project["author"] = author
-                project["website"] = website
-                project["contributors"] = contributors
-                save_forge(project)
+            project["author"] = author
+            project["website"] = website
+            project["contributors"] = contributors
+            save_forge(project)
+            st.success("Author & credits saved.")
 
     st.divider()
 
@@ -227,32 +297,47 @@ def render():
         )
 
     has_funscript = bool(st.session_state.get("funscript_path"))
-    col_export, col_phrases = st.columns(2)
-    with col_export:
-        if st.button(
-            "Export Now",
-            use_container_width=True,
-            disabled=not has_funscript,
-            help=None if has_funscript else "Add a funscript first.",
-        ):
-            st.session_state["nav_hint"] = "export"
-            st.rerun()
-    with col_phrases:
-        if st.button(
-            "Continue to Edit Phrases →",
-            type="primary",
-            use_container_width=True,
-            disabled=not has_funscript,
-            help=None if has_funscript else "Add a funscript first.",
-        ):
-            st.session_state["nav_hint"] = "phrases"
-            st.rerun()
+
+    st.info(
+        "**Accept** saves your project and takes you to the **Tone** tab to "
+        "choose a feel for your output. You can also skip ahead to any tab — "
+        "**Tone** sets the character, **Phrases** gives fine-grained control, "
+        "or jump straight to **Export** for a clean device-safe file."
+    )
+
+    if st.button(
+        "Accept →",
+        type="primary",
+        width="stretch",
+        disabled=not has_funscript,
+        help="Save project and continue to the Tone tab." if has_funscript else "Add a funscript first.",
+    ):
+        _commit_project_to_disk(project)
+        st.session_state["nav_hint"] = "tone"
+        st.rerun()
 
     hint = st.session_state.pop("nav_hint", None)
-    if hint == "export":
-        st.info("Click the **Export** tab above.")
-    elif hint == "phrases":
-        st.info("Click the **Phrases** tab above.")
+    if hint == "tone":
+        _click_tab("Tone")
+
+
+def _click_tab(tab_label: str):
+    """Programmatically click a Streamlit tab by its label using JS."""
+    import streamlit.components.v1 as components
+    components.html(
+        f"""<script>
+        (function() {{
+            var tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"] button, [role="tab"]');
+            for (var i = 0; i < tabs.length; i++) {{
+                if (tabs[i].textContent.trim() === '{tab_label}') {{
+                    tabs[i].click();
+                    return;
+                }}
+            }}
+        }})();
+        </script>""",
+        height=0,
+    )
 
 
 # ── Funscript ────────────────────────────────────────────────────────────────
@@ -264,10 +349,11 @@ def _funscript_section(v: int):
         key=f"funscript_upload_{v}",
         label_visibility="collapsed",
     )
-    if uploaded:
+    if uploaded and st.session_state.get("_funscript_processed") != uploaded.name:
         tmp = Path(tempfile.mkdtemp()) / uploaded.name
         tmp.write_bytes(uploaded.read())
         st.session_state["funscript_path"] = str(tmp)
+        st.session_state["_funscript_processed"] = uploaded.name
         st.session_state.pop("output_folder_input", None)  # reseed export path
         st.rerun()
 
@@ -301,7 +387,7 @@ def _funscript_chart(data: dict, path: str):
         plot_bgcolor="rgba(0,0,0,0.05)",
         showlegend=False,
     )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
     st.caption(f"📄 {Path(path).name}")
 
 
@@ -329,7 +415,7 @@ def _video_section(project: dict | None, v: int):
         key=f"video_upload_{v}",
         label_visibility="collapsed",
     )
-    if uploaded:
+    if uploaded and st.session_state.get("_video_processed") != uploaded.name:
         try:
             tmp = Path(tempfile.mkdtemp()) / uploaded.name
             tmp.write_bytes(uploaded.read())
@@ -352,6 +438,7 @@ def _video_section(project: dict | None, v: int):
             add_input_file(project, "video", str(dest))
             save_forge(project)
             st.session_state["video_path"] = str(dest)
+        st.session_state["_video_processed"] = uploaded.name
         st.rerun()
 
     # Prefer project-stored path (persistent), fall back to session state
@@ -424,7 +511,7 @@ def _video_heatmap(video_path: str, project: dict):
                 pass
 
     if data is None:
-        if st.button("Analyze motion", key="analyze_motion_btn", use_container_width=True):
+        if st.button("Analyze motion", key="analyze_motion_btn", width="stretch"):
             with st.spinner("Analyzing video motion… (runs once, cached after)"):
                 data = analyze_motion(video_path, output_folder)
                 if data:
@@ -459,7 +546,7 @@ def _video_heatmap_chart(data: dict):
     col_label, col_legend = st.columns([1, 3])
     col_label.caption("**Video motion**")
     col_legend.caption("black → purple → orange → yellow")
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
 def _audio_section(project: dict | None, v: int):
@@ -473,15 +560,130 @@ def _audio_section(project: dict | None, v: int):
         key=f"audio_upload_{v}",
         label_visibility="collapsed",
     )
-    if uploaded and project and project.get("output_folder"):
+    if uploaded and project and project.get("output_folder") and st.session_state.get("_audio_processed") != uploaded.name:
         dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
         dest.write_bytes(uploaded.read())
         add_input_file(project, "audio", str(dest))
         save_forge(project)
+        st.session_state["_audio_processed"] = uploaded.name
         st.rerun()
 
-    if existing and Path(existing).exists():
-        st.caption(f"♪ {Path(existing).name}")
+    audio_path = existing if (existing and Path(existing).exists()) else None
+    if audio_path:
+        st.caption(f"♪ {Path(audio_path).name}")
+        _audio_stats_row(audio_path)
+
+    # Beat generation button — available when project has audio or video
+    if project and project.get("output_folder"):
+        _beat_generation_button(project, audio_path)
+
+
+def _audio_stats_row(audio_path: str):
+    """Show basic audio metadata."""
+    try:
+        from pymediainfo import MediaInfo
+        info = MediaInfo.parse(audio_path)
+    except Exception:
+        return
+
+    audio = next((t for t in info.tracks if t.track_type == "Audio"), None)
+    general = next((t for t in info.tracks if t.track_type == "General"), None)
+    if not audio:
+        return
+
+    duration_ms = getattr(general, "duration", None) or getattr(audio, "duration", None)
+    duration_s = int(duration_ms) / 1000.0 if duration_ms else None
+    sample_rate = getattr(audio, "sampling_rate", None)
+    channels = getattr(audio, "channel_s", None)
+    codec = getattr(audio, "format", None) or "—"
+    file_size = getattr(general, "file_size", None)
+    bit_rate = getattr(audio, "bit_rate", None)
+
+    cols = st.columns(5)
+    if duration_s:
+        m, s = divmod(int(duration_s), 60)
+        cols[0].metric("Duration", f"{m}:{s:02d}")
+    else:
+        cols[0].metric("Duration", "—")
+    cols[1].metric("Format", codec)
+    cols[2].metric("Sample rate", f"{int(sample_rate):,} Hz" if sample_rate else "—")
+    cols[3].metric("Channels", str(channels) if channels else "—")
+    cols[4].metric("Bit rate", f"{int(bit_rate) // 1000} kbps" if bit_rate else "—")
+
+
+def _beat_generation_button(project: dict, audio_path: str | None):
+    """Show a button to generate beat data from audio (or video fallback)."""
+    output_folder = project.get("output_folder", "")
+    beat_cache = Path(output_folder) / "_beat_data.json"
+
+    if beat_cache.exists():
+        import json as _json
+        try:
+            beat_data = _json.loads(beat_cache.read_text())
+            beat_count = len(beat_data.get("beats", []))
+            tempo = beat_data.get("tempo_bpm", 0)
+            st.caption(f"🥁 Beat data: **{beat_count}** beats detected, ~**{tempo:.0f}** BPM")
+        except Exception:
+            pass
+        return
+
+    source = audio_path
+    if not source:
+        video_path = get_input_file(project, "video")
+        if video_path and Path(video_path).exists():
+            source = video_path
+
+    if source:
+        if st.button("🥁 Generate beat data", key="generate_beats_btn", width="stretch"):
+            with st.spinner("Analyzing beats… (runs once, cached after)"):
+                beat_data, err = _analyze_beats(source, output_folder)
+                if beat_data:
+                    st.success(f"Found **{len(beat_data.get('beats', []))}** beats at ~**{beat_data.get('tempo_bpm', 0):.0f}** BPM")
+                    st.rerun()
+                else:
+                    st.error(f"Beat analysis failed: {err}")
+
+
+def _analyze_beats(source_path: str, output_folder: str) -> tuple[dict | None, str]:
+    """Run beat detection on audio/video file using librosa.
+    Returns (result_dict, error_string). One will be None."""
+    try:
+        import librosa
+        import json as _json
+    except ImportError:
+        return None, "librosa is not installed. Run: pip install librosa"
+
+    try:
+        y, sr = librosa.load(source_path, sr=22050, mono=True)
+    except Exception as e:
+        return None, f"Could not load audio from file: {e}"
+
+    try:
+        tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+        beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
+        # tempo may be an array in some librosa versions
+        if hasattr(tempo, '__len__'):
+            tempo = float(tempo[0]) if len(tempo) > 0 else 0.0
+        else:
+            tempo = float(tempo)
+    except Exception as e:
+        return None, f"Beat detection failed: {e}"
+
+    result = {
+        "source_path": source_path,
+        "tempo_bpm": tempo,
+        "beats": [{"time_s": t, "beat_number": i + 1} for i, t in enumerate(beat_times)],
+    }
+
+    if output_folder:
+        cache_path = Path(output_folder) / "_beat_data.json"
+        try:
+            Path(output_folder).mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(_json.dumps(result, indent=2))
+        except Exception:
+            pass  # cache write failure is non-fatal
+
+    return result, ""
 
 
 def _captions_section(project: dict | None, v: int):
@@ -495,15 +697,42 @@ def _captions_section(project: dict | None, v: int):
         key=f"captions_upload_{v}",
         label_visibility="collapsed",
     )
-    if uploaded and project and project.get("output_folder"):
+    if uploaded and project and project.get("output_folder") and st.session_state.get("_captions_processed") != uploaded.name:
         dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
         dest.write_bytes(uploaded.read())
         add_input_file(project, "captions", str(dest))
         save_forge(project)
+        st.session_state["_captions_processed"] = uploaded.name
         st.rerun()
 
     if existing and Path(existing).exists():
         st.caption(f"💬 {Path(existing).name}")
+        _captions_stats_row(existing)
+
+
+def _captions_stats_row(captions_path: str):
+    """Show basic caption file stats."""
+    try:
+        text = Path(captions_path).read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return
+
+    ext = Path(captions_path).suffix.lower()
+    lines = text.strip().splitlines()
+
+    # Count cue blocks (rough: count lines that look like timestamps)
+    import re
+    if ext in (".srt", ".vtt"):
+        cue_count = sum(1 for line in lines if "-->" in line)
+    elif ext == ".ass":
+        cue_count = sum(1 for line in lines if line.startswith("Dialogue:"))
+    else:
+        cue_count = 0
+
+    cols = st.columns(3)
+    cols[0].metric("Format", ext.lstrip(".").upper())
+    cols[1].metric("Cues", f"{cue_count:,}")
+    cols[2].metric("File size", f"{len(text):,} chars")
 
 
 # ── Summary ───────────────────────────────────────────────────────────────────

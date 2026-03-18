@@ -530,6 +530,8 @@ def _sidebar() -> None:
             _clear_keys = [
                 "forge_project", "funscript_path", "video_path",
                 "output_folder_input", "output_folder_pending",
+                "_funscript_processed", "_video_processed",
+                "_audio_processed", "_captions_processed",
             ]
             _motion_keys = [k for k in st.session_state if k.startswith("motion_")]
             for _k in _clear_keys + _motion_keys:
