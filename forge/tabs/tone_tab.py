@@ -135,17 +135,23 @@ def render():
 
     st.divider()
 
-    # ── Accept ────────────────────────────────────────────────────────────
-    if st.button(
-        "Accept →",
-        type="primary",
-        width="stretch",
-        disabled=not selected,
-        help="Apply this tone and continue." if selected else "Select a tone first.",
-    ):
-        _apply_tone(selected)
-        st.session_state["nav_hint_tone"] = "phrases"
-        st.rerun()
+    # ── Show Suggestion + Accept ─────────────────────────────────────────
+    col_suggest, col_accept = st.columns([1, 2])
+    with col_suggest:
+        if st.button("★ Show Suggestion", width="stretch"):
+            st.session_state["tone_global"] = None  # clear selection to show bubble
+            st.rerun()
+    with col_accept:
+        if st.button(
+            "Accept →",
+            type="primary",
+            width="stretch",
+            disabled=not selected,
+            help="Apply this tone and continue." if selected else "Select a tone first.",
+        ):
+            _apply_tone(selected)
+            st.session_state["nav_hint_tone"] = "phrases"
+            st.rerun()
 
     hint = st.session_state.pop("nav_hint_tone", None)
     if hint == "phrases":
