@@ -181,28 +181,18 @@ def _browse_for_file(title: str, filetypes: list) -> str | None:
 
 
 def _funscript_section():
-    """Inspect a funscript — path input, drag-drop, chart preview. No saving."""
-    # Path input + browse
-    col_path, col_browse = st.columns([5, 1])
-    with col_path:
-        typed = st.text_input(
-            "Funscript path",
-            value=st.session_state.get("funscript_path", ""),
-            placeholder="/path/to/my-script.funscript",
-            label_visibility="collapsed",
-            key="funscript_path_input",
-        )
-    with col_browse:
-        if st.button("Browse…", key="funscript_browse", use_container_width=True):
-            picked = _browse_for_file("Select funscript", [("Funscript", "*.funscript"), ("All files", "*.*")])
-            if picked:
-                st.session_state["funscript_path"] = picked
-                st.rerun()
-
-    if typed and typed != st.session_state.get("funscript_path"):
-        st.session_state["funscript_path"] = typed
+    """Inspect a funscript — drag-drop, chart preview. No saving."""
+    uploaded = st.file_uploader(
+        "Drag and drop or browse",
+        type=["funscript"],
+        key="funscript_upload",
+        label_visibility="collapsed",
+    )
+    if uploaded:
+        tmp = Path(tempfile.mkdtemp()) / uploaded.name
+        tmp.write_bytes(uploaded.read())
+        st.session_state["funscript_path"] = str(tmp)
         st.rerun()
-
 
     # Preview
     funscript_path = st.session_state.get("funscript_path", "")
@@ -259,32 +249,8 @@ def _video_section(project: dict):
     st.markdown("**Source video** *(optional)*")
     existing = get_input_file(project, "video")
 
-    col_path, col_browse = st.columns([5, 1])
-    with col_path:
-        video_path = st.text_input(
-            "Video path",
-            value=existing or "",
-            placeholder="/path/to/video.mp4",
-            key="video_path_input",
-            label_visibility="collapsed",
-        )
-    with col_browse:
-        if st.button("Browse…", key="video_browse", use_container_width=True):
-            picked = _browse_for_file(
-                "Select video",
-                [("Video files", "*.mp4 *.mov *.avi *.mkv"), ("All files", "*.*")],
-            )
-            if picked:
-                st.session_state["video_path_input"] = picked
-                video_path = picked
-
-    if video_path and video_path != existing and project.get("output_folder"):
-        add_input_file(project, "video", video_path)
-        save_forge(project)
-        st.rerun()
-
     uploaded_video = st.file_uploader(
-        "or drag and drop",
+        "Drag and drop or browse",
         type=["mp4", "mov", "avi", "mkv"],
         key="video_upload",
         label_visibility="collapsed",
