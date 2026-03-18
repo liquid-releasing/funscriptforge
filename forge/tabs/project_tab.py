@@ -102,9 +102,15 @@ def render():
     funscript_path = st.session_state.get("funscript_path", "")
     auto_output = str(_default_output_for(funscript_path)) if funscript_path else ""
 
-    # Browse button sets a pending value; text input picks it up as default
+    # Seed the input once; after that the widget owns its own state.
+    # Browse or funscript-drop can force-update by writing to the key directly.
     _pending = st.session_state.pop("output_folder_pending", None)
-    _default = _pending or (project["output_folder"] if project else auto_output)
+    if _pending:
+        st.session_state["output_folder_input"] = _pending
+    elif "output_folder_input" not in st.session_state:
+        st.session_state["output_folder_input"] = (
+            project["output_folder"] if project else auto_output
+        )
 
     col_path, col_browse = st.columns([5, 1])
     with col_browse:
@@ -116,7 +122,6 @@ def render():
     with col_path:
         output_folder = st.text_input(
             "Export location path",
-            value=_default,
             placeholder="assets/output/my-project/",
             label_visibility="collapsed",
             key="output_folder_input",
