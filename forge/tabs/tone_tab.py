@@ -158,16 +158,19 @@ def _render_card(tone: dict, selected: str | None):
     opacity = "1.0" if (is_selected or selected is None) else "0.5"
     badge = " ✓" if is_selected else ""
 
-    # ── Title + tagline + ℹ️ toggle (always visible) ──
-    flip_icon = "🖼️" if is_flipped else "ℹ️"
+    # ── Title + tagline box ──
     st.markdown(
-        f"<div style='text-align:center;opacity:{opacity};'>"
+        f"<div style='border:{border_width} solid {border_color};border-radius:10px 10px 0 0;"
+        f"padding:8px;text-align:center;opacity:{opacity};'>"
         f"<strong style='color:{tone['color']};font-size:0.85em'>{name}{badge}</strong>"
         f"<div style='font-size:0.7em;color:#888'>{tone['tagline']}</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
-    if st.button(flip_icon, key=f"flip_{name}", help="Show description" if not is_flipped else "Show icon"):
+
+    # ── ℹ️ flip button (full width, no text) ──
+    flip_icon = "🖼️" if is_flipped else "ℹ️"
+    if st.button(flip_icon, key=f"flip_{name}", width="stretch"):
         st.session_state[flip_key] = not is_flipped
         st.rerun()
 
