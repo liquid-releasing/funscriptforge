@@ -529,16 +529,13 @@ def _sidebar() -> None:
                            help="Clear session and start fresh."):
             _clear_keys = [
                 "forge_project", "funscript_path", "video_path",
-                "funscript_upload", "video_upload", "audio_upload",
-                "captions_upload", "output_folder_input",
-                "audio_playback_checkbox", "analyze_motion_btn",
-                "target_estim_foc", "target_estim_stereo",
-                "target_handy", "target_osr2",
+                "output_folder_input", "output_folder_pending",
             ]
-            # Also clear motion analysis cache entries
             _motion_keys = [k for k in st.session_state if k.startswith("motion_")]
             for _k in _clear_keys + _motion_keys:
                 st.session_state.pop(_k, None)
+            # Increment version to force all upload widgets to reset
+            st.session_state["project_ver"] = st.session_state.get("project_ver", 0) + 1
             st.rerun()
 
     _render_sidebar_footer()

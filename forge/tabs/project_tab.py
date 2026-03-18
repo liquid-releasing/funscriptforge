@@ -1,11 +1,11 @@
 """
 Tab 1 — Project
 
-Landing page. Single-column top-to-bottom flow:
-  1. Funscript (required) — drives everything
-  2. Export location — auto-filled from funscript, Browse for folder
+Single-column top-to-bottom flow:
+  1. Funscript (required)
+  2. Export location
   3. Output targets
-  4. Media (optional) — video, audio, captions
+  4. Media (optional)
   5. Author & credits (optional)
   6. Summary
   7. Continue → / New Project
@@ -50,7 +50,6 @@ def _browse_for_folder() -> str | None:
         )
         root.destroy()
         if folder:
-            # Remember the parent so next browse opens in the same neighbourhood
             st.session_state["last_browse_dir"] = str(Path(folder).parent)
             return folder
         return None
@@ -58,15 +57,21 @@ def _browse_for_folder() -> str | None:
         return None
 
 
+def _ver() -> int:
+    """Widget version counter — incremented on Clear Project to reset all widgets."""
+    return st.session_state.get("project_ver", 0)
+
+
 def render():
     if "forge_project" not in st.session_state:
         st.session_state.forge_project = None
 
     project = st.session_state.forge_project
+    v = _ver()
 
     # ── 1. Funscript ─────────────────────────────────────────────────────────
     st.subheader("Funscript")
-    _funscript_section()
+    _funscript_section(v)
 
     # Auto-create project from funscript if not yet created
     funscript_path = st.session_state.get("funscript_path", "")
@@ -82,6 +87,8 @@ def render():
             Path(auto_folder).mkdir(parents=True, exist_ok=True)
             save_forge(proj)
             st.session_state.forge_project = proj
+        # Seed export location input for the new project
+        st.session_state.pop("output_folder_input", None)
         st.rerun()
 
     project = st.session_state.forge_project
@@ -102,15 +109,13 @@ def render():
     funscript_path = st.session_state.get("funscript_path", "")
     auto_output = str(_default_output_for(funscript_path)) if funscript_path else ""
 
-    # Seed the input once; after that the widget owns its own state.
-    # Browse or funscript-drop can force-update by writing to the key directly.
-    _pending = st.session_state.pop("output_folder_pending", None)
-    if _pending:
-        st.session_state["output_folder_input"] = _pending
-    elif "output_folder_input" not in st.session_state:
+    # Seed once; external changes (browse, funscript drop) pop the key to reseed
+    if "output_folder_input" not in st.session_state:
         st.session_state["output_folder_input"] = (
             project["output_folder"] if project else auto_output
         )
+    if "output_folder_pending" in st.session_state:
+        st.session_state["output_folder_input"] = st.session_state.pop("output_folder_pending")
 
     col_path, col_browse = st.columns([5, 1])
     with col_browse:
@@ -120,26 +125,48 @@ def render():
                 st.session_state["output_folder_pending"] = picked
                 st.rerun()
     with col_path:
-        output_folder = st.text_input(
-            "Export location path",
-            placeholder="assets/output/my-project/",
-            label_visibility="collapsed",
-            key="output_folder_input",
-        )
+        with st.form("export_location_form", border=False):
+            output_folder = st.text_input(
+                "Export location path",
+                placeholder="assets/output/my-project/",
+                label_visibility="collapsed",
+                key="output_folder_input",
+            )
+            col_set, col_copy = st.columns([1, 2])
+            with col_set:
+                set_clicked = st.form_submit_button("Set location", use_container_width=True)
+            with col_copy:
+                copy_media = st.form_submit_button(
+                    "Set + copy media to folder",
+                    use_container_width=True,
+                    help="Copies all input files into the export folder on Continue.",
+                )
 
-    if output_folder and output_folder != (project or {}).get("output_folder", ""):
-        existing = load_forge(output_folder)
-        if existing:
-            st.session_state.forge_project = existing
-            st.success(f"Resumed: **{existing['name']}**")
-        else:
-            stem = Path(output_folder).name
-            st.session_state.forge_project = default_forge(stem, output_folder)
-            save_forge(st.session_state.forge_project)
-            st.success(f"Created: **{stem}**")
-        st.rerun()
+    if set_clicked or copy_media:
+        if output_folder and output_folder != (project or {}).get("output_folder", ""):
+            existing = load_forge(output_folder)
+            if existing:
+                st.session_state.forge_project = existing
+                st.success(f"Resumed: **{existing['name']}**")
+            else:
+                stem = Path(output_folder).name
+                new_proj = default_forge(stem, output_folder)
+                if copy_media:
+                    new_proj["copy_media_on_continue"] = True
+                st.session_state.forge_project = new_proj
+                save_forge(new_proj)
+                st.success(f"Created: **{stem}**")
+            st.rerun()
+        elif project and copy_media:
+            project["copy_media_on_continue"] = True
+            save_forge(project)
+            st.info("Media will be copied to export folder on Continue.")
 
     project = st.session_state.forge_project
+
+    # Copy media indicator
+    if project and project.get("copy_media_on_continue"):
+        st.caption("📋 Media will be copied to export folder on Continue.")
 
     st.divider()
 
@@ -159,7 +186,7 @@ def render():
     for col, (key, label, desc) in zip(cols, _TARGETS):
         with col:
             if col.checkbox(label, value=key in saved_targets, help=desc,
-                            key=f"target_{key}", disabled=not project):
+                            key=f"target_{key}_{v}", disabled=not project):
                 selected.append(key)
 
     if project and selected != saved_targets:
@@ -169,12 +196,18 @@ def render():
     st.divider()
 
     # ── 4. Media ─────────────────────────────────────────────────────────────
-    with st.expander("Media *(optional)*"):
-        _video_section(project)
+    has_media = bool(
+        get_input_file(project, "video") if project else None or
+        st.session_state.get("video_path") or
+        (get_input_file(project, "audio") if project else None) or
+        (get_input_file(project, "captions") if project else None)
+    )
+    with st.expander("Media *(optional)*", expanded=has_media, key="media_expander"):
+        _video_section(project, v)
         st.divider()
-        _audio_section(project)
+        _audio_section(project, v)
         st.divider()
-        _captions_section(project)
+        _captions_section(project, v)
 
     # ── 5. Author & credits ──────────────────────────────────────────────────
     with st.expander("Author & credits *(optional)*"):
@@ -211,7 +244,8 @@ def render():
     col_new, col_continue = st.columns([1, 2])
     with col_new:
         if st.button("New Project", use_container_width=True, disabled=not project):
-            save_forge(project)
+            if project:
+                save_forge(project)
             st.session_state.forge_project = None
             st.rerun()
     with col_continue:
@@ -227,20 +261,19 @@ def render():
 
 # ── Funscript ────────────────────────────────────────────────────────────────
 
-def _funscript_section():
+def _funscript_section(v: int):
     uploaded = st.file_uploader(
         "Drag and drop your funscript here",
         type=["funscript"],
-        key="funscript_upload",
+        key=f"funscript_upload_{v}",
         label_visibility="collapsed",
     )
     if uploaded:
-        current = st.session_state.get("funscript_path", "")
-        if Path(current).name != uploaded.name:
-            tmp = Path(tempfile.mkdtemp()) / uploaded.name
-            tmp.write_bytes(uploaded.read())
-            st.session_state["funscript_path"] = str(tmp)
-            st.rerun()
+        tmp = Path(tempfile.mkdtemp()) / uploaded.name
+        tmp.write_bytes(uploaded.read())
+        st.session_state["funscript_path"] = str(tmp)
+        st.session_state.pop("output_folder_input", None)  # reseed export path
+        st.rerun()
 
     funscript_path = st.session_state.get("funscript_path", "")
     if funscript_path and Path(funscript_path).exists():
@@ -290,14 +323,14 @@ def _funscript_stats_row(data: dict):
 
 # ── Media sections ───────────────────────────────────────────────────────────
 
-def _video_section(project: dict | None):
+def _video_section(project: dict | None, v: int):
     st.subheader("Source video")
     existing = get_input_file(project, "video") if project else None
 
     uploaded = st.file_uploader(
         "Drag and drop your video here",
         type=["mp4", "mov", "avi", "mkv"],
-        key="video_upload",
+        key=f"video_upload_{v}",
         label_visibility="collapsed",
     )
     if uploaded:
@@ -306,23 +339,31 @@ def _video_section(project: dict | None):
         st.session_state["video_path"] = str(tmp)
         if project and project.get("output_folder"):
             import shutil
+            Path(project["output_folder"]).mkdir(parents=True, exist_ok=True)
             dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
             shutil.copy2(str(tmp), str(dest))
             add_input_file(project, "video", str(dest))
             save_forge(project)
+            st.session_state["video_path"] = str(dest)
         st.rerun()
 
-    video_path = existing or st.session_state.get("video_path", "")
-    if video_path and Path(video_path).exists():
-        stats = video_stats(video_path)
+    # Prefer project-stored path (persistent), fall back to session state
+    video_path = existing if (existing and Path(existing).exists()) else ""
+    if not video_path:
+        sp = st.session_state.get("video_path", "")
+        if sp and Path(sp).exists():
+            video_path = sp
+
+    if video_path:
         st.caption(f"📹 {Path(video_path).name}")
+        stats = video_stats(video_path)
         if stats:
-            _video_stats_row(stats, project)
+            _video_stats_row(stats)
         if project and project.get("output_folder"):
             _video_heatmap(video_path, project)
 
 
-def _video_stats_row(stats: dict, project: dict | None):
+def _video_stats_row(stats: dict):
     funscript_path = st.session_state.get("funscript_path", "")
     match_icon = ""
     if funscript_path and Path(funscript_path).exists():
@@ -397,7 +438,7 @@ def _video_heatmap_chart(data: dict):
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
-def _audio_section(project: dict | None):
+def _audio_section(project: dict | None, v: int):
     st.subheader("Audio")
     st.caption("Beat track or alternative audio. Beat data generated from video if not provided.")
     existing = get_input_file(project, "audio") if project else None
@@ -405,7 +446,7 @@ def _audio_section(project: dict | None):
     uploaded = st.file_uploader(
         "Drag and drop audio here",
         type=["mp3", "wav", "flac", "ogg"],
-        key="audio_upload",
+        key=f"audio_upload_{v}",
         label_visibility="collapsed",
     )
     if uploaded and project and project.get("output_folder"):
@@ -419,7 +460,7 @@ def _audio_section(project: dict | None):
         st.caption(f"♪ {Path(existing).name}")
 
 
-def _captions_section(project: dict | None):
+def _captions_section(project: dict | None, v: int):
     st.subheader("Captions")
     st.caption("SRT/VTT for caption display and V2 emotion-aware haptics.")
     existing = get_input_file(project, "captions") if project else None
@@ -427,7 +468,7 @@ def _captions_section(project: dict | None):
     uploaded = st.file_uploader(
         "Drag and drop captions here",
         type=["srt", "vtt", "ass"],
-        key="captions_upload",
+        key=f"captions_upload_{v}",
         label_visibility="collapsed",
     )
     if uploaded and project and project.get("output_folder"):
