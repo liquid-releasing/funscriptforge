@@ -102,21 +102,25 @@ def render():
     funscript_path = st.session_state.get("funscript_path", "")
     auto_output = str(_default_output_for(funscript_path)) if funscript_path else ""
 
+    # Browse button sets a pending value; text input picks it up as default
+    _pending = st.session_state.pop("output_folder_pending", None)
+    _default = _pending or (project["output_folder"] if project else auto_output)
+
     col_path, col_browse = st.columns([5, 1])
-    with col_path:
-        output_folder = st.text_input(
-            "Export location path",
-            value=project["output_folder"] if project else auto_output,
-            placeholder="assets/output/my-project/",
-            label_visibility="collapsed",
-            key="output_folder_input",
-        )
     with col_browse:
         if st.button("Browse…", key="output_folder_browse", use_container_width=True):
             picked = _browse_for_folder()
             if picked:
-                st.session_state["output_folder_input"] = picked
-                output_folder = picked
+                st.session_state["output_folder_pending"] = picked
+                st.rerun()
+    with col_path:
+        output_folder = st.text_input(
+            "Export location path",
+            value=_default,
+            placeholder="assets/output/my-project/",
+            label_visibility="collapsed",
+            key="output_folder_input",
+        )
 
     if output_folder and output_folder != (project or {}).get("output_folder", ""):
         existing = load_forge(output_folder)
