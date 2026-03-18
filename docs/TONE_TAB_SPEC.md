@@ -413,39 +413,48 @@ def effective_tone(phrase_index, forge_project):
 The recipe layer receives both and composes them. When phrase == global, it is
 equivalent to a single Tone applied fully.
 
-### Device safety pass
+### Device-aware output pass
 
-After the Tone recipe generates output for a device, a **device-specific safety
-pass** is applied before writing the file. The safety pass enforces the physical
-limits of the device — it does not change intent, it ensures the output can be
-executed safely.
+After the Tone recipe generates output for a device, a **device-aware output pass**
+is applied before writing the file. This pass clamps values to the device's known
+operating parameters so the output is within the range the device is designed to run.
 
 ```
-Tone recipe output  →  [device safety pass]  →  output file
+Tone recipe output  →  [device limits pass]  →  output file
 ```
 
-We know the capability of every supported device. No matter what choices the user
-made — aggressive Tone, high beat influence, stacked phrase intensities — the
-safety pass ensures the output is within safe bounds. We always do the right thing.
-This guarantee does not depend on the player (restim, Handy app, etc.) applying
-its own limits. We own the safety contract at export time.
+We know the published operating range of every supported device. If Tone choices
+produce values outside that range — too fast, too intense, too wide — the pass
+clamps them to the device's documented limits before writing.
 
-Each device has its own constraints:
+Each device has its own parameter range:
 
-| Device | Safety constraints |
+| Device | Operating limits applied |
 |---|---|
-| **Main funscript / Handy** | Max velocity between actions; minimum action interval; position clamped 0–100 |
+| **Main funscript / Handy** | Max velocity between actions; minimum action interval; position 0–100 |
 | **OSR2 / SR6** | Per-axis velocity limits; mechanical range per axis |
-| **Estim (restim)** | pulse_frequency within safe range; pulse_width limits; amplitude ceiling per channel |
-| **Haptic suit** | Zone activation rate limits; simultaneous zone count ceiling |
+| **Estim (restim)** | pulse_frequency operating range; pulse_width bounds; amplitude ceiling per channel |
+| **Haptic suit** | Zone activation rate; simultaneous zone count |
 
-The safety pass is a read-and-clamp operation — it never rejects an export, it
-adjusts values to fit within safe bounds. The user is never blocked; the output
-is always within device spec.
+The pass never rejects an export — it adjusts to fit. The output is always within
+device operating range.
 
-This is distinct from source integrity safety (which protects the source funscript
-from being overwritten). Source integrity protects the project. Device safety
-protects the user and the hardware.
+**Liability note — internal only:**
+
+User-facing copy must never describe this as a "safety" feature or claim the output
+is "safe." Estim and physical devices involve inherent risk that is entirely outside
+our control — device condition, user health, session duration, placement, and more.
+We are not the safety authority. We stay within documented device parameters.
+
+Framing that is accurate and not liability-creating:
+- "Output stays within device operating range" ✓
+- "Values are clamped to device specs" ✓
+- "Safe output guaranteed" ✗
+- "We protect you from unsafe scripts" ✗
+
+This is distinct from source integrity (which protects the source funscript from
+being overwritten). Source integrity is a file-system concern. Device limits are
+a hardware-parameter concern. They do not overlap.
 
 ### One decision set drives all output files
 
