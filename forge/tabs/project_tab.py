@@ -43,7 +43,10 @@ def _browse_for_folder() -> str | None:
         root = tk.Tk()
         root.withdraw()
         root.wm_attributes("-topmost", True)
-        folder = filedialog.askdirectory(title="Choose project output folder")
+        folder = filedialog.askdirectory(
+            title="Choose project output folder",
+            initialdir=str(_ASSETS_OUTPUT),
+        )
         root.destroy()
         return folder or None
     except Exception:

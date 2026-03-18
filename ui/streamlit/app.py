@@ -520,10 +520,18 @@ def _sidebar() -> None:
         _dirty = st.session_state.get("project_dirty", False)
         _save_label = "● Save project" if _dirty else "Save project"
         _save_help  = "Unsaved changes — click to save." if _dirty else "Save the current project state."
-        if st.sidebar.button(_save_label, help=_save_help):
+        _sb_col1, _sb_col2 = st.sidebar.columns(2)
+        if _sb_col1.button(_save_label, help=_save_help, use_container_width=True):
             project.export_project(project_save_path)
             st.session_state.project_dirty = False
             st.sidebar.success(f"Saved to {project_save_path}")
+        if _sb_col2.button("Clear project", use_container_width=True,
+                           help="Clear session and start fresh."):
+            for _k in ["forge_project", "funscript_path", "video_path",
+                       "funscript_upload", "video_upload", "audio_upload",
+                       "captions_upload", "output_folder_input"]:
+                st.session_state.pop(_k, None)
+            st.rerun()
 
     _render_sidebar_footer()
 
