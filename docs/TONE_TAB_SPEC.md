@@ -330,6 +330,10 @@ state that can accumulate damage.
 By the time the user ships, safety is already in place — not through guards or
 warnings, but because the model never allowed unsafe state to exist.
 
+The result for the user: a rich, coherent experience across every device they own.
+One set of creative decisions. Every output file expresses it faithfully. No
+degradation, no drift, no re-work.
+
 ---
 
 ## Source integrity — the single most important architectural constraint
