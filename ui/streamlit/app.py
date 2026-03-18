@@ -527,9 +527,17 @@ def _sidebar() -> None:
             st.sidebar.success(f"Saved to {project_save_path}")
         if _sb_col2.button("Clear project", use_container_width=True,
                            help="Clear session and start fresh."):
-            for _k in ["forge_project", "funscript_path", "video_path",
-                       "funscript_upload", "video_upload", "audio_upload",
-                       "captions_upload", "output_folder_input"]:
+            _clear_keys = [
+                "forge_project", "funscript_path", "video_path",
+                "funscript_upload", "video_upload", "audio_upload",
+                "captions_upload", "output_folder_input",
+                "audio_playback_checkbox", "analyze_motion_btn",
+                "target_estim_foc", "target_estim_stereo",
+                "target_handy", "target_osr2",
+            ]
+            # Also clear motion analysis cache entries
+            _motion_keys = [k for k in st.session_state if k.startswith("motion_")]
+            for _k in _clear_keys + _motion_keys:
                 st.session_state.pop(_k, None)
             st.rerun()
 
