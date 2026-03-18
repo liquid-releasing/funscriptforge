@@ -453,8 +453,6 @@ def _video_section(project: dict | None, v: int):
         stats = video_stats(video_path)
         if stats:
             _video_stats_row(stats)
-        if project and project.get("output_folder"):
-            _video_heatmap(video_path, project)
 
 
 _DURATION_WARN_S = 15  # warn if funscript and video differ by more than this
@@ -572,10 +570,6 @@ def _audio_section(project: dict | None, v: int):
     if audio_path:
         st.caption(f"♪ {Path(audio_path).name}")
         _audio_stats_row(audio_path)
-
-    # Beat generation button — available when project has audio or video
-    if project and project.get("output_folder"):
-        _beat_generation_button(project, audio_path)
 
 
 def _audio_stats_row(audio_path: str):
