@@ -37,6 +37,7 @@ Apply device-safe fixes globally before phrase editing. Tab layout:
 - Phrase detection settings (moved from top of Phrases)
 - Beat bar plotly (if video/audio loaded) for reference
 - Fix strategy: `[X] Performance [ ] Halve strokes [ ] Shorten strokes [ ] Beat`
+  - **Note:** "Rebuild from beats" requires pre-release testing. Mark as roadmap — do not ship without validation against multiple funscripts and beat data sources.
 - Apply scope: `[ ] Entire funscript [ ] Alternate by phrase [ ] Random by phrase`
 - Accept rebuilds phrase list, creates full-color chart for Phrases tab
 - Saves devices + decisions to .forge config

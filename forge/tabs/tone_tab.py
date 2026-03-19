@@ -166,8 +166,8 @@ def render():
 
     if st.session_state.get("tone_accepted"):
         st.success(
-            "Your next step is **Phrases** for fine-tuning, "
-            "or skip ahead to **Export** for a clean device-safe file."
+            "Your next step is the **Phrases** tab for fine-tuning, "
+            "or skip ahead to the **Export** tab for a clean device-safe file."
         )
 
     # ── Credit ────────────────────────────────────────────────────────────

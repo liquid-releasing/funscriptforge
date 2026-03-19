@@ -82,10 +82,16 @@ def render():
 
     # ── Apply scope ───────────────────────────────────────────────────────
     st.subheader("Apply scope")
-    st.caption("How to distribute the fix across your funscript.")
+    multiple_fixes = len(selected_fixes) > 1
+    if multiple_fixes:
+        st.caption("How to distribute multiple fixes across your funscript.")
+    else:
+        st.caption("Select more than one fix strategy to enable per-phrase distribution.")
 
     saved_scope = (project or {}).get("device_apply_scope", "global")
-    scope_labels = {key: label for key, label in _APPLY_SCOPES}
+    # Force global when only one fix selected
+    if not multiple_fixes:
+        saved_scope = "global"
 
     selected_scope = st.radio(
         "Apply scope",
@@ -95,6 +101,7 @@ def render():
         key="device_apply_scope",
         label_visibility="collapsed",
         horizontal=True,
+        disabled=not multiple_fixes,
     )
 
     st.divider()
@@ -135,8 +142,8 @@ def render():
     if st.session_state.get("device_accepted"):
         st.success(
             "Your funscript is device-safe and ready to export. "
-            "Your next step is **Tone** to shape the feel, "
-            "or skip ahead to **Export**."
+            "Your next step is the **Tone** tab to shape the feel, "
+            "or skip ahead to the **Export** tab."
         )
 
 

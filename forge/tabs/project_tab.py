@@ -342,7 +342,7 @@ def render():
         st.rerun()
 
     if st.session_state.get("project_accepted"):
-        st.success("Your next step in the workflow is **Device**.")
+        st.success("Your next step in the workflow is the **Device** tab.")
 
 
 # ── Funscript ────────────────────────────────────────────────────────────────
