@@ -9,7 +9,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from forge.project import save_forge, get_input_file
+from forge.project import save_forge, get_input_file, save_chain_funscript, get_chain_funscript_for
 
 # Device targets — same list that was on Project tab
 _TARGETS = [
@@ -157,13 +157,24 @@ def _apply_device_awareness(project, targets, fix_strategies, apply_scope):
     status.write(f"✅ Fixes: {', '.join(fix_strategies)}")
     status.write(f"✅ Scope: {apply_scope}")
 
-    # TODO: Apply actual device-safe fixes to the funscript here.
-    # For v1, Performance = basic position clamping + speed limiting.
-    # Estim devices get full fix from funscript-tools math.
-    # Handy/OSR2 get basic safety pass.
+    # Apply device-safe fixes to the funscript and save to chain
     status.update(label="Applying fixes…")
-    # Placeholder — real math goes here
-    status.write("✅ Device-safe fixes applied")
+    from forge.funscript import load_funscript, parse_actions
+    funscript_path = st.session_state.get("funscript_path", "")
+    if funscript_path and Path(funscript_path).exists():
+        fs_data = load_funscript(funscript_path)
+        if fs_data:
+            times, positions = parse_actions(fs_data)
+            if times:
+                times_s = [t / 1000.0 for t in times]
+                modified = _apply_device_fix_preview(times_s, positions, fix_strategies)
+                # Update actions in funscript data
+                for i, action in enumerate(fs_data.get("actions", [])):
+                    if i < len(modified):
+                        action["pos"] = int(round(modified[i]))
+                # Save to chain
+                save_chain_funscript(project, "device", fs_data)
+                status.write(f"✅ Device-safe fixes applied to {len(times):,} actions")
 
     # Safety verification pass
     status.update(label="Verifying device safety…")

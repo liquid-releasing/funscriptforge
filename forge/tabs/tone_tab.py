@@ -431,13 +431,27 @@ def _get_slider_values(tone_name: str) -> tuple[float, float]:
 
 
 def _render_preview(selected: str | None):
-    """Show before/after funscript preview."""
-    funscript_path = st.session_state.get("funscript_path", "")
-    if not funscript_path or not Path(funscript_path).exists():
-        st.caption("Load a funscript in the Project tab to see a preview.")
-        return
+    """Show before/after funscript preview.
+    Before = device-fixed funscript (or original if no device step yet)."""
+    from forge.project import get_chain_funscript_for
 
-    data = load_funscript(funscript_path)
+    # Load from chain: Tone reads from Device output (or original)
+    project = st.session_state.get("forge_project")
+    data = None
+    source_label = "original"
+    if project:
+        data = get_chain_funscript_for(project, "tone")
+        if data:
+            source_label = "device-safe"
+
+    # Fall back to raw funscript if chain has nothing
+    if not data:
+        funscript_path = st.session_state.get("funscript_path", "")
+        if not funscript_path or not Path(funscript_path).exists():
+            st.caption("Load a funscript in the Project tab to see a preview.")
+            return
+        data = load_funscript(funscript_path)
+
     if not data:
         return
 
@@ -453,8 +467,8 @@ def _render_preview(selected: str | None):
         impact = st.session_state.get(f"tone_impact_{selected}", 1.0)
         col_before, col_after = st.columns(2)
         with col_before:
-            st.caption("**Before** — original")
-            _plot_funscript(times_s, positions, _BLUE, "Original")
+            st.caption(f"**Before** — {source_label}")
+            _plot_funscript(times_s, positions, _BLUE, "Before")
         with col_after:
             st.caption(f"**After** — {selected} (impact {impact:.0%})")
             toned = _apply_tone_preview(times_s, positions, selected, s1, s2)
@@ -539,8 +553,9 @@ def _apply_tone_preview(times_s: list, positions: list, tone_name: str,
 
 def _apply_tone(tone_name: str):
     """Save tone selection, sliders, and impact to the forge project.
-    Appends a history snapshot for undo. Caches chart for Phrases tab."""
-    from forge.project import save_forge
+    Appends a history snapshot for undo. Saves toned funscript to chain.
+    Caches chart for Phrases tab."""
+    from forge.project import save_forge, save_chain_funscript, get_chain_funscript_for
     from datetime import datetime
 
     project = st.session_state.get("forge_project")
@@ -572,20 +587,38 @@ def _apply_tone(tone_name: str):
         if Path(project.get("output_folder", "")).exists():
             save_forge(project)
 
-    # Cache the Plotly figure for the Phrases tab
-    funscript_path = st.session_state.get("funscript_path", "")
-    if funscript_path and Path(funscript_path).exists():
+    # Apply tone to chain funscript and cache Plotly for Phrases tab
+    project = st.session_state.get("forge_project")
+    # Read from chain (device-fixed) or fall back to original
+    chain_data = get_chain_funscript_for(project, "tone") if project else None
+    if not chain_data:
+        funscript_path = st.session_state.get("funscript_path", "")
+        if funscript_path and Path(funscript_path).exists():
+            chain_data = load_funscript(funscript_path)
+
+    if chain_data:
         status = st.status("Applying tone…", expanded=True)
         status.write(f"✅ Tone set to **{tone_name}**")
 
-        data = load_funscript(funscript_path)
-        if data:
-            times, positions = parse_actions(data)
-            if times:
-                status.update(label=f"Building chart… {len(times):,} actions")
-                times_s = [t / 1000.0 for t in times]
-                tone_data = next(t for t in _TONES if t["name"] == tone_name)
-                modified = _apply_tone_preview(times_s, positions, tone_name)
+        times, positions = parse_actions(chain_data)
+        if times:
+            s1, s2 = _get_slider_values(tone_name)
+            impact = st.session_state.get(f"tone_impact_{tone_name}", 1.0)
+            status.update(label=f"Applying tone to {len(times):,} actions…")
+            times_s = [t / 1000.0 for t in times]
+            tone_data = next(t for t in _TONES if t["name"] == tone_name)
+            toned = _apply_tone_preview(times_s, positions, tone_name, s1, s2)
+            # Apply impact blending
+            modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
+
+            # Save toned funscript to chain
+            if project:
+                toned_data = dict(chain_data)
+                for i, action in enumerate(toned_data.get("actions", [])):
+                    if i < len(modified):
+                        action["pos"] = int(round(modified[i]))
+                save_chain_funscript(project, "tone", toned_data)
+                status.write("✅ Toned funscript saved to chain")
 
                 # Build and cache the full-color figure
                 fig = go.Figure()
