@@ -1,63 +1,167 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/INSTALL/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/art/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/ARCHITECTURE_estim_pipeline/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/_journey-map/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/AUTO_METADATA_SPEC/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/00-overview/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/DEVELOPMENT/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/00-overview/concepts/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/HAPTIC_COMPOSITION_SPEC/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/01-getting-started/install/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/INSTALL/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/01-getting-started/your-first-funscript/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/OSS_INTEGRATION_PATTERN/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/media/reading-assessment--phrase-detail.caption/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/TONE_TAB_SPEC/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/media/your-first-funscript--phrase-overview.caption/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/concepts/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/troubleshooting/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/overview/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/troubleshooting/export/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/art/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/troubleshooting/install/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/getting-started/forge-your-first-funscript/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/troubleshooting/loading-a-script/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/getting-started/install/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/troubleshooting/media-player/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/guide/_journey-map/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
     <url>
-         <loc>https://liquid-releasing.github.io/funscriptforge/guide/troubleshooting/transforms/</loc>
-         <lastmod>2026-03-16</lastmod>
+         <loc>https://help.funscriptforge.com/guide/export/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/media-player/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/pattern-editor/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/phrase-editor/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/transforms/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/00-overview/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/00-overview/concepts/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/01-getting-started/install/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/01-getting-started/your-first-funscript/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/media/reading-assessment--phrase-detail.caption/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/media/your-first-funscript--phrase-overview.caption/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/troubleshooting/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/troubleshooting/export/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/troubleshooting/install/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/troubleshooting/loading-a-script/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/troubleshooting/media-player/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/troubleshooting/transforms/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/reference/behavioral-tags/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/reference/cli/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/reference/definitions/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/reference/device-safety/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/troubleshooting/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/troubleshooting/export/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/troubleshooting/install/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/troubleshooting/loading-a-script/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/troubleshooting/media-player/</loc>
+         <lastmod>2026-03-19</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/troubleshooting/transforms/</loc>
+         <lastmod>2026-03-19</lastmod>
     </url>
 </urlset>

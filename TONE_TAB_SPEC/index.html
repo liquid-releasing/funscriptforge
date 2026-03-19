@@ -1,0 +1,2567 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The professional post-processor for haptic script creators.">
+      
+      
+      
+        <link rel="canonical" href="https://help.funscriptforge.com/TONE_TAB_SPEC/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Tone Tab — Design Specification - FunscriptForge</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#tone-tab-design-specification" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="FunscriptForge" class="md-header__button md-logo" aria-label="FunscriptForge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            FunscriptForge
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Tone Tab — Design Specification
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/liquid-releasing/funscriptforge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    liquid-releasing/funscriptforge
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../overview/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../getting-started/install/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../concepts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Concepts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../guide/phrase-editor/" class="md-tabs__link">
+          
+  
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/cli/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../troubleshooting/" class="md-tabs__link">
+          
+  
+  
+  Troubleshooting
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="FunscriptForge" class="md-nav__button md-logo" aria-label="FunscriptForge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    FunscriptForge
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/liquid-releasing/funscriptforge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    liquid-releasing/funscriptforge
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/forge-your-first-funscript/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge Your First Funscript
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/phrase-editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phrase Editor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/pattern-editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pattern Editor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/media-player/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Media Player
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/transforms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transforms
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/behavioral-tags/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Behavioral Tags
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/device-safety/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Device Safety
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Definitions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Troubleshooting
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/loading-a-script/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Loading a Script
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/media-player/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Media Player
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/transforms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transforms
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#purpose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Purpose">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-this-makes-possible" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this makes possible
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-six-tones" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Six Tones
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Six Tones">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-tones-and-not-characters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why "Tones" and not "Characters"
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tab-2-global-tone-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tab 2 — Global Tone Selection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tab 2 — Global Tone Selection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#entry-state" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Entry state
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tone-card-anatomy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tone card — anatomy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-youll-feel-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "What you'll feel" panel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#beat-influence-slider" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Beat influence slider
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tone-as-transform-phrase-editor-local-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tone as Transform (Phrase Editor — local scope)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#beat-weight-envelopes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Beat Weight Envelopes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#caption-emotion-tone-v2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Caption Emotion → Tone (V2)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tone-vocabulary-across-systems" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tone vocabulary across systems
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tone vocabulary across systems">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tone-as-spatial-haptic-intent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tone as spatial haptic intent
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#etransforms-from-ui-to-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        eTransforms — from UI to catalog
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#navigation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Navigation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Navigation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#default-tone-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Default Tone resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#three-stage-application-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Three-stage application model
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Three-stage application model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tone-composition-influence-not-replacement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tone composition — influence, not replacement
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#device-aware-output-pass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Device-aware output pass
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disclaimer-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Disclaimer file
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#one-decision-set-drives-all-output-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One decision set drives all output files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scope-phrases-only-not-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope: phrases only, not patterns
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#safety-through-intent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Safety through intent
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#source-integrity-the-single-most-important-architectural-constraint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Source integrity — the single most important architectural constraint
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#open-questions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Open questions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#art-backlog-the-six-tone-cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Art backlog — the six Tone cards
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Art backlog — the six Tone cards">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-to-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What to build
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#acceptance-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Acceptance criteria
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="tone-tab-design-specification">Tone Tab — Design Specification<a class="headerlink" href="#tone-tab-design-specification" title="Permanent link">&para;</a></h1>
+<p><strong>Status:</strong> Design
+<strong>Tab position:</strong> Tab 2 in the forge workflow (Project → <strong>Tone</strong> → Export)</p>
+<hr />
+<h2 id="purpose">Purpose<a class="headerlink" href="#purpose" title="Permanent link">&para;</a></h2>
+<p>Tone is the Easy Button. It is the single most important creative decision in a
+forge project — the one choice that defines how the haptic output feels across
+the whole scene.</p>
+<p>Most users open this tab, glance at the suggestion, accept or change it, and
+click <strong>Continue</strong>. Done. Three steps total. That is the design goal.</p>
+<p>Power users who want per-phrase control use the Phrase Editor's Transform button 4
+(same vocabulary, local scope). That is optional depth, not a requirement.</p>
+<h3 id="what-this-makes-possible">What this makes possible<a class="headerlink" href="#what-this-makes-possible" title="Permanent link">&para;</a></h3>
+<p>Two layers — global arc and phrase texture — compose into a haptic experience that
+no single-layer system can produce.</p>
+<p>The global Tone sets the trajectory: a Build that climbs from 2 to 8, a Tease that
+oscillates and withholds, a Climax that drives all the way through. The phrase Tones
+add local character along that trajectory: a Tender moment in the middle of the climb,
+an Edge plateau just before the peak, a Dominant push in the final third.</p>
+<p>The result is a haptic experience with the structure of music — a recognizable arc,
+with texture and variation inside it. Not random, not monotone. Shaped.</p>
+<p>And it is explainable. Before the user presses play, they can read what they will
+feel: <em>"A steady build with a tender passage at phrase 3, then a dominant push to
+the finish."</em> That is haptic design with language. That is what Tone makes possible.</p>
+<hr />
+<h2 id="the-six-tones">The Six Tones<a class="headerlink" href="#the-six-tones" title="Permanent link">&para;</a></h2>
+<p>The tone vocabulary is the shared language across every FunscriptForge system:
+metadata derivation, beat weight envelopes, caption emotion (V2), and device output.</p>
+<table>
+<thead>
+<tr>
+<th>Tone</th>
+<th>One-line meaning</th>
+<th>Haptic character</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Build</strong></td>
+<td>Tension grows</td>
+<td>Intensity increases steadily; no release until the end</td>
+</tr>
+<tr>
+<td><strong>Climax</strong></td>
+<td>Everything, now</td>
+<td>Maximum intensity, full range, urgent pacing</td>
+</tr>
+<tr>
+<td><strong>Tease</strong></td>
+<td>Pull back at the peak</td>
+<td>Oscillates — rises toward a peak then retreats; reward withheld</td>
+</tr>
+<tr>
+<td><strong>Edge</strong></td>
+<td>Hold there</td>
+<td>Sustained plateau; high intensity maintained, no release</td>
+</tr>
+<tr>
+<td><strong>Tender</strong></td>
+<td>Slow and close</td>
+<td>Soft, slow, shallow strokes; intimate and present</td>
+</tr>
+<tr>
+<td><strong>Dominant</strong></td>
+<td>Driving, relentless</td>
+<td>Fast, wide, assertive; device takes charge</td>
+</tr>
+</tbody>
+</table>
+<p>These six are permanent vocabulary. Adding tones is a breaking change to the
+entire pipeline — treat them as locked.</p>
+<h3 id="why-tones-and-not-characters">Why "Tones" and not "Characters"<a class="headerlink" href="#why-tones-and-not-characters" title="Permanent link">&para;</a></h3>
+<p>The vocabulary was previously called <strong>characters</strong> — names that described device
+behavior (Gentle, Reactive, etc.). It was renamed to <strong>Tones</strong> deliberately.</p>
+<p>"Characters" is mechanism-first: it describes what a device does. "Tones" is
+sensation-first: it describes what a user feels. That difference matters because
+the vocabulary needs to apply to any output surface — a single-axis toy, an estim
+device, a multi-zone haptic suit, a spatial audio rig. The mechanism varies. The
+sensation is consistent.</p>
+<p>Tease on a Handy oscillates amplitude. Tease on a haptic suit swirls sensation
+toward a zone and pulls away before committing. The same word. The same felt
+experience. Different surfaces, same intent.</p>
+<p>The renaming is what makes the vocabulary extensible without modification.</p>
+<hr />
+<h2 id="tab-2-global-tone-selection">Tab 2 — Global Tone Selection<a class="headerlink" href="#tab-2-global-tone-selection" title="Permanent link">&para;</a></h2>
+<h3 id="entry-state">Entry state<a class="headerlink" href="#entry-state" title="Permanent link">&para;</a></h3>
+<p>The tab opens with a tone <strong>pre-selected</strong> based on auto-metadata derived from
+the funscript (see <code>docs/AUTO_METADATA_SPEC.md</code> and <code>forge/metadata.py</code>).</p>
+<p>A rationale line appears above the picker explaining the suggestion:</p>
+<blockquote>
+<p><em>Suggested based on: dominant mood Tease, building arc, medium intensity</em></p>
+</blockquote>
+<p>This is not binding. It is a starting point. The user can change it in one click.</p>
+<h3 id="layout">Layout<a class="headerlink" href="#layout" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────────────────────────────────────────────────┐
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│  Tone                                                        │
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│                                                             │
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│  Suggested: Tease                                            │
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│  &quot;Suggested based on: dominant mood Tease, building arc&quot;    │
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│                                                             │
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│  │  Build   │  │  Climax  │  │  Tease ✓ │  ← selected      │
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│  │          │  │          │  │          │                   │
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>│  │[preview] │  │[preview] │  │[preview] │                   │
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>│  │          │  │          │  │          │                   │
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>│  │ Select   │  │ Select   │  │Selected ✓│                   │
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>│  └──────────┘  └──────────┘  └──────────┘                  │
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>│  ┌──────────┐  ┌──────────┐  ┌──────────┐                  │
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>│  │   Edge   │  │  Tender  │  │ Dominant │                   │
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>│  │          │  │          │  │          │                   │
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>│  │[preview] │  │[preview] │  │[preview] │                   │
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>│  │          │  │          │  │          │                   │
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>│  │ Select   │  │ Select   │  │ Select   │                   │
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>│  └──────────┘  └──────────┘  └──────────┘                  │
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>│                                                             │
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>│  ── Global controls ─────────────────────────────────────  │
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>│  Beat influence   [●──────────] 0.5    (when beats loaded)  │
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>│                                                             │
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>│  ── What you&#39;ll feel ────────────────────────────────────  │
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>│  Tease: Intensity builds across each phrase, then pulls     │
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>│  back just before the peak. The beat rhythm oscillates      │
+<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>│  in and out rather than driving straight through.           │
+<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>│                                                             │
+<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>│                        [ Continue → ]                       │
+<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>└─────────────────────────────────────────────────────────────┘
+</code></pre></div>
+<h3 id="tone-card-anatomy">Tone card — anatomy<a class="headerlink" href="#tone-card-anatomy" title="Permanent link">&para;</a></h3>
+<p>Each of the six cards shows:</p>
+<table>
+<thead>
+<tr>
+<th>Element</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Name</strong></td>
+<td>Tone label</td>
+</tr>
+<tr>
+<td><strong>Micro-preview</strong></td>
+<td>Small chart showing what a representative phrase looks like after this tone is applied (BPM envelope or position trace shape)</td>
+</tr>
+<tr>
+<td><strong>Select / Selected ✓</strong></td>
+<td>Action button; selected card gets accent border + checkmark badge</td>
+</tr>
+<tr>
+<td><strong>Dimming</strong></td>
+<td>Unselected cards render at reduced opacity — selection state is visually unambiguous</td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-youll-feel-panel">"What you'll feel" panel<a class="headerlink" href="#what-youll-feel-panel" title="Permanent link">&para;</a></h3>
+<p>Below the card grid, a plain-English description of the selected tone — two to three
+sentences explaining the haptic sensation, not the technical mechanism.</p>
+<p>Example for <strong>Tease</strong>:</p>
+<blockquote>
+<p><em>Intensity builds across each phrase, then pulls back just before the peak.
+The device follows your rhythm but never quite commits. You'll always want more.</em></p>
+</blockquote>
+<p>Example for <strong>Dominant</strong>:</p>
+<blockquote>
+<p><em>Fast, wide, and unrelenting. The device drives the pace — you follow it.
+Phrases hit hard and push through to their end.</em></p>
+</blockquote>
+<h3 id="beat-influence-slider">Beat influence slider<a class="headerlink" href="#beat-influence-slider" title="Permanent link">&para;</a></h3>
+<p>Visible only when beat data has been generated (beats were extracted in the Project tab).</p>
+<table>
+<thead>
+<tr>
+<th>Position</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>Beats have no influence on haptic output</td>
+</tr>
+<tr>
+<td>0.5 (default)</td>
+<td>Moderate beat accent — rhythm visible but not dominant</td>
+</tr>
+<tr>
+<td>1.0</td>
+<td>Beats fully shape the phrase intensity envelope</td>
+</tr>
+</tbody>
+</table>
+<p>The beat influence interacts with the selected tone — <strong>Build</strong> = influence
+increases across the phrase; <strong>Tease</strong> = influence oscillates; <strong>Climax</strong> =
+full influence throughout; <strong>Tender</strong> = influence suppressed below 0.3 regardless
+of slider.</p>
+<p>See beat weight envelope table below.</p>
+<hr />
+<h2 id="tone-as-transform-phrase-editor-local-scope">Tone as Transform (Phrase Editor — local scope)<a class="headerlink" href="#tone-as-transform-phrase-editor-local-scope" title="Permanent link">&para;</a></h2>
+<p>The same six tones appear as <strong>Transform button 4</strong> in the Phrase Editor.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>[Shape ▼]  [Tempo ▼]  [Intensity ▼]  [Tone ▼]
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>                                        Build
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>                                        Climax
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>                                        Tease  ← selected for this phrase
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>                                        Edge
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>                                        Tender
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>                                        Dominant
+</code></pre></div>
+<p>This is the same component, narrower scope. It overrides the global tone for the
+selected phrase or segment only.</p>
+<p>Shape (1), Tempo (2), and Intensity (3) transforms run first. Tone (4) is applied
+last — it colors the result, not the raw input.</p>
+<hr />
+<h2 id="beat-weight-envelopes">Beat Weight Envelopes<a class="headerlink" href="#beat-weight-envelopes" title="Permanent link">&para;</a></h2>
+<p>When beats are present, each tone defines a different shape for how beat influence
+is applied across a phrase over time.</p>
+<table>
+<thead>
+<tr>
+<th>Tone</th>
+<th>Envelope shape</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Build</strong></td>
+<td>Linear ramp up</td>
+<td>Beat influence starts low, ends high — rhythm grows</td>
+</tr>
+<tr>
+<td><strong>Climax</strong></td>
+<td>Flat at maximum</td>
+<td>Full beat influence throughout the phrase</td>
+</tr>
+<tr>
+<td><strong>Tease</strong></td>
+<td>Sine oscillation</td>
+<td>Beat influence rises and falls — never fully commits</td>
+</tr>
+<tr>
+<td><strong>Edge</strong></td>
+<td>Step function</td>
+<td>Full influence until 80% of phrase, then drops — sustain then release</td>
+</tr>
+<tr>
+<td><strong>Tender</strong></td>
+<td>Flat at low</td>
+<td>Beat influence capped at 0.3 regardless of slider — stays soft</td>
+</tr>
+<tr>
+<td><strong>Dominant</strong></td>
+<td>Flat at high</td>
+<td>Beat influence capped at 0.9 — relentless rhythm</td>
+</tr>
+</tbody>
+</table>
+<p>The envelope is applied per phrase, not globally. A funscript with mixed phrase
+types gets mixed envelopes — each phrase has its own Tone assignment.</p>
+<hr />
+<h2 id="caption-emotion-tone-v2">Caption Emotion → Tone (V2)<a class="headerlink" href="#caption-emotion-tone-v2" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p><strong>V2 gate:</strong> Requires vocal separation (Demucs/Spleeter) to isolate the vocal
+track before emotion analysis. Mixed audio gives unreliable results.
+This feature ships when vocal separation is integrated.</p>
+</blockquote>
+<p>The mapping from detected speech emotion to Tone vocabulary:</p>
+<table>
+<thead>
+<tr>
+<th>Detected emotion</th>
+<th>Tone label</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Anger, command</td>
+<td>Dominant</td>
+</tr>
+<tr>
+<td>Joy, playful</td>
+<td>Tease</td>
+</tr>
+<tr>
+<td>Sadness, softness</td>
+<td>Tender</td>
+</tr>
+<tr>
+<td>Fear, urgency</td>
+<td>Climax</td>
+</tr>
+<tr>
+<td>Neutral, sustained</td>
+<td>Edge</td>
+</tr>
+<tr>
+<td>Rising tension</td>
+<td>Build</td>
+</tr>
+</tbody>
+</table>
+<p>Caption emotion overrides the global tone for the duration of that caption window.
+It does not replace the phrase-level tone — it composes with it.</p>
+<hr />
+<h2 id="tone-vocabulary-across-systems">Tone vocabulary across systems<a class="headerlink" href="#tone-vocabulary-across-systems" title="Permanent link">&para;</a></h2>
+<p>One vocabulary. All systems speak it.</p>
+<table>
+<thead>
+<tr>
+<th>System</th>
+<th>Where tone appears</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Auto-metadata</strong></td>
+<td><code>derive_metadata()</code> → <code>tone_suggestion</code> — seeds the Tone tab pre-selection</td>
+</tr>
+<tr>
+<td><strong>Tone tab (global)</strong></td>
+<td>User picks or accepts suggestion — applies to the whole project</td>
+</tr>
+<tr>
+<td><strong>Phrase Editor (local)</strong></td>
+<td>Transform button 4 — overrides global tone for one phrase or segment</td>
+</tr>
+<tr>
+<td><strong>Beat weight envelopes</strong></td>
+<td>Each tone defines an envelope shape for beat influence per phrase</td>
+</tr>
+<tr>
+<td><strong>Caption emotion (V2)</strong></td>
+<td>Detected speech emotion maps to a tone → overrides locally</td>
+</tr>
+<tr>
+<td><strong>Export</strong></td>
+<td>Tone label drives haptic output shaping for each device profile</td>
+</tr>
+<tr>
+<td><strong>eTransforms catalog (estim)</strong></td>
+<td>Internal recipe table: Tone → restim channel parameters. Not user-facing.</td>
+</tr>
+<tr>
+<td><strong>Spatial haptics (backlog)</strong></td>
+<td>Same intent record drives body-zone distribution — see below</td>
+</tr>
+</tbody>
+</table>
+<h3 id="tone-as-spatial-haptic-intent">Tone as spatial haptic intent<a class="headerlink" href="#tone-as-spatial-haptic-intent" title="Permanent link">&para;</a></h3>
+<p>The same Tone decisions that shape funscript output also describe how sensation
+moves across a haptic suit. Funscript is one axis of motion. A haptic suit is a
+surface — dozens of zones that can receive independent signals simultaneously.</p>
+<p>Tone maps naturally to spatial movement:</p>
+<table>
+<thead>
+<tr>
+<th>Tone</th>
+<th>Spatial character</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Build</strong></td>
+<td>Sensation grows inward — starts at the periphery, converges toward center</td>
+</tr>
+<tr>
+<td><strong>Climax</strong></td>
+<td>Everything activates simultaneously — full body, full intensity</td>
+</tr>
+<tr>
+<td><strong>Tease</strong></td>
+<td>Sensation swirls and retreats — arrives at a zone then pulls away before committing</td>
+</tr>
+<tr>
+<td><strong>Edge</strong></td>
+<td>Sustained activation across a zone — plateau, no release</td>
+</tr>
+<tr>
+<td><strong>Tender</strong></td>
+<td>Soft, slow, spreading — sensation diffuses rather than concentrating</td>
+</tr>
+<tr>
+<td><strong>Dominant</strong></td>
+<td>Driving wave across the body — directional, assertive, one zone leads</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>.forge</code> intent record (global Tone + phrase overrides) is already sufficient
+to generate spatial haptic output. No new user decisions required. The same creative
+choice that shaped the main funscript also describes how the experience moves
+through the body.</p>
+<p>This is the same architectural pattern as the device profile expansion — one set of
+decisions, one more output surface.</p>
+<hr />
+<h2 id="etransforms-from-ui-to-catalog">eTransforms — from UI to catalog<a class="headerlink" href="#etransforms-from-ui-to-catalog" title="Permanent link">&para;</a></h2>
+<p>eTransforms was the original estim channel generation system, with its own
+character vocabulary (Gentle, Reactive, etc.) and its own UI. That UI is no
+longer needed.</p>
+<p><strong>Tone replaces eTransforms as the user-facing vocabulary.</strong></p>
+<p>eTransforms survives as the <strong>estim device profile recipe catalog</strong> — an internal
+translation table that maps each Tone label to restim channel parameters
+(alpha, beta, pulse_frequency, pulse_width, pulse_rise, E1–E4, prostate).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>User picks: Tease
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    │
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    └── Export: estim profile
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>            └── eTransforms catalog lookup: Tease → {
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>                    alpha: oscillating envelope,
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>                    pulse_frequency: mid-range with retreat,
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>                    ...
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>                }
+</code></pre></div>
+<p>The user sees Tone. The export layer uses the eTransforms catalog to produce
+the estim-specific output. The catalog is implementation — not product.</p>
+<p>This resolves the prior vocabulary conflict between eTransforms characters and
+Tone labels. They no longer need to align: eTransforms characters become named
+recipes inside the catalog, and Tone is the key used to look them up.</p>
+<hr />
+<h2 id="data-model">Data model<a class="headerlink" href="#data-model" title="Permanent link">&para;</a></h2>
+<p>Tone state is stored in the <code>.forge</code> project file.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">&quot;tone&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">&quot;global&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Tease&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="nt">&quot;suggestion&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Tease&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span><span class="nt">&quot;rationale&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Suggested based on: dominant mood Tease, building arc&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="nt">&quot;beat_influence&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.5</span><span class="p">,</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">    </span><span class="nt">&quot;phrase_tones&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">      </span><span class="nt">&quot;3&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Climax&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">      </span><span class="nt">&quot;7&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Tender&quot;</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="p">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>global</code></td>
+<td>The tone the user selected (or accepted) — the foundation for the whole funscript</td>
+</tr>
+<tr>
+<td><code>suggestion</code></td>
+<td>What auto-metadata recommended (preserved for display)</td>
+</tr>
+<tr>
+<td><code>rationale</code></td>
+<td>Human-readable rationale string from <code>derive_metadata()</code></td>
+</tr>
+<tr>
+<td><code>beat_influence</code></td>
+<td>Global beat influence slider value (0–1)</td>
+</tr>
+<tr>
+<td><code>phrase_tones</code></td>
+<td>Dict of phrase index → tone label. These modulate the global tone, they do not replace it.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="navigation">Navigation<a class="headerlink" href="#navigation" title="Permanent link">&para;</a></h2>
+<p><strong>Continue →</strong> advances to the Export tab. It is available as soon as a tone is selected
+(which it is by default — the suggestion is pre-selected on load).</p>
+<p>The <strong>Continue</strong> button is not gated on beat influence or any slider. Tone selection
+is the only required decision.</p>
+<h3 id="default-tone-resolution">Default Tone resolution<a class="headerlink" href="#default-tone-resolution" title="Permanent link">&para;</a></h3>
+<p>A Tone is always set. The system never reaches Export without one.</p>
+<p>Resolution order:</p>
+<ol>
+<li><strong>User selection</strong> — the user clicked a card in Tab 2. This is the active Tone.</li>
+<li><strong>Auto-metadata suggestion</strong> — <code>derive_metadata()</code> produced a <code>tone_suggestion</code>. Pre-selected on tab load. Used if the user never changed it.</li>
+<li><strong>System default</strong> — <code>"Build"</code>. Used only when auto-metadata returned no suggestion (very short funscript, no detectable arc).</li>
+</ol>
+<p>The resolved Tone is stored in <code>forge_project["tone"]["global"]</code> before export begins.
+No Tone picker appears on the Export tab — the choice was made in Tab 2.</p>
+<hr />
+<h2 id="three-stage-application-model">Three-stage application model<a class="headerlink" href="#three-stage-application-model" title="Permanent link">&para;</a></h2>
+<p><strong>Simple version:</strong> Export uses exactly what the user decided — the global Tone from
+Tab 2, and any per-phrase influences set in the Phrase Editor. Nothing more.</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Where</th>
+<th>Scope</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1 — Intent</strong></td>
+<td>Tab 2 (global)</td>
+<td>Whole project</td>
+<td>User picks (or accepts) a Tone. Applied as the foundation across the entire funscript. Stored in <code>.forge</code>.</td>
+</tr>
+<tr>
+<td><strong>2 — Phrase work</strong></td>
+<td>Phrase editor button 4</td>
+<td>Per phrase (optional)</td>
+<td>Per-phrase Tones stored in <code>.forge</code>. These modulate the global foundation — they do not replace it.</td>
+</tr>
+<tr>
+<td><strong>3 — Export</strong></td>
+<td>Export pass</td>
+<td>All output files</td>
+<td>Global Tone applied first. Phrase Tones layer on top. Writes all device output files.</td>
+</tr>
+</tbody>
+</table>
+<p>Export is a read of stored decisions — it does not re-derive or re-prompt.</p>
+<h3 id="tone-composition-influence-not-replacement">Tone composition — influence, not replacement<a class="headerlink" href="#tone-composition-influence-not-replacement" title="Permanent link">&para;</a></h3>
+<p>A phrase Tone <strong>modulates</strong> the global Tone. It does not replace it.</p>
+<ul>
+<li><strong>Global Tone</strong> is the foundation. It changes the funscript fundamentally — the
+  character of the whole piece is established here.</li>
+<li><strong>Phrase Tone</strong> is a local emphasis. It intensifies, softens, or redirects the
+  global character within a phrase. The global foundation remains underneath.</li>
+<li><strong>No phrase Tone set</strong> — the global Tone expresses fully in that phrase. Phrase
+  Tones have the most impact when a strong global Tone is already established.</li>
+</ul>
+<p><strong>Example — the climb:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Intensity
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>  8 |                                          ·
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    |                                    ·
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    |                           ·
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    |                  [ P3 ]·
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    |           ·
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>  2 |·
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    +---------------------------------------------&gt; time
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>         global arc: Build (steady climb, 2 → 8)
+</code></pre></div>
+<p>Phrase 3 sits in the middle of a global Build arc. The user sets phrase 3 to
+Tender. The climb does not stop. The arc does not bend. Phrase 3 still occupies
+its position on the 2→8 trajectory.</p>
+<p>What changes is the texture inside phrase 3 — slower, softer strokes. The device
+takes it a little easier for that moment. Then phrase 4 picks up the climb where
+phrase 3 left off.</p>
+<p>The global Tone defines the trajectory. The phrase Tone defines how that moment
+feels along the way.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">effective_tone</span><span class="p">(</span><span class="n">phrase_index</span><span class="p">,</span> <span class="n">forge_project</span><span class="p">):</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">global_tone</span> <span class="o">=</span> <span class="n">forge_project</span><span class="p">[</span><span class="s2">&quot;tone&quot;</span><span class="p">][</span><span class="s2">&quot;global&quot;</span><span class="p">]</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">phrase_tone</span> <span class="o">=</span> <span class="n">forge_project</span><span class="p">[</span><span class="s2">&quot;tone&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;phrase_overrides&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">phrase_index</span><span class="p">))</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="c1"># phrase_tone modulates global_tone — both are passed to the recipe layer</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;global&quot;</span><span class="p">:</span> <span class="n">global_tone</span><span class="p">,</span> <span class="s2">&quot;phrase&quot;</span><span class="p">:</span> <span class="n">phrase_tone</span> <span class="ow">or</span> <span class="n">global_tone</span><span class="p">}</span>
+</code></pre></div>
+<p>The recipe layer receives both and composes them. When phrase == global, it is
+equivalent to a single Tone applied fully.</p>
+<h3 id="device-aware-output-pass">Device-aware output pass<a class="headerlink" href="#device-aware-output-pass" title="Permanent link">&para;</a></h3>
+<p>After the Tone recipe generates output for a device, a <strong>device-aware output pass</strong>
+is applied before writing the file. This pass clamps values to the device's known
+operating parameters so the output is within the range the device is designed to run.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Tone recipe output  →  [device limits pass]  →  output file
+</code></pre></div>
+<p>We know the published operating range of every supported device. If Tone choices
+produce values outside that range — too fast, too intense, too wide — the pass
+clamps them to the device's documented limits before writing.</p>
+<p>Each device has its own parameter range:</p>
+<table>
+<thead>
+<tr>
+<th>Device</th>
+<th>Operating limits applied</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Main funscript / Handy</strong></td>
+<td>Max velocity between actions; minimum action interval; position 0–100</td>
+</tr>
+<tr>
+<td><strong>OSR2 / SR6</strong></td>
+<td>Per-axis velocity limits; mechanical range per axis</td>
+</tr>
+<tr>
+<td><strong>Estim (restim)</strong></td>
+<td>pulse_frequency operating range; pulse_width bounds; amplitude ceiling per channel</td>
+</tr>
+<tr>
+<td><strong>Haptic suit</strong></td>
+<td>Zone activation rate; simultaneous zone count</td>
+</tr>
+</tbody>
+</table>
+<p>The pass never rejects an export — it adjusts to fit. The output is always within
+device operating range.</p>
+<p><strong>Liability note — internal only:</strong></p>
+<p>User-facing copy must never describe this as a "safety" feature or claim the output
+is "safe." Estim and physical devices involve inherent risk that is entirely outside
+our control — device condition, user health, session duration, placement, and more.
+We are not the safety authority. We stay within documented device parameters.</p>
+<p>Framing that is accurate and not liability-creating:
+- "Output stays within device operating range" ✓
+- "Values are clamped to device specs" ✓
+- "Safe output guaranteed" ✗
+- "We protect you from unsafe scripts" ✗</p>
+<p>This is distinct from source integrity (which protects the source funscript from
+being overwritten). Source integrity is a file-system concern. Device limits are
+a hardware-parameter concern. They do not overlap.</p>
+<h3 id="disclaimer-file">Disclaimer file<a class="headerlink" href="#disclaimer-file" title="Permanent link">&para;</a></h3>
+<p>Every export writes a <code>DISCLAIMER.txt</code> into the output folder alongside the
+generated files. The disclaimer travels with the content.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>DISCLAIMER.txt
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>my-scene/
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    estim/
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>        alpha.funscript
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>        ...
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    handy/
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>        my-scene.funscript
+</code></pre></div>
+<p><strong>Draft disclaimer text:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>These files were generated by FunscriptForge.
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>We followed your intent and kept output within the documented operating
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>range of your device. Beyond that, you are on your own.
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>This content is for informed adults. Physical devices involve real risk.
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>You are responsible for your health, your equipment, and how you use this.
+</code></pre></div>
+<p>The disclaimer is plain text, always overwritten on export, not user-editable.
+It is not shown in the UI — it is part of the output package.</p>
+<h3 id="one-decision-set-drives-all-output-files">One decision set drives all output files<a class="headerlink" href="#one-decision-set-drives-all-output-files" title="Permanent link">&para;</a></h3>
+<p>The <code>.forge</code> file is the complete record of user intent: global Tone + per-phrase
+influences. Export applies that intent through each device profile's translation layer,
+then applies the device limits pass before writing.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>.forge (global=Tease, phrase_tones={3: Climax, 7: Tender})
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    │
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    ├── main funscript recipe  →  [limits pass]  →  my-scene.funscript
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    ├── estim alpha recipe     →  [limits pass]  →  estim/alpha.funscript
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    ├── estim beta recipe      →  [limits pass]  →  estim/beta.funscript
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    ├── estim pulse_frequency  →  [limits pass]  →  estim/pulse_frequency.funscript
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>    ├── estim pulse_width      →  [limits pass]  →  estim/pulse_width.funscript
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>    ├── estim pulse_rise       →  [limits pass]  →  estim/pulse_rise.funscript
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>    ├── estim E1–E4, prostate  →  [limits pass]  →  estim/E1.funscript … prostate.funscript
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>    └── Handy funscript        →  [limits pass]  →  handy/my-scene.funscript
+</code></pre></div>
+<p>The user never re-decides Tone per device. The same Tone choices flow through
+every device profile automatically. All output files express the same creative intent.</p>
+<p>This means Tone decisions made incrementally during phrase editing accumulate in
+<code>.forge</code> and are already complete at export time. Export has no new questions to ask.</p>
+<h3 id="scope-phrases-only-not-patterns">Scope: phrases only, not patterns<a class="headerlink" href="#scope-phrases-only-not-patterns" title="Permanent link">&para;</a></h3>
+<p>Tone applies to <strong>phrases</strong> edited in the Phrase Editor. It does not apply to
+behavioral pattern instances fixed in the Pattern Editor. Pattern fixes (normalize,
+recenter, beat_accent, etc.) are corrective — they fix broken motion. Tone is
+expressive — it shapes intent. These are separate concerns and do not compose.</p>
+<hr />
+<h2 id="safety-through-intent">Safety through intent<a class="headerlink" href="#safety-through-intent" title="Permanent link">&para;</a></h2>
+<p>Safety is not a check added at export. It is built into the architecture.</p>
+<p>The system stores <strong>intent</strong> (what the user decided), not <strong>results</strong> (a processed
+signal). Export applies intent once, from a clean source, every time. There is no
+state that can accumulate damage.</p>
+<ul>
+<li>The user sets a Tone globally and optionally per phrase. Those decisions live in
+  <code>.forge</code> as data — never as a mutated funscript.</li>
+<li>Export reads clean source + stored intent → writes output. Same inputs, same output,
+  every run.</li>
+<li>There is no way to accidentally apply a Tone twice, because the system never stores
+  "this Tone was applied to this funscript." It stores "this is the Tone for this phrase."</li>
+</ul>
+<p>By the time the user ships, safety is already in place — not through guards or
+warnings, but because the model never allowed unsafe state to exist.</p>
+<p>The result for the user: a rich, coherent experience across every device they own.
+One set of creative decisions. Every output file expresses it faithfully. No
+degradation, no drift, no re-work.</p>
+<hr />
+<h2 id="source-integrity-the-single-most-important-architectural-constraint">Source integrity — the single most important architectural constraint<a class="headerlink" href="#source-integrity-the-single-most-important-architectural-constraint" title="Permanent link">&para;</a></h2>
+<p><strong>The Stage 2 cleaned funscript is the permanent canonical source.
+The Stage 3 export pass always reads from it. Export outputs are never
+fed back into the project as a new source.</strong></p>
+<p>This matters because several transforms used in Tone recipes are <strong>not idempotent</strong> —
+applying them more than once degrades the funscript:</p>
+<table>
+<thead>
+<tr>
+<th>Transform</th>
+<th>What happens on repeated application</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>smooth</code></td>
+<td>Each pass lowers the effective cutoff frequency. Converges toward a flat line at average position.</td>
+</tr>
+<tr>
+<td><code>amplitude_scale &lt; 1.0</code></td>
+<td>Amplitude × 0.7ⁿ → 0. Energy drains to zero.</td>
+</tr>
+<tr>
+<td><code>halve_tempo</code></td>
+<td>BPM halved each time. 4 applications: 120 BPM → 7.5 BPM. Near stillness.</td>
+</tr>
+<tr>
+<td><code>boost_contrast</code></td>
+<td>Converges toward binary 0/100 signal. Loses all mid-range nuance.</td>
+</tr>
+</tbody>
+</table>
+<p>Safe transforms (idempotent — re-running produces no change):</p>
+<table>
+<thead>
+<tr>
+<th>Transform</th>
+<th>Why safe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>normalize</code></td>
+<td>Second application: min already 0, max already 100. No-op.</td>
+</tr>
+<tr>
+<td><code>recenter</code></td>
+<td>Same target: no movement on second pass.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Violation scenario to prevent:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>Day 1: Export → Tone(Tender) applied to clean funscript → tender_output.funscript
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>Day 2: tender_output.funscript becomes the project source (wrong)
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>       Export again → Tone(Tender) applied again → doubly smoothed, half amplitude
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>Day N: Near-flat, near-zero signal. All energy gone.
+</code></pre></div>
+<p><strong>Enforcement:</strong></p>
+<ul>
+<li>Export outputs go to the output folder only — never overwrite the source funscript</li>
+<li>The source funscript path in <code>.forge</code> is set once (in the Project tab) and never
+  changed by an export operation</li>
+<li>Export is a pure read operation on the source: same input → same output every time</li>
+</ul>
+<hr />
+<h2 id="open-questions">Open questions<a class="headerlink" href="#open-questions" title="Permanent link">&para;</a></h2>
+<ol>
+<li>
+<p><strong>Micro-preview content</strong> — what shape makes each tone visually distinguishable
+   at card size? Options: BPM envelope curve, beat weight envelope shape, position
+   trace of a representative phrase after tone is applied.</p>
+</li>
+<li>
+<p><strong>Beat influence per-phrase vs global</strong> — the slider is global for v1. Per-phrase
+   beat influence is the full vision (see haptic composition spec) but needs the
+   per-phrase tone assignment to work. Sequence: global slider first → per-phrase
+   envelopes in v2.</p>
+</li>
+<li>
+<p><strong>Tone card color</strong> — each tone should have a distinct color for border/accent.
+   Align with the character color scheme from the original eTransform spec:
+   Build=Green, Climax=Red, Tease=Purple, Edge=Orange, Tender=Blue, Dominant=Dark.</p>
+</li>
+<li>
+<p><strong>Phrase override UX</strong> — in v1 the Phrase Editor is the way to set per-phrase
+   tones. A future compact view on the Tone tab (a phrase timeline with tone chips
+   per phrase) could let power users review all overrides without leaving Tab 2.</p>
+</li>
+</ol>
+<hr />
+<h2 id="art-backlog-the-six-tone-cards">Art backlog — the six Tone cards<a class="headerlink" href="#art-backlog-the-six-tone-cards" title="Permanent link">&para;</a></h2>
+<p>Each of the six Tones needs a visual identity that works at card size and
+communicates the sensation before the user reads a word. This is not a chart.
+It is art — something a person feels when they look at it.</p>
+<table>
+<thead>
+<tr>
+<th>Tone</th>
+<th>Color</th>
+<th>Visual concept</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Build</strong></td>
+<td>Green</td>
+<td>A rising line or ascending form — anticipation gathering, energy accumulating. Never peaks within the frame.</td>
+</tr>
+<tr>
+<td><strong>Climax</strong></td>
+<td>Red</td>
+<td>Full expansion — everything at once. A burst, a peak, the moment of arrival. Nothing held back.</td>
+</tr>
+<tr>
+<td><strong>Tease</strong></td>
+<td>Purple</td>
+<td>A wave that approaches and retreats. Crests toward the edge of the frame and pulls away just before.</td>
+</tr>
+<tr>
+<td><strong>Edge</strong></td>
+<td>Orange</td>
+<td>A plateau — sustained at height, held there. Tension without resolution. The line refuses to fall.</td>
+</tr>
+<tr>
+<td><strong>Tender</strong></td>
+<td>Blue</td>
+<td>Soft, slow, close. A gentle curve or unfurling form. Intimate scale — it doesn't fill the card aggressively.</td>
+</tr>
+<tr>
+<td><strong>Dominant</strong></td>
+<td>Dark / Charcoal</td>
+<td>Driving, directional, assertive. Bold strokes moving in one direction. The form leads; the viewer follows.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-to-build">What to build<a class="headerlink" href="#what-to-build" title="Permanent link">&para;</a></h3>
+<ul>
+<li>One artwork per Tone, sized for the card micro-preview (roughly 160×100px)</li>
+<li>Style: abstract / motion-based — evoke the haptic sensation, not a literal device</li>
+<li>Each artwork should work in both light and dark mode, or have a dark-mode variant</li>
+<li>The color listed above is the card accent (border, badge, button highlight) — the
+  art itself may use a full palette</li>
+<li>Art ships as SVG or high-res PNG, stored in <code>assets/tone_cards/</code></li>
+</ul>
+<h3 id="acceptance-criteria">Acceptance criteria<a class="headerlink" href="#acceptance-criteria" title="Permanent link">&para;</a></h3>
+<p>A user unfamiliar with the vocabulary should be able to match each piece of art
+to its Tone word with better than chance accuracy. That is the bar.</p>
+<hr />
+<h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docs/AUTO_METADATA_SPEC.md</code></td>
+<td>How <code>tone_suggestion</code> is derived</td>
+</tr>
+<tr>
+<td><code>docs/HAPTIC_COMPOSITION_SPEC.md</code></td>
+<td>Three-layer haptic composition; beat envelopes; caption emotion</td>
+</tr>
+<tr>
+<td><code>forge/metadata.py</code></td>
+<td><code>derive_metadata()</code> — produces <code>tone_suggestion</code> + <code>tone_rationale</code></td>
+</tr>
+<tr>
+<td><code>forge/tabs/tone_tab.py</code></td>
+<td>Implementation stub</td>
+</tr>
+<tr>
+<td><code>forge/tabs/project_tab.py</code></td>
+<td>Feeds metadata into Tone tab on Continue</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      &copy; 2026 Liquid Releasing. Licensed under the MIT License.
+    </div>
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/liquid-releasing/funscriptforge" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

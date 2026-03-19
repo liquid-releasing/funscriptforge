@@ -6,11 +6,11 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Funscript assessment, transformation, and customization">
+        <meta name="description" content="The professional post-processor for haptic script creators.">
       
       
       
-        <link rel="canonical" href="https://liquid-releasing.github.io/funscriptforge/guide/troubleshooting/loading-a-script/">
+        <link rel="canonical" href="https://help.funscriptforge.com/guide/troubleshooting/loading-a-script/">
       
       
       
@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.5">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
@@ -44,8 +44,8 @@
         
         
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
-        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
       
     
     
@@ -65,7 +65,7 @@
     
     
     
-    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-orange" data-md-color-accent="orange">
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange">
   
     
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
@@ -121,7 +121,21 @@
     
     
     
-    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="deep-orange" data-md-color-accent="orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
     
   
 </form>
@@ -207,7 +221,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../../docs/guide/00-overview/index.md" class="md-tabs__link">
+      <a href="../../.." class="md-tabs__link">
         
   
   
@@ -226,7 +240,46 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../../docs/guide/00-overview/concepts.md" class="md-tabs__link">
+      <a href="../../../overview/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../getting-started/install/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../concepts/" class="md-tabs__link">
         
   
   
@@ -247,11 +300,11 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../docs/guide/01-getting-started/install.md" class="md-tabs__link">
+        <a href="../../phrase-editor/" class="md-tabs__link">
           
   
   
-  Getting Started
+  Guide
 
         </a>
       </li>
@@ -264,17 +317,38 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../../../docs/guide/troubleshooting" class="md-tabs__link">
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/cli/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
         
   
   
+  
+  
     
+    
+      <li class="md-tabs__item">
+        <a href="../../../troubleshooting/" class="md-tabs__link">
+          
+  
   
   Troubleshooting
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -330,7 +404,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../docs/guide/00-overview/index.md" class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -357,7 +431,151 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../docs/guide/00-overview/concepts.md" class="md-nav__link">
+      <a href="../../../overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../getting-started/install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../getting-started/forge-your-first-funscript/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge Your First Funscript
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../concepts/" class="md-nav__link">
         
   
   
@@ -397,17 +615,19 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
             
   
   
   <span class="md-ellipsis">
     
   
-    Getting Started
+    Guide
   
 
     
@@ -418,12 +638,12 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
   
-    Getting Started
+    Guide
   
 
           </label>
@@ -436,14 +656,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../docs/guide/01-getting-started/install.md" class="md-nav__link">
+      <a href="../../phrase-editor/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Install
+    Phrase Editor
   
 
     
@@ -464,14 +684,98 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../docs/guide/01-getting-started/your-first-funscript.md" class="md-nav__link">
+      <a href="../../pattern-editor/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Your First Funscript
+    Pattern Editor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../media-player/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Media Player
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../transforms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transforms
   
 
     
@@ -498,9 +802,200 @@
   
   
   
-    <li class="md-nav__item">
-      <a href="../../../docs/guide/troubleshooting" class="md-nav__link">
+    
+    
+    
+    
+      
+      
         
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/behavioral-tags/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Behavioral Tags
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/device-safety/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Device Safety
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Definitions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
   
   
   <span class="md-ellipsis">
@@ -514,7 +1009,191 @@
   
   
 
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Troubleshooting
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
       </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../troubleshooting/install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../troubleshooting/loading-a-script/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Loading a Script
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../troubleshooting/export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../troubleshooting/media-player/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Media Player
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../troubleshooting/transforms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transforms
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -642,25 +1321,25 @@
   
 
 
-<h1 id="troubleshooting-loading-a-script">Troubleshooting — Loading a Script</h1>
+<h1 id="troubleshooting-loading-a-script">Troubleshooting — Loading a Script<a class="headerlink" href="#troubleshooting-loading-a-script" title="Permanent link">&para;</a></h1>
 <p>Find your situation below. Each question is written the way you might actually think it —
 not the way a manual would phrase it.</p>
 <p>If your question isn't here, <a href="https://funscriptforge.com/help">ask the help assistant →</a>
 and if it turns out to be a common one, it will show up on this page.</p>
 <hr />
-<h2 id="the-file-wont-load-it-says-file-not-found">The file won't load — it says "file not found"</h2>
+<h2 id="the-file-wont-load-it-says-file-not-found">The file won't load — it says "file not found"<a class="headerlink" href="#the-file-wont-load-it-says-file-not-found" title="Permanent link">&para;</a></h2>
 <p><em>You might be searching for: "file not found", "funscript won't load", "can't open my file"</em></p>
 <p>Use the full absolute path to the file, not a relative path or just the filename.</p>
 <p><strong>Windows example:</strong></p>
-<div class="highlight"><pre><span></span><code>C:\Users\YourName\Videos\myscript.funscript
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>C:\Users\YourName\Videos\myscript.funscript
 </code></pre></div>
 <p><strong>macOS/Linux example:</strong></p>
-<div class="highlight"><pre><span></span><code>/Users/yourname/Videos/myscript.funscript
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>/Users/yourname/Videos/myscript.funscript
 </code></pre></div>
 <p>The fastest way to get the exact path: on Windows, hold <strong>Shift</strong> and right-click the file →
 <strong>Copy as path</strong>. On macOS, drag the file onto a Terminal window.</p>
 <hr />
-<h2 id="my-analysis-only-shows-one-phrase-or-a-very-small-number">My analysis only shows one phrase (or a very small number)</h2>
+<h2 id="my-analysis-only-shows-one-phrase-or-a-very-small-number">My analysis only shows one phrase (or a very small number)<a class="headerlink" href="#my-analysis-only-shows-one-phrase-or-a-very-small-number" title="Permanent link">&para;</a></h2>
 <p><em>You might be searching for: "only one phrase", "just one phrase detected", "phrases wrong",
 "my funscript is one big phrase"</em></p>
 <p>This usually means your funscript is uniform-tempo — the same BPM throughout with no
@@ -670,17 +1349,17 @@ time-based phrases automatically so you still have sections to work with.</p>
 <p>Continue to <a href="../02-understand-your-script/reading-the-assessment.md">Read your assessment</a> —
 it will explain what was found and what to do next.</p>
 <hr />
-<h2 id="the-chart-is-blank-i-cant-see-anything">The chart is blank — I can't see anything</h2>
+<h2 id="the-chart-is-blank-i-cant-see-anything">The chart is blank — I can't see anything<a class="headerlink" href="#the-chart-is-blank-i-cant-see-anything" title="Permanent link">&para;</a></h2>
 <p><em>You might be searching for: "blank chart", "no waveform", "chart not showing",
 "nothing appears after loading"</em></p>
 <p>The funscript file may be empty or malformed. Open it in a plain text editor (Notepad,
 TextEdit, etc.) and check that it contains an <code>actions</code> array with entries like:</p>
-<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">&quot;actions&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">&quot;at&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;pos&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;at&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">500</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;pos&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">},</span><span class="w"> </span><span class="err">...</span><span class="p">]}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span><span class="nt">&quot;actions&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">&quot;at&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;pos&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;at&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">500</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;pos&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">},</span><span class="w"> </span><span class="err">...</span><span class="p">]}</span>
 </code></pre></div>
 <p>If the file is empty, or the <code>actions</code> array is empty or missing, there is nothing to display.
 You will need a valid funscript file to proceed.</p>
 <hr />
-<h2 id="the-analysis-froze-partway-through">The analysis froze partway through</h2>
+<h2 id="the-analysis-froze-partway-through">The analysis froze partway through<a class="headerlink" href="#the-analysis-froze-partway-through" title="Permanent link">&para;</a></h2>
 <p><em>You might be searching for: "analysis stuck", "progress bar stopped", "analysis not finishing",
 "app frozen during analysis"</em></p>
 <p>Very large files (2+ hours of content, millions of actions) can take 30–60 seconds.
@@ -688,7 +1367,7 @@ The progress indicator should still be moving. Wait and watch.</p>
 <p>If it is genuinely frozen (progress indicator completely still for over 2 minutes):
 close the app, reopen it, and try loading the file again.</p>
 <hr />
-<h2 id="the-progress-shows-phrases-0-at-the-end">The progress shows "Phrases: 0" at the end</h2>
+<h2 id="the-progress-shows-phrases-0-at-the-end">The progress shows "Phrases: 0" at the end<a class="headerlink" href="#the-progress-shows-phrases-0-at-the-end" title="Permanent link">&para;</a></h2>
 <p><em>You might be searching for: "zero phrases", "no phrases found", "phrases 0"</em></p>
 <p>This can happen with very short funscripts (under 10 seconds) or files with fewer than
 a handful of actions. FunscriptForge needs enough structure to find meaningful phrase
@@ -696,7 +1375,7 @@ boundaries.</p>
 <p>Try with a longer file. If you're following this guide for the first time, the
 <a href="../../00-overview/">example funscript</a> <em>(link coming)</em> is a good starting point.</p>
 <hr />
-<h2 id="the-app-loaded-my-file-but-the-assessment-numbers-seem-wrong">The app loaded my file but the assessment numbers seem wrong</h2>
+<h2 id="the-app-loaded-my-file-but-the-assessment-numbers-seem-wrong">The app loaded my file but the assessment numbers seem wrong<a class="headerlink" href="#the-app-loaded-my-file-but-the-assessment-numbers-seem-wrong" title="Permanent link">&para;</a></h2>
 <p><em>You might be searching for: "wrong BPM", "wrong phrase count", "assessment looks off",
 "phrases don't match my script"</em></p>
 <p>Assessment results depend on the actual content of the file, not on filenames or metadata.
@@ -709,7 +1388,7 @@ A few things that look "wrong" but are actually correct:</p>
 <p>For a full explanation of every number in the assessment panel, see
 <a href="../../reference/assessment-deep-dive.md">Assessment deep dive</a>.</p>
 <hr />
-<h2 id="my-question-isnt-here">My question isn't here</h2>
+<h2 id="my-question-isnt-here">My question isn't here<a class="headerlink" href="#my-question-isnt-here" title="Permanent link">&para;</a></h2>
 <p><a href="https://funscriptforge.com/help">Ask the help assistant →</a></p>
 <p>Type your question the way you'd naturally ask it. If it's a question others are likely to
 hit too, it will be added to this page. You're helping the next person by asking.</p>
@@ -732,6 +1411,8 @@ hit too, it will be added to this page. You're helping the next person by asking
             </div>
           
           
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
 <script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
         </div>
         
@@ -745,14 +1426,31 @@ hit too, it will be added to this page. You're helping the next person by asking
       
         <footer class="md-footer">
   
+    
+  
   <div class="md-footer-meta md-typeset">
     <div class="md-footer-meta__inner md-grid">
       <div class="md-copyright">
   
+    <div class="md-copyright__highlight">
+      &copy; 2026 Liquid Releasing. Licensed under the MIT License.
+    </div>
   
-    Made with
-    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
-      Material for MkDocs
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/liquid-releasing/funscriptforge" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
     </a>
   
 </div>
@@ -770,7 +1468,7 @@ hit too, it will be added to this page. You're helping the next person by asking
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "content.code.copy"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link", "toc.follow"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
