@@ -280,32 +280,7 @@ def render():
 
     st.divider()
 
-    # ── 3. Output targets ────────────────────────────────────────────────────
-    st.subheader("Output targets")
-    st.caption("All checked targets are generated automatically at export.")
-
-    _TARGETS = [
-        ("estim_foc",    "Estim — FOC",    "Single-channel estim. Classic waveform."),
-        ("estim_stereo", "Estim — Stereo", "Dual-channel estim. Left/right separation."),
-        ("handy",        "The Handy",      "Linear stroker. Industry standard."),
-        ("osr2",         "OSR2",           "Multi-axis stroker. Twist + stroke."),
-    ]
-    saved_targets = (project or {}).get("output_targets", ["handy"])
-    selected = []
-    cols = st.columns(len(_TARGETS))
-    for col, (key, label, desc) in zip(cols, _TARGETS):
-        with col:
-            if col.checkbox(label, value=key in saved_targets, help=desc,
-                            key=f"target_{key}_{v}"):
-                selected.append(key)
-
-    if project and selected != saved_targets:
-        project["output_targets"] = selected
-        save_forge(project)
-
-    st.divider()
-
-    # ── 4. Media ─────────────────────────────────────────────────────────────
+    # ── 3. Media ──────────────────────────────────────────────────────────────
     has_media = bool(
         (get_input_file(project, "video") if project else None)
         or st.session_state.get("video_path")
