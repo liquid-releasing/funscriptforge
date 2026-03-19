@@ -138,24 +138,23 @@ def render():
     # ── Show Suggestion + Accept ─────────────────────────────────────────
     col_suggest, col_accept = st.columns([1, 2])
     with col_suggest:
-        if st.button("★ Show Suggestion", width="stretch"):
-            st.session_state["tone_global"] = None  # clear selection to show bubble
+        if st.button("★ Show Suggestions", width="stretch"):
+            st.session_state["tone_global"] = None
             st.rerun()
     with col_accept:
         if st.button(
-            "Accept →",
+            "Accept",
             type="primary",
             width="stretch",
             disabled=not selected,
-            help="Apply this tone and continue." if selected else "Select a tone first.",
+            help="Apply this tone to your project." if selected else "Select a tone first.",
         ):
             _apply_tone(selected)
-            st.session_state["nav_hint_tone"] = "phrases"
+            st.session_state["tone_accepted"] = True
             st.rerun()
 
-    hint = st.session_state.pop("nav_hint_tone", None)
-    if hint == "phrases":
-        _click_tab("Phrases")
+    if st.session_state.get("tone_accepted"):
+        st.success("Your next step in the workflow is **Phrases**.")
 
 
 # ── Card rendering ────────────────────────────────────────────────────────
@@ -563,20 +562,3 @@ def _apply_tone(tone_name: str):
         status.update(label="Tone applied!", state="complete", expanded=False)
 
 
-def _click_tab(tab_label: str):
-    """Programmatically click a Streamlit tab by its label using JS."""
-    import streamlit.components.v1 as components
-    components.html(
-        f"""<script>
-        (function() {{
-            var tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"] button, [role="tab"]');
-            for (var i = 0; i < tabs.length; i++) {{
-                if (tabs[i].textContent.trim() === '{tab_label}') {{
-                    tabs[i].click();
-                    return;
-                }}
-            }}
-        }})();
-        </script>""",
-        height=0,
-    )

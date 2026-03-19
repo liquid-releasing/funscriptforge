@@ -355,46 +355,19 @@ def render():
 
     has_funscript = bool(st.session_state.get("funscript_path"))
 
-    st.info(
-        "**Accept** saves your project and takes you to the **Tone** tab to "
-        "choose a feel for your output. You can also skip ahead to any tab — "
-        "**Tone** sets the character, **Phrases** gives fine-grained control, "
-        "or jump straight to **Export** for a clean device-safe file."
-    )
-
     if st.button(
-        "Accept →",
+        "Accept",
         type="primary",
         width="stretch",
         disabled=not has_funscript,
-        help="Save project and continue to the Tone tab." if has_funscript else "Add a funscript first.",
+        help="Save project and run analysis." if has_funscript else "Add a funscript first.",
     ):
         _commit_project_to_disk(project)
-        st.session_state["nav_hint"] = "tone"
+        st.session_state["project_accepted"] = True
         st.rerun()
 
-    hint = st.session_state.pop("nav_hint", None)
-    if hint == "tone":
-        _click_tab("Tone")
-
-
-def _click_tab(tab_label: str):
-    """Programmatically click a Streamlit tab by its label using JS."""
-    import streamlit.components.v1 as components
-    components.html(
-        f"""<script>
-        (function() {{
-            var tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"] button, [role="tab"]');
-            for (var i = 0; i < tabs.length; i++) {{
-                if (tabs[i].textContent.trim() === '{tab_label}') {{
-                    tabs[i].click();
-                    return;
-                }}
-            }}
-        }})();
-        </script>""",
-        height=0,
-    )
+    if st.session_state.get("project_accepted"):
+        st.success("Your next step in the workflow is **Device**.")
 
 
 # ── Funscript ────────────────────────────────────────────────────────────────
