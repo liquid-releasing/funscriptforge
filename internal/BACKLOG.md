@@ -89,10 +89,19 @@ Links to SyncPlayer repo when available. Could ship as part of this release.
 
 ---
 
-### Cleanup: delete uidesign_for_v1_considerations.md
+### Cleanup: uidesign_for_v1_considerations.md → user guide → delete
 
-Delete `funscriptforge/uidesign_for_v1_considerations.md` when all v1 ship items above
-are completed or otherwise resolved. The content has been captured in this backlog.
+Before deleting `funscriptforge/uidesign_for_v1_considerations.md`:
+
+1. Extract design learnings that help users make good decisions and incorporate
+   into user guide docs (e.g. why Device before Tone, why Impact slider exists,
+   what each fix strategy does, how Tone respects global arc at phrase level,
+   the "don't match — complement" suggestion philosophy).
+2. Ensure all actionable items are captured in this backlog.
+3. Then delete the file.
+
+The content has been captured in this backlog but the *reasoning* behind
+decisions should live in user-facing docs, not just developer notes.
 
 ---
 
