@@ -186,6 +186,54 @@ def _save_recents(output_dir: str, file_path: str) -> None:
 _BROWSE_SENTINEL = "— enter a path below —"
 
 
+def _project_picker_local(output_dir: str) -> None:
+    """Show a dropdown of recent .forge projects for quick resume."""
+    _assets_output = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__)))), "assets", "output")
+    forge_files = []
+    if os.path.isdir(_assets_output):
+        for d in sorted(os.listdir(_assets_output), reverse=True):
+            dpath = os.path.join(_assets_output, d)
+            if os.path.isdir(dpath):
+                for f in os.listdir(dpath):
+                    if f.endswith(".forge"):
+                        forge_files.append((d, os.path.join(dpath, f)))
+
+    if forge_files:
+        st.sidebar.subheader("Recent Projects")
+        _NEW_PROJECT = "— new project —"
+        options = [_NEW_PROJECT] + [name for name, _ in forge_files]
+        sel = st.sidebar.selectbox(
+            "Resume a project",
+            options=options,
+            key="project_picker",
+            label_visibility="collapsed",
+        )
+        if sel != _NEW_PROJECT:
+            forge_path = next(p for n, p in forge_files if n == sel)
+            folder = os.path.dirname(forge_path)
+            # Load the forge project if not already loaded
+            current = st.session_state.get("forge_project")
+            if not current or current.get("output_folder") != folder:
+                from forge.project import load_forge
+                loaded = load_forge(folder)
+                if loaded:
+                    st.session_state.forge_project = loaded
+                    # Restore funscript path from project
+                    from forge.project import get_input_file
+                    fs = get_input_file(loaded, "funscript")
+                    if fs:
+                        st.session_state["funscript_path"] = fs
+                    # Restore chain path
+                    for stage in ["phrases", "tone", "device"]:
+                        chain_file = os.path.join(folder, f"_funscript_{stage}.json")
+                        if os.path.isfile(chain_file):
+                            st.session_state["chain_funscript_path"] = chain_file
+                            break
+                    st.rerun()
+        st.sidebar.markdown("---")
+
+
 def _funscript_picker_local(output_dir: str) -> str | None:
     """Local-mode funscript picker: selectbox of recents + text-input fallback.
 
@@ -286,9 +334,12 @@ def _sidebar() -> None:
         st.sidebar.title("FunscriptForge")
     st.sidebar.markdown("---")
 
-    # --- File picker: local path input or web upload ---
+    # --- Project picker (resume recent projects) ---
     output_dir = st.session_state.output_dir
+    if _IS_LOCAL:
+        _project_picker_local(output_dir)
 
+    # --- File picker: local path input or web upload ---
     if _IS_LOCAL:
         funscript_path = _funscript_picker_local(output_dir)
         if funscript_path is None:
