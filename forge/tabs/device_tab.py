@@ -112,6 +112,12 @@ def render():
             except Exception:
                 pass
 
+    # ── Before / After preview ────────────────────────────────────────────
+    if selected_fixes:
+        _render_device_preview(selected_fixes, selected_scope)
+
+    st.divider()
+
     # ── Accept ────────────────────────────────────────────────────────────
     has_devices = bool(selected_targets)
 
@@ -178,3 +184,93 @@ def _apply_device_awareness(project, targets, fix_strategies, apply_scope):
         save_forge(project)
 
     status.update(label="Device awareness complete!", state="complete", expanded=False)
+
+
+# ── Preview ───────────────────────────────────────────────────────────────
+
+
+def _render_device_preview(fix_strategies: list, apply_scope: str):
+    """Show before/after monochrome preview of device fixes."""
+    from forge.funscript import load_funscript, parse_actions
+    import plotly.graph_objects as go
+
+    funscript_path = st.session_state.get("funscript_path", "")
+    if not funscript_path or not Path(funscript_path).exists():
+        st.caption("Load a funscript in the Project tab to see a preview.")
+        return
+
+    data = load_funscript(funscript_path)
+    if not data:
+        return
+
+    times, positions = parse_actions(data)
+    if not times:
+        return
+
+    times_s = [t / 1000.0 for t in times]
+    _BLUE = "#4C8BF5"
+
+    modified = _apply_device_fix_preview(times_s, positions, fix_strategies)
+
+    col_before, col_after = st.columns(2)
+    with col_before:
+        st.caption("**Before** — original")
+        _plot_device(times_s, positions, _BLUE)
+    with col_after:
+        st.caption(f"**After** — {', '.join(fix_strategies)}")
+        _plot_device(times_s, modified, _BLUE)
+
+
+def _plot_device(times_s: list, positions: list, color: str):
+    """Compact monochrome chart for device preview."""
+    import plotly.graph_objects as go
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=times_s, y=positions,
+        mode="lines",
+        line=dict(color=color, width=1),
+        showlegend=False,
+    ))
+    fig.update_layout(
+        height=150,
+        margin=dict(l=0, r=0, t=0, b=0),
+        xaxis=dict(showgrid=False, showticklabels=False),
+        yaxis=dict(range=[0, 100], showgrid=False, showticklabels=False),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0.05)",
+        showlegend=False,
+    )
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+
+def _apply_device_fix_preview(times_s: list, positions: list, strategies: list) -> list:
+    """Visual approximation of device-safe fixes for preview.
+    Real math applied on Accept — this is just for the preview chart."""
+    import numpy as np
+    pos = np.array(positions, dtype=float)
+
+    for strategy in strategies:
+        if strategy == "performance":
+            # Clamp to device-safe range, preserve dynamics
+            # Simulate: pull extremes toward safe zone (5-95)
+            pos = np.clip(pos, 5, 95)
+        elif strategy == "halve":
+            # Halve the speed: move positions halfway toward previous
+            smoothed = pos.copy()
+            for i in range(1, len(smoothed)):
+                smoothed[i] = smoothed[i - 1] + (pos[i] - smoothed[i - 1]) * 0.5
+            pos = smoothed
+        elif strategy == "shorten":
+            # Reduce range: compress toward center
+            center = 50
+            pos = center + (pos - center) * 0.7
+        elif strategy == "beat":
+            # Rebuild from beat: quantize to beat grid (simplified)
+            # Just smooth heavily for preview
+            kernel_size = min(11, len(pos))
+            if kernel_size > 1:
+                kernel = np.ones(kernel_size) / kernel_size
+                pos = np.convolve(pos, kernel, mode="same")
+
+    return np.clip(pos, 0, 100).tolist()
