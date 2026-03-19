@@ -355,6 +355,7 @@ def _sidebar() -> None:
                 _sp.Popen(["open", _folder])
             else:
                 _sp.Popen(["xdg-open", _folder])
+
     else:
         # Web mode: file upload widgets (kept for the web UI deployment).
         st.sidebar.subheader("Funscript Project")
@@ -416,6 +417,11 @@ def _sidebar() -> None:
                 st.rerun()
 
     selected_file = os.path.basename(funscript_path)
+
+    # Show forge project output path if accepted
+    _forge_proj = st.session_state.get("forge_project")
+    if _forge_proj and _forge_proj.get("output_folder"):
+        st.sidebar.caption(f"📁 `{_forge_proj['output_folder']}`")
 
     # Detection settings live in the Phrase Selector tab; read from session state here.
     min_phrase_s    = st.session_state.get("min_phrase_s", 20)
