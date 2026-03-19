@@ -89,6 +89,13 @@ Links to SyncPlayer repo when available. Could ship as part of this release.
 
 ---
 
+### Cleanup: delete uidesign_for_v1_considerations.md
+
+Delete `funscriptforge/uidesign_for_v1_considerations.md` when all v1 ship items above
+are completed or otherwise resolved. The content has been captured in this backlog.
+
+---
+
 ## Open — Existing
 
 ### Test FunscriptForge on Linux
