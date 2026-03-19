@@ -22,8 +22,8 @@ _TARGETS = [
 # Fix strategies
 _FIX_STRATEGIES = [
     ("performance", "Performance", "Maximize intensity within device-safe limits. Preserves beat and energy."),
-    ("halve",       "Halve strokes", "Slow down fast strokes but keep full range. Cuts speed in half."),
-    ("shorten",     "Shorten strokes", "Reduce stroke range just enough to stay device-safe."),
+    ("halve",       "Halve cycles", "Slow down fast cycles but keep full range. Cuts speed in half."),
+    ("shorten",     "Shorten cycles", "Reduce cycle range just enough to stay device-safe."),
     ("beat",        "Rebuild from beat", "Reconstruct motion from beat data. Most aggressive change."),
 ]
 
