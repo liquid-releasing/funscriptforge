@@ -4,11 +4,12 @@ Tab 1 — Project
 Single-column top-to-bottom flow:
   1. Funscript (required)
   2. Export location
-  3. Output targets
-  4. Media (optional)
-  5. Author & credits (optional)
-  6. Summary
-  7. Continue → / New Project
+  3. Media (optional)
+  4. Author & credits (optional)
+  5. Summary
+  6. Accept
+
+Output device selection is on the Device tab.
 """
 
 import tempfile

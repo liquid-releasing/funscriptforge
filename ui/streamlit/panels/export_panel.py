@@ -332,6 +332,13 @@ def render(project: "Project") -> None:
         st.markdown("#### Recommended transforms &nbsp; ⬜ none will be exported")
     _render_recommended(recommended_plan)
 
+    st.divider()
+
+    # ----------------------------------------------------------------
+    # Export to device subfolders + open folder
+    # ----------------------------------------------------------------
+    _render_export_to_folder(project)
+
     # ----------------------------------------------------------------
     # Clamp warning (#9)
     # ----------------------------------------------------------------
@@ -997,3 +1004,114 @@ def _render_pipeline_section(project) -> None:
             if col_clr.button("✕ Clear", key="pipeline_clear_btn"):
                 del st.session_state["pipeline_result"]
                 st.rerun()
+
+
+# ------------------------------------------------------------------
+# Export to device subfolders
+# ------------------------------------------------------------------
+
+def _render_export_to_folder(project) -> None:
+    """Export funscripts to device-specific subfolders in the output directory."""
+    forge_project = st.session_state.get("forge_project")
+    if not forge_project:
+        return
+
+    output_folder = forge_project.get("output_folder", "")
+    if not output_folder:
+        st.caption("Set an export location in the **Project** tab first.")
+        return
+
+    targets = forge_project.get("output_targets", [])
+    if not targets:
+        st.caption("Select output devices in the **Device** tab first.")
+        return
+
+    st.subheader("Export to folder")
+    st.caption(f"Output location: `{output_folder}`")
+
+    # Show what will be created
+    for target in targets:
+        device_folder = os.path.join(output_folder, target)
+        st.caption(f"  → `{target}/` — device-specific funscript")
+
+    col_export, col_open = st.columns(2)
+    with col_export:
+        if st.button("Export All", type="primary", width="stretch"):
+            _do_export_to_folders(forge_project, project)
+    with col_open:
+        if os.path.isdir(output_folder):
+            if st.button("Open folder", width="stretch"):
+                import subprocess, sys
+                if sys.platform == "win32":
+                    os.startfile(output_folder)
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", output_folder])
+                else:
+                    subprocess.Popen(["xdg-open", output_folder])
+        else:
+            st.button("Open folder", width="stretch", disabled=True,
+                      help="Export first to create the folder.")
+
+    if st.session_state.get("export_complete"):
+        st.success(
+            f"Export complete. Files written to `{output_folder}`. "
+            "Click **Open folder** to view."
+        )
+
+
+def _do_export_to_folders(forge_project: dict, project) -> None:
+    """Write funscripts to device subfolders."""
+    from forge.project import get_latest_funscript, save_forge
+
+    output_folder = forge_project.get("output_folder", "")
+    targets = forge_project.get("output_targets", [])
+
+    status = st.status("Exporting…", expanded=True)
+
+    # Get the latest funscript from the chain
+    fs_data, stage = get_latest_funscript(forge_project)
+    if not fs_data:
+        status.write("⚠️ No funscript data found in chain. Run through the workflow first.")
+        status.update(label="Export failed", state="error")
+        return
+
+    status.write(f"✅ Using funscript from **{stage}** stage")
+
+    actions = fs_data.get("actions", [])
+    status.write(f"✅ {len(actions):,} actions to export")
+
+    for target in targets:
+        device_folder = os.path.join(output_folder, target)
+        os.makedirs(device_folder, exist_ok=True)
+
+        # Write the funscript
+        out_path = os.path.join(device_folder, f"{forge_project['name']}.funscript")
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(fs_data, f, indent=2)
+        status.write(f"✅ `{target}/{forge_project['name']}.funscript`")
+
+    # Copy input media to top-level output folder
+    from forge.project import get_input_file
+    for role in ("video", "audio", "captions"):
+        src = get_input_file(forge_project, role)
+        if src and os.path.isfile(src):
+            import shutil
+            dest = os.path.join(output_folder, os.path.basename(src))
+            if not os.path.exists(dest):
+                shutil.copy2(src, dest)
+                status.write(f"✅ Copied {os.path.basename(src)}")
+
+    # Update progress
+    forge_project["progress"]["exported"] = True
+    from datetime import datetime
+    forge_project.setdefault("history", []).append({
+        "tab": "export",
+        "timestamp": datetime.now().isoformat(),
+        "targets": targets,
+        "stage": stage,
+        "action_count": len(actions),
+    })
+    save_forge(forge_project)
+
+    st.session_state["export_complete"] = True
+    status.update(label=f"Exported to {len(targets)} device(s)!", state="complete", expanded=False)
