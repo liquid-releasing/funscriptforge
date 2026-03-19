@@ -135,7 +135,10 @@ def render(
     phrase = phrases[phrase_idx]
 
     win_start, win_end = _fixed_viewport(phrases, phrase, duration_ms)
-    funscript_path = st.session_state.project.funscript_path
+    # Use chain funscript if available (device-fixed + tone-applied)
+    import os as _os
+    _chain_path = st.session_state.get("chain_funscript_path")
+    funscript_path = _chain_path if (_chain_path and _os.path.isfile(_chain_path)) else st.session_state.project.funscript_path
 
     _detail_fragment(
         funscript_path=funscript_path,

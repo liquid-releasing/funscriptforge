@@ -112,16 +112,17 @@ def render():
 
     selected = st.session_state.get("tone_global", None)
     suggested = _suggest_tone()
+    show_suggestions = st.session_state.pop("show_tone_suggestions", False)
 
     # ── Suggestion bubble row (above cards) ─────────────────────────────
-    if suggested and not selected:
+    if suggested and (not selected or show_suggestions):
         _render_suggestion_bubble(suggested)
 
     # ── Six cards across ──────────────────────────────────────────────────
     cols = st.columns(6, gap="small")
     for i, tone in enumerate(_TONES):
         with cols[i]:
-            _render_card(tone, selected, suggested)
+            _render_card(tone, selected, suggested if (not selected or show_suggestions) else None)
 
     # ── Sliders (between cards and preview) ───────────────────────────────
     if selected:
@@ -150,7 +151,7 @@ def render():
     col_suggest, col_accept = st.columns([1, 2])
     with col_suggest:
         if st.button("★ Show Suggestions", width="stretch"):
-            st.session_state["tone_global"] = None
+            st.session_state["show_tone_suggestions"] = True
             st.rerun()
     with col_accept:
         if st.button(

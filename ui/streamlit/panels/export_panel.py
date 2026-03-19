@@ -624,7 +624,10 @@ def _render_export_preview(project, assessment_dict: dict, plan: List[dict]) -> 
     from visualizations.chart_data import compute_chart_data, compute_annotation_bands
     from visualizations.funscript_chart import FunscriptChart
 
-    with open(project.funscript_path, encoding="utf-8") as f:
+    # Read from chain if available, otherwise fall back to original
+    _chain_path = st.session_state.get("chain_funscript_path")
+    _fs_path = _chain_path if (_chain_path and os.path.isfile(_chain_path)) else project.funscript_path
+    with open(_fs_path, encoding="utf-8") as f:
         fs_data = json.load(f)
 
     original_actions = fs_data.get("actions", [])

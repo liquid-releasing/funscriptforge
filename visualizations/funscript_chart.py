@@ -247,7 +247,7 @@ class FunscriptChart:
         bottom_margin = 60 if tickangle else 30
 
         fig.update_layout(
-            title=dict(text=self.title, font=dict(size=12)) if self.title else None,
+            title=dict(text=self.title, font=dict(size=12)) if (self.title and self.title.strip()) else None,
             height=height,
             margin=dict(l=45, r=10, t=30 if self.title else 10, b=bottom_margin),
             paper_bgcolor="#0e1117",
