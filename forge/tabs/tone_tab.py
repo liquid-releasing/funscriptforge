@@ -527,14 +527,37 @@ def _apply_tone_preview(times_s: list, positions: list, tone_name: str,
 
 
 def _apply_tone(tone_name: str):
-    """Save tone selection to the forge project and cache the chart for Phrases tab."""
+    """Save tone selection, sliders, and impact to the forge project.
+    Appends a history snapshot for undo. Caches chart for Phrases tab."""
     from forge.project import save_forge
+    from datetime import datetime
 
     project = st.session_state.get("forge_project")
     if project:
+        # Collect slider values
+        s1, s2 = _get_slider_values(tone_name)
+        impact = st.session_state.get(f"tone_impact_{tone_name}", 1.0)
+
         project["tone"] = tone_name
+        project["tone_sliders"] = {
+            "impact": impact,
+            "s1": s1,
+            "s2": s2,
+            "slider_defs": [
+                {"label": sl[0], "key": sl[1], "value": st.session_state.get(f"{tone_name}_{sl[1]}", sl[4])}
+                for sl in _TONE_SLIDERS.get(tone_name, [])
+            ],
+        }
         project["progress"]["tone_applied"] = True
-        # Only save if output folder exists (project was accepted in Project tab)
+
+        # History snapshot for undo
+        project.setdefault("history", []).append({
+            "tab": "tone",
+            "timestamp": datetime.now().isoformat(),
+            "tone": tone_name,
+            "tone_sliders": project["tone_sliders"],
+        })
+
         if Path(project.get("output_folder", "")).exists():
             save_forge(project)
 
