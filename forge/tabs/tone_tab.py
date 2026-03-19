@@ -167,6 +167,14 @@ def render():
     if st.session_state.get("tone_accepted"):
         st.success("Your next step in the workflow is **Phrases**.")
 
+    # ── Credit ────────────────────────────────────────────────────────────
+    st.divider()
+    st.caption(
+        "Tone processing incorporates the significant work of "
+        "[Edger's Funscript-Tools](https://github.com/edger477/funscript-tools). "
+        "For advanced estim channel settings, see the **Stim** tab."
+    )
+
 
 # ── Card rendering ────────────────────────────────────────────────────────
 
