@@ -179,8 +179,9 @@ def _apply_device_awareness(project, targets, fix_strategies, apply_scope):
                 for i, action in enumerate(fs_data.get("actions", [])):
                     if i < len(modified):
                         action["pos"] = int(round(modified[i]))
-                # Save to chain
-                save_chain_funscript(project, "device", fs_data)
+                # Save to chain and update session state path for downstream tabs
+                chain_path = save_chain_funscript(project, "device", fs_data)
+                st.session_state["chain_funscript_path"] = chain_path
                 status.write(f"✅ Device-safe fixes applied to {len(times):,} actions")
 
     # Safety verification pass

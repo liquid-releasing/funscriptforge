@@ -617,7 +617,8 @@ def _apply_tone(tone_name: str):
                 for i, action in enumerate(toned_data.get("actions", [])):
                     if i < len(modified):
                         action["pos"] = int(round(modified[i]))
-                save_chain_funscript(project, "tone", toned_data)
+                chain_path = save_chain_funscript(project, "tone", toned_data)
+                st.session_state["chain_funscript_path"] = chain_path
                 status.write("✅ Toned funscript saved to chain")
 
                 # Build and cache the full-color figure

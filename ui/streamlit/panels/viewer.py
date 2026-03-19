@@ -121,18 +121,23 @@ def render(
     phrases         = assessment_dict.get("phrases", [])
     duration_ms     = project.assessment.duration_ms
 
+    # Use chain funscript if available (device-fixed + tone-applied),
+    # otherwise fall back to the original.
+    _chain_path = st.session_state.get("chain_funscript_path")
+    _fs_path = _chain_path if (_chain_path and __import__("os").path.isfile(_chain_path)) else project.funscript_path
+
     # Ensure phrases are always shown even if view_state has them toggled off.
     view_state.show_phrases = True
 
     # Heatmap: compact motion-intensity strip above the main chart.
     # Always shows the full timeline regardless of zoom state.
     st.markdown("**Funscript Heatmap**")
-    _render_heatmap(project.funscript_path, phrases, duration_ms)
+    _render_heatmap(_fs_path, phrases, duration_ms)
 
     st.markdown("**Funscript Visualization**")
     # Full-funscript chart always visible (fragment keeps scroll/zoom cheap).
     _selector_fragment(
-        funscript_path=project.funscript_path,
+        funscript_path=_fs_path,
         assessment_dict=assessment_dict,
         duration_ms=duration_ms,
         large_funscript_threshold=large_funscript_threshold,
