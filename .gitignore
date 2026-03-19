@@ -217,7 +217,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 # code workspace settings
-.code-workspace
+*.code-workspace
 
 # Claude Code project data (AI session state, personal memory)
 .claude/
@@ -273,3 +273,11 @@ docs/deployment-architecture.md
 *.mp3
 *.wav
 *.m4v
+
+# Local dev folders — large/private, not for repo
+ml_video_examples/
+test_videos/
+docs/_drafts/
+
+# Demo funscripts at repo root level (canonical copies are in demo/examples/)
+demo/*.funscript
