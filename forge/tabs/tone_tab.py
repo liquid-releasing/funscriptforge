@@ -165,7 +165,10 @@ def render():
             st.rerun()
 
     if st.session_state.get("tone_accepted"):
-        st.success("Your next step in the workflow is **Phrases**.")
+        st.success(
+            "Your next step is **Phrases** for fine-tuning, "
+            "or skip ahead to **Export** for a clean device-safe file."
+        )
 
     # ── Credit ────────────────────────────────────────────────────────────
     st.divider()

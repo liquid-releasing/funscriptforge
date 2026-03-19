@@ -236,7 +236,8 @@ class FunscriptChart:
                 mode="markers",
                 marker=dict(color=colors, size=dot_size, line=dict(width=0)),
                 hovertemplate="t=%{x} ms  pos=%{y}<extra></extra>",
-                name=self.title,
+                name=self.title or "",
+                showlegend=False,
             ))
 
         # --- Layout ---

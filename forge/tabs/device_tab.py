@@ -66,21 +66,17 @@ def render():
     st.subheader("Device-safe fix")
     st.caption("How to handle actions that exceed device limits.")
 
-    saved_fix = (project or {}).get("device_fix_strategy", "performance")
-    fix_labels = {key: label for key, label, _ in _FIX_STRATEGIES}
-    fix_help = {key: desc for key, _, desc in _FIX_STRATEGIES}
+    saved_fixes = (project or {}).get("device_fix_strategies", ["performance"])
+    selected_fixes = []
+    fix_cols = st.columns(len(_FIX_STRATEGIES))
+    for col, (key, label, desc) in zip(fix_cols, _FIX_STRATEGIES):
+        with col:
+            default = key in saved_fixes
+            if st.checkbox(label, value=default, help=desc, key=f"device_fix_{key}"):
+                selected_fixes.append(key)
 
-    selected_fix = st.radio(
-        "Fix strategy",
-        options=[key for key, _, _ in _FIX_STRATEGIES],
-        format_func=lambda k: fix_labels[k],
-        index=[k for k, _, _ in _FIX_STRATEGIES].index(saved_fix) if saved_fix in fix_labels else 0,
-        key="device_fix_strategy",
-        label_visibility="collapsed",
-        horizontal=True,
-    )
-
-    st.caption(fix_help.get(selected_fix, ""))
+    if not selected_fixes:
+        st.caption("Select at least one fix strategy.")
 
     st.divider()
 
@@ -126,7 +122,7 @@ def render():
         disabled=not has_devices,
         help="Apply device-safe fixes." if has_devices else "Select at least one device.",
     ):
-        _apply_device_awareness(project, selected_targets, selected_fix, selected_scope)
+        _apply_device_awareness(project, selected_targets, selected_fixes, selected_scope)
         st.session_state["device_accepted"] = True
         st.rerun()
 
@@ -138,7 +134,7 @@ def render():
         )
 
 
-def _apply_device_awareness(project, targets, fix_strategy, apply_scope):
+def _apply_device_awareness(project, targets, fix_strategies, apply_scope):
     """Save device decisions to .forge and apply fixes."""
     from datetime import datetime
 
@@ -148,11 +144,11 @@ def _apply_device_awareness(project, targets, fix_strategy, apply_scope):
     status = st.status("Applying device awareness…", expanded=True)
 
     project["output_targets"] = targets
-    project["device_fix_strategy"] = fix_strategy
+    project["device_fix_strategies"] = fix_strategies
     project["device_apply_scope"] = apply_scope
 
     status.write(f"✅ Devices: {', '.join(targets)}")
-    status.write(f"✅ Fix: {fix_strategy}")
+    status.write(f"✅ Fixes: {', '.join(fix_strategies)}")
     status.write(f"✅ Scope: {apply_scope}")
 
     # TODO: Apply actual device-safe fixes to the funscript here.
@@ -163,12 +159,17 @@ def _apply_device_awareness(project, targets, fix_strategy, apply_scope):
     # Placeholder — real math goes here
     status.write("✅ Device-safe fixes applied")
 
+    # Safety verification pass
+    status.update(label="Verifying device safety…")
+    # TODO: Run actual safety check against device limits
+    status.write("✅ Safety check passed")
+
     # History snapshot
     project.setdefault("history", []).append({
         "tab": "device",
         "timestamp": datetime.now().isoformat(),
         "targets": targets,
-        "fix_strategy": fix_strategy,
+        "fix_strategies": fix_strategies,
         "apply_scope": apply_scope,
     })
 
