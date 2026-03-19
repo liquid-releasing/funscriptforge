@@ -126,6 +126,17 @@ def render():
     # ── Sliders (between cards and preview) ───────────────────────────────
     if selected:
         st.divider()
+        # Impact slider — always on top, scales the whole tone effect
+        if f"tone_impact_{selected}" not in st.session_state:
+            st.session_state[f"tone_impact_{selected}"] = 1.0
+        st.slider(
+            "Impact — how much of this tone to apply",
+            min_value=0.0,
+            max_value=1.0,
+            key=f"tone_impact_{selected}",
+            help="1.0 = full tone effect. 0.0 = no change (original funscript). "
+                 "Dial back if the tone is too severe.",
+        )
         _render_sliders(selected)
 
     st.divider()
@@ -428,13 +439,16 @@ def _render_preview(selected: str | None):
     _BLUE = "#4C8BF5"
     if selected:
         s1, s2 = _get_slider_values(selected)
+        impact = st.session_state.get(f"tone_impact_{selected}", 1.0)
         col_before, col_after = st.columns(2)
         with col_before:
             st.caption("**Before** — original")
             _plot_funscript(times_s, positions, _BLUE, "Original")
         with col_after:
-            st.caption(f"**After** — {selected}")
-            modified = _apply_tone_preview(times_s, positions, selected, s1, s2)
+            st.caption(f"**After** — {selected} (impact {impact:.0%})")
+            toned = _apply_tone_preview(times_s, positions, selected, s1, s2)
+            # Blend: output = original + impact * (toned - original)
+            modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
             _plot_funscript(times_s, modified, _BLUE, selected)
     else:
         st.caption("**Your funscript** — select a tone to see the preview")
