@@ -4,7 +4,92 @@ Items are loosely ordered by dependency and value. Move to DONE when shipped.
 
 ---
 
-## Open
+## Open — v1 Ship
+
+### Accept pattern on all tabs
+
+Every tab with user actions gets an Accept button. No arrow, no auto-navigation.
+Advisory text below Accept after processing: "Your next step in the workflow is **[Tab]**."
+
+Consider: workflow mermaid diagram showing completed (filled) vs remaining (outline) steps.
+
+- Remove `→` from Accept buttons on Project and Tone tabs
+- Add advisory text after Accept completes
+- Apply same pattern to Device Awareness, Phrases, Stim, Export tabs
+
+---
+
+### Tone tab refinements
+
+1. **Dual suggestions** — "Enhance what you have" + "Add variety." Monotone scripts get variety, varied scripts get a new arc.
+2. **Impact slider** — How much of the tone to apply (0 = no change, 1 = full tone). Top slider, above the others.
+3. **Variable slider count** — Show all effective sliders per tone (1–4, not fixed at 2). Pull from sensitivity matrix data.
+4. **Save to config** — Tone selection, slider values, and modified funscript saved to .forge on Accept.
+5. **Edger credit** — "Incorporates the significant work of Edger's Funscript-Tools" with link to GitHub repo.
+
+---
+
+### Device Awareness tab (new — after Tone, before Phrases)
+
+Apply device-safe fixes globally before phrase editing. Tab layout:
+
+- Device selection checkboxes (moved from Project tab)
+- Phrase detection settings (moved from top of Phrases)
+- Beat bar plotly (if video/audio loaded) for reference
+- Fix strategy: `[X] Performance [ ] Halve strokes [ ] Shorten strokes [ ] Beat`
+- Apply scope: `[ ] Entire funscript [ ] Alternate by phrase [ ] Random by phrase`
+- Accept rebuilds phrase list, creates full-color chart for Phrases tab
+- Saves devices + decisions to .forge config
+
+Design: sections are [Headline][Small description][Plotly]
+
+Open question: Device fix before or after Tone? Leaning before — make it right sooner.
+
+Export change: device-specific subfolders (`output/Timeline1/handy/`, `output/Timeline1/estim-foc/`).
+
+---
+
+### Phrases tab — Tone as first transform
+
+- Add Tone as first radio option in Transform selector: [Tone][Behavior][Structure][Plugins]
+- Default selection = currently applied global Tone (no change if already applied)
+- Dropdown shows the Tone sliders including Impact as top slider
+- Video/audio player for phrase preview (was implemented in earlier branch — check history)
+- Beat bar between as-is and preview sections for reference
+- Preview works as currently laid out
+
+---
+
+### ReTransform → rename to "Stim"
+
+- Only visible when estim is selected as output device
+- Fixed chart scale (don't auto-rescale on slider changes)
+- Show generated channels: alpha, beta, pulse_frequency
+- Consider showing all 4 channel charts (with last selectable to toggle others)
+- Edger credit + link to advanced Funscript-Tools
+- Re-ask output device checkboxes at top of tab
+- On Accept: show workflow diagram
+
+---
+
+### Export improvements
+
+- Copy input media to output folder
+- Device-specific subfolders per selected device
+- Show output folder location prominently
+- On completion: "Open in Explorer/Finder" button
+- Progress wheel shows generation with stroke/action count
+
+---
+
+### Play tab (placeholder)
+
+Placeholder tab with text: "SyncPlayer is coming soon."
+Links to SyncPlayer repo when available. Could ship as part of this release.
+
+---
+
+## Open — Existing
 
 ### Test FunscriptForge on Linux
 
