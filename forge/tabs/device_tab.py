@@ -89,6 +89,7 @@ def render():
         st.caption("Select more than one fix strategy to enable per-phrase distribution.")
 
     saved_scope = (project or {}).get("device_apply_scope", "global")
+    scope_labels = {key: label for key, label in _APPLY_SCOPES}
     # Force global when only one fix selected
     if not multiple_fixes:
         saved_scope = "global"
