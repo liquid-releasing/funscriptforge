@@ -155,10 +155,10 @@ def render():
 
     st.divider()
 
-    # ── Show Suggestion + Accept ─────────────────────────────────────────
+    # ── Show Tone Matches + Accept ──────────────────────────────────────
     col_suggest, col_accept = st.columns([1, 2])
     with col_suggest:
-        if st.button("★ Show Suggestions", width="stretch"):
+        if st.button("★ Show Tone Matches", width="stretch"):
             st.session_state["show_tone_suggestions"] = True
             st.rerun()
     with col_accept:
