@@ -337,6 +337,93 @@ def _media_picker_local(funscript_path: str, output_dir: str) -> None:
 # ------------------------------------------------------------------
 
 
+# ------------------------------------------------------------------
+# Undo + workflow guidance helpers
+# ------------------------------------------------------------------
+
+_WORKFLOW_GUIDANCE = {
+    "Project": "Set up your funscript, media, and export location",
+    "Device": "Make your funscript safe for your target device",
+    "Tone": "Choose how your output feels",
+    "Phrases": "Fine-tune individual sections",
+    "Export": "Generate device-safe output files",
+}
+
+
+def _undo_description(history_entry: dict) -> str:
+    """Human-readable description of what a history entry did."""
+    tab = history_entry.get("tab", "")
+    if tab == "device":
+        fixes = history_entry.get("fix_strategies", [])
+        return f"Applied {', '.join(fixes) if fixes else 'device fixes'}"
+    elif tab == "tone":
+        tone = history_entry.get("tone", "")
+        return f"Applied {tone} tone"
+    elif tab == "export":
+        targets = history_entry.get("targets", [])
+        return f"Exported to {', '.join(targets)}"
+    return "Changes applied"
+
+
+def _next_workflow_step(workflow: list[tuple[str, bool]]) -> tuple[str, str] | None:
+    """Find the next incomplete step in the workflow."""
+    for name, done in workflow:
+        if not done:
+            return name, _WORKFLOW_GUIDANCE.get(name, "")
+    return None
+
+
+def _perform_undo(forge_project: dict) -> None:
+    """Undo the last Accept by popping history and restoring chain state."""
+    from forge.project import save_forge, load_chain_funscript
+    from pathlib import Path
+
+    history = forge_project.get("history", [])
+    if not history:
+        return
+
+    last = history.pop()
+    tab = last.get("tab", "")
+
+    # Restore state based on which tab was undone
+    if tab == "device":
+        st.session_state.pop("device_accepted", None)
+        forge_project.pop("device_fix_strategies", None)
+        forge_project.pop("device_apply_scope", None)
+        # Remove device chain file
+        folder = forge_project.get("output_folder", "")
+        chain_file = os.path.join(folder, "_funscript_device.json")
+        if os.path.isfile(chain_file):
+            os.remove(chain_file)
+        # Reset chain path to original
+        st.session_state.pop("chain_funscript_path", None)
+
+    elif tab == "tone":
+        st.session_state.pop("tone_accepted", None)
+        forge_project["tone"] = None
+        forge_project["tone_sliders"] = {}
+        forge_project["progress"]["tone_applied"] = False
+        # Remove tone chain file
+        folder = forge_project.get("output_folder", "")
+        chain_file = os.path.join(folder, "_funscript_tone.json")
+        if os.path.isfile(chain_file):
+            os.remove(chain_file)
+        # Reset chain path to device stage (or nothing)
+        device_chain = os.path.join(folder, "_funscript_device.json")
+        if os.path.isfile(device_chain):
+            st.session_state["chain_funscript_path"] = device_chain
+        else:
+            st.session_state.pop("chain_funscript_path", None)
+
+    elif tab == "export":
+        forge_project["progress"]["exported"] = False
+        st.session_state.pop("export_complete", None)
+
+    # Save updated forge
+    if Path(forge_project.get("output_folder", "")).exists():
+        save_forge(forge_project)
+
+
 def _sidebar() -> None:
     if st.session_state.pop("_catalog_reset_warning", False):
         st.sidebar.warning(
@@ -578,6 +665,22 @@ def _sidebar() -> None:
         _targets = _forge.get("output_targets", [])
         if _targets:
             st.sidebar.caption(f"📱 Devices: {', '.join(_targets)}")
+
+        # --- Undo + Next step ---
+        _history = _forge.get("history", [])
+        if _history:
+            _last = _history[-1]
+            _last_tab = _last.get("tab", "unknown")
+            _last_desc = _undo_description(_last)
+            st.sidebar.caption(f"Last: **{_last_tab.title()}** — {_last_desc}")
+            if st.sidebar.button("↩ Undo", help=f"Undo {_last_tab.title()} Accept", use_container_width=True):
+                _perform_undo(_forge)
+                st.rerun()
+
+        # Next step guidance
+        _next = _next_workflow_step(_workflow)
+        if _next:
+            st.sidebar.caption(f"Next: **{_next[0]}** — {_next[1]}")
 
     # --- Project state ---
     project: Project | None = st.session_state.project
