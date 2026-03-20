@@ -130,6 +130,29 @@ decisions should live in user-facing docs, not just developer notes.
 
 ## Open — Existing
 
+### Set up test environment with real funscript files
+
+Assemble a set of real funscript files for comprehensive testing:
+- Fast/driving beat content
+- Slow/hypnotic content
+- Mixed/varied content
+- Short clips and long (90+ min) files
+- Files with matching video/audio for beat detection testing
+
+Owner: Bruce
+
+---
+
+### Fix hosting site for release cycle testing
+
+Set up the deployment/hosting infrastructure so we can test the full
+release cycle (build → deploy → install → run). Mac arrives 2026-03-20
+for cross-platform testing.
+
+Owner: Bruce
+
+---
+
 ### Test FunscriptForge on Linux
 
 Build and run the Linux PyInstaller package end-to-end to verify the Linux release works before shipping to users.

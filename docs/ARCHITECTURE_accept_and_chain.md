@@ -124,16 +124,64 @@ project["history"].append({
 save_forge(project)
 ```
 
+## Funscript flow between tabs
+
+```
+┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
+│  Project  │────▶│  Device  │────▶│   Tone   │────▶│ Phrases  │────▶│  Export  │
+│          │     │          │     │          │     │          │     │          │
+│ original │     │ device-  │     │ tone-    │     │ phrase-  │     │ final    │
+│ funscript│     │ aware    │     │ applied  │     │ edited   │     │ output   │
+└──────────┘     └──────────┘     └──────────┘     └──────────┘     └──────────┘
+     │                │                │                │                │
+     ▼                ▼                ▼                ▼                ▼
+  _funscript_     _funscript_     _funscript_     _funscript_      device/
+  original.json   device.json     tone.json       phrases.json    subfolders
+```
+
+Each tab reads from the **previous tab's output**, not the original funscript.
+This is the cascading chain — changes accumulate through the workflow.
+
+**Key rule:** The "Before" chart on any tab shows the previous tab's output.
+The "After" chart shows what this tab will change. The user always sees the
+delta, not the full transformation from original.
+
+**Fallback:** If a chain stage doesn't exist (user skipped a tab), the system
+walks backward to find the most recent saved state.
+
 ## What each Accept does
 
 | Tab | Reads from | Writes to | Key operations |
 |---|---|---|---|
 | **Project** | User input | `.forge` + analysis files | Create output folder, save .forge, run beat/motion/assessment analysis |
-| **Device** | Original funscript | `_funscript_device.json` | Apply device-safe fixes, safety verification, save to chain |
+| **Device** | Original funscript | `_funscript_device.json` | Apply device-aware fixes, safety verification, save to chain |
 | **Tone** | `_funscript_device.json` | `_funscript_tone.json` | Apply tone + impact + sliders, save to chain, cache Plotly |
 | **Phrases** | `_funscript_tone.json` | `_funscript_phrases.json` | Per-phrase transforms, save to chain |
 | **Stim** | `_funscript_phrases.json` | Estim channel files | Generate alpha/beta/pulse channels (estim only) |
 | **Export** | Latest chain state | Device subfolders | Write final funscripts per device, copy media |
+
+## Undo
+
+The sidebar shows the last Accept action and an **Undo** button. Undo:
+
+1. Pops the last entry from the `.forge` history array
+2. Removes the chain funscript file for that stage
+3. Clears the accepted flag in session state
+4. Saves the updated `.forge`
+
+One level deep per tab — undoes the last Accept, not individual slider changes.
+
+The sidebar also shows **Next step** guidance: the next incomplete tab in the
+workflow with a description of what it does.
+
+## Workflow Templates
+
+On Export, a `.forgetmpl` file is written alongside the funscripts. The template
+captures all workflow decisions (tone, sliders, device settings) without
+project-specific data (paths, timestamps).
+
+v1: export only. v2: import templates to pre-fill all tabs, ship starter
+presets (Driving Beat, Hypnotic Mix, Romance), CLI batch processing.
 
 ---
 

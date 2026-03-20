@@ -6,97 +6,62 @@
 
 ---
 
-## The journey (7 tasks)
+## The journey (5 tasks — Easy Button path)
 
 ```
-Set up your project → Accept → Choose a tone →
-Edit phrases → Apply transforms → Preview → Export
+Set up project → Device awareness → Choose a tone → Edit phrases → Export
 ```
 
 ---
 
 ## Mermaid snippets — one per page
 
-### 01-getting-started/your-first-funscript.md  (Set up your project)
+### Set up your project
 ```mermaid
 flowchart LR
-    A[Set up project]:::here --> B[Accept]
+    A[Set up project]:::here --> B[Device]
     B --> C[Choose tone]
     C --> D[Edit phrases]
-    D --> E[Apply transforms]
-    E --> F[Preview]
-    F --> G[Export]
+    D --> E[Export]
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```
 
-### 01-getting-started/accept.md  (Accept)
+### Device awareness
 ```mermaid
 flowchart LR
-    A[Set up project] --> B[Accept]:::here
+    A[Set up project] --> B[Device]:::here
     B --> C[Choose tone]
     C --> D[Edit phrases]
-    D --> E[Apply transforms]
-    E --> F[Preview]
-    F --> G[Export]
+    D --> E[Export]
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```
 
-### 02-tone/choose-a-tone.md  (Choose a tone)
+### Choose a tone
 ```mermaid
 flowchart LR
-    A[Set up project] --> B[Accept]
+    A[Set up project] --> B[Device]
     B --> C[Choose tone]:::here
     C --> D[Edit phrases]
-    D --> E[Apply transforms]
-    E --> F[Preview]
-    F --> G[Export]
+    D --> E[Export]
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```
 
-### 02-understand-your-script/phrases-at-a-glance.md  (Edit phrases)
+### Edit phrases
 ```mermaid
 flowchart LR
-    A[Set up project] --> B[Accept]
+    A[Set up project] --> B[Device]
     B --> C[Choose tone]
     C --> D[Edit phrases]:::here
-    D --> E[Apply transforms]
-    E --> F[Preview]
-    F --> G[Export]
+    D --> E[Export]
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```
 
-### 03-improve-your-script/apply-a-transform.md  (Apply transforms)
+### Export
 ```mermaid
 flowchart LR
-    A[Set up project] --> B[Accept]
+    A[Set up project] --> B[Device]
     B --> C[Choose tone]
     C --> D[Edit phrases]
-    D --> E[Apply transforms]:::here
-    E --> F[Preview]
-    F --> G[Export]
-    classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
-```
-
-### 03-improve-your-script/preview-your-changes.md  (Preview)
-```mermaid
-flowchart LR
-    A[Set up project] --> B[Accept]
-    B --> C[Choose tone]
-    C --> D[Edit phrases]
-    D --> E[Apply transforms]
-    E --> F[Preview]:::here
-    F --> G[Export]
-    classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
-```
-
-### 04-export-and-use/export.md  (Export)
-```mermaid
-flowchart LR
-    A[Set up project] --> B[Accept]
-    B --> C[Choose tone]
-    C --> D[Edit phrases]
-    D --> E[Apply transforms]
-    E --> F[Preview]
-    F --> G[Export]:::here
+    D --> E[Export]:::here
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```

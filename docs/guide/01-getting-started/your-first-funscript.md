@@ -4,10 +4,9 @@
 [Overview](../00-overview/index.md) →
 [Install](./install.md) →
 **Set up your project** →
+[Device awareness](./device-awareness.md) →
 [Choose a tone](../02-tone/choose-a-tone.md) →
 [Edit phrases](../02-understand-your-script/phrases-at-a-glance.md) →
-[Apply transforms](../03-improve-your-script/apply-a-transform.md) →
-[Preview](../03-improve-your-script/preview-your-changes.md) →
 [Export](../04-export-and-use/export.md)
 
 ---
@@ -15,10 +14,8 @@
 ## Overview
 
 In this step you create a project in FunscriptForge, add your funscript and optional
-media files, and click **Accept**. FunscriptForge then analyzes everything automatically
-and takes you to the Tone tab to choose how your output should feel.
-
-This is the Easy Button: drop your files, click Accept, watch the progress, done.
+media files, and click **Accept**. FunscriptForge analyzes everything automatically
+and you move to the Device tab to make your funscript device-aware.
 
 ---
 
@@ -45,8 +42,6 @@ You'll immediately see:
 - A **waveform chart** showing the full motion structure
 - A **stats row**: duration, action count, average speed, position range
 
-> **TODO: insert screenshot — funscript chart and stats row**
-
 ---
 
 ### 2. Check the export location
@@ -62,27 +57,14 @@ The path appears in the **Export location** text box, fully editable.
 
 ---
 
-### 3. Choose output targets
-
-Check the devices you want to export for. All checked targets are generated at export time:
-
-| Target | Description |
-| --- | --- |
-| **Estim — FOC** | Single-channel estim. Classic waveform. |
-| **Estim — Stereo** | Dual-channel estim. Left/right separation. |
-| **The Handy** | Linear stroker. Industry standard. |
-| **OSR2** | Multi-axis stroker. Twist + stroke. |
-
----
-
-### 4. Add media *(optional)*
+### 3. Add media *(optional)*
 
 Expand the **Media** section to add:
 
 - **Source video** — your matching video file. FunscriptForge displays codec, resolution,
   frame rate, and checks whether the duration matches your funscript.
-- **Alternate audio** — an optional replacement audio track. If not provided,
-  beat data is generated from the video.
+- **Alternate audio** — an optional replacement audio track. Beat data is
+  generated from video by default.
 - **Captions** — SRT, VTT, or ASS subtitle files for caption display and
   future emotion-aware haptics.
 
@@ -90,29 +72,27 @@ Each file shows metadata stats after upload.
 
 ---
 
-### 5. Add author info *(optional)*
+### 4. Add author info *(optional)*
 
 Expand **Author & credits** to fill in your name, website, and contributors.
 Press **Enter** to move between fields. Click **Save** when done.
 
 ---
 
-### 6. Review the summary
+### 5. Review the summary
 
 The **Summary** section shows a checklist of what's ready:
 
 - ✅ Export location
 - ✅ Funscript loaded
-- ⬜ Tone applied *(next step)*
+- ⬜ Tone applied *(later step)*
 - ⬜ Exported *(last step)*
 
 ---
 
-### 7. Click Accept
+### 6. Click Accept
 
-Read the info box — it explains your options. Then click **Accept →**.
-
-FunscriptForge shows you a live progress panel:
+Click **Accept**. FunscriptForge shows a live progress panel:
 
 ```
 ✅ Saved to my-scene.forge
@@ -122,10 +102,8 @@ FunscriptForge shows you a live progress panel:
 ✅ Assessment saved
 ```
 
-Each step updates in real time so you know exactly what's happening. When it's done,
-you're automatically taken to the **Tone** tab.
-
-> **TODO: insert screenshot — Accept progress panel mid-run**
+Each step updates in real time. When it's done, a message tells you:
+**"Your next step in the workflow is the Device tab."**
 
 ---
 
@@ -134,44 +112,55 @@ you're automatically taken to the **Tone** tab.
 When you clicked Accept, FunscriptForge:
 
 1. **Created your output folder** and saved a `.forge` project file
-2. **Detected beats** in your audio/video using librosa — tempo and beat timestamps
-3. **Analyzed video motion** frame by frame using OpenCV — a motion intensity heatmap
+2. **Detected beats** in your audio/video using librosa
+3. **Analyzed video motion** frame by frame using OpenCV
 4. **Assessed your funscript** — found phrases, patterns, BPM, and behavioral tags
 5. **Saved everything** to your output folder as cached JSON files
 
 All of this runs once and is cached. If you come back to this project later,
-FunscriptForge picks up where you left off.
+FunscriptForge picks up where you left off — just select it from the
+**Recent Projects** dropdown in the sidebar.
 
 ---
 
-## What you'll see on the next tabs
+## The workflow
 
-The analysis you just ran powers everything:
+The sidebar shows your progress through the workflow:
 
-- **Tone tab** — choose the feel of your output (the beat data and motion heatmap inform suggestions)
-- **Phrases tab** — the phrase structure chart, with every phrase detected and tagged
-- **Export tab** — generates device-specific output files
+```
+✅ Project  ⬜ Device  ⬜ Tone  ⬜ Phrases  ⬜ Export
+```
 
----
+Each tab builds on the previous tab's output. You can undo any step
+from the sidebar and redo it with different settings.
 
-Something not working? [Troubleshoot loading a script →](../troubleshooting/loading-a-script.md)
+**Tab order:**
+
+| Tab | What it does |
+| --- | --- |
+| **Project** | Set up your funscript, media, and export location |
+| **Device** | Make your funscript safe for your target device |
+| **Tone** | Choose how your output feels — the creative decision |
+| **Phrases** | Fine-tune individual sections (optional for most users) |
+| **Stim** | Configure estim channels (estim devices only) |
+| **Export** | Generate device-specific output files |
+
+For most users, the path is: **Project → Device → Tone → Export**. Four clicks.
 
 ---
 
 ## Next step
 
-[Choose a tone →](../02-tone/choose-a-tone.md)
+[Device awareness →](./device-awareness.md)
 
 ---
 
 ```mermaid
 flowchart LR
-    A[Set up project]:::here --> B[Accept]
+    A[Set up project]:::here --> B[Device]
     B --> C[Choose tone]
     C --> D[Edit phrases]
-    D --> E[Apply transforms]
-    E --> F[Preview]
-    F --> G[Export]
+    D --> E[Export]
     classDef here fill:#6c63ff,color:#fff,stroke:#6c63ff
 ```
 
