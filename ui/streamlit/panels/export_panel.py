@@ -1104,6 +1104,9 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
                 shutil.copy2(src, dest)
                 status.write(f"✅ Copied {os.path.basename(src)}")
 
+    # Export workflow template (.forgetmpl)
+    _export_template(forge_project, output_folder, status)
+
     # Update progress
     forge_project["progress"]["exported"] = True
     from datetime import datetime
@@ -1118,3 +1121,28 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
 
     st.session_state["export_complete"] = True
     status.update(label=f"Exported to {len(targets)} device(s)!", state="complete", expanded=False)
+
+
+def _export_template(forge_project: dict, output_folder: str, status) -> None:
+    """Export a .forgetmpl file — workflow decisions without project-specific data."""
+    template = {
+        "template_version": "1",
+        "description": f"Template from {forge_project.get('name', 'project')}",
+        # Tone decisions
+        "tone": forge_project.get("tone"),
+        "tone_sliders": forge_project.get("tone_sliders", {}),
+        # Device decisions
+        "output_targets": forge_project.get("output_targets", []),
+        "device_fix_strategies": forge_project.get("device_fix_strategies", []),
+        "device_apply_scope": forge_project.get("device_apply_scope", "global"),
+        # Workflow history (decisions only, no timestamps/paths)
+        "decisions": [
+            {k: v for k, v in entry.items() if k not in ("timestamp",)}
+            for entry in forge_project.get("history", [])
+        ],
+    }
+
+    tmpl_path = os.path.join(output_folder, f"{forge_project.get('name', 'project')}.forgetmpl")
+    with open(tmpl_path, "w", encoding="utf-8") as f:
+        json.dump(template, f, indent=2)
+    status.write(f"✅ Template: `{os.path.basename(tmpl_path)}`")
