@@ -1,7 +1,7 @@
 """
 Tab — Device Awareness
 
-Apply device-safe fixes globally before phrase editing.
+Apply device-aware fixes globally before phrase editing.
 Sits between Project and Tone in the workflow.
 """
 
@@ -21,9 +21,9 @@ _TARGETS = [
 
 # Fix strategies
 _FIX_STRATEGIES = [
-    ("performance", "Performance", "Maximize intensity within device-safe limits. Preserves beat and energy."),
+    ("performance", "Performance", "Maximize intensity within device-aware limits. Preserves beat and energy."),
     ("halve",       "Halve cycles", "Slow down fast cycles but keep full range. Cuts speed in half."),
-    ("shorten",     "Shorten cycles", "Reduce cycle range just enough to stay device-safe."),
+    ("shorten",     "Shorten cycles", "Reduce cycle range just enough to stay device-aware."),
     ("beat",        "Rebuild from beat", "Reconstruct motion from beat data. Most aggressive change."),
 ]
 
@@ -63,7 +63,7 @@ def render():
     st.divider()
 
     # ── Fix strategy ──────────────────────────────────────────────────────
-    st.subheader("Device-safe fix")
+    st.subheader("Device-aware fix")
     st.caption("How to handle actions that exceed device limits.")
 
     saved_fixes = (project or {}).get("device_fix_strategies", ["performance"])
@@ -134,7 +134,7 @@ def render():
         type="primary",
         width="stretch",
         disabled=not has_devices,
-        help="Apply device-safe fixes." if has_devices else "Select at least one device.",
+        help="Apply device-aware fixes." if has_devices else "Select at least one device.",
     ):
         _apply_device_awareness(project, selected_targets, selected_fixes, selected_scope)
         st.session_state["device_accepted"] = True
@@ -142,7 +142,7 @@ def render():
 
     if st.session_state.get("device_accepted"):
         st.success(
-            "Your funscript is device-safe and ready to export. "
+            "Your funscript is device-aware and ready to export. "
             "Your next step is the **Tone** tab to shape the feel, "
             "or skip ahead to the **Export** tab."
         )
@@ -165,7 +165,7 @@ def _apply_device_awareness(project, targets, fix_strategies, apply_scope):
     status.write(f"✅ Fixes: {', '.join(fix_strategies)}")
     status.write(f"✅ Scope: {apply_scope}")
 
-    # Apply device-safe fixes to the funscript and save to chain
+    # Apply device-aware fixes to the funscript and save to chain
     status.update(label="Applying fixes…")
     from forge.funscript import load_funscript, parse_actions
     funscript_path = st.session_state.get("funscript_path", "")
@@ -280,7 +280,7 @@ def _apply_device_fix_preview(
     times_s: list, positions: list, strategies: list,
     scope: str = "global", phrases: list | None = None,
 ) -> list:
-    """Visual approximation of device-safe fixes for preview.
+    """Visual approximation of device-aware fixes for preview.
     Real math applied on Accept — this is just for the preview chart.
 
     scope: "global" applies all strategies everywhere.
@@ -321,7 +321,7 @@ def _apply_device_fix_preview(
 
 
 def _apply_single_fix(pos, strategy: str):
-    """Apply a single device-safe fix strategy to a position array."""
+    """Apply a single device-aware fix strategy to a position array."""
     import numpy as np
 
     if strategy == "performance":
