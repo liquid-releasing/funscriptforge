@@ -103,11 +103,11 @@ def render():
     # ── Tip ───────────────────────────────────────────────────────────────
     st.info(
         "**Tone shapes how your output feels** — from gentle to intense, left to right. "
-        "This is the creative decision that used to require expert-level estim knowledge. "
-        "Now you just pick one.\n\n"
+        "Forge has analyzed your funscript and identified which tone best matches it, "
+        "and which offers the most variety. Either choice sets your project on a "
+        "device-aware workflow.\n\n"
         "Click a card to see what it does. Click again to flip back. "
-        "Your choice applies to the entire funscript. "
-        "Nothing changes until you click **Accept** below."
+        "Your choice applies globally. Nothing changes until you click **Accept**."
     )
 
     selected = st.session_state.get("tone_global", None)
@@ -274,8 +274,8 @@ def _render_dual_bubbles(enhance: str | None, variety: str | None, is_monotone: 
     if enhance and enhance in tone_names:
         idx = tone_names.index(enhance)
         color = _TONES[idx]["color"]
-        is_primary = not is_monotone  # enhance is primary for varied scripts
-        label = "🎯 Enhance" if is_primary else "🎯 Enhance"
+        is_primary = not is_monotone  # match is primary for varied scripts
+        label = "🎯 Best match"
         reason = _enhance_reason(enhance)
         _draw_bubble(bubble_cols[idx], color, label, reason, is_primary)
 
@@ -283,7 +283,7 @@ def _render_dual_bubbles(enhance: str | None, variety: str | None, is_monotone: 
         idx = tone_names.index(variety)
         color = _TONES[idx]["color"]
         is_primary = is_monotone  # variety is primary for monotone scripts
-        label = "🔀 Add variety"
+        label = "🔀 Most variety"
         reason = _variety_reason(variety)
         _draw_bubble(bubble_cols[idx], color, label, reason, is_primary)
 
@@ -428,10 +428,12 @@ def _is_monotone() -> bool:
 # ── Sliders ───────────────────────────────────────────────────────────────
 
 # Per-tone slider definitions: (label, session_key, min, max, default, help)
+# Variable count per tone — only sliders with measurable sensitivity effect.
+# Derived from funscript-tools sensitivity matrix testing.
 _TONE_SLIDERS = {
     "Tender": [
         ("Softness", "tone_s1", 0.0, 1.0, 0.7,
-         "How much to compress stroke range. Higher = gentler."),
+         "How much to compress the cycle range. Higher = gentler."),
         ("Pulse onset", "tone_s2", 0.0, 1.0, 0.3,
          "How gradually pulses rise. Higher = softer entry."),
     ],
@@ -440,12 +442,16 @@ _TONE_SLIDERS = {
          "How fast intensity ramps up. Higher = steeper climb."),
         ("Starting intensity", "tone_s2", 0.0, 1.0, 0.3,
          "Where the ramp begins. Lower = more room to grow."),
+        ("Arc width", "tone_s3", 0.0, 1.0, 0.5,
+         "How wide the sweep pattern is. Higher = broader motion."),
     ],
     "Tease": [
         ("Retreat depth", "tone_s1", 0.0, 1.0, 0.6,
          "How far intensity pulls back at peaks. Higher = more denial."),
         ("Oscillation speed", "tone_s2", 0.0, 1.0, 0.5,
          "How fast the rise-and-retreat cycles. Higher = faster teasing."),
+        ("Pulse variety", "tone_s3", 0.0, 1.0, 0.5,
+         "How much the pulse pattern varies. Higher = less predictable."),
     ],
     "Edge": [
         ("Hold intensity", "tone_s1", 0.0, 1.0, 0.7,
@@ -458,12 +464,18 @@ _TONE_SLIDERS = {
          "How far to push the range. Higher = more extreme."),
         ("Urgency", "tone_s2", 0.0, 1.0, 0.7,
          "How aggressive the pacing feels. Higher = more relentless."),
+        ("Pulse sharpness", "tone_s3", 0.0, 1.0, 0.6,
+         "How sharp the pulse edges are. Higher = harder hits."),
+        ("Frequency push", "tone_s4", 0.0, 1.0, 0.8,
+         "How high the pulse frequency goes. Higher = more intense."),
     ],
     "Dominant": [
         ("Drive", "tone_s1", 0.0, 1.0, 0.8,
          "How assertive the device pace is. Higher = harder push."),
         ("Sweep width", "tone_s2", 0.0, 1.0, 0.7,
-         "How wide the stroke range. Higher = bigger movements."),
+         "How wide the cycle range. Higher = bigger movements."),
+        ("Relentlessness", "tone_s3", 0.0, 1.0, 0.7,
+         "How little the intensity dips. Higher = no breaks."),
     ],
 }
 
@@ -490,17 +502,13 @@ def _render_sliders(selected: str):
             )
 
 
-def _get_slider_values(tone_name: str) -> tuple[float, float]:
-    """Return current slider values for a tone (s1, s2)."""
+def _get_slider_values(tone_name: str) -> list[float]:
+    """Return current slider values for a tone (variable count)."""
     sliders = _TONE_SLIDERS.get(tone_name, [])
-    if len(sliders) < 2:
-        return (0.5, 0.5)
-    s1_key = f"{tone_name}_{sliders[0][1]}"
-    s2_key = f"{tone_name}_{sliders[1][1]}"
-    return (
-        st.session_state.get(s1_key, sliders[0][4]),
-        st.session_state.get(s2_key, sliders[1][4]),
-    )
+    return [
+        st.session_state.get(f"{tone_name}_{sl[1]}", sl[4])
+        for sl in sliders
+    ]
 
 
 # ── Preview ───────────────────────────────────────────────────────────────
@@ -539,7 +547,7 @@ def _render_preview(selected: str | None):
 
     _BLUE = "#4C8BF5"
     if selected:
-        s1, s2 = _get_slider_values(selected)
+        slider_vals = _get_slider_values(selected)
         impact = st.session_state.get(f"tone_impact_{selected}", 1.0)
         col_before, col_after = st.columns(2)
         with col_before:
@@ -547,7 +555,7 @@ def _render_preview(selected: str | None):
             _plot_funscript(times_s, positions, _BLUE, "Before")
         with col_after:
             st.caption(f"**After** — {selected} (impact {impact:.0%})")
-            toned = _apply_tone_preview(times_s, positions, selected, s1, s2)
+            toned = _apply_tone_preview(times_s, positions, selected, slider_vals)
             # Blend: output = original + impact * (toned - original)
             modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
             _plot_funscript(times_s, modified, _BLUE, selected)
@@ -578,48 +586,61 @@ def _plot_funscript(times_s: list, positions: list, color: str, label: str):
 
 
 def _apply_tone_preview(times_s: list, positions: list, tone_name: str,
-                        s1: float = 0.5, s2: float = 0.5) -> list:
+                        sliders: list[float] | None = None) -> list:
     """Apply a tone simulation for preview, driven by slider values.
-    s1 and s2 are the two contextual sliders (0.0–1.0).
+    sliders is a variable-length list of slider values (0.0–1.0).
     This is a visual approximation — the real transform runs on Accept."""
     import numpy as np
     pos = np.array(positions, dtype=float)
     n = len(pos)
     t_norm = np.linspace(0, 1, n)
     center = 50
+    sv = sliders or [0.5] * 4  # safe defaults
+    s = lambda i: sv[i] if i < len(sv) else 0.5  # safe accessor
 
     if tone_name == "Tender":
-        # s1 = Softness (compression), s2 = Pulse onset (smoothing)
-        compression = 0.2 + 0.6 * (1.0 - s1)  # higher softness = more compression
+        # s(0) = Softness, s(1) = Pulse onset
+        compression = 0.2 + 0.6 * (1.0 - s(0))
         pos = center + (pos - center) * compression
     elif tone_name == "Build":
-        # s1 = Build rate (steepness), s2 = Starting intensity
-        floor = s2 * 0.5  # 0.0–0.5
-        scale = floor + (1.0 - floor) * (t_norm ** (0.5 + s1 * 1.5))
-        pos = center + (pos - center) * scale
+        # s(0) = Build rate, s(1) = Starting intensity, s(2) = Arc width
+        floor = s(1) * 0.5
+        scale = floor + (1.0 - floor) * (t_norm ** (0.5 + s(0) * 1.5))
+        arc_width = 0.7 + s(2) * 0.6  # 0.7–1.3x
+        pos = center + (pos - center) * scale * arc_width
     elif tone_name == "Tease":
-        # s1 = Retreat depth, s2 = Oscillation speed
-        cycles = 2 + s2 * 6  # 2–8 cycles
-        depth = 0.2 + s1 * 0.6  # how much it retreats
+        # s(0) = Retreat depth, s(1) = Oscillation speed, s(2) = Pulse variety
+        cycles = 2 + s(1) * 6
+        depth = 0.2 + s(0) * 0.6
         envelope = (1.0 - depth) + depth * np.abs(np.sin(t_norm * np.pi * cycles))
+        # Pulse variety adds noise to the envelope
+        if s(2) > 0.1:
+            noise = np.random.RandomState(42).uniform(-s(2) * 0.2, s(2) * 0.2, n)
+            envelope = np.clip(envelope + noise, 0.1, 1.0)
         pos = center + (pos - center) * envelope
     elif tone_name == "Edge":
-        # s1 = Hold intensity, s2 = Drop point
-        envelope = np.ones(n) * (0.5 + s1 * 0.5)
-        drop_start = int(n * s2)
+        # s(0) = Hold intensity, s(1) = Drop point
+        envelope = np.ones(n) * (0.5 + s(0) * 0.5)
+        drop_start = int(n * s(1))
         if drop_start < n:
             envelope[drop_start:] = np.linspace(envelope[min(drop_start, n - 1)], 0.3, n - drop_start)
         pos = center + (pos - center) * envelope
     elif tone_name == "Climax":
-        # s1 = Peak intensity (range expansion), s2 = Urgency
-        expansion = 1.0 + s1 * 0.5  # 1.0–1.5x range
-        pos = center + (pos - center) * expansion
+        # s(0) = Peak intensity, s(1) = Urgency, s(2) = Pulse sharpness, s(3) = Freq push
+        expansion = 1.0 + s(0) * 0.5
+        # Urgency: slight acceleration toward the end
+        urgency_env = 1.0 + s(1) * 0.2 * t_norm
+        pos = center + (pos - center) * expansion * urgency_env
     elif tone_name == "Dominant":
-        # s1 = Drive (sharpening), s2 = Sweep width
-        exponent = 1.0 - s1 * 0.3  # 0.7–1.0, lower = sharper peaks
-        width = 0.8 + s2 * 0.6  # 0.8–1.4x range
+        # s(0) = Drive, s(1) = Sweep width, s(2) = Relentlessness
+        exponent = 1.0 - s(0) * 0.3
+        width = 0.8 + s(1) * 0.6
         diff = pos - center
         pos = center + np.sign(diff) * np.abs(diff) ** exponent * width
+        # Relentlessness: pull dips back toward center
+        if s(2) > 0.3:
+            min_level = s(2) * 30  # floor at relentlessness * 30
+            pos = np.where(pos < center, np.maximum(pos, center - (center - min_level)), pos)
 
     return np.clip(pos, 0, 100).tolist()
 
@@ -637,14 +658,13 @@ def _apply_tone(tone_name: str):
     project = st.session_state.get("forge_project")
     if project:
         # Collect slider values
-        s1, s2 = _get_slider_values(tone_name)
+        slider_vals = _get_slider_values(tone_name)
         impact = st.session_state.get(f"tone_impact_{tone_name}", 1.0)
 
         project["tone"] = tone_name
         project["tone_sliders"] = {
             "impact": impact,
-            "s1": s1,
-            "s2": s2,
+            "values": slider_vals,
             "slider_defs": [
                 {"label": sl[0], "key": sl[1], "value": st.session_state.get(f"{tone_name}_{sl[1]}", sl[4])}
                 for sl in _TONE_SLIDERS.get(tone_name, [])
@@ -678,12 +698,12 @@ def _apply_tone(tone_name: str):
 
         times, positions = parse_actions(chain_data)
         if times:
-            s1, s2 = _get_slider_values(tone_name)
+            slider_vals = _get_slider_values(tone_name)
             impact = st.session_state.get(f"tone_impact_{tone_name}", 1.0)
             status.update(label=f"Applying tone to {len(times):,} actions…")
             times_s = [t / 1000.0 for t in times]
             tone_data = next(t for t in _TONES if t["name"] == tone_name)
-            toned = _apply_tone_preview(times_s, positions, tone_name, s1, s2)
+            toned = _apply_tone_preview(times_s, positions, tone_name, slider_vals)
             # Apply impact blending
             modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
 
