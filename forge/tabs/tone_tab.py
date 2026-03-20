@@ -111,18 +111,26 @@ def render():
     )
 
     selected = st.session_state.get("tone_global", None)
-    suggested = _suggest_tone()
+    enhance, variety, is_monotone = _suggest_tone()
     show_suggestions = st.session_state.pop("show_tone_suggestions", False)
 
-    # ── Suggestion bubble row (above cards) ─────────────────────────────
-    if suggested and (not selected or show_suggestions):
-        _render_suggestion_bubble(suggested)
+    # ── Dual suggestion bubbles (above cards) ─────────────────────────────
+    if (enhance or variety) and (not selected or show_suggestions):
+        _render_dual_bubbles(enhance, variety, is_monotone)
 
     # ── Six cards across ──────────────────────────────────────────────────
+    # Highlighted cards: both suggestions glow when visible
+    _highlighted = set()
+    if not selected or show_suggestions:
+        if enhance:
+            _highlighted.add(enhance)
+        if variety:
+            _highlighted.add(variety)
+
     cols = st.columns(6, gap="small")
     for i, tone in enumerate(_TONES):
         with cols[i]:
-            _render_card(tone, selected, suggested if (not selected or show_suggestions) else None)
+            _render_card(tone, selected, tone["name"] if tone["name"] in _highlighted else None)
 
     # ── Sliders (between cards and preview) ───────────────────────────────
     if selected:
@@ -255,45 +263,76 @@ def _render_card(tone: dict, selected: str | None, suggested: str | None = None)
 # ── Suggestion bubble ─────────────────────────────────────────────────────
 
 
-def _suggestion_reason(tone_name: str) -> str:
-    """Return a short reason why this tone was suggested."""
-    reasons = {
-        "Tender": "Your funscript is slow with a small stroke range — already gentle.",
-        "Build": "Your funscript has rising intensity — a natural arc to enhance.",
-        "Tease": "Your funscript has varied intensity — peaks and valleys to play with.",
-        "Edge": "Your funscript holds high intensity — a sustained plateau to shape.",
-        "Climax": "Your funscript runs hot — full range, fast pacing throughout.",
-        "Dominant": "Your funscript is fast and wide — assertive energy to channel.",
-    }
-    return reasons.get(tone_name, "Based on your funscript's motion profile.")
 
-
-def _render_suggestion_bubble(suggested: str):
-    """Render a speech bubble above the suggested card's column."""
+def _render_dual_bubbles(enhance: str | None, variety: str | None, is_monotone: bool):
+    """Render two suggestion bubbles above the card grid.
+    Primary suggestion is bigger based on monotone analysis."""
     tone_names = [t["name"] for t in _TONES]
-    suggested_idx = tone_names.index(suggested) if suggested in tone_names else -1
-    if suggested_idx < 0:
-        return
 
-    tone_data = _TONES[suggested_idx]
-    color = tone_data["color"]
-    reason = _suggestion_reason(suggested)
-
-    # Use 6 columns matching the card layout — bubble goes in the suggested column
     bubble_cols = st.columns(6, gap="small")
-    with bubble_cols[suggested_idx]:
+
+    if enhance and enhance in tone_names:
+        idx = tone_names.index(enhance)
+        color = _TONES[idx]["color"]
+        is_primary = not is_monotone  # enhance is primary for varied scripts
+        label = "🎯 Enhance" if is_primary else "🎯 Enhance"
+        reason = _enhance_reason(enhance)
+        _draw_bubble(bubble_cols[idx], color, label, reason, is_primary)
+
+    if variety and variety in tone_names and variety != enhance:
+        idx = tone_names.index(variety)
+        color = _TONES[idx]["color"]
+        is_primary = is_monotone  # variety is primary for monotone scripts
+        label = "🔀 Add variety"
+        reason = _variety_reason(variety)
+        _draw_bubble(bubble_cols[idx], color, label, reason, is_primary)
+
+
+def _draw_bubble(col, color: str, label: str, reason: str, is_primary: bool):
+    """Draw a single suggestion bubble in a column."""
+    border_w = "2px" if is_primary else "1px"
+    opacity = "1.0" if is_primary else "0.7"
+    font_size = "0.75em" if is_primary else "0.68em"
+    with col:
         st.markdown(
-            f"<div style='background:{color}22;border:1px solid {color};"
+            f"<div style='background:{color}22;border:{border_w} solid {color};"
             f"border-radius:8px;padding:6px 8px;text-align:center;"
-            f"font-size:0.72em;color:#eee;line-height:1.3;margin-bottom:4px;'>"
-            f"★ <strong>Suggested</strong><br>"
+            f"font-size:{font_size};color:#eee;line-height:1.3;margin-bottom:4px;"
+            f"opacity:{opacity};'>"
+            f"<strong>{label}</strong><br>"
             f"<span style='color:#bbb;font-size:0.9em'>{reason}</span>"
             f"</div>"
             f"<div style='width:0;height:0;margin:0 auto;"
             f"border-left:8px solid transparent;border-right:8px solid transparent;"
-            f"border-top:8px solid {color};'></div>",
+            f"border-top:8px solid {color};opacity:{opacity};'></div>",
             unsafe_allow_html=True,
         )
+
+
+def _enhance_reason(tone_name: str) -> str:
+    """Why this tone enhances what's already there."""
+    reasons = {
+        "Tender": "Already gentle — this intensifies the intimacy.",
+        "Build": "Already rising — this sharpens the arc.",
+        "Tease": "Already playful — this adds more push-pull.",
+        "Edge": "Already sustained — this locks in the plateau.",
+        "Climax": "Already intense — this pushes to the limit.",
+        "Dominant": "Already driving — this adds authority.",
+    }
+    return reasons.get(tone_name, "Enhances your funscript's existing character.")
+
+
+def _variety_reason(tone_name: str) -> str:
+    """Why this tone adds something new."""
+    reasons = {
+        "Tender": "Adds quiet moments your funscript is missing.",
+        "Build": "Adds a rising arc to give it direction.",
+        "Tease": "Adds push-pull dynamics to break the pattern.",
+        "Edge": "Adds sustained tension for contrast.",
+        "Climax": "Adds peak intensity your funscript avoids.",
+        "Dominant": "Adds assertive drive to shake things up.",
+    }
+    return reasons.get(tone_name, "Adds contrast your funscript doesn't have.")
 
 
 # ── Suggestion engine ─────────────────────────────────────────────────────
@@ -310,44 +349,80 @@ _TONE_TARGETS = {
 }
 
 
-def _suggest_tone() -> str | None:
-    """Suggest the closest tone based on funscript assessment stats.
-    Returns tone name or None if no assessment available."""
+def _suggest_tone() -> tuple[str | None, str | None, bool]:
+    """Suggest two tones: enhance (match) and variety (complement).
+    Returns (enhance_tone, variety_tone, is_monotone).
+    is_monotone determines which suggestion is primary."""
     from forge.funscript import funscript_stats
 
-    funscript_path = st.session_state.get("funscript_path", "")
-    if not funscript_path or not Path(funscript_path).exists():
-        return None
-
-    data = load_funscript(funscript_path)
+    # Use chain funscript if available
+    project = st.session_state.get("forge_project")
+    data = None
+    if project:
+        from forge.project import get_chain_funscript_for
+        data = get_chain_funscript_for(project, "tone")
     if not data:
-        return None
+        funscript_path = st.session_state.get("funscript_path", "")
+        if not funscript_path or not Path(funscript_path).exists():
+            return None, None, False
+        data = load_funscript(funscript_path)
+    if not data:
+        return None, None, False
 
     stats = funscript_stats(data)
     if not stats:
-        return None
+        return None, None, False
 
     # Normalize the funscript's characteristics to 0–1
-    # BPM: 0–200 range typical, avg_speed is proxy for BPM
     bpm_norm = min(stats.get("avg_speed", 0) / 200.0, 1.0)
-    # Range: max_pos - min_pos, out of 100
     range_norm = (stats.get("max_pos", 100) - stats.get("min_pos", 0)) / 100.0
-    # Speed: avg_speed / max_speed gives consistency, invert for "energy"
     max_spd = stats.get("max_speed", 1)
     speed_norm = min(stats.get("avg_speed", 0) / max(max_spd, 1), 1.0)
-
     profile = (bpm_norm, range_norm, speed_norm)
 
-    # Find closest tone by euclidean distance
-    best_tone = None
-    best_dist = float("inf")
+    # Rank all tones by distance
+    ranked = []
     for tone_name, target in _TONE_TARGETS.items():
         dist = sum((a - b) ** 2 for a, b in zip(profile, target)) ** 0.5
-        if dist < best_dist:
-            best_dist = dist
-            best_tone = tone_name
+        ranked.append((dist, tone_name))
+    ranked.sort()
 
-    return best_tone
+    # Enhance = closest match
+    enhance = ranked[0][1]
+    # Variety = farthest that's not the enhance pick
+    variety = ranked[-1][1]
+    if variety == enhance and len(ranked) > 1:
+        variety = ranked[-2][1]
+
+    # Determine if monotone: check phrase behavioral tags
+    is_monotone = _is_monotone()
+
+    return enhance, variety, is_monotone
+
+
+def _is_monotone() -> bool:
+    """Check if >50% of phrases share the same behavioral tag."""
+    _proj = st.session_state.get("project")
+    if not _proj or not hasattr(_proj, "assessment") or not _proj.is_loaded:
+        return False
+
+    phrases = _proj.assessment.to_dict().get("phrases", [])
+    if not phrases:
+        return False
+
+    # Count primary tags
+    tag_counts: dict[str, int] = {}
+    for ph in phrases:
+        tags = ph.get("tags", [])
+        if tags:
+            primary = tags[0]
+            tag_counts[primary] = tag_counts.get(primary, 0) + 1
+
+    if not tag_counts:
+        return False
+
+    max_count = max(tag_counts.values())
+    return max_count / len(phrases) > 0.5
 
 
 # ── Sliders ───────────────────────────────────────────────────────────────
