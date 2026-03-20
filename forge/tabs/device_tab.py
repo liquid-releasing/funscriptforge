@@ -329,10 +329,16 @@ def _apply_single_fix(pos, strategy: str):
     if strategy == "performance":
         pos = np.clip(pos, 5, 95)
     elif strategy == "halve":
-        smoothed = pos.copy()
-        for i in range(1, len(smoothed)):
-            smoothed[i] = smoothed[i - 1] + (pos[i] - smoothed[i - 1]) * 0.5
-        pos = smoothed
+        # Keep full amplitude but half the speed: stretch each cycle to take 2x longer.
+        # Take every other action point and interpolate between them.
+        n = len(pos)
+        if n > 2:
+            # Sample every other point (keeps peaks/valleys)
+            sampled_idx = np.arange(0, n, 2)
+            sampled_vals = pos[sampled_idx]
+            # Interpolate back to full length — same range, slower transitions
+            pos = np.interp(np.arange(n), sampled_idx, sampled_vals)
+
     elif strategy == "shorten":
         center = 50
         pos = center + (pos - center) * 0.7
