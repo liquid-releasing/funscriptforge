@@ -101,7 +101,10 @@ def render(project: "Project") -> None:
         st.session_state.pe_selected_instance = 0
 
     selected_tag: str  = st.session_state.pe_selected_label
-    funscript_path: str = project.funscript_path
+    # Use chain funscript if available (device-aware + toned)
+    import os as _os
+    _chain_path = st.session_state.get("chain_funscript_path")
+    funscript_path: str = _chain_path if (_chain_path and _os.path.isfile(_chain_path)) else project.funscript_path
     duration_ms: int   = project.assessment.duration_ms
 
     col_tags, col_detail = st.columns([1, 4])

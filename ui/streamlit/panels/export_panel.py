@@ -36,6 +36,14 @@ _COL_W_REC     = [0.4, 2.8, 1.0, 3.2, 2.0, 1.5, 0.5, 0.5, 0.5]
 _HEADERS_REC   = ["#", "Time", "Dur (s)", "Transform", "BPM", "Cycles", "", "", ""]
 
 
+def _get_funscript_path(project) -> str:
+    """Get the best funscript path — chain if available, otherwise original."""
+    _chain = st.session_state.get("chain_funscript_path")
+    if _chain and os.path.isfile(_chain):
+        return _chain
+    return _get_funscript_path(project)
+
+
 # ------------------------------------------------------------------
 # Output integrity helpers (#9 position clamp, #10 dedup/sort)
 # ------------------------------------------------------------------
@@ -118,7 +126,7 @@ def _render_quality_gate(project, plan: List[dict]) -> None:
         )
         if st.button("Run quality check", key="quality_run_btn"):
             with st.spinner("Checking…"):
-                with open(project.funscript_path, encoding="utf-8") as _f:
+                with open(_get_funscript_path(project), encoding="utf-8") as _f:
                     _fs = json.load(_f)
                 _rej = st.session_state.get("export_rejected", set())
                 _acc = st.session_state.get("export_accepted", set())
@@ -127,12 +135,12 @@ def _render_quality_gate(project, plan: List[dict]) -> None:
                 st.session_state["quality_gate_result"] = {
                     "issues":       _issues,
                     "action_count": len(_actions),
-                    "source_file":  project.funscript_path,
+                    "source_file":  _get_funscript_path(project),
                 }
             st.rerun()
 
         qr = st.session_state.get("quality_gate_result")
-        if qr and qr.get("source_file") == project.funscript_path:
+        if qr and qr.get("source_file") == _get_funscript_path(project):
             issues   = qr["issues"]
             errors   = [i for i in issues if i["level"] == "error"]
             warnings = [i for i in issues if i["level"] == "warning"]
@@ -626,7 +634,7 @@ def _render_export_preview(project, assessment_dict: dict, plan: List[dict]) -> 
 
     # Read from chain if available, otherwise fall back to original
     _chain_path = st.session_state.get("chain_funscript_path")
-    _fs_path = _chain_path if (_chain_path and os.path.isfile(_chain_path)) else project.funscript_path
+    _fs_path = _chain_path if (_chain_path and os.path.isfile(_chain_path)) else _get_funscript_path(project)
     with open(_fs_path, encoding="utf-8") as f:
         fs_data = json.load(f)
 
@@ -703,7 +711,7 @@ def _build_export_log(
     return {
         "forge_version":  "0.5.0",
         "exported_at":    datetime.now().isoformat(),
-        "source_file":    os.path.basename(project.funscript_path),
+        "source_file":    os.path.basename(_get_funscript_path(project)),
         "transforms":     applied,
         "blend_seams":    blend_seams,
         "final_smooth":   final_smooth,
@@ -773,7 +781,7 @@ def _build_download_bytes(
     """Apply all non-rejected transforms in plan order and return JSON bytes."""
     from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
 
-    with open(project.funscript_path, encoding="utf-8") as f:
+    with open(_get_funscript_path(project), encoding="utf-8") as f:
         fs_data = json.load(f)
 
     rejected: set = st.session_state.get("export_rejected", set())
@@ -817,7 +825,7 @@ def _build_download_bytes_device(
     """Apply transforms and optionally cap velocity for mechanical device safety."""
     from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
 
-    with open(project.funscript_path, encoding="utf-8") as f:
+    with open(_get_funscript_path(project), encoding="utf-8") as f:
         fs_data = json.load(f)
 
     rejected: set = st.session_state.get("export_rejected", set())
@@ -917,7 +925,7 @@ def _render_pipeline_section(project) -> None:
             )
             try:
                 actions, pipe_log = run_pipeline_in_memory(
-                    funscript_path=project.funscript_path,
+                    funscript_path=_get_funscript_path(project),
                     assessment=project.assessment,
                     transformer_config=tcfg,
                 )
@@ -959,7 +967,7 @@ def _render_pipeline_section(project) -> None:
                     "actions":     actions,
                     "log":         pipe_log,
                     "clamp_count": clamp_count,
-                    "source_file": project.funscript_path,
+                    "source_file": _get_funscript_path(project),
                 }
                 st.rerun()
             except Exception as exc:
@@ -967,7 +975,7 @@ def _render_pipeline_section(project) -> None:
 
         # Show result if available
         pipe_res = st.session_state.get("pipeline_result")
-        if pipe_res and pipe_res.get("source_file") == project.funscript_path:
+        if pipe_res and pipe_res.get("source_file") == _get_funscript_path(project):
             actions     = pipe_res["actions"]
             pipe_log    = pipe_res["log"]
             clamp_count = pipe_res.get("clamp_count", 0)
@@ -982,14 +990,14 @@ def _render_pipeline_section(project) -> None:
                 st.warning(f"{clamp_count} action(s) clamped to [0, 100].")
 
             # Build download bytes
-            with open(project.funscript_path, encoding="utf-8") as f:
+            with open(_get_funscript_path(project), encoding="utf-8") as f:
                 fs_data = json.load(f)
             out = dict(fs_data)
             out["actions"]    = actions
             out["_forge_log"] = {
                 "forge_version":  "0.5.0",
                 "exported_at":    datetime.now().isoformat(),
-                "source_file":    os.path.basename(project.funscript_path),
+                "source_file":    os.path.basename(_get_funscript_path(project)),
                 "pipeline":       pipe_log,
                 "clamp_warnings": clamp_count,
             }
