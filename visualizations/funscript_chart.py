@@ -247,7 +247,7 @@ class FunscriptChart:
         bottom_margin = 60 if tickangle else 30
 
         fig.update_layout(
-            title=None,  # never show a chart title — avoids "undefined" rendering
+            title="",  # empty string — avoids Plotly rendering "undefined"
             height=height,
             margin=dict(l=45, r=10, t=10, b=bottom_margin),
             paper_bgcolor="#0e1117",

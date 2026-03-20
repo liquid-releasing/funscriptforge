@@ -520,11 +520,14 @@ def _sidebar() -> None:
         min_phrase_duration_ms=min_phrase_s * 1000,
         amplitude_tolerance=amp_tol_map[amp_sensitivity],
     )
-    cfg_key = (funscript_path, min_phrase_s, amp_sensitivity)
+    # Include chain path in config key so assessment re-runs after Device/Tone Accept
+    _chain_path = st.session_state.get("chain_funscript_path", "")
+    _effective_path = _chain_path if (_chain_path and os.path.isfile(_chain_path)) else funscript_path
+    cfg_key = (_effective_path, min_phrase_s, amp_sensitivity)
 
-    # Auto-load only when the selected file changes; settings changes require
-    # an explicit Re-analyse click so rapid slider adjustments don't trigger
-    # a full re-assessment on every interaction (T3 debounce).
+    # Auto-load only when the effective file changes (chain or original);
+    # settings changes require an explicit Re-analyse click so rapid slider
+    # adjustments don't trigger a full re-assessment on every interaction.
     _last_cfg = st.session_state.last_loaded_cfg
     file_changed     = _last_cfg is None or cfg_key[0] != _last_cfg[0]
     settings_changed = not file_changed and cfg_key != _last_cfg
