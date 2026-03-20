@@ -146,6 +146,8 @@ def render():
             "Your next step is the **Tone** tab to shape the feel, "
             "or skip ahead to the **Export** tab."
         )
+        from forge.tabs._ui_helpers import scroll_to_top
+        scroll_to_top()
 
 
 def _apply_device_awareness(project, targets, fix_strategies, apply_scope):

@@ -176,8 +176,10 @@ def render():
     if st.session_state.get("tone_accepted"):
         st.success(
             "Your next step is the **Phrases** tab for fine-tuning, "
-            "or skip ahead to the **Export** tab for a clean device-safe file."
+            "or skip ahead to the **Export** tab for a clean device-aware file."
         )
+        from forge.tabs._ui_helpers import scroll_to_top
+        scroll_to_top()
 
     # ── Credit ────────────────────────────────────────────────────────────
     st.divider()
