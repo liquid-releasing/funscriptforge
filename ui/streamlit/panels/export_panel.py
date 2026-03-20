@@ -41,7 +41,7 @@ def _get_funscript_path(project) -> str:
     _chain = st.session_state.get("chain_funscript_path")
     if _chain and os.path.isfile(_chain):
         return _chain
-    return _get_funscript_path(project)
+    return project.funscript_path
 
 
 # ------------------------------------------------------------------
