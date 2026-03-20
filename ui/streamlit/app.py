@@ -235,11 +235,28 @@ def _project_picker_local(output_dir: str) -> None:
 
 
 def _funscript_picker_local(output_dir: str) -> str | None:
-    """Local-mode funscript picker: selectbox of recents + text-input fallback.
+    """Local-mode funscript picker.
 
+    If a forge project is loaded (via Project tab), shows the path as readonly.
+    Otherwise shows selectbox of recents + text-input fallback.
     Returns the selected absolute path, or ``None`` if nothing valid is chosen.
     """
     st.sidebar.subheader("Funscript Project")
+
+    # If a forge project is active, show readonly info instead of picker
+    _forge = st.session_state.get("forge_project")
+    _fs_path = st.session_state.get("funscript_path", "")
+    if _forge and _fs_path and os.path.isfile(_fs_path):
+        st.sidebar.markdown(f"**{_forge.get('name', 'Project')}**")
+        st.sidebar.caption(f"📄 {os.path.basename(_fs_path)}")
+        # Still show assessment stats if available
+        _proj = st.session_state.get("project")
+        if _proj and _proj.is_loaded:
+            _desc = _proj.get_description()
+            if _desc:
+                st.sidebar.caption(_desc)
+        return _fs_path
+
     _proj = st.session_state.get("project")
     if _proj and _proj.is_loaded:
         st.sidebar.markdown(f"**{_proj.display_name}**")
@@ -520,6 +537,32 @@ def _sidebar() -> None:
 
     st.sidebar.markdown("---")
 
+    # --- Workflow progress ---
+    _forge = st.session_state.get("forge_project")
+    if _forge:
+        _progress = _forge.get("progress", {})
+        _workflow = [
+            ("Project", st.session_state.get("project_accepted", False)),
+            ("Device", st.session_state.get("device_accepted", False)),
+            ("Tone", _progress.get("tone_applied", False)),
+            ("Phrases", _progress.get("phrases_edited", False)),
+            ("Export", _progress.get("exported", False)),
+        ]
+        _wf_line = "  ".join(
+            f"✅ {name}" if done else f"⬜ {name}" for name, done in _workflow
+        )
+        st.sidebar.caption(_wf_line)
+
+        # Show tone if selected
+        _tone = _forge.get("tone")
+        if _tone:
+            st.sidebar.caption(f"🎨 Tone: **{_tone}**")
+
+        # Show devices if selected
+        _targets = _forge.get("output_targets", [])
+        if _targets:
+            st.sidebar.caption(f"📱 Devices: {', '.join(_targets)}")
+
     # --- Project state ---
     project: Project | None = st.session_state.project
     if project and project.is_loaded:
@@ -582,19 +625,24 @@ def _sidebar() -> None:
             project.export_project(project_save_path)
             st.session_state.project_dirty = False
             st.sidebar.success(f"Saved to {project_save_path}")
-        if _sb_col2.button("Clear project", use_container_width=True,
-                           help="Clear session and start fresh."):
+        if _sb_col2.button("New project", use_container_width=True,
+                           help="Start a new project. Recent projects are kept."):
             _clear_keys = [
                 "forge_project", "funscript_path", "video_path",
                 "output_folder_input", "output_folder_pending",
                 "_funscript_processed", "_video_processed",
                 "_audio_processed", "_captions_processed",
+                "chain_funscript_path",
+                "project_accepted", "device_accepted", "tone_accepted",
+                "tone_global", "show_tone_suggestions", "export_complete",
             ]
             _motion_keys = [k for k in st.session_state if k.startswith("motion_")]
-            for _k in _clear_keys + _motion_keys:
+            _tone_keys = [k for k in st.session_state if k.startswith("tone_flip_") or k.startswith("tone_impact_")]
+            for _k in _clear_keys + _motion_keys + _tone_keys:
                 st.session_state.pop(_k, None)
             # Increment version to force all upload widgets to reset
             st.session_state["project_ver"] = st.session_state.get("project_ver", 0) + 1
+            # Keep output_dir and recents — don't clear those
             st.rerun()
 
     _render_sidebar_footer()
