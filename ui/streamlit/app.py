@@ -230,6 +230,16 @@ def _project_picker_local(output_dir: str) -> None:
                         if os.path.isfile(chain_file):
                             st.session_state["chain_funscript_path"] = chain_file
                             break
+                    # Restore accepted flags from progress
+                    _prog = loaded.get("progress", {})
+                    if loaded.get("output_targets"):
+                        st.session_state["device_accepted"] = True
+                    if _prog.get("tone_applied"):
+                        st.session_state["tone_accepted"] = True
+                        st.session_state["tone_global"] = loaded.get("tone")
+                    if _prog.get("phrases_edited"):
+                        pass  # phrase chains restored via chain_funscript_path
+                    st.session_state["project_accepted"] = True
                     st.rerun()
         st.sidebar.markdown("---")
 

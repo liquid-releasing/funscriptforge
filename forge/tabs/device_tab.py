@@ -84,7 +84,7 @@ def render():
     st.subheader("Apply scope")
     multiple_fixes = len(selected_fixes) > 1
     if multiple_fixes:
-        st.caption("How to distribute multiple fixes across your funscript.")
+        st.caption("**Entire**: all fixes applied in sequence. **Alternate/Random**: each phrase gets one fix.")
     else:
         st.caption("Select more than one fix strategy to enable per-phrase distribution.")
 

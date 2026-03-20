@@ -359,6 +359,12 @@ def _funscript_section(v: int):
     if uploaded and st.session_state.get("_funscript_processed") != uploaded.name:
         tmp = Path(tempfile.mkdtemp()) / uploaded.name
         tmp.write_bytes(uploaded.read())
+        # Clear media if funscript filename changed (different content)
+        _prev_name = Path(st.session_state.get("funscript_path", "")).stem
+        _new_name = Path(uploaded.name).stem
+        if _prev_name and _prev_name != _new_name:
+            for _mk in ["video_path", "_video_processed", "_audio_processed", "_captions_processed"]:
+                st.session_state.pop(_mk, None)
         st.session_state["funscript_path"] = str(tmp)
         st.session_state["_funscript_processed"] = uploaded.name
         st.session_state.pop("output_folder_input", None)  # reseed export path
