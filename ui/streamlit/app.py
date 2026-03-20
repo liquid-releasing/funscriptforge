@@ -635,7 +635,6 @@ def _sidebar() -> None:
             # Best-effort — never block the UI, but surface disk/permission errors.
             st.sidebar.warning(f"Pattern catalog could not be saved: {_cat_err}")
 
-        _stage_ph.empty()
         st.rerun()
 
     st.sidebar.markdown("---")
