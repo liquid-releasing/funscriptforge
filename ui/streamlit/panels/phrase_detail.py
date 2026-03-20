@@ -94,11 +94,16 @@ def _render_device_safety(phrase_idx: int) -> None:
     else:
         st.success("✅ Device aware")
 
+    # Default from Device tab decision — if device fixes were applied, default on
+    _forge = st.session_state.get("forge_project")
+    _device_applied = bool(st.session_state.get("device_accepted")) or bool(
+        (_forge or {}).get("device_fix_strategies")
+    )
     st.checkbox(
         "Enforce device awareness",
-        value=st.session_state.get(f"device_safety_{phrase_idx}", True),
+        value=st.session_state.get(f"device_safety_{phrase_idx}", _device_applied),
         key=f"device_safety_{phrase_idx}",
-        help="Apply Performance transform to cap velocity at 200 pos/s and smooth short intervals.",
+        help="Apply Performance transform to cap velocity. Inherited from Device tab settings.",
     )
 
 
@@ -931,6 +936,8 @@ def _render_save_cancel(phrase_idx: int, view_state) -> None:
         type="primary",
         help="Accept this transform — it becomes the new baseline for further editing",
     ):
+        _status = st.status("Saving changes…", expanded=True)
+
         _chain_key = f"phrase_transform_chain_{phrase_idx}"
         _cur_chain = st.session_state.get(_chain_key, [])
         _new_chain = list(_cur_chain)
@@ -942,6 +949,7 @@ def _render_save_cancel(phrase_idx: int, view_state) -> None:
                 for pk, p in TRANSFORM_CATALOG[_pending_key].params.items()
             }
             _new_chain.append({"transform_key": _pending_key, "param_values": _pv})
+            _status.write(f"✅ Applied **{_pending_key}** to phrase {phrase_idx + 1}")
 
         # Append Performance if device awareness fix is active for this phrase
         if st.session_state.get(f"_ds_fix_{phrase_idx}", False):
@@ -949,10 +957,13 @@ def _render_save_cancel(phrase_idx: int, view_state) -> None:
             _perf_defaults = {pk: p.default for pk, p in _TC["performance"].params.items()}
             _perf_defaults["max_velocity"] = 0.20
             _new_chain.append({"transform_key": "performance", "param_values": _perf_defaults})
+            _status.write("✅ Device awareness applied")
 
         if _new_chain != list(_cur_chain):
             st.session_state[_chain_key] = _new_chain
             st.session_state["project_dirty"] = True
+
+        _status.update(label="Changes saved!", state="complete", expanded=False)
 
         # Reset picker to passthrough
         _clear_picker_state(phrase_idx)
