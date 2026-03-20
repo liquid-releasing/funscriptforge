@@ -443,77 +443,29 @@ def _sidebar() -> None:
     if _IS_LOCAL:
         _project_picker_local(output_dir)
 
-    # --- File picker: local path input or web upload ---
-    if _IS_LOCAL:
-        funscript_path = _funscript_picker_local(output_dir)
-        if funscript_path is None:
-            return
-        # Sync sidebar selection into session state so Project tab can see it
-        if funscript_path != st.session_state.get("funscript_path"):
-            st.session_state["funscript_path"] = funscript_path
-        _media_picker_local(funscript_path, output_dir)
-        _folder = os.path.dirname(os.path.abspath(funscript_path))
-        if st.sidebar.button("📂 Open folder", help=f"Open {_folder} in Explorer", use_container_width=True):
-            import subprocess as _sp
-            import sys as _sys
-            if _sys.platform == "win32":
-                os.startfile(_folder)
-            elif _sys.platform == "darwin":
-                _sp.Popen(["open", _folder])
-            else:
-                _sp.Popen(["xdg-open", _folder])
+    # --- Sidebar project status (read-only) ---
+    _forge = st.session_state.get("forge_project")
+    _fs_path = st.session_state.get("funscript_path", "")
 
+    if _forge and _fs_path:
+        st.sidebar.subheader("Project")
+        st.sidebar.markdown(f"**{_forge.get('name', 'Project')}**")
+        st.sidebar.caption(f"📄 {os.path.basename(_fs_path)}")
+        if _forge.get("output_folder"):
+            st.sidebar.caption(f"📁 `{_forge['output_folder']}`")
     else:
-        # Web mode: file upload widgets (kept for the web UI deployment).
-        st.sidebar.subheader("Funscript Project")
-        _proj = st.session_state.get("project")
-        if _proj and _proj.is_loaded:
-            st.sidebar.markdown(f"**{_proj.display_name}**")
-            _desc = _proj.get_description()
-            if _desc:
-                st.sidebar.caption(_desc)
+        st.sidebar.subheader("Project")
+        st.sidebar.caption("Drop a funscript on the **Project** tab to get started.")
 
-        # Build candidate list: uploaded files first, then test_funscript/.
-        _path_for: dict[str, str] = {}
-        uploads_dir = os.path.join(output_dir, "uploads")
-        if os.path.isdir(uploads_dir):
-            for _f in sorted(os.listdir(uploads_dir)):
-                if _f.endswith(".funscript"):
-                    _path_for[f"[↑] {_f}"] = os.path.join(uploads_dir, _f)
+    # For backward compatibility: set funscript_path for downstream code
+    funscript_path = _fs_path or None
+    if funscript_path is None:
+        # No funscript loaded — still render the rest of the sidebar but skip
+        # assessment-dependent sections
+        pass
 
-        funscript_dir = os.path.join(_ROOT, "test_funscript")
-        if os.path.isdir(funscript_dir):
-            for _f in sorted(os.listdir(funscript_dir)):
-                if _f.endswith(".funscript"):
-                    _path_for[_f] = os.path.join(funscript_dir, _f)
-
-        if not _path_for:
-            st.sidebar.warning("No .funscript files found. Upload one above.")
-            return
-
-        candidate_labels = list(_path_for.keys())
-        _default_idx = 0
-        _last_upload  = st.session_state.get("last_upload_name")
-        if _last_upload:
-            _upload_label = f"[↑] {_last_upload}"
-            if _upload_label in candidate_labels:
-                _default_idx = candidate_labels.index(_upload_label)
-
-        selected_label = st.sidebar.selectbox(
-            "Select funscript",
-            options=candidate_labels,
-            index=_default_idx,
-        )
-        funscript_path = _path_for[selected_label]
-
-        # Auto-detect media by stem in uploads dir.
-        if st.session_state.get("media_auto_for") != funscript_path:
-            from ui.streamlit.panels.media_player import find_matching_media
-            _auto = find_matching_media(funscript_path, uploads_dir)
-            if _auto:
-                st.session_state["media_path"] = _auto
-            st.session_state["media_auto_for"] = funscript_path
-
+    if not _IS_LOCAL:
+        # Web mode: keep upload path for SaaS deployment
         _mp = st.session_state.get("media_path")
         if _mp and os.path.exists(_mp):
             _mc1, _mc2 = st.sidebar.columns([5, 1])
@@ -523,12 +475,11 @@ def _sidebar() -> None:
                 st.session_state.pop("media_auto_for", None)
                 st.rerun()
 
-    selected_file = os.path.basename(funscript_path)
+    if not funscript_path:
+        _render_sidebar_footer()
+        return
 
-    # Show forge project output path if accepted
-    _forge_proj = st.session_state.get("forge_project")
-    if _forge_proj and _forge_proj.get("output_folder"):
-        st.sidebar.caption(f"📁 `{_forge_proj['output_folder']}`")
+    selected_file = os.path.basename(funscript_path)
 
     # Detection settings live in the Phrase Selector tab; read from session state here.
     min_phrase_s    = st.session_state.get("min_phrase_s", 20)
