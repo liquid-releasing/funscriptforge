@@ -44,7 +44,7 @@ from utils import ms_to_timestamp
 
 
 # ------------------------------------------------------------------
-# Device safety helpers
+# Device awareness helpers
 # ------------------------------------------------------------------
 
 def _check_quality_phrase(actions: list, phrase: dict) -> list:
@@ -74,7 +74,7 @@ def _check_quality_phrase(actions: list, phrase: dict) -> list:
 
 
 def _render_device_safety(phrase_idx: int) -> None:
-    """Enforce device safety checkbox + status badge above Accept.
+    """Enforce device awareness checkbox + status badge above Accept.
 
     Checkbox is on by default.  When on, the Performance transform is applied
     to the preview (and to the accepted chain) to cap velocity at 200 pos/s.
@@ -83,7 +83,7 @@ def _render_device_safety(phrase_idx: int) -> None:
     n_warnings = st.session_state.get(f"_ds_warnings_{phrase_idx}", 0)
 
     if st.session_state.get(f"_ds_fix_{phrase_idx}"):
-        st.success("🛡 Device safe")
+        st.success("🛡 Device aware")
     elif n_errors:
         st.error(
             f"⚠ {n_errors} error{'s' if n_errors != 1 else ''}"
@@ -92,10 +92,10 @@ def _render_device_safety(phrase_idx: int) -> None:
     elif n_warnings:
         st.warning(f"⚠ {n_warnings} warning{'s' if n_warnings != 1 else ''}")
     else:
-        st.success("✅ Device safe")
+        st.success("✅ Device aware")
 
     st.checkbox(
-        "Enforce device safety",
+        "Enforce device awareness",
         value=st.session_state.get(f"device_safety_{phrase_idx}", True),
         key=f"device_safety_{phrase_idx}",
         help="Apply Performance transform to cap velocity at 200 pos/s and smooth short intervals.",
@@ -239,7 +239,7 @@ def _detail_fragment(
         # Preview applies pending transform on top of the accepted baseline
         preview_actions = _apply_transform_to_window(baseline_actions, phrase, spec, param_values)
 
-        # --- Device safety: check preview quality, optionally apply Performance ---
+        # --- Device awareness: check preview quality, optionally apply Performance ---
         _enforce     = st.session_state.get(f"device_safety_{phrase_idx}", True)
         _issues      = _check_quality_phrase(preview_actions, phrase)
         _n_errors    = sum(1 for i in _issues if i["level"] == "error")
@@ -943,7 +943,7 @@ def _render_save_cancel(phrase_idx: int, view_state) -> None:
             }
             _new_chain.append({"transform_key": _pending_key, "param_values": _pv})
 
-        # Append Performance if device safety fix is active for this phrase
+        # Append Performance if device awareness fix is active for this phrase
         if st.session_state.get(f"_ds_fix_{phrase_idx}", False):
             from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG as _TC
             _perf_defaults = {pk: p.default for pk, p in _TC["performance"].params.items()}
@@ -952,6 +952,7 @@ def _render_save_cancel(phrase_idx: int, view_state) -> None:
 
         if _new_chain != list(_cur_chain):
             st.session_state[_chain_key] = _new_chain
+            st.session_state["project_dirty"] = True
 
         # Reset picker to passthrough
         _clear_picker_state(phrase_idx)
@@ -967,9 +968,11 @@ def _render_save_cancel(phrase_idx: int, view_state) -> None:
         "✔ Done",
         key="pd_done",
         width="stretch",
-        help="Finish all edits — return to Phrase Selector showing the updated funscript",
+        help="Finish all edits — save to project and return to Phrase Selector",
     ):
         _accept_pending(phrase_idx)
+        # Save edited funscript to chain
+        _save_phrase_edits_to_chain(phrases)
         view_state.clear_selection()
         view_state.reset_zoom()
         st.session_state["phrase_table_ver"] = st.session_state.get("phrase_table_ver", 0) + 1
@@ -1146,6 +1149,40 @@ def build_edited_actions(phrases: list, original_actions: list) -> list:
                     if a["at"] in t_to_pos:
                         a["pos"] = t_to_pos[a["at"]]
     return result
+
+
+def _save_phrase_edits_to_chain(phrases: list) -> None:
+    """Build the fully edited funscript and save it to the chain."""
+    import json as _json
+    from pathlib import Path
+    from forge.project import save_chain_funscript, get_chain_funscript_for, save_forge
+
+    project = st.session_state.get("forge_project")
+    if not project:
+        return
+
+    # Read from chain (tone stage or earlier)
+    chain_data = get_chain_funscript_for(project, "phrases")
+    if not chain_data:
+        import os as _os
+        _chain_path = st.session_state.get("chain_funscript_path")
+        if _chain_path and _os.path.isfile(_chain_path):
+            chain_data = _json.loads(Path(_chain_path).read_text(encoding="utf-8"))
+    if not chain_data:
+        return
+
+    original_actions = chain_data.get("actions", [])
+    edited_actions = build_edited_actions(phrases, original_actions)
+
+    # Save to chain
+    chain_data["actions"] = edited_actions
+    chain_path = save_chain_funscript(project, "phrases", chain_data)
+    st.session_state["chain_funscript_path"] = chain_path
+
+    # Update progress
+    project["progress"]["phrases_edited"] = True
+    if Path(project.get("output_folder", "")).exists():
+        save_forge(project)
 
 
 

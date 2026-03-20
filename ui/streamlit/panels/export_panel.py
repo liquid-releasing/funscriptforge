@@ -246,7 +246,7 @@ def render(project: "Project") -> None:
 
         with tab_dev:
             apply_safety = st.checkbox(
-                "Apply device safety",
+                "Apply device awareness",
                 value=True,
                 key="export_device_safety",
                 help="Caps velocity at 200 pos/s to protect mechanical devices (Handy, OSR2).",
@@ -822,7 +822,7 @@ def _build_download_bytes_device(
     final_smooth: bool = False,
     apply_safety: bool = True,
 ) -> bytes:
-    """Apply transforms and optionally cap velocity for mechanical device safety."""
+    """Apply transforms and optionally cap velocity for mechanical device awareness."""
     from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
 
     with open(_get_funscript_path(project), encoding="utf-8") as f:
