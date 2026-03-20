@@ -83,6 +83,28 @@ Export change: device-specific subfolders (`output/Timeline1/handy/`, `output/Ti
 
 ---
 
+### Workflow templates — export (v1)
+
+Export a `.forgetmpl` file alongside funscripts on every export. The template
+captures all workflow decisions (tone, sliders, device settings, phrase rules)
+without project-specific data (paths, timestamps).
+
+v1 scope: export only. Validate that templates capture enough to replay.
+
+---
+
+### [v2] Workflow templates — import + catalog + CLI
+
+- Import `.forgetmpl` on Project tab → pre-fill all decisions, user walks through
+- Ship starter templates: Driving Beat, Hypnotic Mix, Romance, Party Mix, Intensity
+- Template catalog in UI
+- Community template sharing
+- CLI batch processing: `funscriptforge run --project x.forgeproj --template y.forgetmpl`
+- `.forgeproj` = project definition (input files, output folder, devices)
+- `.forgetmpl` = reusable decisions (tone, sliders, phrase rules, stim prefs)
+
+---
+
 ### Play tab (placeholder)
 
 Placeholder tab with text: "SyncPlayer is coming soon."
