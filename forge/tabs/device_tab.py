@@ -175,7 +175,12 @@ def _apply_device_awareness(project, targets, fix_strategies, apply_scope):
             times, positions = parse_actions(fs_data)
             if times:
                 times_s = [t / 1000.0 for t in times]
-                modified = _apply_device_fix_preview(times_s, positions, fix_strategies)
+                # Get phrase data for per-phrase scope
+                _phrases = []
+                _proj = st.session_state.get("project")
+                if _proj and hasattr(_proj, "assessment") and _proj.is_loaded:
+                    _phrases = _proj.assessment.to_dict().get("phrases", [])
+                modified = _apply_device_fix_preview(times_s, positions, fix_strategies, apply_scope, _phrases)
                 # Update actions in funscript data
                 for i, action in enumerate(fs_data.get("actions", [])):
                     if i < len(modified):
@@ -230,14 +235,21 @@ def _render_device_preview(fix_strategies: list, apply_scope: str):
     times_s = [t / 1000.0 for t in times]
     _BLUE = "#4C8BF5"
 
-    modified = _apply_device_fix_preview(times_s, positions, fix_strategies)
+    # Get phrase boundaries if available (for per-phrase scope)
+    phrases = []
+    _proj = st.session_state.get("project")
+    if _proj and hasattr(_proj, "assessment") and _proj.is_loaded:
+        phrases = _proj.assessment.to_dict().get("phrases", [])
+
+    modified = _apply_device_fix_preview(times_s, positions, fix_strategies, apply_scope, phrases)
 
     col_before, col_after = st.columns(2)
     with col_before:
         st.caption("**Before** — original")
         _plot_device(times_s, positions, _BLUE)
     with col_after:
-        st.caption(f"**After** — {', '.join(fix_strategies)}")
+        scope_label = f" ({apply_scope})" if apply_scope != "global" else ""
+        st.caption(f"**After** — {', '.join(fix_strategies)}{scope_label}")
         _plot_device(times_s, modified, _BLUE)
 
 
@@ -264,33 +276,67 @@ def _plot_device(times_s: list, positions: list, color: str):
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
-def _apply_device_fix_preview(times_s: list, positions: list, strategies: list) -> list:
+def _apply_device_fix_preview(
+    times_s: list, positions: list, strategies: list,
+    scope: str = "global", phrases: list | None = None,
+) -> list:
     """Visual approximation of device-safe fixes for preview.
-    Real math applied on Accept — this is just for the preview chart."""
-    import numpy as np
-    pos = np.array(positions, dtype=float)
+    Real math applied on Accept — this is just for the preview chart.
 
-    for strategy in strategies:
-        if strategy == "performance":
-            # Clamp to device-safe range, preserve dynamics
-            # Simulate: pull extremes toward safe zone (5-95)
-            pos = np.clip(pos, 5, 95)
-        elif strategy == "halve":
-            # Halve the speed: move positions halfway toward previous
-            smoothed = pos.copy()
-            for i in range(1, len(smoothed)):
-                smoothed[i] = smoothed[i - 1] + (pos[i] - smoothed[i - 1]) * 0.5
-            pos = smoothed
-        elif strategy == "shorten":
-            # Reduce range: compress toward center
-            center = 50
-            pos = center + (pos - center) * 0.7
-        elif strategy == "beat":
-            # Rebuild from beat: quantize to beat grid (simplified)
-            # Just smooth heavily for preview
-            kernel_size = min(11, len(pos))
-            if kernel_size > 1:
-                kernel = np.ones(kernel_size) / kernel_size
-                pos = np.convolve(pos, kernel, mode="same")
+    scope: "global" applies all strategies everywhere.
+           "alternate" rotates strategies across phrases.
+           "random" assigns strategies randomly per phrase.
+    """
+    import numpy as np
+    import random
+
+    pos = np.array(positions, dtype=float)
+    times_ms = [t * 1000 for t in times_s]
+
+    if scope == "global" or not phrases or len(strategies) <= 1:
+        # Apply all strategies sequentially to entire funscript
+        for strategy in strategies:
+            pos = _apply_single_fix(pos, strategy)
+    else:
+        # Per-phrase: assign a strategy to each phrase
+        for ph_idx, phrase in enumerate(phrases):
+            start_ms = phrase.get("start_ms", 0)
+            end_ms = phrase.get("end_ms", 0)
+            # Find action indices within this phrase
+            mask = np.array([(start_ms <= t <= end_ms) for t in times_ms])
+            if not mask.any():
+                continue
+
+            if scope == "alternate":
+                strategy = strategies[ph_idx % len(strategies)]
+            else:  # random
+                strategy = random.choice(strategies)
+
+            # Apply fix only to this phrase's actions
+            phrase_pos = pos[mask].copy()
+            phrase_pos = _apply_single_fix(phrase_pos, strategy)
+            pos[mask] = phrase_pos
 
     return np.clip(pos, 0, 100).tolist()
+
+
+def _apply_single_fix(pos, strategy: str):
+    """Apply a single device-safe fix strategy to a position array."""
+    import numpy as np
+
+    if strategy == "performance":
+        pos = np.clip(pos, 5, 95)
+    elif strategy == "halve":
+        smoothed = pos.copy()
+        for i in range(1, len(smoothed)):
+            smoothed[i] = smoothed[i - 1] + (pos[i] - smoothed[i - 1]) * 0.5
+        pos = smoothed
+    elif strategy == "shorten":
+        center = 50
+        pos = center + (pos - center) * 0.7
+    elif strategy == "beat":
+        kernel_size = min(11, len(pos))
+        if kernel_size > 1:
+            kernel = np.ones(kernel_size) / kernel_size
+            pos = np.convolve(pos, kernel, mode="same")
+    return pos

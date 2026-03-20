@@ -493,22 +493,31 @@ def _sidebar() -> None:
     if file_changed or _reanalyse_requested or st.sidebar.button("Re-analyse", type="primary"):
         import time
 
-        # Progress indicator: sidebar placeholder shows current stage.
-        # Using a sidebar placeholder (not st.spinner) avoids a lingering
-        # full-page spinner that persists visually after the chart renders.
-        _stage_ph = st.sidebar.empty()
-        _stage_ph.caption("⟳ Running assessment…")
+        # Use chain funscript if available, otherwise original
+        _chain_path = st.session_state.get("chain_funscript_path")
+        _analyse_path = _chain_path if (_chain_path and os.path.isfile(_chain_path)) else funscript_path
+
+        # Count actions for progress display
+        try:
+            import json as _json_count
+            with open(_analyse_path, encoding="utf-8") as _fc:
+                _action_count = len(_json_count.load(_fc).get("actions", []))
+        except Exception:
+            _action_count = 0
+
+        _status = st.sidebar.status(f"Analysing {_action_count:,} actions…", expanded=True)
 
         def _on_stage(stage: str) -> None:
-            _stage_ph.caption(f"⟳ {stage}")
+            _status.update(label=f"Analysing: {stage}")
 
         _t0 = time.time()
         st.session_state.project = Project.from_funscript(
-            funscript_path,
+            _analyse_path,
             analyzer_config=analyzer_cfg,
             progress_callback=_on_stage,
         )
-        st.session_state.last_assessment_elapsed = time.time() - _t0
+        _elapsed = time.time() - _t0
+        st.session_state.last_assessment_elapsed = _elapsed
         st.session_state.last_loaded_cfg  = cfg_key
         st.session_state.last_loaded_file = selected_file
         st.session_state.view_state       = ViewState()
@@ -516,6 +525,13 @@ def _sidebar() -> None:
             _save_recents(output_dir, funscript_path)
         st.session_state.export_rejected  = set()
         st.session_state.export_accepted  = set()
+
+        _s = st.session_state.project.summary()
+        _status.write(
+            f"✅ {_s['phrases']} phrases, {_s['patterns']} patterns, "
+            f"~{_s['bpm']:.0f} BPM ({_elapsed:.1f}s)"
+        )
+        _status.update(label="Assessment complete!", state="complete", expanded=False)
 
         # Auto-update the pattern catalog with this funscript's tagged phrases
         try:
