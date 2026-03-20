@@ -127,7 +127,7 @@ if "last_loaded_file" not in st.session_state:
     st.session_state.last_loaded_file = None
 
 if "large_funscript_threshold" not in st.session_state:
-    st.session_state.large_funscript_threshold = 10_000
+    st.session_state.large_funscript_threshold = 100_000  # force vibrant colors for all funscripts
 
 if "last_assessment_elapsed" not in st.session_state:
     st.session_state.last_assessment_elapsed = None
@@ -490,8 +490,8 @@ def _sidebar() -> None:
         large_funscript_threshold = st.number_input(
             "Fast rendering threshold (actions)",
             min_value=100,
-            max_value=100_000,
-            value=10_000,
+            max_value=200_000,
+            value=100_000,
             step=500,
             help=(
                 "Funscripts with more actions than this use a single grey "

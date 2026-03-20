@@ -648,7 +648,7 @@ def _render_export_preview(project, assessment_dict: dict, plan: List[dict]) -> 
     series = compute_chart_data(preview_actions)
     chart  = FunscriptChart(
         series, bands, "", duration_ms,
-        large_funscript_threshold=st.session_state.get("large_funscript_threshold", 10_000),
+        large_funscript_threshold=st.session_state.get("large_funscript_threshold", 100_000),
     )
 
     class _StaticVS:

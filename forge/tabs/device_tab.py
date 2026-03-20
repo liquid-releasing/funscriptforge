@@ -93,6 +93,9 @@ def render():
     # Force global when only one fix selected
     if not multiple_fixes:
         saved_scope = "global"
+        # Clear session state to prevent stale alternate/random selection
+        if st.session_state.get("device_apply_scope") != "global":
+            st.session_state["device_apply_scope"] = "global"
 
     selected_scope = st.radio(
         "Apply scope",
@@ -104,6 +107,9 @@ def render():
         horizontal=True,
         disabled=not multiple_fixes,
     )
+    # Override if disabled — Streamlit may keep the old value
+    if not multiple_fixes:
+        selected_scope = "global"
 
     st.divider()
 
@@ -141,13 +147,12 @@ def render():
         st.rerun()
 
     if st.session_state.get("device_accepted"):
-        st.success(
+        from forge.tabs._ui_helpers import success_with_scroll
+        success_with_scroll(
             "Your funscript is device-aware and ready to export. "
             "Your next step is the **Tone** tab to shape the feel, "
             "or skip ahead to the **Export** tab."
         )
-        from forge.tabs._ui_helpers import scroll_to_top
-        scroll_to_top()
 
 
 def _apply_device_awareness(project, targets, fix_strategies, apply_scope):
@@ -329,15 +334,29 @@ def _apply_single_fix(pos, strategy: str):
     if strategy == "performance":
         pos = np.clip(pos, 5, 95)
     elif strategy == "halve":
-        # Keep full amplitude but half the speed: stretch each cycle to take 2x longer.
-        # Take every other action point and interpolate between them.
+        # Keep full amplitude but half the speed.
+        # Find peaks and valleys (direction changes), keep them all.
+        # Insert midpoints between each pair so transitions take 2x longer.
         n = len(pos)
         if n > 2:
-            # Sample every other point (keeps peaks/valleys)
-            sampled_idx = np.arange(0, n, 2)
-            sampled_vals = pos[sampled_idx]
-            # Interpolate back to full length — same range, slower transitions
-            pos = np.interp(np.arange(n), sampled_idx, sampled_vals)
+            # Detect direction changes (peaks and valleys)
+            keypoints = [0]  # always keep first
+            for i in range(1, n - 1):
+                prev_dir = pos[i] - pos[i - 1]
+                next_dir = pos[i + 1] - pos[i]
+                if prev_dir * next_dir <= 0:  # direction change = peak or valley
+                    keypoints.append(i)
+            keypoints.append(n - 1)  # always keep last
+
+            # Stretch keypoints to take 2x the original indices
+            orig_times = np.array(keypoints, dtype=float)
+            stretched_times = orig_times * 2.0
+            # Scale back to fit in original length
+            if stretched_times[-1] > 0:
+                stretched_times = stretched_times * (n - 1) / stretched_times[-1]
+            keypoint_vals = pos[keypoints]
+            # Interpolate to full length
+            pos = np.interp(np.arange(n), stretched_times, keypoint_vals)
 
     elif strategy == "shorten":
         center = 50

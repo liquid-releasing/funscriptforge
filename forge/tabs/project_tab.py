@@ -343,9 +343,8 @@ def render():
         st.rerun()
 
     if st.session_state.get("project_accepted"):
-        st.success("Your next step in the workflow is the **Device** tab.")
-        from forge.tabs._ui_helpers import scroll_to_top
-        scroll_to_top()
+        from forge.tabs._ui_helpers import success_with_scroll
+        success_with_scroll("Your next step in the workflow is the **Device** tab.")
 
 
 # ── Funscript ────────────────────────────────────────────────────────────────
