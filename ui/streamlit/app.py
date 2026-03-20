@@ -448,6 +448,9 @@ def _sidebar() -> None:
         funscript_path = _funscript_picker_local(output_dir)
         if funscript_path is None:
             return
+        # Sync sidebar selection into session state so Project tab can see it
+        if funscript_path != st.session_state.get("funscript_path"):
+            st.session_state["funscript_path"] = funscript_path
         _media_picker_local(funscript_path, output_dir)
         _folder = os.path.dirname(os.path.abspath(funscript_path))
         if st.sidebar.button("📂 Open folder", help=f"Open {_folder} in Explorer", use_container_width=True):
