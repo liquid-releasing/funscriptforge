@@ -26,7 +26,7 @@ output/my-project/
 ├── _funscript_tone.json          ← after Tone Accept
 ├── _funscript_phrases.json       ← after Phrases Accept
 ├── _assessment.json              ← phrase/pattern/BPM analysis
-├── _beat_data.json               ← librosa beat detection
+├── _beat_data.json               ← videoflow AudioBeatMap (BPM, beats, downbeats, phrases, energy)
 └── _video_motion.json            ← OpenCV motion heatmap
 ```
 

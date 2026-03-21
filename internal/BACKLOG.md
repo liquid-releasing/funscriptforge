@@ -128,6 +128,30 @@ decisions should live in user-facing docs, not just developer notes.
 
 ---
 
+## Done — Component Refactor (2026-03-21)
+
+Extracted shared components to [forge-ui-components](https://github.com/liquid-releasing/forge-ui-components).
+See [ARCHITECTURE_components.md](../docs/ARCHITECTURE_components.md) for details.
+
+- ✅ funscript_chart — monochrome + vibrant, replaced 6 inline chart functions (~600 lines removed)
+- ✅ file_picker — 4 pickers in project_tab, upload guard + callbacks
+- ✅ beat_bar — wraps videoflow AudioBeatMap, replaces inline librosa
+- ✅ project_status — sidebar dashboard, ProjectStatus snapshot
+- ✅ visualizations/ — converted to backward-compat shims
+- ⬜ transform_editor — stub (already shared via transform_picker.py, extraction later)
+- ⬜ tone_selector — stub (extraction when Tone panel becomes reusable per-phrase)
+
+Related: cloned xolvco/media-tools (ffmpeg probe/audio/video) and xolvco/videoflow (beat analysis, scene detection).
+
+### Remaining component work
+
+- Replace pymediainfo with media-tools probe() for video/audio stats
+- Extract tone_selector when Tone-as-first-transform in Phrases is built
+- Extract transform_editor if Phrases/Patterns diverge enough to need it
+- Delete visualizations/ shims once all consumers are migrated
+
+---
+
 ## Open — Existing
 
 ### Set up test environment with real funscript files
