@@ -27,6 +27,11 @@ from forge.project import (
 )
 from forge.funscript import funscript_stats, load_funscript
 from forge_ui_components.funscript_chart.streamlit import render_monochrome, render_stats_row
+from forge_ui_components.file_picker.core import (
+    AUDIO_PICKER, CAPTIONS_PICKER, FUNSCRIPT_PICKER, VIDEO_PICKER,
+    is_new_upload, mark_processed, resolve_file_path,
+)
+from forge_ui_components.file_picker.streamlit import render_upload
 from forge.video import analyze_motion, video_stats
 
 _APP_ROOT = Path(__file__).parents[2]
@@ -349,22 +354,21 @@ def render():
 # ── Funscript ────────────────────────────────────────────────────────────────
 
 def _funscript_section(v: int):
-    uploaded = st.file_uploader(
-        "Drag and drop your funscript here",
-        type=["funscript"],
-        key=f"funscript_upload_{v}",
-        label_visibility="collapsed",
-    )
-    if uploaded and st.session_state.get("_funscript_processed") != uploaded.name:
+    def _on_funscript_upload(uploaded, cfg):
         tmp = Path(tempfile.mkdtemp()) / uploaded.name
         tmp.write_bytes(uploaded.read())
-        # Reset all downstream state for the new funscript
         _reset_downstream_state()
-        st.session_state["funscript_path"] = str(tmp)
-        st.session_state["_funscript_processed"] = uploaded.name
-        st.rerun()
+        return str(tmp)
 
     funscript_path = st.session_state.get("funscript_path", "")
+    render_upload(
+        FUNSCRIPT_PICKER,
+        version=v,
+        on_upload=_on_funscript_upload,
+        current_path=funscript_path,
+        show_clear=False,  # funscript clear is handled by New Project
+    )
+
     if funscript_path and Path(funscript_path).exists():
         data = load_funscript(funscript_path)
         if data:
@@ -382,13 +386,7 @@ def _video_section(project: dict | None, v: int):
     st.subheader("Source video")
     existing = get_input_file(project, "video") if project else None
 
-    uploaded = st.file_uploader(
-        "Drag and drop your video here",
-        type=["mp4", "mov", "avi", "mkv"],
-        key=f"video_upload_{v}",
-        label_visibility="collapsed",
-    )
-    if uploaded and st.session_state.get("_video_processed") != uploaded.name:
+    def _on_video_upload(uploaded, cfg):
         try:
             tmp = Path(tempfile.mkdtemp()) / uploaded.name
             tmp.write_bytes(uploaded.read())
@@ -397,8 +395,8 @@ def _video_section(project: dict | None, v: int):
                 st.error("Not enough disk space to load this video. Free up space and try again.")
             else:
                 st.error(f"Could not save video: {e}")
-            return
-        st.session_state["video_path"] = str(tmp)
+            return None
+        resolved = str(tmp)
         if project and project.get("output_folder"):
             import shutil
             Path(project["output_folder"]).mkdir(parents=True, exist_ok=True)
@@ -407,31 +405,27 @@ def _video_section(project: dict | None, v: int):
                 shutil.copy2(str(tmp), str(dest))
             except OSError as e:
                 st.error(f"Could not copy video to output folder: {e}")
-                return
+                return None
             add_input_file(project, "video", str(dest))
             save_forge(project)
-            st.session_state["video_path"] = str(dest)
-        st.session_state["_video_processed"] = uploaded.name
-        st.rerun()
+            resolved = str(dest)
+        return resolved
 
-    # Prefer project-stored path (persistent), fall back to session state
-    video_path = existing if (existing and Path(existing).exists()) else ""
-    if not video_path:
-        sp = st.session_state.get("video_path", "")
-        if sp and Path(sp).exists():
-            video_path = sp
+    def _on_video_clear(cfg):
+        if project:
+            remove_input_file(project, "video")
+            save_forge(project)
+        st.session_state["_media_only_change"] = True
 
+    video_path = resolve_file_path(VIDEO_PICKER, st.session_state, project_path=existing)
+    render_upload(
+        VIDEO_PICKER,
+        version=v,
+        on_upload=_on_video_upload,
+        on_clear=_on_video_clear,
+        current_path=video_path,
+    )
     if video_path:
-        col_name, col_clear = st.columns([6, 1])
-        col_name.caption(f"📹 {Path(video_path).name}")
-        if col_clear.button("✕", key="clear_video", help="Remove video"):
-            st.session_state.pop("video_path", None)
-            st.session_state.pop("_video_processed", None)
-            if project:
-                remove_input_file(project, "video")
-                save_forge(project)
-            st.session_state["_media_only_change"] = True
-            st.rerun()
         stats = video_stats(video_path)
         if stats:
             _video_stats_row(stats)
@@ -534,31 +528,30 @@ def _audio_section(project: dict | None, v: int):
     st.caption("Optional replacement audio track. Beat data is generated from video by default.")
     existing = get_input_file(project, "audio") if project else None
 
-    uploaded = st.file_uploader(
-        "Drag and drop audio here",
-        type=["mp3", "wav", "flac", "ogg"],
-        key=f"audio_upload_{v}",
-        label_visibility="collapsed",
-    )
-    if uploaded and project and project.get("output_folder") and st.session_state.get("_audio_processed") != uploaded.name:
+    def _on_audio_upload(uploaded, cfg):
+        if not project or not project.get("output_folder"):
+            return None
         dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
         dest.write_bytes(uploaded.read())
         add_input_file(project, "audio", str(dest))
         save_forge(project)
-        st.session_state["_audio_processed"] = uploaded.name
-        st.rerun()
+        return str(dest)
 
-    audio_path = existing if (existing and Path(existing).exists()) else None
+    def _on_audio_clear(cfg):
+        if project:
+            remove_input_file(project, "audio")
+            save_forge(project)
+        st.session_state["_media_only_change"] = True
+
+    audio_path = resolve_file_path(AUDIO_PICKER, st.session_state, project_path=existing)
+    render_upload(
+        AUDIO_PICKER,
+        version=v,
+        on_upload=_on_audio_upload,
+        on_clear=_on_audio_clear,
+        current_path=audio_path,
+    )
     if audio_path:
-        col_name, col_clear = st.columns([6, 1])
-        col_name.caption(f"♪ {Path(audio_path).name}")
-        if col_clear.button("✕", key="clear_audio", help="Remove audio"):
-            st.session_state.pop("_audio_processed", None)
-            if project:
-                remove_input_file(project, "audio")
-                save_forge(project)
-            st.session_state["_media_only_change"] = True
-            st.rerun()
         _audio_stats_row(audio_path)
 
 
@@ -675,31 +668,31 @@ def _captions_section(project: dict | None, v: int):
     st.caption("SRT/VTT for caption display and V2 emotion-aware haptics.")
     existing = get_input_file(project, "captions") if project else None
 
-    uploaded = st.file_uploader(
-        "Drag and drop captions here",
-        type=["srt", "vtt", "ass"],
-        key=f"captions_upload_{v}",
-        label_visibility="collapsed",
-    )
-    if uploaded and project and project.get("output_folder") and st.session_state.get("_captions_processed") != uploaded.name:
+    def _on_captions_upload(uploaded, cfg):
+        if not project or not project.get("output_folder"):
+            return None
         dest = Path(project["output_folder"]) / f"_input_{uploaded.name}"
         dest.write_bytes(uploaded.read())
         add_input_file(project, "captions", str(dest))
         save_forge(project)
-        st.session_state["_captions_processed"] = uploaded.name
-        st.rerun()
+        return str(dest)
 
-    if existing and Path(existing).exists():
-        col_name, col_clear = st.columns([6, 1])
-        col_name.caption(f"💬 {Path(existing).name}")
-        if col_clear.button("✕", key="clear_captions", help="Remove captions"):
-            st.session_state.pop("_captions_processed", None)
-            if project:
-                remove_input_file(project, "captions")
-                save_forge(project)
-            st.session_state["_media_only_change"] = True
-            st.rerun()
-        _captions_stats_row(existing)
+    def _on_captions_clear(cfg):
+        if project:
+            remove_input_file(project, "captions")
+            save_forge(project)
+        st.session_state["_media_only_change"] = True
+
+    captions_path = resolve_file_path(CAPTIONS_PICKER, st.session_state, project_path=existing)
+    render_upload(
+        CAPTIONS_PICKER,
+        version=v,
+        on_upload=_on_captions_upload,
+        on_clear=_on_captions_clear,
+        current_path=captions_path,
+    )
+    if captions_path:
+        _captions_stats_row(captions_path)
 
 
 def _captions_stats_row(captions_path: str):
