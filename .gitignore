@@ -264,6 +264,9 @@ docs/cost-estimates.md
 docs/vision-agentic.md
 docs/deployment-architecture.md
 
+# Test media — matched funscript + video + audio sets for testing
+test_media/
+
 # Media files - never commit
 *.mp4
 *.mkv
