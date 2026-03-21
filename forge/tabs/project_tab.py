@@ -53,8 +53,10 @@ def _reset_downstream_state():
         "chain_funscript_path",
         # Assessment / analysis
         "last_loaded_cfg", "last_loaded_file",
-        # Project object (force re-init)
-        "project",
+        # Project objects (force re-init)
+        "project", "forge_project",
+        # Sidebar project picker
+        "project_picker",
     ]
     for key in _keys_to_clear:
         st.session_state.pop(key, None)
