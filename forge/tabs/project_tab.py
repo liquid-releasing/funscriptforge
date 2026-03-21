@@ -130,56 +130,80 @@ def _commit_project_to_disk(project: dict | None) -> None:
                 status.write(f"✅ Motion heatmap: {n_samples:,} samples from {Path(video_path).name}")
 
     # Run funscript assessment (phrase detection, patterns, BPM)
+    # Skip if cached assessment exists on disk (resume case)
     funscript_path = st.session_state.get("funscript_path", "")
+    import json as _json
+    assessment_path = Path(folder) / "_assessment.json"
+
     if funscript_path and Path(funscript_path).exists():
-        fs_data = load_funscript(funscript_path)
-        action_count = len(fs_data.get("actions", [])) if fs_data else 0
-        status.update(label=f"Analyzing funscript… {action_count:,} actions")
-        from ui.common.project import Project
-        from assessment.analyzer import AnalyzerConfig
-        min_phrase_s = st.session_state.get("min_phrase_s", 20)
-        amp_tol_map = {"Low (0.35)": 0.35, "Medium (0.30)": 0.30, "High (0.25)": 0.25}
-        amp_sensitivity = st.session_state.get("amp_sensitivity", "Medium (0.30)")
-        analyzer_cfg = AnalyzerConfig(
-            min_phrase_duration_ms=min_phrase_s * 1000,
-            amplitude_tolerance=amp_tol_map.get(amp_sensitivity, 0.30),
-        )
+        if assessment_path.exists() and not st.session_state.get("project"):
+            # Resume: load cached assessment instead of re-running
+            status.update(label="Loading cached assessment…")
+            from ui.common.project import Project
+            try:
+                assessed = Project.from_funscript(
+                    funscript_path,
+                    existing_assessment_path=str(assessment_path),
+                )
+                st.session_state.project = assessed
+                s = assessed.summary()
+                status.write(
+                    f"✅ Funscript: **{s['phrases']}** phrases, "
+                    f"**{s['patterns']}** patterns, "
+                    f"~**{s['bpm']:.0f}** BPM (cached)"
+                )
+            except Exception:
+                # Cache corrupt — fall through to full analysis
+                assessment_path.unlink(missing_ok=True)
 
-        def _on_stage(stage: str) -> None:
-            status.update(label=f"Analyzing: {stage}")
-
-        import time
-        t0 = time.time()
-        assessed = Project.from_funscript(
-            funscript_path,
-            analyzer_config=analyzer_cfg,
-            progress_callback=_on_stage,
-        )
-        elapsed = time.time() - t0
-        st.session_state.project = assessed
-        st.session_state.last_assessment_elapsed = elapsed
-        st.session_state.last_loaded_cfg = (funscript_path, min_phrase_s, amp_sensitivity)
-        st.session_state.last_loaded_file = Path(funscript_path).name
-
-        s = assessed.summary()
-        status.write(
-            f"✅ Funscript: **{s['phrases']}** phrases, "
-            f"**{s['patterns']}** patterns, "
-            f"~**{s['bpm']:.0f}** BPM "
-            f"({elapsed:.1f}s)"
-        )
-
-        # Save assessment to output folder so later tabs load instantly
-        import json as _json
-        assessment_path = Path(folder) / "_assessment.json"
-        try:
-            assessment_path.write_text(
-                _json.dumps(assessed.assessment.to_dict(), indent=2),
-                encoding="utf-8",
+        if not st.session_state.get("project"):
+            # Full analysis (first time or cache miss)
+            fs_data = load_funscript(funscript_path)
+            action_count = len(fs_data.get("actions", [])) if fs_data else 0
+            status.update(label=f"Analyzing funscript… {action_count:,} actions")
+            from ui.common.project import Project
+            from assessment.analyzer import AnalyzerConfig
+            min_phrase_s = st.session_state.get("min_phrase_s", 20)
+            amp_tol_map = {"Low (0.35)": 0.35, "Medium (0.30)": 0.30, "High (0.25)": 0.25}
+            amp_sensitivity = st.session_state.get("amp_sensitivity", "Medium (0.30)")
+            analyzer_cfg = AnalyzerConfig(
+                min_phrase_duration_ms=min_phrase_s * 1000,
+                amplitude_tolerance=amp_tol_map.get(amp_sensitivity, 0.30),
             )
-            status.write("✅ Assessment saved")
-        except Exception:
-            pass
+
+            def _on_stage(stage: str) -> None:
+                status.update(label=f"Analyzing: {stage}")
+
+            import time
+            t0 = time.time()
+            assessed = Project.from_funscript(
+                funscript_path,
+                analyzer_config=analyzer_cfg,
+                progress_callback=_on_stage,
+            )
+            elapsed = time.time() - t0
+            st.session_state.project = assessed
+            st.session_state.last_assessment_elapsed = elapsed
+            st.session_state.last_loaded_cfg = (funscript_path, min_phrase_s, amp_sensitivity)
+            st.session_state.last_loaded_file = Path(funscript_path).name
+
+            s = assessed.summary()
+            status.write(
+                f"✅ Funscript: **{s['phrases']}** phrases, "
+                f"**{s['patterns']}** patterns, "
+                f"~**{s['bpm']:.0f}** BPM "
+                f"({elapsed:.1f}s)"
+            )
+
+            # Save assessment to output folder for future resume
+            try:
+                assessment_path.write_text(
+                    _json.dumps(assessed.assessment.to_dict(), indent=2),
+                    encoding="utf-8",
+                )
+                status.write("✅ Assessment saved")
+            except Exception:
+                pass
 
     status.update(label="Project ready!", state="complete", expanded=False)
 
