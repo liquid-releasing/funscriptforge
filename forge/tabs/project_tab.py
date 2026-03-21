@@ -464,6 +464,7 @@ def _video_section(project: dict | None, v: int):
             if project:
                 remove_input_file(project, "video")
                 save_forge(project)
+            st.session_state["_media_only_change"] = True
             st.rerun()
         stats = video_stats(video_path)
         if stats:
@@ -590,6 +591,7 @@ def _audio_section(project: dict | None, v: int):
             if project:
                 remove_input_file(project, "audio")
                 save_forge(project)
+            st.session_state["_media_only_change"] = True
             st.rerun()
         _audio_stats_row(audio_path)
 
@@ -729,6 +731,7 @@ def _captions_section(project: dict | None, v: int):
             if project:
                 remove_input_file(project, "captions")
                 save_forge(project)
+            st.session_state["_media_only_change"] = True
             st.rerun()
         _captions_stats_row(existing)
 

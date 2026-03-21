@@ -544,7 +544,8 @@ def _sidebar() -> None:
 
     _reanalyse_requested = st.session_state.pop("reanalyse_requested", False)
 
-    if file_changed or _reanalyse_requested or st.sidebar.button("Re-analyse", type="primary"):
+    _media_only = st.session_state.pop("_media_only_change", False)
+    if not _media_only and (file_changed or _reanalyse_requested or st.sidebar.button("Re-analyse", type="primary")):
         import time
 
         # Use chain funscript if available, otherwise original
