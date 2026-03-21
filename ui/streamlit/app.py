@@ -551,27 +551,45 @@ def _sidebar() -> None:
         _chain_path = st.session_state.get("chain_funscript_path")
         _analyse_path = _chain_path if (_chain_path and os.path.isfile(_chain_path)) else funscript_path
 
-        # Count actions for progress display
-        try:
-            import json as _json_count
-            with open(_analyse_path, encoding="utf-8") as _fc:
-                _action_count = len(_json_count.load(_fc).get("actions", []))
-        except Exception:
-            _action_count = 0
+        # Check for cached assessment first (fast resume)
+        _forge_proj = st.session_state.get("forge_project")
+        _output_folder = _forge_proj.get("output_folder", "") if _forge_proj else ""
+        _cached_assessment = os.path.join(_output_folder, "_assessment.json") if _output_folder else ""
+        _used_cache = False
 
-        _status = st.sidebar.status(f"Analysing {_action_count:,} actions…", expanded=True)
+        if file_changed and not _reanalyse_requested and _cached_assessment and os.path.isfile(_cached_assessment):
+            try:
+                st.session_state.project = Project.from_funscript(
+                    _analyse_path,
+                    existing_assessment_path=_cached_assessment,
+                )
+                _used_cache = True
+            except Exception:
+                pass  # fall through to full analysis
 
-        def _on_stage(stage: str) -> None:
-            _status.update(label=f"Analysing: {stage}")
+        if not _used_cache:
+            # Count actions for progress display
+            try:
+                import json as _json_count
+                with open(_analyse_path, encoding="utf-8") as _fc:
+                    _action_count = len(_json_count.load(_fc).get("actions", []))
+            except Exception:
+                _action_count = 0
 
-        _t0 = time.time()
-        st.session_state.project = Project.from_funscript(
-            _analyse_path,
-            analyzer_config=analyzer_cfg,
-            progress_callback=_on_stage,
-        )
-        _elapsed = time.time() - _t0
-        st.session_state.last_assessment_elapsed = _elapsed
+            _status = st.sidebar.status(f"Analysing {_action_count:,} actions…", expanded=True)
+
+            def _on_stage(stage: str) -> None:
+                _status.update(label=f"Analysing: {stage}")
+
+            _t0 = time.time()
+            st.session_state.project = Project.from_funscript(
+                _analyse_path,
+                analyzer_config=analyzer_cfg,
+                progress_callback=_on_stage,
+            )
+            _elapsed = time.time() - _t0
+            st.session_state.last_assessment_elapsed = _elapsed
+
         st.session_state.last_loaded_cfg  = cfg_key
         st.session_state.last_loaded_file = selected_file
         st.session_state.view_state       = ViewState()
