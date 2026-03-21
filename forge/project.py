@@ -66,6 +66,12 @@ def add_input_file(project: dict, role: str, path: str) -> dict:
     return project
 
 
+def remove_input_file(project: dict, role: str) -> dict:
+    """Remove an input file by role from the project config."""
+    project["input_files"] = [f for f in project["input_files"] if f["role"] != role]
+    return project
+
+
 def get_input_file(project: dict, role: str) -> Optional[str]:
     for f in project.get("input_files", []):
         if f["role"] == role:

@@ -23,6 +23,7 @@ from forge.project import (
     default_forge,
     get_input_file,
     load_forge,
+    remove_input_file,
     save_forge,
 )
 from forge.funscript import funscript_stats, load_funscript, parse_actions
@@ -496,7 +497,15 @@ def _video_section(project: dict | None, v: int):
             video_path = sp
 
     if video_path:
-        st.caption(f"📹 {Path(video_path).name}")
+        col_name, col_clear = st.columns([6, 1])
+        col_name.caption(f"📹 {Path(video_path).name}")
+        if col_clear.button("✕", key="clear_video", help="Remove video"):
+            st.session_state.pop("video_path", None)
+            st.session_state.pop("_video_processed", None)
+            if project:
+                remove_input_file(project, "video")
+                save_forge(project)
+            st.rerun()
         stats = video_stats(video_path)
         if stats:
             _video_stats_row(stats)
@@ -615,7 +624,14 @@ def _audio_section(project: dict | None, v: int):
 
     audio_path = existing if (existing and Path(existing).exists()) else None
     if audio_path:
-        st.caption(f"♪ {Path(audio_path).name}")
+        col_name, col_clear = st.columns([6, 1])
+        col_name.caption(f"♪ {Path(audio_path).name}")
+        if col_clear.button("✕", key="clear_audio", help="Remove audio"):
+            st.session_state.pop("_audio_processed", None)
+            if project:
+                remove_input_file(project, "audio")
+                save_forge(project)
+            st.rerun()
         _audio_stats_row(audio_path)
 
 
@@ -747,7 +763,14 @@ def _captions_section(project: dict | None, v: int):
         st.rerun()
 
     if existing and Path(existing).exists():
-        st.caption(f"💬 {Path(existing).name}")
+        col_name, col_clear = st.columns([6, 1])
+        col_name.caption(f"💬 {Path(existing).name}")
+        if col_clear.button("✕", key="clear_captions", help="Remove captions"):
+            st.session_state.pop("_captions_processed", None)
+            if project:
+                remove_input_file(project, "captions")
+                save_forge(project)
+            st.rerun()
         _captions_stats_row(existing)
 
 
