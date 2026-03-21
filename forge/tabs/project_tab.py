@@ -73,41 +73,6 @@ def _default_output_for(funscript_path: str) -> Path:
     return _ASSETS_OUTPUT / stem
 
 
-def _browse_for_folder() -> str | None:
-    """Open a native folder picker dialog. Runs in a temporary thread to avoid
-    blocking Streamlit, with tkinter mainloop pumped manually so the dialog
-    actually appears on Windows."""
-    import threading
-
-    result: list[str | None] = [None]
-
-    def _pick():
-        try:
-            import tkinter as tk
-            from tkinter import filedialog
-            last = st.session_state.get("last_browse_dir", str(_ASSETS_OUTPUT))
-            root = tk.Tk()
-            root.withdraw()
-            root.wm_attributes("-topmost", True)
-            root.update()  # pump event loop so the dialog can open
-            folder = filedialog.askdirectory(
-                title="Choose project output folder",
-                initialdir=last,
-                parent=root,
-            )
-            root.destroy()
-            if folder:
-                result[0] = folder
-        except Exception:
-            pass
-
-    t = threading.Thread(target=_pick, daemon=True)
-    t.start()
-    t.join(timeout=30)  # wait up to 30s for user to pick
-    if result[0]:
-        st.session_state["last_browse_dir"] = str(Path(result[0]).parent)
-    return result[0]
-
 
 def _commit_project_to_disk(project: dict | None) -> None:
     """Create the output folder, write .forge file, and run post-accept analysis.
@@ -270,50 +235,20 @@ def render():
     funscript_path = st.session_state.get("funscript_path", "")
     auto_output = str(_default_output_for(funscript_path)) if funscript_path else ""
 
-    # Seed once; external changes (browse, funscript drop) pop the key to reseed.
-    # The text_input widget reads its value from session_state[key], so we must
-    # write the default BEFORE the widget renders.
-    if "output_folder_input" not in st.session_state:
-        st.session_state["output_folder_input"] = (
-            project["output_folder"] if project else auto_output
-        )
-    if "output_folder_pending" in st.session_state:
-        st.session_state["output_folder_input"] = st.session_state.pop("output_folder_pending")
-    # If the session key exists but is empty and we have a good default, use it
-    if not st.session_state.get("output_folder_input") and auto_output:
-        st.session_state["output_folder_input"] = auto_output
-
-    has_funscript = bool(st.session_state.get("funscript_path"))
-    col_path, col_browse, col_set = st.columns([5, 1, 1])
-    with col_browse:
-        if st.button("Browse…", key="output_folder_browse", width="stretch",
-                      disabled=not has_funscript):
-            picked = _browse_for_folder()
-            if picked:
-                st.session_state["output_folder_pending"] = picked
-                st.rerun()
-    with col_path:
-        output_folder = st.text_input(
-            "Export location path",
-            label_visibility="collapsed",
-            key="output_folder_input",
-        )
-    with col_set:
-        set_clicked = st.button("Set", key="output_folder_set", width="stretch")
-
-    if set_clicked and output_folder:
-        folder = output_folder.strip()
-        if folder != (project or {}).get("output_folder", ""):
-            existing = load_forge(folder) if Path(folder).exists() else None
+    # Auto-set output folder from funscript name or project config
+    output_folder = (project or {}).get("output_folder", "") or auto_output
+    if output_folder:
+        st.code(output_folder, language=None)
+        # Auto-create or resume project
+        if not project or project.get("output_folder") != output_folder:
+            existing = load_forge(output_folder) if Path(output_folder).exists() else None
             if existing:
                 st.session_state.forge_project = existing
-                st.success(f"Resumed: **{existing['name']}**")
             else:
-                stem = Path(folder).name
-                new_proj = default_forge(stem, folder)
-                st.session_state.forge_project = new_proj
-                st.success(f"Project folder set: **{stem}**")
-            st.rerun()
+                stem = Path(output_folder).name
+                st.session_state.forge_project = default_forge(stem, output_folder)
+    else:
+        st.info("Load a funscript to set the output location.")
 
     project = st.session_state.forge_project
 
