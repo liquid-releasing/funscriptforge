@@ -15,7 +15,6 @@ Output device selection is on the Device tab.
 import tempfile
 from pathlib import Path
 
-import plotly.graph_objects as go
 import streamlit as st
 
 from forge.project import (
@@ -26,7 +25,8 @@ from forge.project import (
     remove_input_file,
     save_forge,
 )
-from forge.funscript import funscript_stats, load_funscript, parse_actions
+from forge.funscript import funscript_stats, load_funscript
+from forge_ui_components.funscript_chart.streamlit import render_monochrome, render_stats_row
 from forge.video import analyze_motion, video_stats
 
 _APP_ROOT = Path(__file__).parents[2]
@@ -368,46 +368,12 @@ def _funscript_section(v: int):
     if funscript_path and Path(funscript_path).exists():
         data = load_funscript(funscript_path)
         if data:
-            _funscript_chart(data, funscript_path)
-            _funscript_stats_row(data)
+            actions = data.get("actions", [])
+            render_monochrome(actions, caption=f"📄 {Path(funscript_path).name}")
+            stats = funscript_stats(data)
+            render_stats_row(stats)
         else:
             st.error("Could not parse funscript file.")
-
-
-def _funscript_chart(data: dict, path: str):
-    times, positions = parse_actions(data)
-    if not times:
-        return
-    times_s = [t / 1000.0 for t in times]
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=times_s, y=positions,
-        mode="lines",
-        line=dict(color="#4C8BF5", width=1.5),
-    ))
-    fig.update_layout(
-        height=180,
-        margin=dict(l=0, r=0, t=0, b=0),
-        xaxis=dict(title="time (s)", showgrid=False),
-        yaxis=dict(title="pos", range=[0, 100], showgrid=False),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0.05)",
-        showlegend=False,
-    )
-    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-    st.caption(f"📄 {Path(path).name}")
-
-
-def _funscript_stats_row(data: dict):
-    stats = funscript_stats(data)
-    if not stats:
-        return
-    cols = st.columns(5)
-    cols[0].metric("Duration", stats["duration_fmt"])
-    cols[1].metric("Actions", f"{stats['action_count']:,}")
-    cols[2].metric("Avg speed", f"{stats['avg_speed']:.0f}")
-    cols[3].metric("Min pos", stats["min_pos"])
-    cols[4].metric("Max pos", stats["max_pos"])
 
 
 # ── Media sections ───────────────────────────────────────────────────────────

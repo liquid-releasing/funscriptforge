@@ -8,10 +8,10 @@ Card flip: icon on front, description on back.
 
 from pathlib import Path
 
-import plotly.graph_objects as go
 import streamlit as st
 
 from forge.funscript import load_funscript, parse_actions
+from forge_ui_components.funscript_chart.streamlit import render_monochrome_from_arrays
 
 _ASSETS = Path(__file__).parents[2] / "assets" / "tone_cards"
 
@@ -545,44 +545,22 @@ def _render_preview(selected: str | None):
 
     times_s = [t / 1000.0 for t in times]
 
-    _BLUE = "#4C8BF5"
     if selected:
         slider_vals = _get_slider_values(selected)
         impact = st.session_state.get(f"tone_impact_{selected}", 1.0)
         col_before, col_after = st.columns(2)
         with col_before:
             st.caption(f"**Before** — {source_label}")
-            _plot_funscript(times_s, positions, _BLUE, "Before")
+            render_monochrome_from_arrays(times_s, positions, key="tone_before")
         with col_after:
             st.caption(f"**After** — {selected} (impact {impact:.0%})")
             toned = _apply_tone_preview(times_s, positions, selected, slider_vals)
             # Blend: output = original + impact * (toned - original)
             modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
-            _plot_funscript(times_s, modified, _BLUE, selected)
+            render_monochrome_from_arrays(times_s, modified, key="tone_after")
     else:
         st.caption("**Your funscript** — select a tone to see the preview")
-        _plot_funscript(times_s, positions, _BLUE, "Original")
-
-
-def _plot_funscript(times_s: list, positions: list, color: str, label: str):
-    """Render a compact funscript chart."""
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=times_s, y=positions,
-        mode="lines",
-        line=dict(color=color, width=1),
-        name=label,
-    ))
-    fig.update_layout(
-        height=150,
-        margin=dict(l=0, r=0, t=0, b=0),
-        xaxis=dict(showgrid=False, showticklabels=False),
-        yaxis=dict(range=[0, 100], showgrid=False, showticklabels=False),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0.05)",
-        showlegend=False,
-    )
-    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        render_monochrome_from_arrays(times_s, positions, key="tone_original")
 
 
 def _apply_tone_preview(times_s: list, positions: list, tone_name: str,
@@ -718,21 +696,13 @@ def _apply_tone(tone_name: str):
                 status.write("✅ Toned funscript saved to chain")
 
                 # Build and cache the full-color figure
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=times_s, y=modified,
-                    mode="lines",
-                    line=dict(color=tone_data["color"], width=1.5),
-                    name=tone_name,
-                ))
-                fig.update_layout(
+                from forge_ui_components.funscript_chart.core import monochrome_figure
+                fig = monochrome_figure(
+                    times_s, modified,
+                    color=tone_data["color"],
                     height=300,
-                    margin=dict(l=0, r=0, t=10, b=0),
-                    xaxis=dict(title="time (s)", showgrid=False),
-                    yaxis=dict(title="pos", range=[0, 100], showgrid=False),
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0.05)",
-                    showlegend=False,
+                    show_axes=True,
+                    line_width=1.5,
                 )
                 st.session_state["cached_tone_chart"] = fig
                 status.write(f"✅ Chart cached: {len(times):,} actions")

@@ -10,6 +10,7 @@ from pathlib import Path
 import streamlit as st
 
 from forge.project import save_forge, get_input_file, save_chain_funscript, get_chain_funscript_for
+from forge_ui_components.funscript_chart.streamlit import render_monochrome_from_arrays
 
 # Device targets — same list that was on Project tab
 _TARGETS = [
@@ -222,7 +223,6 @@ def _apply_device_awareness(project, targets, fix_strategies, apply_scope):
 def _render_device_preview(fix_strategies: list, apply_scope: str):
     """Show before/after monochrome preview of device fixes."""
     from forge.funscript import load_funscript, parse_actions
-    import plotly.graph_objects as go
 
     funscript_path = st.session_state.get("funscript_path", "")
     if not funscript_path or not Path(funscript_path).exists():
@@ -238,7 +238,6 @@ def _render_device_preview(fix_strategies: list, apply_scope: str):
         return
 
     times_s = [t / 1000.0 for t in times]
-    _BLUE = "#4C8BF5"
 
     # Get phrase boundaries if available (for per-phrase scope)
     phrases = []
@@ -251,34 +250,11 @@ def _render_device_preview(fix_strategies: list, apply_scope: str):
     col_before, col_after = st.columns(2)
     with col_before:
         st.caption("**Before** — original")
-        _plot_device(times_s, positions, _BLUE)
+        render_monochrome_from_arrays(times_s, positions, key="device_before")
     with col_after:
         scope_label = f" ({apply_scope})" if apply_scope != "global" else ""
         st.caption(f"**After** — {', '.join(fix_strategies)}{scope_label}")
-        _plot_device(times_s, modified, _BLUE)
-
-
-def _plot_device(times_s: list, positions: list, color: str):
-    """Compact monochrome chart for device preview."""
-    import plotly.graph_objects as go
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=times_s, y=positions,
-        mode="lines",
-        line=dict(color=color, width=1),
-        showlegend=False,
-    ))
-    fig.update_layout(
-        height=150,
-        margin=dict(l=0, r=0, t=0, b=0),
-        xaxis=dict(showgrid=False, showticklabels=False),
-        yaxis=dict(range=[0, 100], showgrid=False, showticklabels=False),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0.05)",
-        showlegend=False,
-    )
-    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        render_monochrome_from_arrays(times_s, modified, key="device_after")
 
 
 def _apply_device_fix_preview(
