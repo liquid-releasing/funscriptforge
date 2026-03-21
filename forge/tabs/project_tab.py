@@ -590,18 +590,19 @@ def _audio_stats_row(audio_path: str):
 
 def _beat_generation_button(project: dict, audio_path: str | None):
     """Show a button to generate beat data from audio (or video fallback)."""
+    from forge_ui_components.beat_bar.core import load_cached_beats, analyze_beats, save_beats
+
     output_folder = project.get("output_folder", "")
     beat_cache = Path(output_folder) / "_beat_data.json"
 
-    if beat_cache.exists():
-        import json as _json
-        try:
-            beat_data = _json.loads(beat_cache.read_text())
-            beat_count = len(beat_data.get("beats", []))
-            tempo = beat_data.get("tempo_bpm", 0)
-            st.caption(f"🥁 Beat data: **{beat_count}** beats detected, ~**{tempo:.0f}** BPM")
-        except Exception:
-            pass
+    cached = load_cached_beats(beat_cache)
+    if cached is not None:
+        st.caption(
+            f"🥁 Beat data: **{len(cached.beats)}** beats detected, "
+            f"~**{cached.bpm:.0f}** BPM · "
+            f"{len(cached.downbeats)} downbeats · "
+            f"{len(cached.phrases)} phrases"
+        )
         return
 
     source = audio_path
@@ -613,54 +614,17 @@ def _beat_generation_button(project: dict, audio_path: str | None):
     if source:
         if st.button("🥁 Generate beat data", key="generate_beats_btn", width="stretch"):
             with st.spinner("Analyzing beats… (runs once, cached after)"):
-                beat_data, err = _analyze_beats(source, output_folder)
-                if beat_data:
-                    st.success(f"Found **{len(beat_data.get('beats', []))}** beats at ~**{beat_data.get('tempo_bpm', 0):.0f}** BPM")
+                try:
+                    beat_map = analyze_beats(source)
+                    Path(output_folder).mkdir(parents=True, exist_ok=True)
+                    save_beats(beat_map, beat_cache)
+                    st.success(
+                        f"Found **{len(beat_map.beats)}** beats at "
+                        f"~**{beat_map.bpm:.0f}** BPM"
+                    )
                     st.rerun()
-                else:
-                    st.error(f"Beat analysis failed: {err}")
-
-
-def _analyze_beats(source_path: str, output_folder: str) -> tuple[dict | None, str]:
-    """Run beat detection on audio/video file using librosa.
-    Returns (result_dict, error_string). One will be None."""
-    try:
-        import librosa
-        import json as _json
-    except ImportError:
-        return None, "librosa is not installed. Run: pip install librosa"
-
-    try:
-        y, sr = librosa.load(source_path, sr=22050, mono=True)
-    except Exception as e:
-        return None, f"Could not load audio from file: {e}"
-
-    try:
-        tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
-        beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
-        # tempo may be an array in some librosa versions
-        if hasattr(tempo, '__len__'):
-            tempo = float(tempo[0]) if len(tempo) > 0 else 0.0
-        else:
-            tempo = float(tempo)
-    except Exception as e:
-        return None, f"Beat detection failed: {e}"
-
-    result = {
-        "source_path": source_path,
-        "tempo_bpm": tempo,
-        "beats": [{"time_s": t, "beat_number": i + 1} for i, t in enumerate(beat_times)],
-    }
-
-    if output_folder:
-        cache_path = Path(output_folder) / "_beat_data.json"
-        try:
-            Path(output_folder).mkdir(parents=True, exist_ok=True)
-            cache_path.write_text(_json.dumps(result, indent=2))
-        except Exception:
-            pass  # cache write failure is non-fatal
-
-    return result, ""
+                except Exception as e:
+                    st.error(f"Beat analysis failed: {e}")
 
 
 def _captions_section(project: dict | None, v: int):
