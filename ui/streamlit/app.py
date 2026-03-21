@@ -625,96 +625,82 @@ def _sidebar() -> None:
 
     st.sidebar.markdown("---")
 
-    # --- Workflow progress ---
+    # --- Build ProjectStatus snapshot and render via component ---
+    from forge_ui_components.project_status.core import ProjectStatus
+    from forge_ui_components.project_status.streamlit import render_full_sidebar_status
+
     _forge = st.session_state.get("forge_project")
+    _status = ProjectStatus()
+
     if _forge:
         _progress = _forge.get("progress", {})
-        _workflow = [
-            ("Project", st.session_state.get("project_accepted", False)),
-            ("Device", st.session_state.get("device_accepted", False)),
-            ("Tone", _progress.get("tone_applied", False)),
-            ("Phrases", _progress.get("phrases_edited", False)),
-            ("Export", _progress.get("exported", False)),
-        ]
-        _wf_line = "  ".join(
-            f"✅ {name}" if done else f"⬜ {name}" for name, done in _workflow
-        )
-        st.sidebar.caption(_wf_line)
+        _status.tabs_completed = {
+            "Project": st.session_state.get("project_accepted", False),
+            "Device": st.session_state.get("device_accepted", False),
+            "Tone": _progress.get("tone_applied", False),
+            "Phrases": _progress.get("phrases_edited", False),
+            "Export": _progress.get("exported", False),
+        }
+        _status.tone_name = _forge.get("tone", "")
+        _status.device_targets = _forge.get("output_targets", [])
 
-        # Show tone if selected
-        _tone = _forge.get("tone")
-        if _tone:
-            st.sidebar.caption(f"🎨 Tone: **{_tone}**")
-
-        # Show devices if selected
-        _targets = _forge.get("output_targets", [])
-        if _targets:
-            st.sidebar.caption(f"📱 Devices: {', '.join(_targets)}")
-
-        # --- Undo + Next step ---
+        # Undo
         _history = _forge.get("history", [])
         if _history:
             _last = _history[-1]
-            _last_tab = _last.get("tab", "unknown")
-            _last_desc = _undo_description(_last)
-            st.sidebar.caption(f"Last: **{_last_tab.title()}** — {_last_desc}")
-            if st.sidebar.button("↩ Undo", help=f"Undo {_last_tab.title()} Accept", use_container_width=True):
-                _perform_undo(_forge)
-                st.rerun()
+            _status.has_undo = True
+            _status.last_action_tab = _last.get("tab", "unknown").title()
+            _status.last_action_desc = _undo_description(_last)
 
-        # Next step guidance
+        # Next step
+        _workflow = list(_status.tabs_completed.items())
         _next = _next_workflow_step(_workflow)
         if _next:
-            st.sidebar.caption(f"Next: **{_next[0]}** — {_next[1]}")
+            _status.next_step_name = _next[0]
+            _status.next_step_desc = _next[1]
 
-    # --- Project state ---
+    # Assessment stats
     project: Project | None = st.session_state.project
     if project and project.is_loaded:
         s = project.summary()
+        _status.project_name = _forge.get("name", "Project") if _forge else project.name
+        _status.funscript_name = os.path.basename(st.session_state.get("funscript_path", ""))
+        _status.phrase_count = s["phrases"]
+        _status.transition_count = s["bpm_transitions"]
+        _status.pattern_count = s["patterns"]
+        _status.bpm_avg = s["bpm"]
+        _status.assessment_elapsed_s = st.session_state.last_assessment_elapsed
 
-        # --- Project Specs ---
-        st.sidebar.markdown("**Project Specs**")
         _phrases_data = project.assessment.to_dict().get("phrases", [])
         _bpms = [p["bpm"] for p in _phrases_data if p.get("bpm")]
-        _elapsed = st.session_state.last_assessment_elapsed
-        _spec_lines = [
-            f"● {s['phrases']} phrases",
-            f"● {s['bpm_transitions']} transitions",
-            f"● {s['patterns']} patterns",
-        ]
         if _bpms:
-            _spec_lines.append(f"● BPM avg: {s['bpm']:.0f}")
-            _spec_lines.append(f"● Phrase BPM range: {min(_bpms):.0f}–{max(_bpms):.0f}")
-        if _elapsed is not None:
-            _spec_lines.append(f"● Assessed in {_elapsed:.1f}s")
-        st.sidebar.caption("\n\n".join(_spec_lines))
+            _status.bpm_min = min(_bpms)
+            _status.bpm_max = max(_bpms)
 
-        # --- Available Transforms ---
+        # Transform categories
         from pattern_catalog.phrase_transforms import get_transforms_by_category
-        _tx_cats = get_transforms_by_category()
-        st.sidebar.markdown("**Available Transforms**")
-        st.sidebar.caption("\n\n".join(
-            f"● {cat}: {len(pairs)}" for cat, pairs in _tx_cats.items()
-        ))
+        _status.transform_categories = {
+            cat: len(pairs) for cat, pairs in get_transforms_by_category().items()
+        }
 
-        # --- Editing Progress (only once work has started) ---
-        _n_phrases = s["phrases"]
-        _phrases_edited = sum(
-            1 for i in range(_n_phrases)
+        # Editing progress
+        _status.phrases_edited = sum(
+            1 for i in range(s["phrases"])
             if st.session_state.get(f"phrase_transform_chain_{i}")
         )
-        _pe_applied = sum(
+        _status.pattern_instances_applied = sum(
             1 for k, v in st.session_state.items()
             if k.startswith("pe_apply_") and v is True
         )
-        if _phrases_edited or _pe_applied:
-            st.sidebar.markdown("**Editing Progress**")
-            _prog_lines = []
-            if _n_phrases:
-                _prog_lines.append(f"● Phrases edited: {_phrases_edited} / {_n_phrases}")
-            if _pe_applied:
-                _prog_lines.append(f"● Pattern instances applied: {_pe_applied}")
-            st.sidebar.caption("\n\n".join(_prog_lines))
+
+    with st.sidebar:
+        render_full_sidebar_status(_status)
+
+        # Undo button (interactive — stays in app.py)
+        if _status.has_undo:
+            if st.button("↩ Undo", help=f"Undo {_status.last_action_tab} Accept", use_container_width=True):
+                _perform_undo(_forge)
+                st.rerun()
 
         st.sidebar.markdown("---")
 
