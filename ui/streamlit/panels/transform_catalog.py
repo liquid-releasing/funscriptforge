@@ -346,6 +346,251 @@ def _render_tag_chart(
     return _make_chart(actions, color, title, height=height)
 
 
+# ---------------------------------------------------------------------------
+# Tone Catalog
+# ---------------------------------------------------------------------------
+
+_TONE_CATALOG = [
+    {
+        "name": "Tender",
+        "icon": "💜",
+        "intensity": "Low",
+        "description": (
+            "Compresses the cycle range and softens pulse onset. "
+            "Good for intimate, slow content. Preserves the original shape "
+            "while making everything gentler."
+        ),
+        "sliders": [
+            ("Softness", "How much to compress the cycle range. Higher = gentler."),
+            ("Pulse onset", "How gradually pulses rise. Higher = softer entry."),
+        ],
+    },
+    {
+        "name": "Build",
+        "icon": "📈",
+        "intensity": "Low → Medium",
+        "description": (
+            "Creates a rising intensity arc across the phrase. "
+            "Starts low and ramps up. Good for scenes that develop over time."
+        ),
+        "sliders": [
+            ("Build rate", "How fast intensity ramps up. Higher = steeper climb."),
+            ("Starting intensity", "Where the ramp begins. Lower = more room to grow."),
+            ("Arc width", "How wide the sweep pattern is. Higher = broader motion."),
+        ],
+    },
+    {
+        "name": "Tease",
+        "icon": "🎭",
+        "intensity": "Medium",
+        "description": (
+            "Rise-and-retreat pattern that builds then pulls back before full intensity. "
+            "Creates anticipation and denial. Good for edging content."
+        ),
+        "sliders": [
+            ("Retreat depth", "How far intensity pulls back at peaks. Higher = more denial."),
+            ("Oscillation speed", "How fast the rise-and-retreat cycles. Higher = faster teasing."),
+            ("Pulse variety", "How much the pulse pattern varies. Higher = less predictable."),
+        ],
+    },
+    {
+        "name": "Edge",
+        "icon": "🔥",
+        "intensity": "Medium → High",
+        "description": (
+            "Sustains a high-intensity plateau before a sharp drop. "
+            "Holds the user at peak intensity for as long as possible."
+        ),
+        "sliders": [
+            ("Hold intensity", "The sustained plateau level. Higher = more demanding."),
+            ("Drop point", "How late the intensity drops. Higher = longer hold."),
+        ],
+    },
+    {
+        "name": "Climax",
+        "icon": "💥",
+        "intensity": "High",
+        "description": (
+            "Pushes everything to maximum — range, urgency, sharpness, and frequency. "
+            "Designed for the peak moment of a scene."
+        ),
+        "sliders": [
+            ("Peak intensity", "How far to push the range. Higher = more extreme."),
+            ("Urgency", "How aggressive the pacing feels. Higher = more relentless."),
+            ("Pulse sharpness", "How sharp the pulse edges are. Higher = harder hits."),
+            ("Frequency push", "How high the pulse frequency goes. Higher = more intense."),
+        ],
+    },
+    {
+        "name": "Dominant",
+        "icon": "👊",
+        "intensity": "High",
+        "description": (
+            "Assertive, wide-sweep pattern with minimal intensity dips. "
+            "Relentless pacing that doesn't let up."
+        ),
+        "sliders": [
+            ("Drive", "How assertive the device pace is. Higher = harder push."),
+            ("Sweep width", "How wide the cycle range. Higher = bigger movements."),
+            ("Relentlessness", "How little the intensity dips. Higher = no breaks."),
+        ],
+    },
+]
+
+
+def _render_tone_catalog() -> None:
+    """Render the Tone Catalog section — one card per tone."""
+    st.markdown("## Tone Catalog")
+    st.info(
+        "Tones shape the overall feel of your funscript. Applied globally on the Tone tab, "
+        "they adjust amplitude, pacing, and pulse shape to match a mood. "
+        "Tones are ordered from gentle to intense.",
+        icon=None,
+    )
+
+    for tone in _TONE_CATALOG:
+        with st.expander(
+            f"**{tone['icon']} {tone['name']}** — Intensity: {tone['intensity']}",
+            expanded=False,
+        ):
+            st.write(tone["description"])
+
+            if tone["sliders"]:
+                st.caption("**Sliders**")
+                for label, hint in tone["sliders"]:
+                    st.markdown(f"- **{label}** — {hint}")
+
+    # Summary table
+    st.markdown("### Tone Summary")
+    rows = []
+    for tone in _TONE_CATALOG:
+        rows.append({
+            "Tone": f"{tone['icon']} {tone['name']}",
+            "Intensity": tone["intensity"],
+            "Sliders": len(tone["sliders"]),
+            "Description": tone["description"][:80] + ("…" if len(tone["description"]) > 80 else ""),
+        })
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+
+
+# ---------------------------------------------------------------------------
+# Stim Catalog
+# ---------------------------------------------------------------------------
+
+_STIM_CATALOG = [
+    {
+        "name": "Gentle",
+        "icon": "🌊",
+        "tagline": "Soft, slow-building",
+        "description": (
+            "Sensation stays close to center and builds gradually — no sharp onset. "
+            "Subtle movement with slow pulse build. Good for warming up or winding down."
+        ),
+        "path": "Semi-circle",
+        "sliders": [
+            ("Softness", "How far sensation moves from center. Low = very subtle."),
+            ("Pulse onset", "How gently pulses start. Higher = softer attack."),
+        ],
+    },
+    {
+        "name": "Reactive",
+        "icon": "⚡",
+        "tagline": "Sharp, tracks every stroke",
+        "description": (
+            "Sensation follows the action instantly — no lag, wide sweep. "
+            "Pulse rate spikes with fast action. Good for fast, intense content."
+        ),
+        "path": "Three-quarter arc",
+        "sliders": [
+            ("Reactivity", "How tightly sensation follows each stroke. Low = instant."),
+            ("Peak intensity", "Maximum pulse rate during peak action."),
+        ],
+    },
+    {
+        "name": "Scene Builder",
+        "icon": "🏗️",
+        "tagline": "Builds gradually over the scene",
+        "description": (
+            "Sensation expands as the scene develops. The arc widens over time. "
+            "Rewards patience. Works well for longer content with a slow arc."
+        ),
+        "path": "Full circle",
+        "sliders": [
+            ("Build speed", "How gradually sensation builds. High = very slow build."),
+            ("Arc width", "How far the sensation sweeps across."),
+        ],
+    },
+    {
+        "name": "Unpredictable",
+        "icon": "🎲",
+        "tagline": "Random direction changes",
+        "description": (
+            "Direction changes without warning. Pulse rate varies widely. "
+            "Keeps you guessing. Good for surprise content."
+        ),
+        "path": "Zigzag",
+        "sliders": [
+            ("Wildness", "How wide the random movement ranges. High = very wild."),
+            ("Variety", "How varied the pulse rate is."),
+        ],
+    },
+    {
+        "name": "Balanced",
+        "icon": "⚖️",
+        "tagline": "Middle of everything",
+        "description": (
+            "Moderate sweep, steady build, neither too sharp nor too soft. "
+            "A good starting point for any content. Works with most scenes."
+        ),
+        "path": "Full circle",
+        "sliders": [
+            ("Sweep width", "Width of the sensation sweep."),
+            ("Speed / build balance", "More reactive (low) vs. more gradual (high)."),
+        ],
+    },
+]
+
+
+def _render_stim_catalog() -> None:
+    """Render the Stim Catalog section — e-stim character patterns."""
+    st.markdown("## Stim Catalog")
+    st.info(
+        "Stim characters control how funscript motion translates into e-stim sensation. "
+        "Each character defines a path shape and signal behavior. "
+        "These apply only when an e-stim device (FOC or Stereo) is selected.",
+        icon=None,
+    )
+
+    for char in _STIM_CATALOG:
+        with st.expander(
+            f"**{char['icon']} {char['name']}** — {char['tagline']}",
+            expanded=False,
+        ):
+            st.write(char["description"])
+            st.caption(f"**Path shape:** {char['path']}")
+
+            if char["sliders"]:
+                st.caption("**Sliders**")
+                for label, hint in char["sliders"]:
+                    st.markdown(f"- **{label}** — {hint}")
+
+    # Summary table
+    st.markdown("### Stim Character Summary")
+    rows = []
+    for char in _STIM_CATALOG:
+        rows.append({
+            "Character": f"{char['icon']} {char['name']}",
+            "Style": char["tagline"],
+            "Path": char["path"],
+            "Sliders": len(char["sliders"]),
+        })
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+
+
+# ---------------------------------------------------------------------------
+# Tag Catalog
+# ---------------------------------------------------------------------------
+
 def _render_tag_catalog() -> None:
     """Render the Tag Catalog section — one card per behavioral tag."""
     from assessment.classifier import TAGS
@@ -506,5 +751,11 @@ def render() -> None:
                 for spec in specs:
                     _render_transform_card(spec)
 
-    # Tag Catalog — appears last, after Plugins
+    # Tone Catalog
+    _render_tone_catalog()
+
+    # Stim Catalog
+    _render_stim_catalog()
+
+    # Tag Catalog — appears last
     _render_tag_catalog()
