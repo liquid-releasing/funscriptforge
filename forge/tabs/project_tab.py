@@ -60,9 +60,10 @@ def _reset_downstream_state():
     ]
     for key in _keys_to_clear:
         st.session_state.pop(key, None)
-    # Clear tone impact sliders (dynamic keys)
+    # Clear dynamic keys (tone sliders, motion cache)
     for key in list(st.session_state.keys()):
-        if key.startswith("tone_impact_") or key.startswith("tone_s"):
+        if key.startswith("tone_impact_") or key.startswith("tone_s") \
+                or key.startswith("motion_"):
             st.session_state.pop(key, None)
 
 
