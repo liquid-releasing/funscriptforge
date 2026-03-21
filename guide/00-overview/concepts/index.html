@@ -1314,6 +1314,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tone
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#transform" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1484,6 +1495,15 @@ you work on all phrases of a given tag at once.</p>
 <p>A point in the funscript where the tempo changes significantly. FunscriptForge
 detects these automatically. They often correspond to scene changes in the video.</p>
 <hr />
+<h3 id="tone">Tone<a class="headerlink" href="#tone" title="Permanent link">&para;</a></h3>
+<p>A creative decision that shapes the overall feel of your output. FunscriptForge
+offers six tones — each one changes how your funscript is interpreted and
+transformed without altering the underlying structure.</p>
+<p>Think of tone like choosing a mood for a playlist. The same notes sound different
+when played gently vs. aggressively. Tone works the same way for haptic motion.</p>
+<p>You choose a tone on the <strong>Tone tab</strong> right after setting up your project.
+For most users, this is all you need — pick a tone, export, done.</p>
+<hr />
 <h3 id="transform">Transform<a class="headerlink" href="#transform" title="Permanent link">&para;</a></h3>
 <p>An operation you apply to a phrase to change how it feels. A transform does not
 change <em>when</em> things happen — it changes <em>how</em> they happen: the stroke range,
@@ -1494,7 +1514,7 @@ the velocity shape, the smoothing, the dynamics.</p>
 - <strong>Performance</strong> — adds expression to mechanical-sounding motion
 - <strong>Break</strong> — makes a calm section feel genuinely quiet</p>
 <p>You choose which transform to apply to each phrase. FunscriptForge will also
-suggest transforms based on the phrase's behavioral tag.</p>
+suggest transforms based on the phrase's behavioral tag and your chosen tone.</p>
 <hr />
 <h2 id="how-the-pieces-fit-together">How the pieces fit together<a class="headerlink" href="#how-the-pieces-fit-together" title="Permanent link">&para;</a></h2>
 <pre class="mermaid"><code>flowchart TD
@@ -1503,11 +1523,12 @@ suggest transforms based on the phrase's behavioral tag.</p>
     C --&gt; D["Patterns\nRuns of similar cycles"]
     D --&gt; E["Phrases\nMeaningful sections\n★ You work here ★"]
     E --&gt; F["Behavioral Tag\nWhat kind of motion?"]
-    E --&gt; G["Transform\nHow to improve it"]
-    G --&gt; H["Improved funscript\nReady to export"]</code></pre>
-<p>FunscriptForge builds this hierarchy automatically when you load a file. You only
-ever need to think about <strong>phrases</strong> and <strong>transforms</strong> — everything below is
-computed for you.</p>
+    E --&gt; G["Tone\nHow should it feel?"]
+    G --&gt; H["Transform\nHow to improve it"]
+    H --&gt; I["Improved funscript\nReady to export"]</code></pre>
+<p>FunscriptForge builds this hierarchy automatically when you click <strong>Accept</strong>.
+For most users, you only need to think about <strong>tone</strong> — pick one, export, done.
+Power users can go deeper into <strong>phrases</strong> and <strong>transforms</strong>.</p>
 <hr />
 <h2 id="what-funscriptforge-does-not-do">What FunscriptForge does NOT do<a class="headerlink" href="#what-funscriptforge-does-not-do" title="Permanent link">&para;</a></h2>
 <ul>
