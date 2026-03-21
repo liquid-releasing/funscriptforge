@@ -343,8 +343,10 @@ def render():
         st.rerun()
 
     if st.session_state.get("project_accepted"):
-        from forge.tabs._ui_helpers import success_with_scroll
-        success_with_scroll("Your next step in the workflow is the **Device** tab.")
+        from forge.tabs._ui_helpers import success_guidance
+        success_guidance(
+            "Scroll to top to select Devices you want for this funscript."
+        )
 
 
 # ── Funscript ────────────────────────────────────────────────────────────────

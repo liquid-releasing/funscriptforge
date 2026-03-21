@@ -147,11 +147,9 @@ def render():
         st.rerun()
 
     if st.session_state.get("device_accepted"):
-        from forge.tabs._ui_helpers import success_with_scroll
-        success_with_scroll(
-            "Your funscript is device-aware and ready to export. "
-            "Your next step is the **Tone** tab to shape the feel, "
-            "or skip ahead to the **Export** tab."
+        from forge.tabs._ui_helpers import success_guidance
+        success_guidance(
+            "Scroll to top to select your next tab: **Tone** or **Export**."
         )
 
 
