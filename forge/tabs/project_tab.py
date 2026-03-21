@@ -99,7 +99,7 @@ def _browse_for_folder() -> str | None:
 
     t = threading.Thread(target=_pick, daemon=True)
     t.start()
-    t.join(timeout=120)  # wait up to 2 min for user to pick
+    t.join(timeout=30)  # wait up to 30s for user to pick
     if result[0]:
         st.session_state["last_browse_dir"] = str(Path(result[0]).parent)
     return result[0]
@@ -279,9 +279,11 @@ def render():
     if not st.session_state.get("output_folder_input") and auto_output:
         st.session_state["output_folder_input"] = auto_output
 
+    has_funscript = bool(st.session_state.get("funscript_path"))
     col_path, col_browse, col_set = st.columns([5, 1, 1])
     with col_browse:
-        if st.button("Browse…", key="output_folder_browse", width="stretch"):
+        if st.button("Browse…", key="output_folder_browse", width="stretch",
+                      disabled=not has_funscript):
             picked = _browse_for_folder()
             if picked:
                 st.session_state["output_folder_pending"] = picked
