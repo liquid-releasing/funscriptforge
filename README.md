@@ -37,70 +37,116 @@ The **character name is the API** between all three tools: Explorer analysis →
 
 ## Features
 
+### Workflow — 9 Tabs
+
+FunScriptForge guides you through a structured workflow. Each tab builds on the previous one:
+
+| Tab | Purpose |
+|-----|---------|
+| **Project** | Load funscript, set output folder, add media (video/audio/captions), author info |
+| **Device** | Select target devices (Handy, OSR2, E-Stim FOC/Stereo), choose fix strategy, run assessment |
+| **Tone** | Apply a global mood — 6 tones from Tender to Dominant, with contextual sliders |
+| **Phrases** | Per-phrase editing with transforms, live preview, Before/After charts |
+| **Patterns** | Batch transforms by behavioral tag across all matching phrases |
+| **Catalogs** | Reference guide: Behavior, Structural, Replacement, Tone, Stim, and Tag catalogs |
+| **Stim** | E-stim character selection (Gentle, Reactive, Scene Builder, Unpredictable, Balanced) |
+| **Export** | Quality gate, transform plan, device-specific folder export |
+| **Next Steps** | Playback guides per device, credits, license |
+
+State flows through the chain: **Original → Device → Tone → Phrases → Export**
+
+### Project Tab
+
+- Load `.funscript` file, set output folder, optional media (video, audio, captions)
+- Author and credits metadata
+- Project summary with Accept button to initialize the pipeline
+- `.forge` project files for save/resume — pick up where you left off
+
+### Device Tab
+
+- Select target devices: Handy, OSR2, E-Stim FOC, E-Stim Stereo
+- Four fix strategies: Performance (default), Halve cycles, Shorten cycles, Rebuild from beat
+- Three application scopes: Entire funscript, Alternate by phrase, Random by phrase
+- Assessment runs on Accept — spinner shows cycle-by-cycle progress
+- Vibrant colour-coded Plotly chart generated and cached for all downstream tabs
+
+### Tone Tab
+
+- 6 tones ordered by intensity: Tender → Build → Tease → Edge → Climax → Dominant
+- Dual suggestions: "Best match" and "Most variety" based on funscript analysis
+- Variable slider count per tone (2–4 contextual sliders from sensitivity matrix)
+- Impact slider (0–1) scales the overall tone effect
+- Before/After preview reads from the device-aware chain
+- Credit to [Edger's Funscript-Tools](https://github.com/edger477/funscript-tools)
+
 ### Analysis
 
 - Structural analysis: phases → cycles → patterns → phrases → BPM transitions
 - Behavioral classification into 10 tags (stingy, giggle, plateau, drift, half-stroke, drone, lazy, frantic, ramp, ambient)
-- Duration-based phrase splitting for uniform-tempo funscripts (no more single-phrase output on long uniform files)
+- Duration-based phrase splitting for uniform-tempo funscripts
 - Real-time progress indicator shows each pipeline stage as it runs
-- Cross-funscript pattern catalog — accumulates stats across all analysed files (persistent JSON)
+- Cross-funscript pattern catalog — accumulates stats across all analysed files
 
-### Phrase Selector (Streamlit UI)
+### Phrase Editor
 
 - Full-funscript colour-coded chart with phrase bounding boxes; click any phrase to open its detail panel
-- Per-phrase transform selection with live parameter sliders and Before / After preview; navigation buttons (P X of N + prev/next) above the transform panel
-- Cycle-based phrase split — slider selects the split boundary; a dashed line marks it on the chart; hover any dot to see its cycle number
-- **Concat with Next Phrase** — two-step preview flow: pending transform is auto-accepted, chart expands to show the combined bounding box of both phrases; Confirm/Cancel before committing the merge
-- ✓ Accept stores the transform in session state; ✕ Cancel discards only the current phrase's pending change
-- Selector chart shows the accumulated edited funscript (with banner) once any transform has been accepted
-- **Large-file phrase highlight** — for long funscripts the selected phrase renders with full velocity colour lines over the grey background, so the active window is always visually distinct
+- Per-phrase transform selection with live parameter sliders and Before/After preview
+- Cycle-based phrase split — slider selects the split boundary; a dashed line marks it on the chart
+- **Concat with Next Phrase** — two-step preview flow with Confirm/Cancel
+- **Large-file phrase highlight** — selected phrase renders with full velocity colour over grey background
 
-### Pattern Editor (Streamlit UI)
+### Pattern Editor
 
 - Select phrases by behavioral tag; view all matching instances at once
-- Apply (✓) checkbox in the first column; clicking a row selects that instance in the transform editor
-- Per-instance transform + per-segment split (split into non-overlapping sub-ranges, each with its own transform)
-- "Suggested transform" shown per tag; Apply to all copies the current instance's transform to every other instance
-- Selector chart also reflects accepted phrase-editor transforms
+- Per-instance transform + per-segment split with independent transforms per sub-range
+- "Suggested transform" shown per tag; Apply to all copies to every matching instance
+- Selector chart reflects accepted transforms in real time
 
 ### Audio / Video Player
 
-- Phrase-restricted HTML5 player embedded in the sidebar — plays only the currently selected phrase window
+- Phrase-restricted HTML5 player — plays only the currently selected phrase window
 - Animated red playhead overlaid on the waveform chart; Back 5 s / Forward 5 s controls
-- **📌 Set split here** — click during playback to send the current timestamp to the Pattern Editor as a split point
-- Local mode: media streams directly from disk at full quality (no file size limit, no upload wait)
-- Web mode: media uploaded via browser and encoded inline; no server required
-- Magic-byte validation on all 9 supported types (MP3, MP4, M4A, MOV, WAV, OGG, WebM, MKV, AAC)
-- **AVI not supported** — browsers cannot decode AVI natively. Convert first:
-  `ffmpeg -i input.avi -c:v libx264 -c:a aac output.mp4`
-  *(Automatic AVI transcoding is planned for the paid SaaS tier.)*
+- **Set split here** — click during playback to send timestamp to Pattern Editor as a split point
+- Local mode: media streams from disk at full quality (no upload, no size limit)
+- Magic-byte validation on 9 supported types (MP3, MP4, M4A, MOV, WAV, OGG, WebM, MKV, AAC)
 
-### Export (Streamlit UI)
+### Catalogs Tab
 
-- Static preview chart at the top shows the full proposed export
-- **Before / After overlay** — toggle to show the original funscript as a semi-transparent grey line on the preview chart, so you can see exactly what the transforms changed
-- Completed transforms (from Phrase Editor or Pattern Editor) listed with reject / restore per row
-- Recommended transforms (tag-aware auto-suggestions) listed separately; each must be explicitly accepted before it is included in the download
-- Optional post-processing: blend seams (bilateral LPF at high-velocity style boundaries) and final smooth (light global LPF)
-- **Download confirmation** — a review checkbox must be ticked before the download button enables, preventing accidental clicks that would discard session state
-- **Output integrity** — all positions clamped to [0, 100] and timestamps sorted/deduplicated automatically; warning shown if any actions were clamped
-- **Export log** — every downloaded funscript contains a `_forge_log` key recording the transform name, parameters, source, and export timestamp for each change (reproducible sessions)
-- **Full pipeline export** — collapsible panel runs BPM Transformer + Window Customizer directly in the browser; result downloads as a separate `_pipeline.funscript` independent of phrase-editor transforms
-- **Quality gate** — velocity and short-interval checks before download; pass/fail badge with an issues table (capped at 50 rows)
-- Download builds the full result on demand
+Six catalog sections in one reference tab:
+
+- **Behavior** — amplitude shaping, position adjustment, smoothing, break/recovery, performance, rhythmic patterns
+- **Structural / Tempo** — tempo reduction transforms
+- **Replacement** — generated shapes (stroke, drift, tide)
+- **Tone Catalog** — all 6 tones with intensity levels, slider descriptions, summary table
+- **Stim Catalog** — all 5 e-stim characters with path shapes, slider descriptions, summary table
+- **Tag Catalog** — all 10 behavioral tags with characteristics, suggested transforms, before/after charts
+
+Each entry includes live interactive sliders and preview charts.
+
+### Export
+
+- Device-specific folder export (e.g. `output/handy/`, `output/estim-foc/`)
+- Before/After overlay — toggle to see what transforms changed
+- Quality gate — velocity and short-interval checks; pass/fail badge
+- Export log — `_forge_log` key records every transform for reproducibility
+- Media copy — input video/audio/captions copied to output folder
+- Open folder button (platform-native file explorer)
 
 ### Undo / Redo
 
-- 50-level undo/redo stack for accepted phrase transforms
-- Sidebar ↩ Undo / ↪ Redo buttons with operation-label tooltips
+- 50-level undo/redo stack for accepted transforms
 - Keyboard shortcuts: `Ctrl+Z` undo, `Ctrl+Y` / `Ctrl+Shift+Z` redo, `Ctrl+S` save
+- Sidebar ↩ Undo / ↪ Redo buttons with operation-label tooltips
+
+### Privacy
+
+- Runs entirely on your machine — no account, no cloud sync, no telemetry
+- Your funscripts, media files, and edits never leave your computer
 
 ### Accessibility
 
 - WCAG 2.1 Level AA — all Critical items and five of seven Major items resolved
-- `aria-label` on all audio player buttons; `role="timer"` on the time display
-- Screen-reader-only text on rejected export rows; BPM value labels on phrase timeline bars
-- Keyboard shortcut support throughout; `lang="en"` injected at page load
+- Keyboard shortcut support throughout; screen-reader labels on all interactive elements
 
 ### CLI
 
@@ -158,19 +204,19 @@ are shown as dashed lines on both charts.  Use **Apply to all** to copy the
 split structure — scaled proportionally — to every other instance of the same
 behavioral tag.
 
-The **Catalogs** tab has two sections:
+The **Catalogs** tab has six sections:
 
-- **Transform Catalog** — reference guide for all transforms grouped by capability (Analysis, Structural, Replacement, Behavior); each entry includes a description, best-fit behavioral tags, a parameter table, and live Before / After charts with interactive sliders
-- **Tag Catalog** — reference for all 10 behavioral tags; each entry shows characteristics, the suggested transform, and before/after example charts
+- **Behavior** — transforms that reshape amplitude, position, smoothing, rhythm
+- **Structural / Tempo** — tempo reduction transforms
+- **Replacement** — generated shapes (stroke, drift, tide)
+- **Tone Catalog** — all 6 tones with intensity, sliders, summary table
+- **Stim Catalog** — all 5 e-stim characters with path shapes, sliders, summary table
+- **Tag Catalog** — all 10 behavioral tags with characteristics, suggested transforms, before/after charts
 
 ### 3 — Export
 
-The **Export** tab aggregates every transform you have applied in the editors,
-plus optionally the auto-recommended transforms for untouched phrases.  A
-change log shows each planned transform with start / end time, duration,
-transform name, source (Phrase Editor / Pattern Editor / Recommended), and
-before → after BPM and cycle count where applicable.  Click 🗑 on any row to
-reject that change before downloading.
+The **Export** tab aggregates every transform applied across the workflow.
+Device-specific folders are created automatically (e.g. `output/handy/`, `output/estim-foc/`).
 
 **Tag-aware auto-suggestions** (`suggest_transform`, checked in priority order):
 
@@ -183,22 +229,8 @@ reject that change before downloading.
 | `drone` | `beat_accent` | Adds rhythmic variation |
 | `ramp` | `funnel` | Progressive center shift + amplitude scaling for energy arc shaping |
 | `ambient` | `waiting` | Low BPM + shallow amplitude + long duration |
-| *(no tag, transition)* | `smooth` | Pattern label contains "transition" |
-| *(no tag, low BPM)* | `passthrough` | BPM < threshold |
-| *(no tag, narrow span)* | `normalize` | `amplitude_span < 40` |
-| *(no tag, high BPM)* | `amplitude_scale` | Fallback |
 
-Two optional post-processing passes run over the full action list just before
-the file is built:
-
-- **Add blended seams** — detects high-velocity jumps between differently-styled
-  sections and applies a bilateral LPF at those seams, leaving normal strokes
-  untouched.
-- **Final smooth** — a light global LPF (strength 0.10) as a finishing polish.
-
-Click **Download edited funscript** to build and save the result.
-
-You can also query the same plan from the CLI — see `export-plan` below.
+Post-processing: blend seams (bilateral LPF at style boundaries) and final smooth (light global LPF).
 
 ### 4 — Transform and customize
 
