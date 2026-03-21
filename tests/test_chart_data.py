@@ -9,7 +9,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from visualizations.chart_data import (
+from forge_ui_components.funscript_chart.core import (
     AnnotationBand,
     PointSeries,
     _hex_to_rgb,

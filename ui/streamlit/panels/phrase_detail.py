@@ -498,10 +498,7 @@ def _render_chart(
     split_ms: Optional[int] = None,
     extra_phrase_end_ms: Optional[int] = None,
 ) -> None:
-    from visualizations.chart_data import (
-        compute_chart_data, compute_annotation_bands, slice_bands,
-    )
-    from visualizations.funscript_chart import FunscriptChart
+    from forge_ui_components.funscript_chart.core import compute_chart_data, vibrant_figure
 
     sel_phrase = phrases[phrase_idx]
 
@@ -510,26 +507,27 @@ def _render_chart(
     window_actions = [a for a in actions if win_start <= a["at"] <= win_end]
     s = compute_chart_data(window_actions)
 
-    # Pass no bands — avoids hit-target traces that extend beyond win_start/win_end
-    # and cause Plotly to auto-range to the full funscript extent.
-    chart = FunscriptChart(
-        s, [],
-        "",
-        win_end - win_start,
-        large_funscript_threshold=2_500,
-    )
+    # Build figure with no bands — avoids hit-target traces that extend beyond
+    # win_start/win_end and cause Plotly to auto-range to the full extent.
 
     class _LocalVS:
         zoom_start_ms      = win_start
         zoom_end_ms        = win_end
         color_mode         = view_state.color_mode
-        show_phrases       = False   # bands are empty; we add vrects manually
+        show_phrases       = False
         selection_start_ms = sel_phrase["start_ms"]
         selection_end_ms   = sel_phrase["end_ms"]
         def has_zoom(self):      return True
-        def has_selection(self): return False  # no hit-target selection needed
+        def has_selection(self): return False
 
-    fig = chart._build_figure(_LocalVS(), height=260)
+    fig = vibrant_figure(
+        s, [],
+        view_state=_LocalVS(),
+        color_mode=view_state.color_mode,
+        height=260,
+        duration_ms=win_end - win_start,
+        large_funscript_threshold=2_500,
+    )
 
     # Highlighted region — either single phrase or combined (concat preview)
     highlight_end = extra_phrase_end_ms if extra_phrase_end_ms else sel_phrase["end_ms"]

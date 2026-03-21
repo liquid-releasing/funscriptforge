@@ -40,8 +40,8 @@ def _selector_fragment(
 ) -> None:
     import json
     import time as _time
-    from visualizations.chart_data import compute_chart_data, compute_annotation_bands
-    from visualizations.funscript_chart import FunscriptChart
+    from forge_ui_components.funscript_chart.core import compute_chart_data, compute_annotation_bands
+    from forge_ui_components.funscript_chart.streamlit import render_vibrant
 
     view_state = st.session_state.view_state
 
@@ -75,13 +75,14 @@ def _selector_fragment(
     _t0 = _time.time()
     with st.spinner(spinner_msg):
         series  = compute_chart_data(display_actions)
-        chart   = FunscriptChart(
-            series, bands, "", duration_ms,
-            large_funscript_threshold=large_funscript_threshold,
-        )
         _chart_v = st.session_state.get("phrase_sel_chart_instance", 0)
-        ev = chart.render_streamlit(
-            view_state, key=f"chart_phrase_sel_{_chart_v}", height=380
+        ev = render_vibrant(
+            series, bands,
+            view_state=view_state,
+            color_mode=view_state.color_mode,
+            height=380,
+            duration_ms=duration_ms,
+            key=f"chart_phrase_sel_{_chart_v}",
         )
     st.caption(f"Chart built in {_time.time() - _t0:.1f}s")
     _handle_chart_event(ev, view_state, phrases)
@@ -112,8 +113,9 @@ def render(
         st.info("Load a funscript to use the Phrase Selector.")
         return
 
-    from visualizations.funscript_chart import HAS_PLOTLY
-    if not HAS_PLOTLY:
+    try:
+        import plotly  # noqa: F401
+    except ImportError:
         st.error("plotly is required.  Run: pip install plotly")
         return
 

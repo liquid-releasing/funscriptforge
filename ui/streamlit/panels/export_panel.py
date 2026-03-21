@@ -629,8 +629,7 @@ def _render_recommended(plan: List[dict]) -> None:
 
 def _render_export_preview(project, assessment_dict: dict, plan: List[dict]) -> None:
     """Render a static (non-interactive) chart of the proposed export actions."""
-    from visualizations.chart_data import compute_chart_data, compute_annotation_bands
-    from visualizations.funscript_chart import FunscriptChart
+    from forge_ui_components.funscript_chart.core import compute_chart_data, compute_annotation_bands, vibrant_figure
 
     # Read from chain if available, otherwise fall back to original
     _chain_path = st.session_state.get("chain_funscript_path")
@@ -646,17 +645,14 @@ def _render_export_preview(project, assessment_dict: dict, plan: List[dict]) -> 
     duration_ms = project.assessment.duration_ms
     bands  = compute_annotation_bands(assessment_dict)
     series = compute_chart_data(preview_actions)
-    chart  = FunscriptChart(
-        series, bands, "", duration_ms,
+
+    fig = vibrant_figure(
+        series, bands,
+        color_mode="velocity",
+        height=260,
+        duration_ms=duration_ms,
         large_funscript_threshold=st.session_state.get("large_funscript_threshold", 100_000),
     )
-
-    class _StaticVS:
-        color_mode = "velocity"
-        def has_zoom(self):      return False
-        def has_selection(self): return False
-
-    fig = chart._build_figure(_StaticVS(), height=260)
 
     st.plotly_chart(
         fig,

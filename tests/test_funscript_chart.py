@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Liquid Releasing. Licensed under the MIT License.
 # Written by human and Claude AI (Claude Sonnet).
 
-"""Tests for visualizations/funscript_chart.py — Plotly chart widget."""
+"""Tests for funscript chart — Plotly chart widget (via forge_ui_components)."""
 
 import os
 import sys
@@ -9,8 +9,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from visualizations.chart_data import AnnotationBand, compute_chart_data
-from visualizations.funscript_chart import FunscriptChart
+from forge_ui_components.funscript_chart.core import AnnotationBand, compute_chart_data, vibrant_figure
 
 
 # ---------------------------------------------------------------------------
@@ -18,7 +17,7 @@ from visualizations.funscript_chart import FunscriptChart
 # ---------------------------------------------------------------------------
 
 class _ViewState:
-    """Minimal stand-in for the Streamlit view-state object used by _build_figure."""
+    """Minimal stand-in for the Streamlit view-state object used by vibrant_figure."""
 
     def __init__(
         self,
@@ -64,16 +63,15 @@ def _scatter_traces(fig) -> list:
 # ---------------------------------------------------------------------------
 
 class TestBuildFigureSmall(unittest.TestCase):
-    """FunscriptChart._build_figure works for small series (< 10 actions)."""
+    """vibrant_figure works for small series (< 10 actions)."""
 
     def test_build_figure_small(self):
         """Small series (< 10 actions) builds a figure without error."""
         actions = _make_actions(5)
         series = compute_chart_data(actions)
-        chart = FunscriptChart(series=series, bands=[], title="test", duration_ms=400)
 
         view = _ViewState(color_mode="velocity")
-        fig = chart._build_figure(view, height=300)
+        fig = vibrant_figure(series, [], view_state=view, height=300, duration_ms=400)
 
         # Must return a Plotly Figure
         try:
@@ -93,7 +91,7 @@ class TestBuildFigureSmall(unittest.TestCase):
 
 
 class TestBuildFigureLarge(unittest.TestCase):
-    """FunscriptChart uses grey-line mode for series above the large threshold."""
+    """vibrant_figure uses grey-line mode for series above the large threshold."""
 
     def test_build_figure_large(self):
         """Series of 11 000 actions uses grey-line mode (only 2 traces: grey line + markers)."""
@@ -104,10 +102,9 @@ class TestBuildFigureLarge(unittest.TestCase):
 
         actions = _make_actions(11_000)
         series = compute_chart_data(actions)
-        chart = FunscriptChart(series=series, bands=[], title="large", duration_ms=11_000 * 100)
 
         view = _ViewState(color_mode="velocity")
-        fig = chart._build_figure(view, height=300)
+        fig = vibrant_figure(series, [], view_state=view, height=300, duration_ms=11_000 * 100)
 
         traces = _scatter_traces(fig)
 
@@ -142,16 +139,15 @@ class TestLargeThresholdConfigurable(unittest.TestCase):
 
         actions = _make_actions(6)
         series = compute_chart_data(actions)
-        chart = FunscriptChart(
-            series=series,
-            bands=[],
-            title="threshold-test",
+
+        view = _ViewState(color_mode="velocity")
+        fig = vibrant_figure(
+            series, [],
+            view_state=view,
+            height=300,
             duration_ms=600,
             large_funscript_threshold=5,  # 6 points > 5 → large mode
         )
-
-        view = _ViewState(color_mode="velocity")
-        fig = chart._build_figure(view, height=300)
 
         traces = _scatter_traces(fig)
 
