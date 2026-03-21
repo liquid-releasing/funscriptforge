@@ -32,6 +32,38 @@ _APP_ROOT = Path(__file__).parents[2]
 _ASSETS_OUTPUT = _APP_ROOT / "assets" / "output"
 
 
+def _reset_downstream_state():
+    """Clear all downstream state when a new funscript is loaded.
+
+    Resets: media paths, output folder, device/tone/project acceptance,
+    chain funscript, assessment cache, tone selection, and cached charts.
+    """
+    _keys_to_clear = [
+        # Media
+        "video_path", "_video_processed", "_audio_processed", "_captions_processed",
+        # Output folder
+        "output_folder_input",
+        # Acceptance flags
+        "project_accepted", "device_accepted", "tone_accepted",
+        # Device tab state
+        "device_apply_scope",
+        # Tone tab state
+        "tone_global", "show_tone_suggestions", "cached_tone_chart",
+        # Chain
+        "chain_funscript_path",
+        # Assessment / analysis
+        "last_loaded_cfg", "last_loaded_file",
+        # Project object (force re-init)
+        "project",
+    ]
+    for key in _keys_to_clear:
+        st.session_state.pop(key, None)
+    # Clear tone impact sliders (dynamic keys)
+    for key in list(st.session_state.keys()):
+        if key.startswith("tone_impact_") or key.startswith("tone_s"):
+            st.session_state.pop(key, None)
+
+
 def _default_output_for(funscript_path: str) -> Path:
     stem = Path(funscript_path).name.split(".")[0]
     return _ASSETS_OUTPUT / stem
@@ -361,15 +393,10 @@ def _funscript_section(v: int):
     if uploaded and st.session_state.get("_funscript_processed") != uploaded.name:
         tmp = Path(tempfile.mkdtemp()) / uploaded.name
         tmp.write_bytes(uploaded.read())
-        # Clear media if funscript filename changed (different content)
-        _prev_name = Path(st.session_state.get("funscript_path", "")).stem
-        _new_name = Path(uploaded.name).stem
-        if _prev_name and _prev_name != _new_name:
-            for _mk in ["video_path", "_video_processed", "_audio_processed", "_captions_processed"]:
-                st.session_state.pop(_mk, None)
+        # Reset all downstream state for the new funscript
+        _reset_downstream_state()
         st.session_state["funscript_path"] = str(tmp)
         st.session_state["_funscript_processed"] = uploaded.name
-        st.session_state.pop("output_folder_input", None)  # reseed export path
         st.rerun()
 
     funscript_path = st.session_state.get("funscript_path", "")
