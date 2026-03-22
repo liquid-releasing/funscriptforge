@@ -1068,18 +1068,16 @@ def _render_phrase_selector_tab(project: Project) -> None:
 
     if st.session_state.get("phrases_accepted"):
         from forge.tabs._ui_helpers import success_guidance
-        # Check if estim is selected — if so, suggest Stim before Export
         _forge = st.session_state.get("forge_project")
         _targets = _forge.get("output_targets", []) if _forge else []
         _has_estim = any("estim" in t for t in _targets)
+        _next_options = ["**Patterns**"]
         if _has_estim:
-            success_guidance(
-                "Scroll to top to select your next tab: **Stim** or **Export**."
-            )
-        else:
-            success_guidance(
-                "Scroll to top to select your next tab: **Export**."
-            )
+            _next_options.append("**Stim**")
+        _next_options.append("**Export**")
+        success_guidance(
+            f"Scroll to top to select your next tab: {', '.join(_next_options)}."
+        )
 
 
 def _render_phrase_editor_tab(project: Project) -> None:
