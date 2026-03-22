@@ -110,10 +110,10 @@ def render() -> None:
     # -- Playback guidance ---------------------------------------------------
     st.subheader("🎬 Playback Guide")
 
-    project = st.session_state.get("project")
+    forge_project = st.session_state.get("forge_project")
     selected_devices: list[str] = []
-    if project and project.config:
-        selected_devices = project.config.get("devices", [])
+    if forge_project:
+        selected_devices = forge_project.get("output_targets", [])
 
     if selected_devices:
         # Show guides only for selected devices

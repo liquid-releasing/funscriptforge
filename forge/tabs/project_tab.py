@@ -373,7 +373,7 @@ def _funscript_section(v: int):
         data = load_funscript(funscript_path)
         if data:
             actions = data.get("actions", [])
-            render_monochrome(actions, caption=f"📄 {Path(funscript_path).name}")
+            render_monochrome(actions)
             stats = funscript_stats(data)
             render_stats_row(stats)
         else:

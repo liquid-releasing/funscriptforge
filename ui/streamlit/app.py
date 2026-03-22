@@ -545,20 +545,26 @@ def _sidebar() -> None:
     _reanalyse_requested = st.session_state.pop("reanalyse_requested", False)
 
     _media_only = st.session_state.pop("_media_only_change", False)
-    if not _media_only and (file_changed or _reanalyse_requested or st.sidebar.button("Re-analyse", type="primary")):
+
+    # Only auto-analyze if: (a) reanalyse explicitly requested, or
+    # (b) file changed AND we have a cached assessment to load (fast resume).
+    # Full analysis on first load runs on Project Accept, not here.
+    _forge_proj = st.session_state.get("forge_project")
+    _output_folder = _forge_proj.get("output_folder", "") if _forge_proj else ""
+    _cached_assessment = os.path.join(_output_folder, "_assessment.json") if _output_folder else ""
+    _has_cache = _cached_assessment and os.path.isfile(_cached_assessment)
+
+    _should_analyze = not _media_only and (_reanalyse_requested or (file_changed and _has_cache))
+    if _should_analyze:
         import time
 
         # Use chain funscript if available, otherwise original
         _chain_path = st.session_state.get("chain_funscript_path")
         _analyse_path = _chain_path if (_chain_path and os.path.isfile(_chain_path)) else funscript_path
 
-        # Check for cached assessment first (fast resume)
-        _forge_proj = st.session_state.get("forge_project")
-        _output_folder = _forge_proj.get("output_folder", "") if _forge_proj else ""
-        _cached_assessment = os.path.join(_output_folder, "_assessment.json") if _output_folder else ""
         _used_cache = False
 
-        if file_changed and not _reanalyse_requested and _cached_assessment and os.path.isfile(_cached_assessment):
+        if file_changed and not _reanalyse_requested and _has_cache:
             try:
                 st.session_state.project = Project.from_funscript(
                     _analyse_path,
@@ -600,11 +606,12 @@ def _sidebar() -> None:
         st.session_state.export_accepted  = set()
 
         _s = st.session_state.project.summary()
-        _status.write(
-            f"✅ {_s['phrases']} phrases, {_s['patterns']} patterns, "
-            f"~{_s['bpm']:.0f} BPM ({_elapsed:.1f}s)"
-        )
-        _status.update(label="Assessment complete!", state="complete", expanded=False)
+        if not _used_cache:
+            _status.write(
+                f"✅ {_s['phrases']} phrases, {_s['patterns']} patterns, "
+                f"~{_s['bpm']:.0f} BPM ({_elapsed:.1f}s)"
+            )
+            _status.update(label="Assessment complete!", state="complete", expanded=False)
 
         # Auto-update the pattern catalog with this funscript's tagged phrases
         try:
@@ -704,17 +711,19 @@ def _sidebar() -> None:
 
         st.sidebar.markdown("---")
 
-        project_save_path = os.path.join(
-            st.session_state.output_dir, f"{project.name}.project.json"
-        )
         _dirty = st.session_state.get("project_dirty", False)
         _save_label = "● Save project" if _dirty else "Save project"
         _save_help  = "Unsaved changes — click to save." if _dirty else "Save the current project state."
         _sb_col1, _sb_col2 = st.sidebar.columns(2)
-        if _sb_col1.button(_save_label, help=_save_help, use_container_width=True):
-            project.export_project(project_save_path)
-            st.session_state.project_dirty = False
-            st.sidebar.success(f"Saved to {project_save_path}")
+        if _sb_col1.button(_save_label, help=_save_help, use_container_width=True,
+                           disabled=project is None):
+            if project:
+                project_save_path = os.path.join(
+                    st.session_state.output_dir, f"{project.name}.project.json"
+                )
+                project.export_project(project_save_path)
+                st.session_state.project_dirty = False
+                st.sidebar.success(f"Saved to {project_save_path}")
         if _sb_col2.button("New project", use_container_width=True,
                            help="Start a new project. Recent projects are kept."):
             _clear_keys = [
