@@ -110,13 +110,13 @@ def _commit_project_to_disk(project: dict | None) -> None:
             source = video_path
         if source:
             status.update(label=f"Analyzing beats… ({Path(source).name})")
-            result, err = _analyze_beats(source, folder)
-            if result:
-                beats = len(result.get("beats", []))
-                bpm = result.get("tempo_bpm", 0)
-                status.write(f"✅ Beat data: {beats} beats, ~{bpm:.0f} BPM")
-            elif err:
-                status.write(f"⚠️ Beat analysis skipped: {err}")
+            try:
+                from forge_ui_components.beat_bar.core import analyze_beats, save_beats
+                beat_map = analyze_beats(source)
+                save_beats(beat_map, beat_cache)
+                status.write(f"✅ Beat data: {len(beat_map.beats)} beats, ~{beat_map.bpm:.0f} BPM")
+            except Exception as e:
+                status.write(f"⚠️ Beat analysis skipped: {e}")
 
     # Run motion analysis if we have video and it hasn't been cached
     motion_cache = Path(folder) / "_video_motion.json"
@@ -360,13 +360,16 @@ def _funscript_section(v: int):
         _reset_downstream_state()
         return str(tmp)
 
+    def _on_funscript_clear(cfg):
+        _reset_downstream_state()
+
     funscript_path = st.session_state.get("funscript_path", "")
     render_upload(
         FUNSCRIPT_PICKER,
         version=v,
         on_upload=_on_funscript_upload,
+        on_clear=_on_funscript_clear,
         current_path=funscript_path,
-        show_clear=False,  # funscript clear is handled by New Project
     )
 
     if funscript_path and Path(funscript_path).exists():

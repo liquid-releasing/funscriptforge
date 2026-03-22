@@ -701,31 +701,9 @@ def _sidebar() -> None:
         )
 
     with st.sidebar:
-        render_full_sidebar_status(_status)
-
-        # Undo button (interactive — stays in app.py)
-        if _status.has_undo:
-            if st.button("↩ Undo", help=f"Undo {_status.last_action_tab} Accept", use_container_width=True):
-                _perform_undo(_forge)
-                st.rerun()
-
-        st.sidebar.markdown("---")
-
-        _dirty = st.session_state.get("project_dirty", False)
-        _save_label = "● Save project" if _dirty else "Save project"
-        _save_help  = "Unsaved changes — click to save." if _dirty else "Save the current project state."
-        _sb_col1, _sb_col2 = st.sidebar.columns(2)
-        if _sb_col1.button(_save_label, help=_save_help, use_container_width=True,
-                           disabled=project is None):
-            if project:
-                project_save_path = os.path.join(
-                    st.session_state.output_dir, f"{project.name}.project.json"
-                )
-                project.export_project(project_save_path)
-                st.session_state.project_dirty = False
-                st.sidebar.success(f"Saved to {project_save_path}")
-        if _sb_col2.button("New project", use_container_width=True,
-                           help="Start a new project. Recent projects are kept."):
+        # New Project button — prominent, at the top of status area
+        if st.button("🔨 New Project", use_container_width=True,
+                      help="Start a new project. Recent projects are kept."):
             _clear_keys = [
                 "forge_project", "funscript_path", "video_path",
                 "output_folder_input", "output_folder_pending",
@@ -739,10 +717,16 @@ def _sidebar() -> None:
             _tone_keys = [k for k in st.session_state if k.startswith("tone_flip_") or k.startswith("tone_impact_")]
             for _k in _clear_keys + _motion_keys + _tone_keys:
                 st.session_state.pop(_k, None)
-            # Increment version to force all upload widgets to reset
             st.session_state["project_ver"] = st.session_state.get("project_ver", 0) + 1
-            # Keep output_dir and recents — don't clear those
             st.rerun()
+
+        render_full_sidebar_status(_status)
+
+        # Undo button (interactive — stays in app.py)
+        if _status.has_undo:
+            if st.button("↩ Undo", help=f"Undo {_status.last_action_tab} Accept", use_container_width=True):
+                _perform_undo(_forge)
+                st.rerun()
 
     _render_sidebar_footer()
 
