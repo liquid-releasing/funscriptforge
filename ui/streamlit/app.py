@@ -977,6 +977,7 @@ def _render_phrase_tab(project: Project) -> None:
 def _render_phrase_selector_tab(project: Project) -> None:
     """Phrase Selector view — full chart + phrase table."""
     view_state = st.session_state.view_state
+    assessment_dict = project.assessment.to_dict()
 
     with st.expander("Phrase detection settings", expanded=False):
         _dc1, _dc2 = st.columns(2)

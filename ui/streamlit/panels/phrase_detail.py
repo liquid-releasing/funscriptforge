@@ -963,10 +963,10 @@ def _render_save_cancel(phrase_idx: int, view_state) -> None:
     to the state when you first entered the phrase editor."""
 
     if st.button(
-        "✕ Cancel all changes",
+        "✕ Cancel phrase changes",
         key="pd_cancel",
         width="stretch",
-        help="Discard all changes to this phrase and revert to how it was when you started editing",
+        help="Discard changes to this phrase and revert to how it was when you started editing",
     ):
         # Restore chain to snapshot taken on entry
         _chain_key = f"phrase_transform_chain_{phrase_idx}"
