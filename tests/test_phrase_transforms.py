@@ -1491,5 +1491,66 @@ class TestBeatAccent(unittest.TestCase):
         self.assertEqual(spec.params["max_accents"].default, 0)
 
 
+class TestToneTransforms(unittest.TestCase):
+    """All 6 tone transforms apply correctly and modify positions."""
+
+    _TONE_KEYS = [
+        "tone_tender", "tone_build", "tone_tease",
+        "tone_edge", "tone_climax", "tone_dominant",
+    ]
+
+    def test_all_tones_registered(self):
+        for key in self._TONE_KEYS:
+            with self.subTest(key=key):
+                self.assertIn(key, TRANSFORM_CATALOG)
+
+    def test_tone_has_impact_param(self):
+        for key in self._TONE_KEYS:
+            with self.subTest(key=key):
+                self.assertIn("impact", TRANSFORM_CATALOG[key].params)
+
+    def test_tone_modifies_positions(self):
+        actions = _actions([10, 50, 90, 20, 80, 40, 60, 30, 70, 50])
+        original_pos = [a["pos"] for a in actions]
+        for key in self._TONE_KEYS:
+            with self.subTest(key=key):
+                spec = TRANSFORM_CATALOG[key]
+                result = spec.apply(actions)
+                result_pos = [a["pos"] for a in result]
+                # At least some positions should change (with default params)
+                self.assertNotEqual(result_pos, original_pos,
+                                    f"{key} did not modify any positions")
+
+    def test_tone_impact_zero_is_passthrough(self):
+        actions = _actions([10, 50, 90, 20, 80])
+        original_pos = [a["pos"] for a in actions]
+        for key in self._TONE_KEYS:
+            with self.subTest(key=key):
+                spec = TRANSFORM_CATALOG[key]
+                result = spec.apply(actions, {"impact": 0.0})
+                result_pos = [a["pos"] for a in result]
+                self.assertEqual(result_pos, original_pos,
+                                 f"{key} with impact=0 should be passthrough")
+
+    def test_tone_does_not_mutate_input(self):
+        actions = _actions([30, 70, 50])
+        original = [a["pos"] for a in actions]
+        for key in self._TONE_KEYS:
+            with self.subTest(key=key):
+                TRANSFORM_CATALOG[key].apply(actions)
+                self.assertEqual([a["pos"] for a in actions], original)
+
+    def test_tone_in_category(self):
+        from pattern_catalog.phrase_transforms import get_transforms_by_category
+        cats = get_transforms_by_category()
+        self.assertIn("Tone", cats)
+        tone_keys = [k for k, _ in cats["Tone"]]
+        for key in self._TONE_KEYS:
+            with self.subTest(key=key):
+                self.assertIn(key, tone_keys)
+        # Tone should be the first category
+        self.assertEqual(list(cats.keys())[0], "Tone")
+
+
 if __name__ == "__main__":
     unittest.main()
