@@ -46,6 +46,18 @@
       "max_delta": 60,
       "notes": "Single-channel estim. No mechanical limits — electrical signal. Max delta controls comfort: 50-70 typical. restim firmware has internal ramping (rise time 1-7, pulse width max 15) that smooths transitions, so theoretical max is 100 but practical comfort limit is lower. Pulse frequency usually capped at 100-150 Hz."
     },
+    "generic": {
+      "name": "Generic / Intiface",
+      "type": "stroker",
+      "max_speed": 300,
+      "max_bpm": 100,
+      "min_cycle_ms": 300,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 2000,
+      "max_delta": 100,
+      "notes": "Conservative defaults for unknown devices via Intiface Central (Lovense, Satisfyer, LELO, We-Vibe, Kiiroo, etc). Safe for most Bluetooth haptic devices."
+    },
     "estim_stereo": {
       "name": "Estim — Stereo",
       "type": "estim",

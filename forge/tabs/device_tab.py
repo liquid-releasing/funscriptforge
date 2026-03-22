@@ -15,10 +15,11 @@ from forge_ui_components.funscript_chart.streamlit import render_monochrome_from
 
 # Device targets
 _TARGETS = [
-    ("estim_foc",    "Estim — FOC",    "Single-channel estim. Classic waveform."),
-    ("estim_stereo", "Estim — Stereo", "Dual-channel estim. Left/right separation."),
-    ("handy",        "The Handy",      "Linear stroker. Industry standard."),
-    ("osr2",         "OSR2",           "Multi-axis stroker. Twist + stroke."),
+    ("handy",        "The Handy",          "Linear stroker. Industry standard."),
+    ("osr2",         "OSR2",               "Multi-axis servo stroker. Twist + stroke."),
+    ("estim_foc",    "Estim — FOC",        "Single-channel estim. Classic waveform."),
+    ("estim_stereo", "Estim — Stereo",     "Dual-channel estim. Left/right separation."),
+    ("generic",      "Generic / Intiface", "Conservative limits for Bluetooth devices (Lovense, Kiiroo, etc)."),
 ]
 
 
