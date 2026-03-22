@@ -1013,6 +1013,74 @@ def _render_phrase_selector_tab(project: Project) -> None:
     with st.expander("Assessment details", expanded=False):
         assessment_panel.render(project)
 
+    # ── Phrases Accept ────────────────────────────────────────────────────
+    st.divider()
+
+    # Check if any phrases have been edited
+    _n_phrases = len(assessment_dict.get("phrases", []))
+    _phrases_edited = sum(
+        1 for i in range(_n_phrases)
+        if st.session_state.get(f"phrase_transform_chain_{i}")
+    )
+    _has_edits = _phrases_edited > 0
+
+    if _has_edits:
+        st.info(
+            f"**{_phrases_edited}** of **{_n_phrases}** phrases edited. "
+            "Click **Accept** to save all phrase edits to the project."
+        )
+
+    if st.button(
+        "Accept",
+        type="primary",
+        width="stretch",
+        help="Save phrase edits and continue to the next step.",
+    ):
+        from ui.streamlit.panels.phrase_detail import _save_phrase_edits_to_chain
+        _forge = st.session_state.get("forge_project")
+
+        status = st.status("Saving phrase edits…", expanded=True)
+
+        phrases = assessment_dict.get("phrases", [])
+        _save_phrase_edits_to_chain(phrases)
+        status.write(f"✅ Phrase edits saved ({_phrases_edited} phrases modified)")
+
+        # Rebuild vibrant chart cache with edited actions
+        status.update(label="Rebuilding chart data…")
+        from forge_ui_components.funscript_chart.core import compute_chart_data
+        import json
+        _chain_path = st.session_state.get("chain_funscript_path")
+        if _chain_path and os.path.isfile(_chain_path):
+            with open(_chain_path) as f:
+                _edited_actions = json.load(f).get("actions", [])
+            st.session_state["cached_vibrant_series"] = compute_chart_data(_edited_actions)
+            status.write(f"✅ Chart data updated: {len(_edited_actions):,} actions")
+
+        # Update workflow progress
+        if _forge:
+            _forge.setdefault("progress", {})["phrases_edited"] = True
+            from forge.project import save_forge
+            save_forge(_forge)
+
+        status.update(label="Phrases complete!", state="complete", expanded=False)
+        st.session_state["phrases_accepted"] = True
+        st.rerun()
+
+    if st.session_state.get("phrases_accepted"):
+        from forge.tabs._ui_helpers import success_guidance
+        # Check if estim is selected — if so, suggest Stim before Export
+        _forge = st.session_state.get("forge_project")
+        _targets = _forge.get("output_targets", []) if _forge else []
+        _has_estim = any("estim" in t for t in _targets)
+        if _has_estim:
+            success_guidance(
+                "Scroll to top to select your next tab: **Stim** or **Export**."
+            )
+        else:
+            success_guidance(
+                "Scroll to top to select your next tab: **Export**."
+            )
+
 
 def _render_phrase_editor_tab(project: Project) -> None:
     """Phrase Editor view — single-phrase editor with prev/next navigation."""
