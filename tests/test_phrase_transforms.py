@@ -68,6 +68,13 @@ _EXPECTED_KEYS = {
     "drift",
     "tide",
     "funnel",
+    # Tone transforms
+    "tone_tender",
+    "tone_build",
+    "tone_tease",
+    "tone_edge",
+    "tone_climax",
+    "tone_dominant",
 }
 
 _PHRASE_HIGH_BPM = {"bpm": 150.0, "pattern_label": "regular", "amplitude_span": 80}
@@ -114,8 +121,10 @@ class TestCatalogStructure(unittest.TestCase):
 
     def test_transform_order_covers_all_catalog_keys(self):
         """Every built-in key in TRANSFORM_CATALOG appears in TRANSFORM_ORDER.
+        Tone transforms have their own category and are excluded.
         User-defined keys (recipes / plugins) are excluded from this check."""
-        missing = _BUILTIN_KEYS - set(TRANSFORM_ORDER)
+        _tone_keys = {k for k in _BUILTIN_KEYS if k.startswith("tone_")}
+        missing = _BUILTIN_KEYS - set(TRANSFORM_ORDER) - _tone_keys
         self.assertEqual(missing, set(), f"Built-in keys missing from TRANSFORM_ORDER: {missing}")
 
     def test_transform_order_has_no_unknown_keys(self):

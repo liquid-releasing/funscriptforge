@@ -986,6 +986,146 @@ class _Nudge(PhraseTransform):
 
 
 # ------------------------------------------------------------------
+# Tone transforms — same logic as Tone tab, applied per-phrase
+# ------------------------------------------------------------------
+
+class _ToneTransform(PhraseTransform):
+    """Apply a tone shape to a phrase. Uses the same preview logic as the
+    global Tone tab but scoped to the phrase actions."""
+
+    _tone_name: str = ""
+
+    def _transform(self, actions: list, p: dict) -> list:
+        import numpy as np
+
+        positions = [a["pos"] for a in actions]
+        pos = np.array(positions, dtype=float)
+        n = len(pos)
+        if n < 2:
+            return actions
+        t_norm = np.linspace(0, 1, n)
+        center = 50.0
+
+        # Impact blending
+        impact = p.get("impact", 1.0)
+
+        # Slider values in order (s1, s2, s3, s4)
+        sv = [p.get(f"s{i}", 0.5) for i in range(1, 5)]
+        s = lambda i: sv[i] if i < len(sv) else 0.5
+
+        tone = self._tone_name
+        original = pos.copy()
+
+        if tone == "Tender":
+            compression = 0.2 + 0.6 * (1.0 - s(0))
+            pos = center + (pos - center) * compression
+        elif tone == "Build":
+            floor = s(1) * 0.5
+            scale = floor + (1.0 - floor) * (t_norm ** (0.5 + s(0) * 1.5))
+            arc_width = 0.7 + s(2) * 0.6
+            pos = center + (pos - center) * scale * arc_width
+        elif tone == "Tease":
+            cycles = 2 + s(1) * 6
+            depth = 0.2 + s(0) * 0.6
+            envelope = (1.0 - depth) + depth * np.abs(np.sin(t_norm * np.pi * cycles))
+            if s(2) > 0.1:
+                noise = np.random.RandomState(42).uniform(-s(2) * 0.2, s(2) * 0.2, n)
+                envelope = np.clip(envelope + noise, 0.1, 1.0)
+            pos = center + (pos - center) * envelope
+        elif tone == "Edge":
+            envelope = np.ones(n) * (0.5 + s(0) * 0.5)
+            drop_start = int(n * s(1))
+            if drop_start < n:
+                envelope[drop_start:] = np.linspace(
+                    envelope[min(drop_start, n - 1)], 0.3, n - drop_start
+                )
+            pos = center + (pos - center) * envelope
+        elif tone == "Climax":
+            expansion = 1.0 + s(0) * 0.5
+            urgency_env = 1.0 + s(1) * 0.2 * t_norm
+            pos = center + (pos - center) * expansion * urgency_env
+        elif tone == "Dominant":
+            exponent = 1.0 - s(0) * 0.3
+            width = 0.8 + s(1) * 0.6
+            diff = pos - center
+            pos = center + np.sign(diff) * np.abs(diff) ** exponent * width
+            if s(2) > 0.3:
+                min_level = s(2) * 30
+                below = pos < (center - min_level)
+                above = pos > (center + min_level)
+                pos = np.where(below, np.maximum(pos, center - min_level), pos)
+                pos = np.where(above, np.minimum(pos, center + min_level), pos)
+
+        # Impact blending: output = original + impact * (toned - original)
+        pos = original + impact * (pos - original)
+        pos = np.clip(pos, 0, 100)
+
+        for i, a in enumerate(actions):
+            a["pos"] = int(round(pos[i]))
+        return actions
+
+
+def _make_tone_transform(tone_name: str, tone_data: dict) -> _ToneTransform:
+    """Build a PhraseTransform for one tone with its slider params."""
+    # Slider definitions from tone_tab._TONE_SLIDERS
+    _TONE_SLIDER_DEFS = {
+        "Tender": [("Softness", "s1", 0.7, "How much to compress the cycle range."),
+                   ("Pulse onset", "s2", 0.3, "How gradually pulses rise.")],
+        "Build": [("Build rate", "s1", 0.5, "How fast intensity ramps up."),
+                  ("Starting intensity", "s2", 0.3, "Where the ramp begins."),
+                  ("Arc width", "s3", 0.5, "How wide the sweep pattern is.")],
+        "Tease": [("Retreat depth", "s1", 0.6, "How far intensity pulls back at peaks."),
+                  ("Oscillation speed", "s2", 0.5, "How fast the rise-and-retreat cycles."),
+                  ("Pulse variety", "s3", 0.5, "How much the pulse pattern varies.")],
+        "Edge": [("Hold intensity", "s1", 0.7, "The sustained plateau level."),
+                 ("Drop point", "s2", 0.85, "How late the intensity drops.")],
+        "Climax": [("Peak intensity", "s1", 0.9, "How far to push the range."),
+                   ("Urgency", "s2", 0.7, "How aggressive the pacing feels."),
+                   ("Pulse sharpness", "s3", 0.6, "How sharp the pulse edges are."),
+                   ("Frequency push", "s4", 0.8, "How high the pulse frequency goes.")],
+        "Dominant": [("Drive", "s1", 0.8, "How assertive the device pace is."),
+                     ("Sweep width", "s2", 0.7, "How wide the cycle range."),
+                     ("Relentlessness", "s3", 0.7, "How little the intensity dips.")],
+    }
+
+    params: Dict[str, TransformParam] = {
+        "impact": TransformParam(
+            label="Impact", type="float", default=1.0,
+            min_val=0.0, max_val=1.0, step=0.05,
+            help="How much of the tone to apply (0 = no change, 1 = full tone).",
+        ),
+    }
+    for label, key, default, help_text in _TONE_SLIDER_DEFS.get(tone_name, []):
+        params[key] = TransformParam(
+            label=label, type="float", default=default,
+            min_val=0.0, max_val=1.0, step=0.05, help=help_text,
+        )
+
+    t = _ToneTransform(
+        key=f"tone_{tone_name.lower()}",
+        name=f"{tone_name}",
+        description=tone_data.get("feel", ""),
+        params=params,
+        category="Tone",
+    )
+    t._tone_name = tone_name
+    return t
+
+
+# Tone data (subset of tone_tab._TONES — just what we need for transforms)
+_TONE_DEFS = [
+    {"name": "Tender", "feel": "Soft, slow, shallow strokes. Intimate and present."},
+    {"name": "Build", "feel": "Intensity increases steadily. No release until the end."},
+    {"name": "Tease", "feel": "Rises toward a peak then retreats. Reward withheld."},
+    {"name": "Edge", "feel": "Sustained plateau. High intensity maintained, no release."},
+    {"name": "Climax", "feel": "Maximum intensity, full range, urgent pacing."},
+    {"name": "Dominant", "feel": "Fast, wide, assertive. The device takes charge."},
+]
+
+_TONE_TRANSFORMS = [_make_tone_transform(td["name"], td) for td in _TONE_DEFS]
+
+
+# ------------------------------------------------------------------
 # Catalog
 # ------------------------------------------------------------------
 
@@ -1780,6 +1920,10 @@ def load_user_transforms(
 # TRANSFORM_ORDER completeness test only checks built-ins.
 # ------------------------------------------------------------------
 
+# Register tone transforms
+for _tt in _TONE_TRANSFORMS:
+    TRANSFORM_CATALOG[_tt.key] = _tt
+
 _BUILTIN_KEYS: frozenset = frozenset(TRANSFORM_CATALOG)
 
 # Merge user-defined transforms (silent no-op when directories are absent)
@@ -1827,15 +1971,21 @@ def get_transform_options() -> tuple[list[str], list[str]]:
 def get_transforms_by_category() -> dict[str, list[tuple[str, str]]]:
     """Return {category_name: [(key, label), ...]} for the two-step picker.
 
-    Categories
+    Categories (order matters — Tone first)
     ----------
+    'Tone'       — per-phrase tone shaping (same logic as global Tone tab)
     'Behavior'   — built-in non-structural transforms (amplitude, smoothing, …)
     'Structural' — built-in structural transforms (tempo, replacement)
     'Plugins'    — user-defined transforms (omitted when none are loaded)
     """
+    tone:       list[tuple[str, str]] = []
     behavior:   list[tuple[str, str]] = []
     structural: list[tuple[str, str]] = []
     plugins:    list[tuple[str, str]] = []
+
+    # Tone transforms (registered from _TONE_TRANSFORMS)
+    for tt in _TONE_TRANSFORMS:
+        tone.append((tt.key, tt.name))
 
     for k in TRANSFORM_ORDER:
         if k not in TRANSFORM_CATALOG:
@@ -1855,6 +2005,7 @@ def get_transforms_by_category() -> dict[str, list[tuple[str, str]]]:
         plugins.append((k, TRANSFORM_CATALOG[k].name))
 
     result: dict[str, list[tuple[str, str]]] = {
+        "Tone":       tone,
         "Behavior":   behavior,
         "Structural": structural,
     }
