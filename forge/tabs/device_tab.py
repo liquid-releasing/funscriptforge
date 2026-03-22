@@ -196,6 +196,14 @@ def _apply_device_awareness(project, targets, fix_strategies, apply_scope):
                 st.session_state["chain_funscript_path"] = chain_path
                 status.write(f"✅ Device-safe fixes applied to {len(times):,} actions")
 
+                # Pre-compute vibrant chart data for Phrases tab
+                status.update(label="Building chart data…")
+                from forge_ui_components.funscript_chart.core import compute_chart_data
+                st.session_state["cached_vibrant_series"] = compute_chart_data(
+                    fs_data.get("actions", [])
+                )
+                status.write("✅ Chart data cached for Phrases")
+
     # Safety verification pass
     status.update(label="Verifying device safety…")
     # TODO: Run actual safety check against device limits
