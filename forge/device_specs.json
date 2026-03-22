@@ -43,7 +43,7 @@
       "position_min": 0,
       "position_max": 100,
       "max_acceleration": 10000,
-      "max_delta": 60,
+      "max_delta": 100,
       "notes": "Single-channel estim. No mechanical limits — electrical signal. Max delta controls comfort: 50-70 typical. restim firmware has internal ramping (rise time 1-7, pulse width max 15) that smooths transitions, so theoretical max is 100 but practical comfort limit is lower. Pulse frequency usually capped at 100-150 Hz."
     },
     "generic": {
@@ -67,7 +67,7 @@
       "position_min": 0,
       "position_max": 100,
       "max_acceleration": 10000,
-      "max_delta": 60,
+      "max_delta": 100,
       "notes": "Dual-channel estim. Same electrical limits as FOC, two independent channels. Max delta 50-70 recommended for comfort."
     }
   }
