@@ -1,0 +1,53 @@
+{
+  "_comment": "Device limits. Conservative defaults — refine via community feedback.",
+  "_units": {
+    "max_speed": "position-units per second (0-100 range, so 400 = full stroke 4x/sec)",
+    "max_bpm": "beats per minute — max comfortable cycling rate",
+    "min_cycle_ms": "minimum time for one full up-down cycle in milliseconds",
+    "position_min": "lowest safe position (0-100)",
+    "position_max": "highest safe position (0-100)",
+    "max_acceleration": "max position-units per second squared (how fast speed can change)"
+  },
+  "devices": {
+    "handy": {
+      "name": "The Handy",
+      "max_speed": 400,
+      "max_bpm": 120,
+      "min_cycle_ms": 250,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 3000,
+      "notes": "Linear stroker. Firmware limits speed. Older firmware is slower."
+    },
+    "osr2": {
+      "name": "OSR2",
+      "max_speed": 500,
+      "max_bpm": 150,
+      "min_cycle_ms": 200,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 4000,
+      "notes": "Multi-axis servo stroker. Speed depends on build quality and servos."
+    },
+    "estim_foc": {
+      "name": "Estim — FOC",
+      "max_speed": 1000,
+      "max_bpm": 300,
+      "min_cycle_ms": 100,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 10000,
+      "notes": "Single-channel estim. No mechanical limits — electrical signal. User comfort is the limit."
+    },
+    "estim_stereo": {
+      "name": "Estim — Stereo",
+      "max_speed": 1000,
+      "max_bpm": 300,
+      "min_cycle_ms": 100,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 10000,
+      "notes": "Dual-channel estim. Same electrical limits as FOC, two independent channels."
+    }
+  }
+}
