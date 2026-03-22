@@ -53,8 +53,42 @@ def render():
 
     st.divider()
 
+    # ── Limits table ──────────────────────────────────────────────────────
+    specs = load_device_specs()
+    limits = combined_limits(selected_targets)
+    if limits is None:
+        return
+
+    st.subheader("Device limits")
+    if len(selected_targets) > 1:
+        st.caption("Combined limits — the most restrictive device wins for each parameter.")
+
+    # Build table showing which device constrains each parameter
+    _selected_specs = [specs[k] for k in selected_targets if k in specs]
+
+    def _bottleneck(attr, use_max=False):
+        """Find which device is the bottleneck for a given attribute."""
+        if len(_selected_specs) == 1:
+            return ""
+        vals = [(getattr(s, attr), s.name) for s in _selected_specs]
+        if use_max:
+            limiting = max(vals, key=lambda x: x[0])
+        else:
+            limiting = min(vals, key=lambda x: x[0])
+        return f"({limiting[1]})"
+
+    import pandas as pd
+    _limits_data = [
+        {"Parameter": "Max speed", "Value": f"{limits.max_speed:.0f} pos/s", "Limited by": _bottleneck("max_speed")},
+        {"Parameter": "Max BPM", "Value": f"{limits.max_bpm:.0f}", "Limited by": _bottleneck("max_bpm")},
+        {"Parameter": "Max delta", "Value": f"{limits.max_delta}" + (" (no limit)" if limits.max_delta >= 100 else ""), "Limited by": _bottleneck("max_delta")},
+        {"Parameter": "Min cycle", "Value": f"{limits.min_cycle_ms} ms", "Limited by": _bottleneck("min_cycle_ms", use_max=True)},
+    ]
+    st.dataframe(pd.DataFrame(_limits_data), hide_index=True, use_container_width=True)
+
+    st.divider()
+
     # ── Analysis ──────────────────────────────────────────────────────────
-    # Load funscript and compute combined device limits
     from forge.funscript import load_funscript, parse_actions
 
     funscript_path = st.session_state.get("funscript_path", "")
@@ -72,10 +106,6 @@ def render():
         return
 
     times_s = [t / 1000.0 for t in times]
-    limits = combined_limits(selected_targets)
-
-    if limits is None:
-        return
 
     # Analyze current state
     analysis = analyze_violations(actions, limits)
