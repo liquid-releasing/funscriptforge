@@ -154,6 +154,15 @@ def render():
             )
             render_monochrome_from_arrays(times_s, fixed_positions, key="device_after")
 
+        # Full-width device-aware chart + stats (same layout as Project tab)
+        st.write("")
+        st.subheader("Device-aware result")
+        from forge_ui_components.funscript_chart.streamlit import render_monochrome, render_stats_row
+        from forge.funscript import funscript_stats as _fs_stats
+        _fixed_data = {"actions": fixed_actions}
+        render_monochrome(fixed_actions, height=180)
+        render_stats_row(_fs_stats(_fixed_data))
+
     st.divider()
 
     # ── Accept ────────────────────────────────────────────────────────────
