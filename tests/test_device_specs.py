@@ -74,6 +74,19 @@ class TestAnalyzeViolations(unittest.TestCase):
         self.assertEqual(result["violation_count"], 1)
         self.assertGreater(result["max_speed_found"], 400)
 
+    def test_detects_delta_violations(self):
+        # Delta 80 exceeds estim limit of 60
+        actions = [{"at": 0, "pos": 10}, {"at": 1000, "pos": 90}]
+        limits = DeviceSpec(
+            key="estim", name="Estim", device_type="estim",
+            max_speed=1000, max_bpm=300, min_cycle_ms=100,
+            position_min=0, position_max=100, max_acceleration=10000,
+            max_delta=60,
+        )
+        result = analyze_violations(actions, limits)
+        self.assertEqual(result["delta_violations"], 1)
+        self.assertEqual(result["max_delta_found"], 80)
+
     def test_empty_actions(self):
         result = analyze_violations([], self._limits())
         self.assertEqual(result["violation_count"], 0)
@@ -110,6 +123,19 @@ class TestApplyMinimumFix(unittest.TestCase):
         fixed = apply_minimum_fix(actions, self._limits())
         self.assertEqual(fixed[0]["pos"], 50)
         self.assertEqual(fixed[1]["pos"], 60)
+
+    def test_fixes_delta_violations(self):
+        # Delta 80 exceeds limit 60 — should be clamped
+        limits = DeviceSpec(
+            key="estim", name="Estim", device_type="estim",
+            max_speed=1000, max_bpm=300, min_cycle_ms=100,
+            position_min=0, position_max=100, max_acceleration=10000,
+            max_delta=60,
+        )
+        actions = [{"at": 0, "pos": 10}, {"at": 500, "pos": 90}]
+        fixed = apply_minimum_fix(actions, limits)
+        delta = abs(fixed[1]["pos"] - fixed[0]["pos"])
+        self.assertLessEqual(delta, 60)
 
     def test_clamps_within_position_range(self):
         actions = [{"at": 0, "pos": 0}, {"at": 100, "pos": 100}]

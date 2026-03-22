@@ -4,50 +4,59 @@
     "max_speed": "position-units per second (0-100 range, so 400 = full stroke 4x/sec)",
     "max_bpm": "beats per minute — max comfortable cycling rate",
     "min_cycle_ms": "minimum time for one full up-down cycle in milliseconds",
-    "position_min": "lowest safe position (0-100)",
-    "position_max": "highest safe position (0-100)",
-    "max_acceleration": "max position-units per second squared (how fast speed can change)"
+    "position_min": "lowest position (0-100)",
+    "position_max": "highest position (0-100)",
+    "max_acceleration": "max position-units per second squared (how fast speed can change)",
+    "max_delta": "max position change between consecutive actions (0-100). Estim comfort/safety limit."
   },
   "devices": {
     "handy": {
       "name": "The Handy",
+      "type": "stroker",
       "max_speed": 400,
       "max_bpm": 120,
       "min_cycle_ms": 250,
       "position_min": 0,
       "position_max": 100,
       "max_acceleration": 3000,
-      "notes": "Linear stroker. Firmware limits speed. Older firmware is slower."
+      "max_delta": 100,
+      "notes": "Linear stroker. Firmware v3 supports up to 400mm/s. Older firmware slower. Community reports 300-400 comfortable range."
     },
     "osr2": {
       "name": "OSR2",
+      "type": "stroker",
       "max_speed": 500,
       "max_bpm": 150,
       "min_cycle_ms": 200,
       "position_min": 0,
       "position_max": 100,
       "max_acceleration": 4000,
-      "notes": "Multi-axis servo stroker. Speed depends on build quality and servos."
+      "max_delta": 100,
+      "notes": "Multi-axis servo stroker. Speed depends on build quality and servos. High-end builds exceed Handy specs."
     },
     "estim_foc": {
       "name": "Estim — FOC",
+      "type": "estim",
       "max_speed": 1000,
       "max_bpm": 300,
       "min_cycle_ms": 100,
       "position_min": 0,
       "position_max": 100,
       "max_acceleration": 10000,
-      "notes": "Single-channel estim. No mechanical limits — electrical signal. User comfort is the limit."
+      "max_delta": 60,
+      "notes": "Single-channel estim. No mechanical limits — electrical signal. Max delta controls comfort: 50-70 typical. restim firmware has internal ramping (rise time 1-7, pulse width max 15) that smooths transitions, so theoretical max is 100 but practical comfort limit is lower. Pulse frequency usually capped at 100-150 Hz."
     },
     "estim_stereo": {
       "name": "Estim — Stereo",
+      "type": "estim",
       "max_speed": 1000,
       "max_bpm": 300,
       "min_cycle_ms": 100,
       "position_min": 0,
       "position_max": 100,
       "max_acceleration": 10000,
-      "notes": "Dual-channel estim. Same electrical limits as FOC, two independent channels."
+      "max_delta": 60,
+      "notes": "Dual-channel estim. Same electrical limits as FOC, two independent channels. Max delta 50-70 recommended for comfort."
     }
   }
 }
