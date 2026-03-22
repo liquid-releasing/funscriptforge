@@ -109,7 +109,8 @@ def render():
     times_s = [t / 1000.0 for t in times]
 
     # Analyze current state
-    analysis = analyze_violations(actions, limits)
+    with st.spinner(f"Analyzing {len(actions):,} actions against device limits…"):
+        analysis = analyze_violations(actions, limits)
 
     # ── Status ────────────────────────────────────────────────────────────
     if analysis["violation_count"] == 0:
