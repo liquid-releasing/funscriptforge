@@ -139,6 +139,12 @@ def render(
 
     phrase = phrases[phrase_idx]
 
+    # Snapshot the chain on entry so Cancel can revert to this state
+    _snapshot_key = f"_phrase_chain_snapshot_{phrase_idx}"
+    if _snapshot_key not in st.session_state:
+        _chain_key = f"phrase_transform_chain_{phrase_idx}"
+        st.session_state[_snapshot_key] = list(st.session_state.get(_chain_key, []))
+
     win_start, win_end = _fixed_viewport(phrases, phrase, duration_ms)
     # Use chain funscript if available (device-fixed + tone-applied)
     import os as _os
@@ -873,27 +879,46 @@ def _clear_all_split_state() -> None:
 # ------------------------------------------------------------------
 
 def _accept_pending(phrase_idx: int) -> None:
-    """Auto-accept any non-passthrough pending transform before navigating."""
+    """Auto-accept any non-passthrough pending transform before navigating.
+    Also applies device safety Performance transform if enabled."""
     from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
     _pending_key = st.session_state.get(f"txpick_{phrase_idx}_key", "passthrough")
+    _chain_key = f"phrase_transform_chain_{phrase_idx}"
+    _cur_chain = list(st.session_state.get(_chain_key, []))
+    _changed = False
+
     if _pending_key != "passthrough":
         _pv = {
             pk: st.session_state.get(f"param_{phrase_idx}_{pk}", p.default)
             for pk, p in TRANSFORM_CATALOG[_pending_key].params.items()
         }
-        _chain_key = f"phrase_transform_chain_{phrase_idx}"
-        _cur_chain = st.session_state.get(_chain_key, [])
-        st.session_state[_chain_key] = _cur_chain + [
-            {"transform_key": _pending_key, "param_values": _pv}
-        ]
+        _cur_chain.append({"transform_key": _pending_key, "param_values": _pv})
+        _changed = True
+
+    # Device safety Performance transform
+    if st.session_state.get(f"_ds_fix_{phrase_idx}", False):
+        _perf_defaults = {pk: p.default for pk, p in TRANSFORM_CATALOG["performance"].params.items()}
+        _perf_defaults["max_velocity"] = 0.20
+        _cur_chain.append({"transform_key": "performance", "param_values": _perf_defaults})
+        _changed = True
+
+    if _changed:
+        st.session_state[_chain_key] = _cur_chain
+        st.session_state["project_dirty"] = True
+    # Clear snapshot — changes are being kept
+    st.session_state.pop(f"_phrase_chain_snapshot_{phrase_idx}", None)
     _clear_picker_state(phrase_idx)
 
 
 def _render_nav_buttons(phrases: list, phrase_idx: int, view_state, duration_ms: int) -> None:
     n = len(phrases)
-    st.caption(f"P{phrase_idx + 1} of {n}")
+    _chain_count = len(st.session_state.get(f"phrase_transform_chain_{phrase_idx}", []))
 
-    col_p, col_n = st.columns(2)
+    st.caption(f"P{phrase_idx + 1} of {n}")
+    if _chain_count:
+        st.caption(f"✓ {_chain_count} transform{'s' if _chain_count > 1 else ''} applied")
+
+    col_p, col_n, col_done = st.columns(3)
     with col_p:
         if st.button("⏮ Prev", key="pd_phrase_prev",
                      disabled=(phrase_idx == 0),
@@ -914,91 +939,44 @@ def _render_nav_buttons(phrases: list, phrase_idx: int, view_state, duration_ms:
             st.session_state["phrase_table_ver"] = st.session_state.get("phrase_table_ver", 0) + 1
             st.rerun()
 
+    with col_done:
+        if st.button("✓ Done", key="pd_done",
+                     width="stretch", type="primary",
+                     help="Save all phrase edits and return to overview"):
+            _accept_pending(phrase_idx)
+            _save_phrase_edits_to_chain(phrases)
+            view_state.clear_selection()
+            view_state.reset_zoom()
+            st.session_state["phrase_table_ver"] = st.session_state.get("phrase_table_ver", 0) + 1
+            st.session_state.phrase_sel_chart_instance = (
+                st.session_state.get("phrase_sel_chart_instance", 0) + 1
+            )
+            st.rerun()
+
 
 # ------------------------------------------------------------------
 # Save / Cancel buttons
 # ------------------------------------------------------------------
 
 def _render_save_cancel(phrase_idx: int, view_state) -> None:
-    """Accept confirms transform for this phrase (stays in editor for further tweaks).
-    Done commits all transforms and returns to phrase selector with full-funscript view.
-    Cancel discards this phrase's transform and returns to selector.
-    """
-    from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
-    _pending_key = st.session_state.get(f"txpick_{phrase_idx}_key", "passthrough")
+    """Cancel discards ALL changes for this phrase (entire chain) and reverts
+    to the state when you first entered the phrase editor."""
 
     if st.button(
-        "✓ Accept",
-        key="pd_save",
-        width="stretch",
-        type="primary",
-        help="Accept this transform — it becomes the new baseline for further editing",
-    ):
-        _status = st.status("Saving changes…", expanded=True)
-
-        _chain_key = f"phrase_transform_chain_{phrase_idx}"
-        _cur_chain = st.session_state.get(_chain_key, [])
-        _new_chain = list(_cur_chain)
-
-        # Append pending transform (skip passthrough)
-        if _pending_key != "passthrough":
-            _pv = {
-                pk: st.session_state.get(f"param_{phrase_idx}_{pk}", p.default)
-                for pk, p in TRANSFORM_CATALOG[_pending_key].params.items()
-            }
-            _new_chain.append({"transform_key": _pending_key, "param_values": _pv})
-            _status.write(f"✅ Applied **{_pending_key}** to phrase {phrase_idx + 1}")
-
-        # Append Performance if device awareness fix is active for this phrase
-        if st.session_state.get(f"_ds_fix_{phrase_idx}", False):
-            from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG as _TC
-            _perf_defaults = {pk: p.default for pk, p in _TC["performance"].params.items()}
-            _perf_defaults["max_velocity"] = 0.20
-            _new_chain.append({"transform_key": "performance", "param_values": _perf_defaults})
-            _status.write("✅ Device awareness applied")
-
-        if _new_chain != list(_cur_chain):
-            st.session_state[_chain_key] = _new_chain
-            st.session_state["project_dirty"] = True
-
-        _status.update(label="Changes saved!", state="complete", expanded=False)
-
-        # Reset picker to passthrough
-        _clear_picker_state(phrase_idx)
-        st.rerun()  # rebuild charts with the updated baseline
-
-    _chain_count = len(st.session_state.get(f"phrase_transform_chain_{phrase_idx}", []))
-    if _chain_count:
-        st.caption(f"✓ {_chain_count} transform{'s' if _chain_count > 1 else ''} accepted")
-
-    st.write("")
-
-    if st.button(
-        "✔ Done",
-        key="pd_done",
-        width="stretch",
-        help="Finish all edits — save to project and return to Phrase Selector",
-    ):
-        _accept_pending(phrase_idx)
-        # Save edited funscript to chain
-        _save_phrase_edits_to_chain(phrases)
-        view_state.clear_selection()
-        view_state.reset_zoom()
-        st.session_state["phrase_table_ver"] = st.session_state.get("phrase_table_ver", 0) + 1
-        st.session_state.phrase_sel_chart_instance = (
-            st.session_state.get("phrase_sel_chart_instance", 0) + 1
-        )
-        st.rerun()
-
-    st.write("")
-
-    if st.button(
-        "✕ Cancel",
+        "✕ Cancel all changes",
         key="pd_cancel",
         width="stretch",
-        help="Discard pending transform — revert preview to baseline and choose again",
+        help="Discard all changes to this phrase and revert to how it was when you started editing",
     ):
-        # Clear only the pending selection — the accepted chain is preserved
+        # Restore chain to snapshot taken on entry
+        _chain_key = f"phrase_transform_chain_{phrase_idx}"
+        _snapshot_key = f"_phrase_chain_snapshot_{phrase_idx}"
+        _snapshot = st.session_state.get(_snapshot_key)
+        if _snapshot is not None:
+            st.session_state[_chain_key] = list(_snapshot)
+        else:
+            st.session_state.pop(_chain_key, None)
+        st.session_state.pop(_snapshot_key, None)
         _clear_picker_state(phrase_idx)
         st.rerun()
 
