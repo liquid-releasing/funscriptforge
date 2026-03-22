@@ -248,28 +248,9 @@ def _detail_fragment(
             param_values[pk] = sv if sv is not None else param.default
 
         # Preview applies pending transform on top of the accepted baseline
+        # Device awareness is already applied globally on the Device tab —
+        # no per-phrase device checks needed here.
         preview_actions = _apply_transform_to_window(baseline_actions, phrase, spec, param_values)
-
-        # --- Device awareness: check preview quality, optionally apply Performance ---
-        _enforce     = st.session_state.get(f"device_safety_{phrase_idx}", True)
-        _issues      = _check_quality_phrase(preview_actions, phrase)
-        _n_errors    = sum(1 for i in _issues if i["level"] == "error")
-        _n_warnings  = sum(1 for i in _issues if i["level"] == "warning")
-        _has_issues  = _n_errors > 0 or _n_warnings > 0
-
-        _safety_fix = bool(_enforce and _has_issues)
-        if _safety_fix:
-            _perf_spec   = TRANSFORM_CATALOG["performance"]
-            _perf_params = {pk: p.default for pk, p in _perf_spec.params.items()}
-            _perf_params["max_velocity"] = 0.20
-            preview_actions = _apply_transform_to_window(
-                preview_actions, phrase, _perf_spec, _perf_params
-            )
-
-        # Persist for _render_device_safety() and Accept handler
-        st.session_state[f"_ds_fix_{phrase_idx}"]      = _safety_fix
-        st.session_state[f"_ds_errors_{phrase_idx}"]   = _n_errors
-        st.session_state[f"_ds_warnings_{phrase_idx}"] = _n_warnings
 
     # ------------------------------------------------------------------
     # Layout:
@@ -351,8 +332,7 @@ def _detail_fragment(
         )
 
         if not split_mode and not concat_preview:
-            _badge = "  🛡 Device Safe" if st.session_state.get(f"_ds_fix_{phrase_idx}") else ""
-            st.subheader(f"Preview — {spec.name}{_badge}")
+            st.subheader(f"Preview — {spec.name}")
             st.caption(_phrase_description(phrase))
             _render_chart(
                 actions=preview_actions,
@@ -380,8 +360,6 @@ def _detail_fragment(
                 _split_phrase(phrase_idx, confirmed_split_ms, view_state, duration_ms)
         else:
             _render_transform_controls(phrase, bpm_threshold, phrase_idx)
-            st.write("")
-            _render_device_safety(phrase_idx)
             st.write("")
             _render_save_cancel(phrase_idx, view_state)
             _render_edit_phrase(phrases, phrase_idx, view_state, duration_ms)
@@ -893,13 +871,6 @@ def _accept_pending(phrase_idx: int) -> None:
             for pk, p in TRANSFORM_CATALOG[_pending_key].params.items()
         }
         _cur_chain.append({"transform_key": _pending_key, "param_values": _pv})
-        _changed = True
-
-    # Device safety Performance transform
-    if st.session_state.get(f"_ds_fix_{phrase_idx}", False):
-        _perf_defaults = {pk: p.default for pk, p in TRANSFORM_CATALOG["performance"].params.items()}
-        _perf_defaults["max_velocity"] = 0.20
-        _cur_chain.append({"transform_key": "performance", "param_values": _perf_defaults})
         _changed = True
 
     if _changed:
