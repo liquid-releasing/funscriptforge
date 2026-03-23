@@ -248,6 +248,13 @@ def render(project=None) -> None:
             "Your next step is **Export**."
         )
 
+    # Feedback prompt
+    st.caption(
+        "💬 Want more sliders or different characters? "
+        "Tell us on [Discord](https://discord.gg/funscriptforge) — "
+        "your feedback shapes what we build next."
+    )
+
     st.divider()
 
     # ── Channel previews ──────────────────────────────────────────────────
