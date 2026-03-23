@@ -889,15 +889,32 @@ def _render_nav_buttons(phrases: list, phrase_idx: int, view_state, duration_ms:
 # ------------------------------------------------------------------
 
 def _render_save_cancel(phrase_idx: int, view_state) -> None:
-    """Cancel discards ALL changes for this phrase (entire chain) and reverts
-    to the state when you first entered the phrase editor."""
+    """Apply accepts current transform and lets you add another.
+    Cancel discards ALL changes for this phrase (entire chain)."""
 
-    if st.button(
-        "✕ Cancel phrase changes",
-        key="pd_cancel",
-        width="stretch",
-        help="Discard changes to this phrase and revert to how it was when you started editing",
-    ):
+    col_apply, col_cancel = st.columns(2)
+    with col_apply:
+        if st.button(
+            "✓ Apply",
+            key="pd_apply",
+            width="stretch",
+            type="primary",
+            help="Accept this transform and add another",
+        ):
+            _accept_pending(phrase_idx)
+            st.rerun()
+
+    _chain_count = len(st.session_state.get(f"phrase_transform_chain_{phrase_idx}", []))
+    if _chain_count:
+        st.caption(f"✓ {_chain_count} transform{'s' if _chain_count > 1 else ''} applied")
+
+    with col_cancel:
+        if st.button(
+            "✕ Cancel",
+            key="pd_cancel",
+            width="stretch",
+            help="Discard all changes to this phrase",
+        ):
         # Restore chain to snapshot taken on entry
         _chain_key = f"phrase_transform_chain_{phrase_idx}"
         _snapshot_key = f"_phrase_chain_snapshot_{phrase_idx}"

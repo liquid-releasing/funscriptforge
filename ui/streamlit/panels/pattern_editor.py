@@ -701,12 +701,12 @@ def _render_controls(
         st.session_state.goto_tab = 3
         st.rerun(scope="app")
 
-    # Apply this instance's transform to all other instances
+    # Apply this instance's transform to all other instances of the same behavior
     if st.button(
-        "Apply to all",
+        f"Apply to all {n_instances} '{selected_label}' patterns",
         key=f"pe_apply_all_{selected_label}_{inst_idx}",
         width="stretch",
-        help=f"Copy this transform to all {n_instances} instances of '{selected_label}' and go to Export.",
+        help=f"Copy this transform to every instance of '{selected_label}' ({n_instances} total).",
     ):
         from ui.streamlit.undo_helpers import push_undo
         push_undo(f"Apply transform to all '{selected_label}'")
@@ -721,141 +721,9 @@ def _render_controls(
         st.session_state.goto_tab = 3
         st.rerun(scope="app")
 
-    st.divider()
-
-    # Save current instance's raw actions to the pattern catalog
-    with st.expander("Save to catalog", expanded=False):
-        default_name = f"{selected_label} #{inst_idx + 1}"
-        pattern_name = st.text_input(
-            "Pattern name",
-            value=default_name,
-            key=f"pe_save_name_{selected_label}_{inst_idx}",
-        )
-        if st.button(
-            "Save raw actions",
-            key=f"pe_save_catalog_{selected_label}_{inst_idx}",
-            width="stretch",
-        ):
-            catalog = st.session_state.get("pattern_catalog")
-            if catalog is None:
-                st.error("Pattern catalog not available.")
-            else:
-                window = [
-                    a for a in original_actions
-                    if cycle["start_ms"] <= a["at"] <= cycle["end_ms"]
-                ]
-                if not window:
-                    st.error("No actions found in this phrase window.")
-                else:
-                    fname = os.path.basename(funscript_path)
-                    phrase_metrics = {}
-                    phrase_bpm = 0.0
-                    phrase_tags: List[str] = []
-                    # Pull metrics from the cycle dict if present
-                    if "bpm" in cycle:
-                        phrase_bpm = float(cycle["bpm"])
-                    if "tags" in cycle:
-                        phrase_tags = list(cycle["tags"])
-                    if "metrics" in cycle:
-                        phrase_metrics = dict(cycle["metrics"])
-                    pid = catalog.save_pattern(
-                        name=pattern_name,
-                        actions=window,
-                        source_funscript=fname,
-                        source_start_ms=cycle["start_ms"],
-                        source_end_ms=cycle["end_ms"],
-                        bpm=phrase_bpm,
-                        tags=phrase_tags,
-                        metrics=phrase_metrics,
-                    )
-                    catalog.save()
-                    st.success(f"Saved as **{pattern_name}** (id: {pid})")
-
-    # Replace selected instance's actions with a saved catalog pattern
-    catalog = st.session_state.get("pattern_catalog")
-    saved_patterns = catalog.get_saved_patterns() if catalog else []
-    if saved_patterns:
-        with st.expander("Replace with saved pattern", expanded=False):
-            pat_names = [p["name"] for p in saved_patterns]
-            chosen_idx = st.selectbox(
-                "Pattern",
-                options=range(len(pat_names)),
-                format_func=lambda i: pat_names[i],
-                key=f"pe_replace_sel_{selected_label}_{inst_idx}",
-            )
-            chosen_pat = saved_patterns[chosen_idx]
-
-            st.caption(
-                f"{ms_to_timestamp(chosen_pat['duration_ms'])} · "
-                f"{chosen_pat['bpm']:.0f} BPM · "
-                f"from {chosen_pat['source_funscript']}"
-            )
-
-            fit = st.checkbox(
-                "Scale to fit window",
-                value=True,
-                key=f"pe_replace_fit_{selected_label}_{inst_idx}",
-                help="Scale pattern timestamps to fill the phrase window exactly.",
-            )
-
-            window_ms = cycle["end_ms"] - cycle["start_ms"]
-            pat_ms    = chosen_pat["duration_ms"]
-            if fit:
-                st.caption(f"Pattern scaled {ms_to_timestamp(pat_ms)} → {ms_to_timestamp(window_ms)}")
-            else:
-                delta = window_ms - pat_ms
-                if delta > 0:
-                    st.caption(f"Gap of {ms_to_timestamp(delta)} at end of window")
-                elif delta < 0:
-                    st.caption(f"Pattern overflows window by {ms_to_timestamp(-delta)}")
-
-            try:
-                with open(funscript_path, encoding="utf-8") as _f:
-                    _funscript = json.load(_f)
-                _existing = _funscript.get("actions", [])
-                _trimmed  = [a for a in _existing
-                             if not (cycle["start_ms"] <= a["at"] <= cycle["end_ms"])]
-                _pat_acts = chosen_pat["actions"]
-                if fit and pat_ms > 0:
-                    _scale    = window_ms / pat_ms
-                    _new_acts = [
-                        {"at": cycle["start_ms"] + round(a["at"] * _scale), "pos": a["pos"]}
-                        for a in _pat_acts
-                    ]
-                else:
-                    _new_acts = [
-                        {"at": a["at"] + cycle["start_ms"], "pos": a["pos"]}
-                        for a in _pat_acts
-                    ]
-                _funscript["actions"] = sorted(_trimmed + _new_acts, key=lambda a: a["at"])
-                _out_bytes = json.dumps(_funscript, indent=2).encode("utf-8")
-                _fname_b   = os.path.basename(funscript_path)
-                _stem      = _fname_b.rsplit(".", 1)[0]
-                _dl_name   = (
-                    f"{_stem}.replaced_{chosen_pat['name'].replace(' ', '_')}.funscript"
-                )
-                st.download_button(
-                    "Download with replacement",
-                    data=_out_bytes,
-                    file_name=_dl_name,
-                    mime="application/json",
-                    key=(
-                        f"pe_replace_dl_{selected_label}_{inst_idx}"
-                        f"_{chosen_idx}_{int(fit)}"
-                    ),
-                    width="stretch",
-                )
-            except Exception as _exc:
-                st.error(f"Could not build patched funscript: {_exc}")
-
-    st.divider()
-
-    _render_finalize_and_download(
-        selected_label=selected_label,
-        cycles=cycles,
-        original_actions=original_actions,
-        funscript_path=funscript_path,
-    )
+    # Save to catalog, Replace with saved pattern, and Build download
+    # removed — use the Export tab for final output. Catalog save belongs
+    # in a future cycle-level editor.
 
 
 # ------------------------------------------------------------------
