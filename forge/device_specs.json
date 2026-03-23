@@ -7,7 +7,7 @@
     "position_min": "lowest position (0-100)",
     "position_max": "highest position (0-100)",
     "max_acceleration": "max position-units per second squared (how fast speed can change)",
-    "max_delta": "max position change between consecutive actions (0-100). Estim comfort/safety limit."
+    "max_delta": "max position change between consecutive actions (0-100). Estim comfort limit."
   },
   "devices": {
     "handy": {
@@ -20,7 +20,7 @@
       "position_max": 100,
       "max_acceleration": 3000,
       "max_delta": 100,
-      "notes": "Linear stroker. Firmware v3 supports up to 400mm/s. Older firmware slower. Community reports 300-400 comfortable range."
+      "notes": "Linear stroker. Firmware v3 supports up to 400mm/s. Older firmware slower. Speed is the limiting factor, not delta."
     },
     "osr2": {
       "name": "OSR2",
@@ -32,7 +32,7 @@
       "position_max": 100,
       "max_acceleration": 4000,
       "max_delta": 100,
-      "notes": "Multi-axis servo stroker. Speed depends on build quality and servos. High-end builds exceed Handy specs."
+      "notes": "Multi-axis servo stroker. Speed depends on build quality. Delta is not a concern for mechanical devices."
     },
     "estim_foc": {
       "name": "Estim — FOC",
@@ -43,8 +43,8 @@
       "position_min": 0,
       "position_max": 100,
       "max_acceleration": 10000,
-      "max_delta": 100,
-      "notes": "Single-channel estim. No mechanical limits — electrical signal. Max delta controls comfort: 50-70 typical. restim firmware has internal ramping (rise time 1-7, pulse width max 15) that smooths transitions, so theoretical max is 100 but practical comfort limit is lower. Pulse frequency usually capped at 100-150 Hz."
+      "max_delta": 60,
+      "notes": "Single-channel estim. Delta 60 = comfort zone (~20-80 range). Intensity spikes allow occasional full-range cycles. restim firmware adds internal ramping."
     },
     "generic": {
       "name": "Generic / Intiface",
@@ -56,7 +56,7 @@
       "position_max": 100,
       "max_acceleration": 2000,
       "max_delta": 100,
-      "notes": "Conservative defaults for unknown devices via Intiface Central (Lovense, Satisfyer, LELO, We-Vibe, Kiiroo, etc). Safe for most Bluetooth haptic devices."
+      "notes": "Conservative speed defaults for unknown Bluetooth devices. Delta is not a concern."
     },
     "estim_stereo": {
       "name": "Estim — Stereo",
@@ -67,8 +67,8 @@
       "position_min": 0,
       "position_max": 100,
       "max_acceleration": 10000,
-      "max_delta": 100,
-      "notes": "Dual-channel estim. Same electrical limits as FOC, two independent channels. Max delta 50-70 recommended for comfort."
+      "max_delta": 60,
+      "notes": "Dual-channel estim. Same comfort delta as FOC. Intensity spikes allow occasional full-range cycles."
     }
   }
 }

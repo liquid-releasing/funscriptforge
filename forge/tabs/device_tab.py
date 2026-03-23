@@ -114,9 +114,9 @@ def render():
 
         _labels = {
             "None": "All cycles smooth — no spikes",
-            "Rare": "~1 in 8 cycles may spike (12.5%)",
-            "Moderate": "~1 in 4 cycles may spike (25%)",
-            "Frequent": "~1 in 2 cycles may spike (50%)",
+            "⅛ Rare": "~1 in 8 cycles may spike",
+            "¼ Moderate": "~1 in 4 cycles may spike",
+            "½ Frequent": "~1 in 2 cycles may spike",
         }
         st.caption(_labels.get(_spike_choice, ""))
 
