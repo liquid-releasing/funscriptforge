@@ -145,5 +145,53 @@ class TestApplyMinimumFix(unittest.TestCase):
             self.assertLessEqual(a["pos"], 100)
 
 
+class TestIntensitySpikes(unittest.TestCase):
+
+    def _estim_limits(self, max_delta=50):
+        return DeviceSpec(
+            key="estim", name="Estim", device_type="estim",
+            max_speed=1000, max_bpm=300, min_cycle_ms=100,
+            position_min=0, position_max=100, max_acceleration=10000,
+            max_delta=max_delta,
+        )
+
+    def test_zero_spikes_clamps_all(self):
+        actions = [
+            {"at": 0, "pos": 0}, {"at": 100, "pos": 80},
+            {"at": 200, "pos": 0}, {"at": 300, "pos": 80},
+        ]
+        limits = self._estim_limits(max_delta=50)
+        fixed = apply_minimum_fix(actions, limits, intensity_spikes=0.0)
+        for i in range(1, len(fixed)):
+            delta = abs(fixed[i]["pos"] - fixed[i - 1]["pos"])
+            self.assertLessEqual(delta, 50, f"Action {i} delta {delta} exceeds limit")
+
+    def test_full_spikes_allows_some_unclamped(self):
+        # With 50% spikes, at least some actions should keep original delta
+        actions = [{"at": i * 100, "pos": 0 if i % 2 == 0 else 90} for i in range(20)]
+        limits = self._estim_limits(max_delta=50)
+        fixed_no_spike = apply_minimum_fix(actions, limits, intensity_spikes=0.0)
+        fixed_with_spike = apply_minimum_fix(actions, limits, intensity_spikes=0.5)
+        # With spikes, some actions should have larger delta than without
+        max_delta_no = max(
+            abs(fixed_no_spike[i]["pos"] - fixed_no_spike[i - 1]["pos"])
+            for i in range(1, len(fixed_no_spike))
+        )
+        max_delta_with = max(
+            abs(fixed_with_spike[i]["pos"] - fixed_with_spike[i - 1]["pos"])
+            for i in range(1, len(fixed_with_spike))
+        )
+        self.assertGreater(max_delta_with, max_delta_no,
+                          "Spike mode should allow larger deltas than no-spike mode")
+
+    def test_spikes_ignored_when_delta_is_100(self):
+        # When max_delta=100 (no limit), spikes don't change anything
+        actions = [{"at": 0, "pos": 0}, {"at": 100, "pos": 100}]
+        limits = self._estim_limits(max_delta=100)
+        fixed_no = apply_minimum_fix(actions, limits, intensity_spikes=0.0)
+        fixed_yes = apply_minimum_fix(actions, limits, intensity_spikes=0.5)
+        self.assertEqual(fixed_no[1]["pos"], fixed_yes[1]["pos"])
+
+
 if __name__ == "__main__":
     unittest.main()

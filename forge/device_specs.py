@@ -132,32 +132,71 @@ def analyze_violations(
     }
 
 
+# Intensity spike presets: name → fraction of cycles allowed at full delta
+INTENSITY_SPIKE_PRESETS = {
+    "None":     0.0,
+    "Rare":     0.125,   # 1 in 8
+    "Moderate": 0.25,    # 1 in 4
+    "Frequent": 0.50,    # 1 in 2
+}
+
+
 def apply_minimum_fix(
     actions: list[dict],
     limits: DeviceSpec,
+    *,
+    intensity_spikes: float = 0.0,
+    spike_seed: int = 42,
 ) -> list[dict]:
     """Apply minimum corrections to bring actions within device limits.
 
     Only modifies actions that violate limits. Preserves timing,
-    adjusts positions to stay within max_speed constraint.
+    adjusts positions to stay within max_speed and max_delta constraints.
+
+    Args:
+        actions: Funscript actions list.
+        limits: Combined device limits.
+        intensity_spikes: Fraction of cycles (0.0–0.5) allowed to use full
+            delta instead of clamped delta. Only applies to estim devices
+            where max_delta < 100. 0.0 = smooth (all clamped),
+            0.5 = every other cycle can spike.
+        spike_seed: Random seed for reproducible spike placement.
 
     Returns a new list (does not mutate input).
     """
     import copy
+    import random
+
     result = copy.deepcopy(actions)
 
     if len(result) < 2:
         return result
 
+    # Identify cycles (direction changes) for spike selection
+    _rng = random.Random(spike_seed)
+    _use_spikes = intensity_spikes > 0 and limits.max_delta < 100
+    _cycle_idx = 0
+    _prev_direction = 0
+
     for i in range(1, len(result)):
         dt_ms = result[i]["at"] - result[i - 1]["at"]
         dp = result[i]["pos"] - result[i - 1]["pos"]
         abs_dp = abs(dp)
-        direction = 1 if dp > 0 else -1
+        direction = 1 if dp > 0 else (-1 if dp < 0 else 0)
+
+        # Track cycles (direction changes)
+        if direction != 0 and direction != _prev_direction:
+            _cycle_idx += 1
+            _prev_direction = direction
+
+        # Determine if this cycle is a spike cycle
+        _is_spike = _use_spikes and _rng.random() < intensity_spikes
 
         # Delta clamp (estim comfort — max position change per action)
-        if abs_dp > limits.max_delta:
-            new_pos = result[i - 1]["pos"] + direction * limits.max_delta
+        # Spike cycles skip the delta clamp (allowed full range)
+        effective_delta = 100 if _is_spike else limits.max_delta
+        if abs_dp > effective_delta:
+            new_pos = result[i - 1]["pos"] + (1 if dp > 0 else -1) * effective_delta
             result[i]["pos"] = int(round(max(
                 limits.position_min,
                 min(limits.position_max, new_pos),
@@ -171,7 +210,7 @@ def apply_minimum_fix(
             speed = abs_dp / dt_s
             if speed > limits.max_speed:
                 max_dp = limits.max_speed * dt_s
-                new_pos = result[i - 1]["pos"] + direction * max_dp
+                new_pos = result[i - 1]["pos"] + (1 if dp > 0 else -1) * max_dp
                 result[i]["pos"] = int(round(max(
                     limits.position_min,
                     min(limits.position_max, new_pos),

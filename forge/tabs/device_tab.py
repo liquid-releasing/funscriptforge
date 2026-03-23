@@ -87,6 +87,42 @@ def render():
     ]
     st.dataframe(pd.DataFrame(_limits_data), hide_index=True, use_container_width=True)
 
+    # ── Intensity spikes (estim only) ─────────────────────────────────────
+    _has_estim = any("estim" in t for t in selected_targets)
+    _spike_fraction = 0.0
+
+    if _has_estim:
+        from forge.device_specs import INTENSITY_SPIKE_PRESETS
+
+        st.divider()
+        st.subheader("Intensity spikes")
+        st.caption(
+            "Estim can deliver occasional sharp intensity spikes for variety. "
+            "Most cycles stay smooth — the selected percentage can spike to full range randomly."
+        )
+
+        _saved_spike = (project or {}).get("intensity_spikes", "None")
+        _preset_names = list(INTENSITY_SPIKE_PRESETS.keys())
+        _spike_choice = st.select_slider(
+            "Spike frequency",
+            options=_preset_names,
+            value=_saved_spike if _saved_spike in _preset_names else "None",
+            key="intensity_spikes",
+            help="None = all smooth. Frequent = up to every other cycle can spike.",
+        )
+        _spike_fraction = INTENSITY_SPIKE_PRESETS[_spike_choice]
+
+        _labels = {
+            "None": "All cycles smooth — no spikes",
+            "Rare": "~1 in 8 cycles may spike (12.5%)",
+            "Moderate": "~1 in 4 cycles may spike (25%)",
+            "Frequent": "~1 in 2 cycles may spike (50%)",
+        }
+        st.caption(_labels.get(_spike_choice, ""))
+
+        if project:
+            project["intensity_spikes"] = _spike_choice
+
     st.divider()
 
     # ── Analysis ──────────────────────────────────────────────────────────
@@ -138,8 +174,8 @@ def render():
         st.caption("Your funscript is already within device limits.")
         render_monochrome_from_arrays(times_s, positions, height=200, key="device_original")
     else:
-        # Apply minimum fix
-        fixed_actions = apply_minimum_fix(actions, limits)
+        # Apply minimum fix (with intensity spikes if estim selected)
+        fixed_actions = apply_minimum_fix(actions, limits, intensity_spikes=_spike_fraction)
         fixed_positions = [a["pos"] for a in fixed_actions]
 
         # Re-analyze to confirm
@@ -173,7 +209,7 @@ def render():
         width="stretch",
         help="Apply device awareness and continue to Tone.",
     ):
-        _apply_device_awareness(project, selected_targets, actions, limits, _already_aware)
+        _apply_device_awareness(project, selected_targets, actions, limits, _already_aware, _spike_fraction)
         st.session_state["device_accepted"] = True
         st.rerun()
 
@@ -184,7 +220,7 @@ def render():
         )
 
 
-def _apply_device_awareness(project, targets, actions, limits, already_aware):
+def _apply_device_awareness(project, targets, actions, limits, already_aware, spike_fraction=0.0):
     """Apply minimum fix and save to chain."""
     from datetime import datetime
 
@@ -198,7 +234,6 @@ def _apply_device_awareness(project, targets, actions, limits, already_aware):
 
     if already_aware:
         status.write("✅ No corrections needed — already within limits")
-        # Still save to chain so downstream tabs have a consistent baseline
         from forge.funscript import load_funscript
         funscript_path = st.session_state.get("funscript_path", "")
         fs_data = load_funscript(funscript_path)
@@ -208,7 +243,7 @@ def _apply_device_awareness(project, targets, actions, limits, already_aware):
     else:
         status.update(label=f"Applying minimum fix to {len(actions):,} actions…")
 
-        fixed_actions = apply_minimum_fix(actions, limits)
+        fixed_actions = apply_minimum_fix(actions, limits, intensity_spikes=spike_fraction)
         analysis = analyze_violations(fixed_actions, limits)
 
         # Build funscript data with fixed actions
