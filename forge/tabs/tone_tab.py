@@ -526,7 +526,7 @@ def _render_preview(selected: str | None):
     if project:
         data = get_chain_funscript_for(project, "tone")
         if data:
-            source_label = "device-safe"
+            source_label = "device-aware"
 
     # Fall back to raw funscript if chain has nothing
     if not data:
@@ -696,7 +696,7 @@ def _apply_tone(tone_name: str):
                 status.write("✅ Toned funscript saved to chain")
 
                 # Build and cache the full-color figure
-                from forge_ui_components.funscript_chart.core import monochrome_figure
+                from forge_ui_components.funscript_chart.core import monochrome_figure, compute_chart_data
                 fig = monochrome_figure(
                     times_s, modified,
                     color=tone_data["color"],
@@ -705,7 +705,12 @@ def _apply_tone(tone_name: str):
                     line_width=1.5,
                 )
                 st.session_state["cached_tone_chart"] = fig
-                status.write(f"✅ Chart cached: {len(times):,} actions")
+
+                # Pre-compute vibrant chart data for Phrases tab
+                status.update(label="Building chart data…")
+                toned_actions = toned_data.get("actions", [])
+                st.session_state["cached_vibrant_series"] = compute_chart_data(toned_actions)
+                status.write(f"✅ Chart data cached: {len(times):,} actions")
 
         status.update(label="Tone applied!", state="complete", expanded=False)
 

@@ -67,24 +67,41 @@ def _selector_fragment(
         display_actions = original_actions
 
     n_actions   = len(display_actions)
-    spinner_msg = (
-        f"Building chart ({n_actions} actions — using fast rendering)…"
-        if n_actions > large_funscript_threshold
-        else f"Building chart ({n_actions} actions)…"
+
+    # Use cached chart data if available (built by previous tab's Accept)
+    _cache_key = "cached_vibrant_series"
+    _cached_series = st.session_state.get(_cache_key)
+    _cache_hit = (
+        _cached_series is not None
+        and not has_edits  # edits invalidate the cache
+        and len(_cached_series.times_ms) == n_actions
     )
+
     _t0 = _time.time()
-    with st.spinner(spinner_msg):
-        series  = compute_chart_data(display_actions)
-        _chart_v = st.session_state.get("phrase_sel_chart_instance", 0)
-        ev = render_vibrant(
-            series, bands,
-            view_state=view_state,
-            color_mode=view_state.color_mode,
-            height=380,
-            duration_ms=duration_ms,
-            key=f"chart_phrase_sel_{_chart_v}",
+    if _cache_hit:
+        series = _cached_series
+    else:
+        spinner_msg = (
+            f"Building chart ({n_actions} actions — using fast rendering)…"
+            if n_actions > large_funscript_threshold
+            else f"Building chart ({n_actions} actions)…"
         )
-    st.caption(f"Chart built in {_time.time() - _t0:.1f}s")
+        with st.spinner(spinner_msg):
+            series = compute_chart_data(display_actions)
+            if not has_edits:
+                st.session_state[_cache_key] = series
+
+    _chart_v = st.session_state.get("phrase_sel_chart_instance", 0)
+    ev = render_vibrant(
+        series, bands,
+        view_state=view_state,
+        color_mode=view_state.color_mode,
+        height=380,
+        duration_ms=duration_ms,
+        key=f"chart_phrase_sel_{_chart_v}",
+    )
+    _elapsed = _time.time() - _t0
+    st.caption(f"Chart {'(cached) ' if _cache_hit else ''}built in {_elapsed:.1f}s")
     _handle_chart_event(ev, view_state, phrases)
 
 

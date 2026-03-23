@@ -75,7 +75,7 @@ def _clamp_sort_dedup(actions: list) -> int:
 # ------------------------------------------------------------------
 
 def _check_quality(actions: list) -> List[dict]:
-    """Run device-safety checks on a final action list.
+    """Run device-awareness checks on a final action list.
 
     Checks
     ------
@@ -172,8 +172,8 @@ def _render_quality_gate(project, plan: List[dict]) -> None:
                 if len(issues) > 50:
                     st.caption(f"… and {len(issues) - 50} more issues not shown")
                 st.caption(
-                    "To fix device issues, use the Device Safety control in the Phrase Editor, "
-                    "or use the Device-aware fix in the Run Full Pipeline section below."
+                    "Device awareness is applied on the Device tab. "
+                    "Go back to the Device tab to adjust limits if needed."
                 )
 
 
@@ -248,8 +248,8 @@ def render(project: "Project") -> None:
             apply_safety = st.checkbox(
                 "Apply device awareness",
                 value=True,
-                key="export_device_safety",
-                help="Caps velocity at 200 pos/s to protect mechanical devices (Handy, OSR2).",
+                key="export_device_awareness",
+                help="Apply device limits from the Device tab to the exported funscript.",
             )
             _confirmed_dev = st.checkbox(
                 "Ready to download",
@@ -260,7 +260,7 @@ def render(project: "Project") -> None:
                     project, phrases, full_plan,
                     blend_seams=blend_seams,
                     final_smooth=final_smooth,
-                    apply_safety=apply_safety,
+                    apply_awareness=apply_safety,
                 )
                 st.download_button(
                     "⬇ Download device funscript",
@@ -816,9 +816,9 @@ def _build_download_bytes_device(
     *,
     blend_seams: bool = False,
     final_smooth: bool = False,
-    apply_safety: bool = True,
+    apply_awareness: bool = True,
 ) -> bytes:
-    """Apply transforms and optionally cap velocity for mechanical device awareness."""
+    """Apply transforms and optionally enforce device awareness limits."""
     from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
 
     with open(_get_funscript_path(project), encoding="utf-8") as f:
@@ -841,7 +841,7 @@ def _build_download_bytes_device(
     if blend_seams or final_smooth:
         _clamp_sort_dedup(result)
 
-    if apply_safety:
+    if apply_awareness:
         issues = _check_quality(result)
         if issues:
             perf_spec = TRANSFORM_CATALOG.get("performance")

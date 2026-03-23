@@ -44,70 +44,6 @@ from utils import ms_to_timestamp
 
 
 # ------------------------------------------------------------------
-# Device awareness helpers
-# ------------------------------------------------------------------
-
-def _check_quality_phrase(actions: list, phrase: dict) -> list:
-    """Run device-safety checks on the phrase window only.
-
-    Returns a list of ``{level, message, at}`` dicts (same format as the
-    export-panel quality gate).  Levels: ``"error"`` (velocity > 300 pos/s)
-    or ``"warning"`` (velocity 200–300 pos/s or interval < 50 ms).
-    """
-    start_ms = phrase["start_ms"]
-    end_ms   = phrase["end_ms"]
-    window   = [a for a in actions if start_ms <= a["at"] <= end_ms]
-    issues: list = []
-    for i in range(1, len(window)):
-        a0, a1 = window[i - 1], window[i]
-        dt_ms = a1["at"] - a0["at"]
-        if dt_ms <= 0:
-            continue
-        vel = abs(a1["pos"] - a0["pos"]) / dt_ms * 1000
-        if vel > 300:
-            issues.append({"level": "error",   "message": f"{vel:.0f} pos/s", "at": a0["at"]})
-        elif vel > 200:
-            issues.append({"level": "warning", "message": f"{vel:.0f} pos/s", "at": a0["at"]})
-        if dt_ms < 50:
-            issues.append({"level": "warning", "message": f"interval {dt_ms} ms", "at": a0["at"]})
-    return issues
-
-
-def _render_device_safety(phrase_idx: int) -> None:
-    """Enforce device awareness checkbox + status badge above Accept.
-
-    Checkbox is on by default.  When on, the Performance transform is applied
-    to the preview (and to the accepted chain) to cap velocity at 200 pos/s.
-    """
-    n_errors   = st.session_state.get(f"_ds_errors_{phrase_idx}",   0)
-    n_warnings = st.session_state.get(f"_ds_warnings_{phrase_idx}", 0)
-
-    if st.session_state.get(f"_ds_fix_{phrase_idx}"):
-        st.success("🛡 Device aware")
-    elif n_errors:
-        st.error(
-            f"⚠ {n_errors} error{'s' if n_errors != 1 else ''}"
-            + (f", {n_warnings} warning{'s' if n_warnings != 1 else ''}" if n_warnings else "")
-        )
-    elif n_warnings:
-        st.warning(f"⚠ {n_warnings} warning{'s' if n_warnings != 1 else ''}")
-    else:
-        st.success("✅ Device aware")
-
-    # Default from Device tab decision — if device fixes were applied, default on
-    _forge = st.session_state.get("forge_project")
-    _device_applied = bool(st.session_state.get("device_accepted")) or bool(
-        (_forge or {}).get("device_fix_strategies")
-    )
-    st.checkbox(
-        "Enforce device awareness",
-        value=st.session_state.get(f"device_safety_{phrase_idx}", _device_applied),
-        key=f"device_safety_{phrase_idx}",
-        help="Apply Performance transform to cap velocity. Inherited from Device tab settings.",
-    )
-
-
-# ------------------------------------------------------------------
 # Public entry point
 # ------------------------------------------------------------------
 
@@ -138,6 +74,12 @@ def render(
         return
 
     phrase = phrases[phrase_idx]
+
+    # Snapshot the chain on entry so Cancel can revert to this state
+    _snapshot_key = f"_phrase_chain_snapshot_{phrase_idx}"
+    if _snapshot_key not in st.session_state:
+        _chain_key = f"phrase_transform_chain_{phrase_idx}"
+        st.session_state[_snapshot_key] = list(st.session_state.get(_chain_key, []))
 
     win_start, win_end = _fixed_viewport(phrases, phrase, duration_ms)
     # Use chain funscript if available (device-fixed + tone-applied)
@@ -242,28 +184,9 @@ def _detail_fragment(
             param_values[pk] = sv if sv is not None else param.default
 
         # Preview applies pending transform on top of the accepted baseline
+        # Device awareness is already applied globally on the Device tab —
+        # no per-phrase device checks needed here.
         preview_actions = _apply_transform_to_window(baseline_actions, phrase, spec, param_values)
-
-        # --- Device awareness: check preview quality, optionally apply Performance ---
-        _enforce     = st.session_state.get(f"device_safety_{phrase_idx}", True)
-        _issues      = _check_quality_phrase(preview_actions, phrase)
-        _n_errors    = sum(1 for i in _issues if i["level"] == "error")
-        _n_warnings  = sum(1 for i in _issues if i["level"] == "warning")
-        _has_issues  = _n_errors > 0 or _n_warnings > 0
-
-        _safety_fix = bool(_enforce and _has_issues)
-        if _safety_fix:
-            _perf_spec   = TRANSFORM_CATALOG["performance"]
-            _perf_params = {pk: p.default for pk, p in _perf_spec.params.items()}
-            _perf_params["max_velocity"] = 0.20
-            preview_actions = _apply_transform_to_window(
-                preview_actions, phrase, _perf_spec, _perf_params
-            )
-
-        # Persist for _render_device_safety() and Accept handler
-        st.session_state[f"_ds_fix_{phrase_idx}"]      = _safety_fix
-        st.session_state[f"_ds_errors_{phrase_idx}"]   = _n_errors
-        st.session_state[f"_ds_warnings_{phrase_idx}"] = _n_warnings
 
     # ------------------------------------------------------------------
     # Layout:
@@ -345,8 +268,7 @@ def _detail_fragment(
         )
 
         if not split_mode and not concat_preview:
-            _badge = "  🛡 Device Safe" if st.session_state.get(f"_ds_fix_{phrase_idx}") else ""
-            st.subheader(f"Preview — {spec.name}{_badge}")
+            st.subheader(f"Preview — {spec.name}")
             st.caption(_phrase_description(phrase))
             _render_chart(
                 actions=preview_actions,
@@ -374,8 +296,6 @@ def _detail_fragment(
                 _split_phrase(phrase_idx, confirmed_split_ms, view_state, duration_ms)
         else:
             _render_transform_controls(phrase, bpm_threshold, phrase_idx)
-            st.write("")
-            _render_device_safety(phrase_idx)
             st.write("")
             _render_save_cancel(phrase_idx, view_state)
             _render_edit_phrase(phrases, phrase_idx, view_state, duration_ms)
@@ -873,27 +793,39 @@ def _clear_all_split_state() -> None:
 # ------------------------------------------------------------------
 
 def _accept_pending(phrase_idx: int) -> None:
-    """Auto-accept any non-passthrough pending transform before navigating."""
+    """Auto-accept any non-passthrough pending transform before navigating.
+    Device awareness is handled globally on the Device tab."""
     from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
     _pending_key = st.session_state.get(f"txpick_{phrase_idx}_key", "passthrough")
+    _chain_key = f"phrase_transform_chain_{phrase_idx}"
+    _cur_chain = list(st.session_state.get(_chain_key, []))
+    _changed = False
+
     if _pending_key != "passthrough":
         _pv = {
             pk: st.session_state.get(f"param_{phrase_idx}_{pk}", p.default)
             for pk, p in TRANSFORM_CATALOG[_pending_key].params.items()
         }
-        _chain_key = f"phrase_transform_chain_{phrase_idx}"
-        _cur_chain = st.session_state.get(_chain_key, [])
-        st.session_state[_chain_key] = _cur_chain + [
-            {"transform_key": _pending_key, "param_values": _pv}
-        ]
+        _cur_chain.append({"transform_key": _pending_key, "param_values": _pv})
+        _changed = True
+
+    if _changed:
+        st.session_state[_chain_key] = _cur_chain
+        st.session_state["project_dirty"] = True
+    # Clear snapshot — changes are being kept
+    st.session_state.pop(f"_phrase_chain_snapshot_{phrase_idx}", None)
     _clear_picker_state(phrase_idx)
 
 
 def _render_nav_buttons(phrases: list, phrase_idx: int, view_state, duration_ms: int) -> None:
     n = len(phrases)
-    st.caption(f"P{phrase_idx + 1} of {n}")
+    _chain_count = len(st.session_state.get(f"phrase_transform_chain_{phrase_idx}", []))
 
-    col_p, col_n = st.columns(2)
+    st.caption(f"P{phrase_idx + 1} of {n}")
+    if _chain_count:
+        st.caption(f"✓ {_chain_count} transform{'s' if _chain_count > 1 else ''} applied")
+
+    col_p, col_n, col_done = st.columns(3)
     with col_p:
         if st.button("⏮ Prev", key="pd_phrase_prev",
                      disabled=(phrase_idx == 0),
@@ -914,91 +846,44 @@ def _render_nav_buttons(phrases: list, phrase_idx: int, view_state, duration_ms:
             st.session_state["phrase_table_ver"] = st.session_state.get("phrase_table_ver", 0) + 1
             st.rerun()
 
+    with col_done:
+        if st.button("✓ Done", key="pd_done",
+                     width="stretch", type="primary",
+                     help="Save all phrase edits and return to overview"):
+            _accept_pending(phrase_idx)
+            _save_phrase_edits_to_chain(phrases)
+            view_state.clear_selection()
+            view_state.reset_zoom()
+            st.session_state["phrase_table_ver"] = st.session_state.get("phrase_table_ver", 0) + 1
+            st.session_state.phrase_sel_chart_instance = (
+                st.session_state.get("phrase_sel_chart_instance", 0) + 1
+            )
+            st.rerun()
+
 
 # ------------------------------------------------------------------
 # Save / Cancel buttons
 # ------------------------------------------------------------------
 
 def _render_save_cancel(phrase_idx: int, view_state) -> None:
-    """Accept confirms transform for this phrase (stays in editor for further tweaks).
-    Done commits all transforms and returns to phrase selector with full-funscript view.
-    Cancel discards this phrase's transform and returns to selector.
-    """
-    from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
-    _pending_key = st.session_state.get(f"txpick_{phrase_idx}_key", "passthrough")
+    """Cancel discards ALL changes for this phrase (entire chain) and reverts
+    to the state when you first entered the phrase editor."""
 
     if st.button(
-        "✓ Accept",
-        key="pd_save",
-        width="stretch",
-        type="primary",
-        help="Accept this transform — it becomes the new baseline for further editing",
-    ):
-        _status = st.status("Saving changes…", expanded=True)
-
-        _chain_key = f"phrase_transform_chain_{phrase_idx}"
-        _cur_chain = st.session_state.get(_chain_key, [])
-        _new_chain = list(_cur_chain)
-
-        # Append pending transform (skip passthrough)
-        if _pending_key != "passthrough":
-            _pv = {
-                pk: st.session_state.get(f"param_{phrase_idx}_{pk}", p.default)
-                for pk, p in TRANSFORM_CATALOG[_pending_key].params.items()
-            }
-            _new_chain.append({"transform_key": _pending_key, "param_values": _pv})
-            _status.write(f"✅ Applied **{_pending_key}** to phrase {phrase_idx + 1}")
-
-        # Append Performance if device awareness fix is active for this phrase
-        if st.session_state.get(f"_ds_fix_{phrase_idx}", False):
-            from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG as _TC
-            _perf_defaults = {pk: p.default for pk, p in _TC["performance"].params.items()}
-            _perf_defaults["max_velocity"] = 0.20
-            _new_chain.append({"transform_key": "performance", "param_values": _perf_defaults})
-            _status.write("✅ Device awareness applied")
-
-        if _new_chain != list(_cur_chain):
-            st.session_state[_chain_key] = _new_chain
-            st.session_state["project_dirty"] = True
-
-        _status.update(label="Changes saved!", state="complete", expanded=False)
-
-        # Reset picker to passthrough
-        _clear_picker_state(phrase_idx)
-        st.rerun()  # rebuild charts with the updated baseline
-
-    _chain_count = len(st.session_state.get(f"phrase_transform_chain_{phrase_idx}", []))
-    if _chain_count:
-        st.caption(f"✓ {_chain_count} transform{'s' if _chain_count > 1 else ''} accepted")
-
-    st.write("")
-
-    if st.button(
-        "✔ Done",
-        key="pd_done",
-        width="stretch",
-        help="Finish all edits — save to project and return to Phrase Selector",
-    ):
-        _accept_pending(phrase_idx)
-        # Save edited funscript to chain
-        _save_phrase_edits_to_chain(phrases)
-        view_state.clear_selection()
-        view_state.reset_zoom()
-        st.session_state["phrase_table_ver"] = st.session_state.get("phrase_table_ver", 0) + 1
-        st.session_state.phrase_sel_chart_instance = (
-            st.session_state.get("phrase_sel_chart_instance", 0) + 1
-        )
-        st.rerun()
-
-    st.write("")
-
-    if st.button(
-        "✕ Cancel",
+        "✕ Cancel phrase changes",
         key="pd_cancel",
         width="stretch",
-        help="Discard pending transform — revert preview to baseline and choose again",
+        help="Discard changes to this phrase and revert to how it was when you started editing",
     ):
-        # Clear only the pending selection — the accepted chain is preserved
+        # Restore chain to snapshot taken on entry
+        _chain_key = f"phrase_transform_chain_{phrase_idx}"
+        _snapshot_key = f"_phrase_chain_snapshot_{phrase_idx}"
+        _snapshot = st.session_state.get(_snapshot_key)
+        if _snapshot is not None:
+            st.session_state[_chain_key] = list(_snapshot)
+        else:
+            st.session_state.pop(_chain_key, None)
+        st.session_state.pop(_snapshot_key, None)
         _clear_picker_state(phrase_idx)
         st.rerun()
 

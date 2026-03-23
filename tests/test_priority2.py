@@ -43,7 +43,7 @@ def _check_quality(actions: list) -> list:
 
 
 class TestQualityGate(unittest.TestCase):
-    """Tests for _check_quality device-safety checks (#13)."""
+    """Tests for _check_quality device-awareness checks (#13)."""
 
     def test_clean_actions_no_issues(self):
         actions = [

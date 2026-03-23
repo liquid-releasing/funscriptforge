@@ -353,10 +353,10 @@ def _media_picker_local(funscript_path: str, output_dir: str) -> None:
 
 _WORKFLOW_GUIDANCE = {
     "Project": "Set up your funscript, media, and export location",
-    "Device": "Make your funscript safe for your target device",
+    "Device": "Make your funscript device-aware",
     "Tone": "Choose how your output feels",
     "Phrases": "Fine-tune individual sections",
-    "Export": "Generate device-safe output files",
+    "Export": "Generate device-aware output files",
 }
 
 
@@ -879,7 +879,7 @@ def _render_welcome() -> None:
     st.markdown(
         "**FunscriptForge** analyses funscripts, detects phrase structure and motion "
         "patterns, and lets you apply per-phrase transforms before exporting a clean, "
-        "device-safe output file."
+        "device-aware output file."
     )
     st.divider()
 
@@ -977,6 +977,7 @@ def _render_phrase_tab(project: Project) -> None:
 def _render_phrase_selector_tab(project: Project) -> None:
     """Phrase Selector view — full chart + phrase table."""
     view_state = st.session_state.view_state
+    assessment_dict = project.assessment.to_dict()
 
     with st.expander("Phrase detection settings", expanded=False):
         _dc1, _dc2 = st.columns(2)
@@ -1012,6 +1013,72 @@ def _render_phrase_selector_tab(project: Project) -> None:
 
     with st.expander("Assessment details", expanded=False):
         assessment_panel.render(project)
+
+    # ── Phrases Accept ────────────────────────────────────────────────────
+    st.divider()
+
+    # Check if any phrases have been edited
+    _n_phrases = len(assessment_dict.get("phrases", []))
+    _phrases_edited = sum(
+        1 for i in range(_n_phrases)
+        if st.session_state.get(f"phrase_transform_chain_{i}")
+    )
+    _has_edits = _phrases_edited > 0
+
+    if _has_edits:
+        st.info(
+            f"**{_phrases_edited}** of **{_n_phrases}** phrases edited. "
+            "Click **Accept** to save all phrase edits to the project."
+        )
+
+    if st.button(
+        "Accept",
+        type="primary",
+        width="stretch",
+        help="Save phrase edits and continue to the next step.",
+    ):
+        from ui.streamlit.panels.phrase_detail import _save_phrase_edits_to_chain
+        _forge = st.session_state.get("forge_project")
+
+        status = st.status("Saving phrase edits…", expanded=True)
+
+        phrases = assessment_dict.get("phrases", [])
+        _save_phrase_edits_to_chain(phrases)
+        status.write(f"✅ Phrase edits saved ({_phrases_edited} phrases modified)")
+
+        # Rebuild vibrant chart cache with edited actions
+        status.update(label="Rebuilding chart data…")
+        from forge_ui_components.funscript_chart.core import compute_chart_data
+        import json
+        _chain_path = st.session_state.get("chain_funscript_path")
+        if _chain_path and os.path.isfile(_chain_path):
+            with open(_chain_path) as f:
+                _edited_actions = json.load(f).get("actions", [])
+            st.session_state["cached_vibrant_series"] = compute_chart_data(_edited_actions)
+            status.write(f"✅ Chart data updated: {len(_edited_actions):,} actions")
+
+        # Update workflow progress
+        if _forge:
+            _forge.setdefault("progress", {})["phrases_edited"] = True
+            from forge.project import save_forge
+            save_forge(_forge)
+
+        status.update(label="Phrases complete!", state="complete", expanded=False)
+        st.session_state["phrases_accepted"] = True
+        st.rerun()
+
+    if st.session_state.get("phrases_accepted"):
+        from forge.tabs._ui_helpers import success_guidance
+        _forge = st.session_state.get("forge_project")
+        _targets = _forge.get("output_targets", []) if _forge else []
+        _has_estim = any("estim" in t for t in _targets)
+        _next_options = ["**Patterns**"]
+        if _has_estim:
+            _next_options.append("**Stim**")
+        _next_options.append("**Export**")
+        success_guidance(
+            f"Scroll to top to select your next tab: {', '.join(_next_options)}."
+        )
 
 
 def _render_phrase_editor_tab(project: Project) -> None:
