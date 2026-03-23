@@ -37,14 +37,14 @@
     "estim_foc": {
       "name": "Estim — FOC",
       "type": "estim",
-      "max_speed": 1000,
-      "max_bpm": 300,
-      "min_cycle_ms": 100,
+      "max_speed": 250,
+      "max_bpm": 125,
+      "min_cycle_ms": 240,
       "position_min": 0,
       "position_max": 100,
       "max_acceleration": 10000,
-      "max_delta": 60,
-      "notes": "Single-channel estim. Delta 60 = comfort zone (~20-80 range). Intensity spikes allow occasional full-range cycles. restim firmware adds internal ramping."
+      "max_delta": 100,
+      "notes": "Single-channel estim. 125 BPM at full range is the comfort limit. Speed clamp reduces fast cycles. Intensity spikes allow occasional full-speed cycles. restim firmware adds internal ramping."
     },
     "generic": {
       "name": "Generic / Intiface",
@@ -61,14 +61,14 @@
     "estim_stereo": {
       "name": "Estim — Stereo",
       "type": "estim",
-      "max_speed": 1000,
-      "max_bpm": 300,
-      "min_cycle_ms": 100,
+      "max_speed": 250,
+      "max_bpm": 125,
+      "min_cycle_ms": 240,
       "position_min": 0,
       "position_max": 100,
       "max_acceleration": 10000,
-      "max_delta": 60,
-      "notes": "Dual-channel estim. Same comfort delta as FOC. Intensity spikes allow occasional full-range cycles."
+      "max_delta": 100,
+      "notes": "Dual-channel estim. Same comfort limits as FOC. 125 BPM at full range. Speed clamp + intensity spikes."
     }
   }
 }
