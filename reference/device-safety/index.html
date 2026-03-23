@@ -1530,17 +1530,17 @@
 </tr>
 <tr>
 <td>Estim — FOC</td>
-<td>1000 pos/s</td>
-<td>300</td>
+<td>250 pos/s</td>
+<td>125</td>
 <td>100</td>
-<td>Electrical signal. restim handles ramping.</td>
+<td>Speed clamp for comfort (~125 BPM at full range).</td>
 </tr>
 <tr>
 <td>Estim — Stereo</td>
-<td>1000 pos/s</td>
-<td>300</td>
+<td>250 pos/s</td>
+<td>125</td>
 <td>100</td>
-<td>Dual-channel. Same as FOC.</td>
+<td>Same comfort limits as FOC.</td>
 </tr>
 <tr>
 <td>Generic / Intiface</td>
@@ -1553,8 +1553,8 @@
 </table>
 <h3 id="two-constraint-types">Two constraint types<a class="headerlink" href="#two-constraint-types" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>Speed</strong> (mechanical devices) — max position change per second. Exceeding this causes skipping or mechanical strain.</li>
-<li><strong>Delta</strong> (estim) — max position change between consecutive actions. Maps to voltage/pulse intensity. Large jumps can cause discomfort.</li>
+<li><strong>Speed</strong> (all devices) — max position change per second. For strokers, exceeding this causes skipping. For estim, fast cycles at full amplitude cause stingy sensation. The comfort limit for estim is ~125 BPM at full range.</li>
+<li><strong>Delta</strong> — max position change between consecutive actions. Strokers have no delta limit (100 = full range). Estim delta is also 100 since the speed clamp handles the comfort constraint.</li>
 </ul>
 <h3 id="combined-limits">Combined limits<a class="headerlink" href="#combined-limits" title="Permanent link">&para;</a></h3>
 <p>When multiple devices are selected, the tightest constraint wins per parameter. The limits table shows which device is the bottleneck.</p>

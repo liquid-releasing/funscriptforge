@@ -1247,6 +1247,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#stingy-speed-not-delta" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stingy = Speed, Not Delta
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#device-specs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1257,17 +1268,6 @@
   
     <nav class="md-nav" aria-label="Device Specs">
       <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#two-constraint-types" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Two constraint types
-      
-    </span>
-  </a>
-  
-</li>
         
           <li class="md-nav__item">
   <a href="#combined-limits" class="md-nav__link">
@@ -1294,22 +1294,38 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Minimum Fix Algorithm">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#fix-strategy" class="md-nav__link">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#intensity-spikes-estim-only" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Fix strategy
+        Intensity Spikes (estim only)
       
     </span>
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#re-clamp-after-transforms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-clamp After Transforms
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1325,10 +1341,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#future-community-device-specs" class="md-nav__link">
+  <a href="#shared-library-planned" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Future: Community Device Specs
+        Shared Library (planned)
       
     </span>
   </a>
@@ -1358,90 +1374,136 @@
 <h1 id="architecture-device-awareness">Architecture: Device Awareness<a class="headerlink" href="#architecture-device-awareness" title="Permanent link">&para;</a></h1>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
 <p>Device awareness ensures funscripts work within the physical limits of target
-output devices. It applies once, globally, on the Device tab — before any
+output devices. It applies once, globally, on the <strong>Device tab</strong> — before any
 creative decisions (Tone, Phrases). Everything downstream is guaranteed to
 work on the selected devices.</p>
 <h2 id="design-principle">Design Principle<a class="headerlink" href="#design-principle" title="Permanent link">&para;</a></h2>
-<p><strong>Device tab = engineering. Tone/Phrases = art.</strong></p>
+<p><strong>Device tab = engineering (what the device CAN do).</strong>
+<strong>Tone/Phrases = art (what the user WANTS).</strong></p>
 <p>The user never has to think about device limits after the Device tab. Creative
-transforms in Tone and Phrases work on the already-constrained baseline. No
-double-constraining, no surprises at export.</p>
-<h2 id="device-specs">Device Specs<a class="headerlink" href="#device-specs" title="Permanent link">&para;</a></h2>
-<p>Device limits are stored in <code>forge/device_specs.json</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">&quot;handy&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;stroker&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">&quot;max_speed&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">400</span><span class="p">,</span><span class="w">        </span><span class="c1">// position-units/sec</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="nt">&quot;max_bpm&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">120</span><span class="p">,</span><span class="w">          </span><span class="c1">// beats per minute</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="nt">&quot;min_cycle_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">250</span><span class="p">,</span><span class="w">     </span><span class="c1">// minimum cycle duration</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nt">&quot;max_delta&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span><span class="w">        </span><span class="c1">// max position change per action (strokers: 100 = no limit)</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span><span class="err">...</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span><span class="p">},</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">  </span><span class="nt">&quot;estim_foc&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;estim&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span><span class="nt">&quot;max_speed&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1000</span><span class="p">,</span><span class="w">       </span><span class="c1">// electrical signal — effectively unlimited</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">    </span><span class="nt">&quot;max_delta&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">60</span><span class="p">,</span><span class="w">         </span><span class="c1">// comfort limit: 50-70 typical for estim</span>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">    </span><span class="err">...</span>
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">  </span><span class="p">}</span>
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="p">}</span>
-</code></pre></div>
-<h3 id="two-constraint-types">Two constraint types<a class="headerlink" href="#two-constraint-types" title="Permanent link">&para;</a></h3>
-<ol>
-<li>
-<p><strong>Speed</strong> (strokers) — max position change per second. The Handy physically
-   can't move faster than ~400 pos/s. Exceeding this causes the device to skip
-   or stall.</p>
-</li>
-<li>
-<p><strong>Delta</strong> (estim) — max position change between consecutive actions. Position
-   maps to voltage/pulse width. A jump from 0→100 causes a sharp muscle
-   contraction. Limiting delta to 50-70 smooths the waveform for comfort.
-   Pulse frequency typically capped at 100-150 Hz.</p>
-</li>
-</ol>
-<h3 id="combined-limits">Combined limits<a class="headerlink" href="#combined-limits" title="Permanent link">&para;</a></h3>
-<p>When multiple devices are selected, the system computes the <strong>most restrictive</strong>
-limits across all devices. The tightest constraint wins:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">combined</span> <span class="o">=</span> <span class="n">DeviceSpec</span><span class="p">(</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">max_speed</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">handy</span><span class="o">.</span><span class="n">max_speed</span><span class="p">,</span> <span class="n">osr2</span><span class="o">.</span><span class="n">max_speed</span><span class="p">),</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">max_delta</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">estim</span><span class="o">.</span><span class="n">max_delta</span><span class="p">,</span> <span class="n">handy</span><span class="o">.</span><span class="n">max_delta</span><span class="p">),</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">min_cycle_ms</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">handy</span><span class="o">.</span><span class="n">min_cycle_ms</span><span class="p">,</span> <span class="n">osr2</span><span class="o">.</span><span class="n">min_cycle_ms</span><span class="p">),</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="o">...</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">)</span>
-</code></pre></div>
-<h2 id="minimum-fix-algorithm">Minimum Fix Algorithm<a class="headerlink" href="#minimum-fix-algorithm" title="Permanent link">&para;</a></h2>
-<p>The algorithm applies the smallest correction needed:</p>
-<ol>
-<li><strong>Analyze</strong> — scan all actions, identify which violate limits (speed or delta)</li>
-<li><strong>Report</strong> — show violation count, max values found, % already OK</li>
-<li><strong>Fix</strong> — only touch violating actions, preserve everything else</li>
-<li><strong>Verify</strong> — re-analyze to confirm zero violations</li>
-</ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Checking 2,760 actions against Handy + Estim Stereo limits...
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>✅ 2,412 actions OK
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>⚠️ 214 speed violations (max 892 pos/s, limit 400)
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>⚠️ 134 delta violations (max 98, limit 60)
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>Applying minimum correction...
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>✅ Device aware — 87% of original preserved
-</code></pre></div>
-<h3 id="fix-strategy">Fix strategy<a class="headerlink" href="#fix-strategy" title="Permanent link">&para;</a></h3>
-<p>For each violating action, clamp the position to stay within limits:</p>
+transforms in Tone and Phrases work on the already-constrained baseline.</p>
+<h2 id="stingy-speed-not-delta">Stingy = Speed, Not Delta<a class="headerlink" href="#stingy-speed-not-delta" title="Permanent link">&para;</a></h2>
+<p>The key insight for estim: stingy sensation comes from <strong>fast cycles at full
+amplitude</strong>, not from large position jumps per se. A 0→100 jump at 60 BPM is
+comfortable. The same jump at 250 BPM burns.</p>
 <ul>
-<li><strong>Delta clamp</strong> (applied first): if <code>|pos[i] - pos[i-1]| &gt; max_delta</code>,
-  reduce to <code>pos[i-1] ± max_delta</code></li>
-<li><strong>Speed clamp</strong> (applied second): if <code>speed &gt; max_speed</code>, reduce to
-  <code>pos[i-1] ± max_speed * dt</code></li>
+<li><strong>Estim comfort limit</strong>: ~125 BPM at full range (0-100)</li>
+<li><strong>PythonDancer</strong> optimizes to 250 BPM — 2x too fast for long sessions</li>
+<li><strong>Our approach</strong>: speed-clamp the original pattern, preserving the musical DNA</li>
+<li>PythonDancer rebuilds from scratch → loses original structure</li>
+<li>FunScriptForge clamps → same beat, different intensity ceiling</li>
 </ul>
-<p>This preserves timing and direction — only the magnitude is reduced.</p>
+<h2 id="device-specs">Device Specs<a class="headerlink" href="#device-specs" title="Permanent link">&para;</a></h2>
+<p>Limits are stored in <code>forge/device_specs.json</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Device</th>
+<th>Max speed</th>
+<th>Max BPM</th>
+<th>Max delta</th>
+<th>Key constraint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The Handy</td>
+<td>400 pos/s</td>
+<td>120</td>
+<td>100</td>
+<td>Speed (mechanical)</td>
+</tr>
+<tr>
+<td>OSR2</td>
+<td>500 pos/s</td>
+<td>150</td>
+<td>100</td>
+<td>Speed (mechanical)</td>
+</tr>
+<tr>
+<td>Estim — FOC</td>
+<td>250 pos/s</td>
+<td>125</td>
+<td>100</td>
+<td>Speed (comfort, not hardware)</td>
+</tr>
+<tr>
+<td>Estim — Stereo</td>
+<td>250 pos/s</td>
+<td>125</td>
+<td>100</td>
+<td>Speed (comfort, not hardware)</td>
+</tr>
+<tr>
+<td>Generic / Intiface</td>
+<td>300 pos/s</td>
+<td>100</td>
+<td>100</td>
+<td>Speed (conservative)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="combined-limits">Combined limits<a class="headerlink" href="#combined-limits" title="Permanent link">&para;</a></h3>
+<p>When multiple devices are selected, the tightest constraint wins per parameter.
+The limits table on the Device tab shows which device is the bottleneck.</p>
+<h2 id="minimum-fix-algorithm">Minimum Fix Algorithm<a class="headerlink" href="#minimum-fix-algorithm" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Analyze</strong> — scan all actions, identify speed and delta violations</li>
+<li><strong>Report</strong> — violation count, max values found, % already OK</li>
+<li><strong>Fix</strong> — delta clamp first, then speed clamp. Only touch violating actions.</li>
+<li><strong>Stats</strong> — report actions clamped, spike cycles, total cycles</li>
+</ol>
+<p>Returns <code>(fixed_actions, fix_stats)</code> tuple.</p>
+<h2 id="intensity-spikes-estim-only">Intensity Spikes (estim only)<a class="headerlink" href="#intensity-spikes-estim-only" title="Permanent link">&para;</a></h2>
+<p>Allows a percentage of cycles to keep their original full-speed intensity
+through the clamp. Not adding spikes — allowing existing intensity to survive.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>None</strong></td>
+<td>All cycles clamped — smooth output</td>
+</tr>
+<tr>
+<td><strong>⅛ Rare</strong></td>
+<td>~1 in 8 cycles unclamped</td>
+</tr>
+<tr>
+<td><strong>¼ Moderate</strong></td>
+<td>~1 in 4 cycles unclamped</td>
+</tr>
+<tr>
+<td><strong>½ Frequent</strong></td>
+<td>~1 in 2 cycles unclamped</td>
+</tr>
+</tbody>
+</table>
+<p>Random placement via seed for reproducibility. Spike cycles skip both delta
+and speed clamps.</p>
+<h2 id="re-clamp-after-transforms">Re-clamp After Transforms<a class="headerlink" href="#re-clamp-after-transforms" title="Permanent link">&para;</a></h2>
+<p><strong>Every transform that modifies positions must re-clamp to device limits.</strong></p>
+<p>Currently implemented:
+- ✅ Device tab Accept (initial clamp)
+- ✅ Tone tab preview + Accept (re-clamp after tone)</p>
+<p>TODO:
+- Phrase editor transforms
+- Pattern editor transforms</p>
+<p>The <code>_reclamp_to_device_limits()</code> helper reads selected devices + spike
+setting from the forge project and applies the same clamp.</p>
+<h2 id="cli">CLI<a class="headerlink" href="#cli" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>cli.py<span class="w"> </span>device-aware<span class="w"> </span>input.funscript<span class="w"> </span>--devices<span class="w"> </span>estim_foc<span class="w"> </span>--spikes<span class="w"> </span><span class="m">0</span>.125
+</code></pre></div>
 <h2 id="vocabulary">Vocabulary<a class="headerlink" href="#vocabulary" title="Permanent link">&para;</a></h2>
-<p>Always use "device aware" / "awareness". Never "device safe" — that implies
-a guarantee we can't make. We consider device limits, we don't guarantee safety.</p>
-<h2 id="future-community-device-specs">Future: Community Device Specs<a class="headerlink" href="#future-community-device-specs" title="Permanent link">&para;</a></h2>
-<p>The JSON file is designed to be updated without code changes. Plan:
-- Ship with conservative defaults
-- Ask the community for real-world measurements
-- Accept PRs to update device_specs.json
-- Support user-defined devices (custom JSON in user config directory)</p>
+<p>Always "device aware" / "awareness". Never "device safe" — liability concern.</p>
+<h2 id="shared-library-planned">Shared Library (planned)<a class="headerlink" href="#shared-library-planned" title="Permanent link">&para;</a></h2>
+<p>Extract <code>device_specs.py</code> + <code>device_specs.json</code> to a shared location for reuse
+across FunScriptForge, ForgePlayer, SyncPlayer, and forgegen. Any app that
+plays or generates funscripts needs device awareness.</p>
 <hr />
 <p><em>© 2026 <a href="https://github.com/liquid-releasing">Liquid Releasing</a>. Licensed under the MIT License.</em></p>
 
