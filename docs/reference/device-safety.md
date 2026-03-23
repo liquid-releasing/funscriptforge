@@ -23,14 +23,14 @@ Limits are stored in `forge/device_specs.json` and are community-refinable:
 |---|---|---|---|---|
 | The Handy | 400 pos/s | 120 | 100 | Linear stroker. Firmware-limited. |
 | OSR2 | 500 pos/s | 150 | 100 | Multi-axis servo. Build-dependent. |
-| Estim — FOC | 1000 pos/s | 300 | 100 | Electrical signal. restim handles ramping. |
-| Estim — Stereo | 1000 pos/s | 300 | 100 | Dual-channel. Same as FOC. |
+| Estim — FOC | 250 pos/s | 125 | 100 | Speed clamp for comfort (~125 BPM at full range). |
+| Estim — Stereo | 250 pos/s | 125 | 100 | Same comfort limits as FOC. |
 | Generic / Intiface | 300 pos/s | 100 | 100 | Conservative defaults for Bluetooth devices. |
 
 ### Two constraint types
 
-- **Speed** (mechanical devices) — max position change per second. Exceeding this causes skipping or mechanical strain.
-- **Delta** (estim) — max position change between consecutive actions. Maps to voltage/pulse intensity. Large jumps can cause discomfort.
+- **Speed** (all devices) — max position change per second. For strokers, exceeding this causes skipping. For estim, fast cycles at full amplitude cause stingy sensation. The comfort limit for estim is ~125 BPM at full range.
+- **Delta** — max position change between consecutive actions. Strokers have no delta limit (100 = full range). Estim delta is also 100 since the speed clamp handles the comfort constraint.
 
 ### Combined limits
 

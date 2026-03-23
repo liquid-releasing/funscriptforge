@@ -144,9 +144,37 @@ Related: cloned xolvco/media-tools (ffmpeg probe/audio/video) and xolvco/videofl
 ### Remaining component work
 
 - Replace pymediainfo with media-tools probe() for video/audio stats
-- Extract tone_selector when Tone-as-first-transform in Phrases is built
-- Extract transform_editor if Phrases/Patterns diverge enough to need it
+- Extract device_specs to shared lib (forge-core) for ForgePlayer/SyncPlayer/forgegen
 - Delete visualizations/ shims once all consumers are migrated
+
+---
+
+## Done — Phrases UX + Device Awareness (2026-03-22/23)
+
+- ✅ White phrase boxes + P labels
+- ✅ Auto-accept workflow: Prev/Next/Done nav, Cancel reverts all
+- ✅ All 6 tones as phrase transforms (Tone category first in picker)
+- ✅ Vibrant chart data cached on Device/Tone Accept
+- ✅ Phrases tab Accept button with green guidance
+- ✅ Device specs JSON with minimum-fix clamp algorithm
+- ✅ Device tab redesign: limits table, analysis, preview, intensity spikes
+- ✅ Re-clamp after Tone (preview + Accept)
+- ✅ Estim: speed=250, delta=100, 125 BPM comfort
+- ✅ "Safe" → "aware" vocabulary sweep
+- ✅ Large funscript threshold raised to 25K (full color lines)
+- ✅ CLI: device-aware command
+- ✅ File upload spinner
+
+### Open from testing
+
+- Re-clamp after phrase/pattern transforms (Tone done, phrases TODO)
+- Pattern instance mismatch bug (table checkbox vs editor number)
+- Pattern editor below table — user doesn't see it
+- Reorder Catalog tab (right of Export in tab bar)
+- Reorder items in Catalog view (Tone on top)
+- Save to catalog / Apply to all need (i) tooltips
+- Multiple transform chain visibility
+- Tone tab double-rendered cards
 
 ---
 

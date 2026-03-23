@@ -3,107 +3,101 @@
 ## Overview
 
 Device awareness ensures funscripts work within the physical limits of target
-output devices. It applies once, globally, on the Device tab — before any
+output devices. It applies once, globally, on the **Device tab** — before any
 creative decisions (Tone, Phrases). Everything downstream is guaranteed to
 work on the selected devices.
 
 ## Design Principle
 
-**Device tab = engineering. Tone/Phrases = art.**
+**Device tab = engineering (what the device CAN do).**
+**Tone/Phrases = art (what the user WANTS).**
 
 The user never has to think about device limits after the Device tab. Creative
-transforms in Tone and Phrases work on the already-constrained baseline. No
-double-constraining, no surprises at export.
+transforms in Tone and Phrases work on the already-constrained baseline.
+
+## Stingy = Speed, Not Delta
+
+The key insight for estim: stingy sensation comes from **fast cycles at full
+amplitude**, not from large position jumps per se. A 0→100 jump at 60 BPM is
+comfortable. The same jump at 250 BPM burns.
+
+- **Estim comfort limit**: ~125 BPM at full range (0-100)
+- **PythonDancer** optimizes to 250 BPM — 2x too fast for long sessions
+- **Our approach**: speed-clamp the original pattern, preserving the musical DNA
+- PythonDancer rebuilds from scratch → loses original structure
+- FunScriptForge clamps → same beat, different intensity ceiling
 
 ## Device Specs
 
-Device limits are stored in `forge/device_specs.json`:
+Limits are stored in `forge/device_specs.json`:
 
-```json
-{
-  "handy": {
-    "type": "stroker",
-    "max_speed": 400,        // position-units/sec
-    "max_bpm": 120,          // beats per minute
-    "min_cycle_ms": 250,     // minimum cycle duration
-    "max_delta": 100,        // max position change per action (strokers: 100 = no limit)
-    ...
-  },
-  "estim_foc": {
-    "type": "estim",
-    "max_speed": 1000,       // electrical signal — effectively unlimited
-    "max_delta": 60,         // comfort limit: 50-70 typical for estim
-    ...
-  }
-}
-```
-
-### Two constraint types
-
-1. **Speed** (strokers) — max position change per second. The Handy physically
-   can't move faster than ~400 pos/s. Exceeding this causes the device to skip
-   or stall.
-
-2. **Delta** (estim) — max position change between consecutive actions. Position
-   maps to voltage/pulse width. A jump from 0→100 causes a sharp muscle
-   contraction. Limiting delta to 50-70 smooths the waveform for comfort.
-   Pulse frequency typically capped at 100-150 Hz.
+| Device | Max speed | Max BPM | Max delta | Key constraint |
+|---|---|---|---|---|
+| The Handy | 400 pos/s | 120 | 100 | Speed (mechanical) |
+| OSR2 | 500 pos/s | 150 | 100 | Speed (mechanical) |
+| Estim — FOC | 250 pos/s | 125 | 100 | Speed (comfort, not hardware) |
+| Estim — Stereo | 250 pos/s | 125 | 100 | Speed (comfort, not hardware) |
+| Generic / Intiface | 300 pos/s | 100 | 100 | Speed (conservative) |
 
 ### Combined limits
 
-When multiple devices are selected, the system computes the **most restrictive**
-limits across all devices. The tightest constraint wins:
-
-```python
-combined = DeviceSpec(
-    max_speed = min(handy.max_speed, osr2.max_speed),
-    max_delta = min(estim.max_delta, handy.max_delta),
-    min_cycle_ms = max(handy.min_cycle_ms, osr2.min_cycle_ms),
-    ...
-)
-```
+When multiple devices are selected, the tightest constraint wins per parameter.
+The limits table on the Device tab shows which device is the bottleneck.
 
 ## Minimum Fix Algorithm
 
-The algorithm applies the smallest correction needed:
+1. **Analyze** — scan all actions, identify speed and delta violations
+2. **Report** — violation count, max values found, % already OK
+3. **Fix** — delta clamp first, then speed clamp. Only touch violating actions.
+4. **Stats** — report actions clamped, spike cycles, total cycles
 
-1. **Analyze** — scan all actions, identify which violate limits (speed or delta)
-2. **Report** — show violation count, max values found, % already OK
-3. **Fix** — only touch violating actions, preserve everything else
-4. **Verify** — re-analyze to confirm zero violations
+Returns `(fixed_actions, fix_stats)` tuple.
 
+## Intensity Spikes (estim only)
+
+Allows a percentage of cycles to keep their original full-speed intensity
+through the clamp. Not adding spikes — allowing existing intensity to survive.
+
+| Setting | Effect |
+|---|---|
+| **None** | All cycles clamped — smooth output |
+| **⅛ Rare** | ~1 in 8 cycles unclamped |
+| **¼ Moderate** | ~1 in 4 cycles unclamped |
+| **½ Frequent** | ~1 in 2 cycles unclamped |
+
+Random placement via seed for reproducibility. Spike cycles skip both delta
+and speed clamps.
+
+## Re-clamp After Transforms
+
+**Every transform that modifies positions must re-clamp to device limits.**
+
+Currently implemented:
+- ✅ Device tab Accept (initial clamp)
+- ✅ Tone tab preview + Accept (re-clamp after tone)
+
+TODO:
+- Phrase editor transforms
+- Pattern editor transforms
+
+The `_reclamp_to_device_limits()` helper reads selected devices + spike
+setting from the forge project and applies the same clamp.
+
+## CLI
+
+```bash
+python cli.py device-aware input.funscript --devices estim_foc --spikes 0.125
 ```
-Checking 2,760 actions against Handy + Estim Stereo limits...
-✅ 2,412 actions OK
-⚠️ 214 speed violations (max 892 pos/s, limit 400)
-⚠️ 134 delta violations (max 98, limit 60)
-Applying minimum correction...
-✅ Device aware — 87% of original preserved
-```
-
-### Fix strategy
-
-For each violating action, clamp the position to stay within limits:
-
-- **Delta clamp** (applied first): if `|pos[i] - pos[i-1]| > max_delta`,
-  reduce to `pos[i-1] ± max_delta`
-- **Speed clamp** (applied second): if `speed > max_speed`, reduce to
-  `pos[i-1] ± max_speed * dt`
-
-This preserves timing and direction — only the magnitude is reduced.
 
 ## Vocabulary
 
-Always use "device aware" / "awareness". Never "device safe" — that implies
-a guarantee we can't make. We consider device limits, we don't guarantee safety.
+Always "device aware" / "awareness". Never "device safe" — liability concern.
 
-## Future: Community Device Specs
+## Shared Library (planned)
 
-The JSON file is designed to be updated without code changes. Plan:
-- Ship with conservative defaults
-- Ask the community for real-world measurements
-- Accept PRs to update device_specs.json
-- Support user-defined devices (custom JSON in user config directory)
+Extract `device_specs.py` + `device_specs.json` to a shared location for reuse
+across FunScriptForge, ForgePlayer, SyncPlayer, and forgegen. Any app that
+plays or generates funscripts needs device awareness.
 
 ---
 

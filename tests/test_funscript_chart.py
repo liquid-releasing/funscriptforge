@@ -94,17 +94,17 @@ class TestBuildFigureLarge(unittest.TestCase):
     """vibrant_figure uses grey-line mode for series above the large threshold."""
 
     def test_build_figure_large(self):
-        """Series of 11 000 actions uses grey-line mode (only 2 traces: grey line + markers)."""
+        """Series of 30 000 actions uses grey-line mode (only 2 traces: grey line + markers)."""
         try:
             import plotly.graph_objects as go
         except ImportError:
             self.skipTest("plotly not installed")
 
-        actions = _make_actions(11_000)
+        actions = _make_actions(30_000)
         series = compute_chart_data(actions)
 
         view = _ViewState(color_mode="velocity")
-        fig = vibrant_figure(series, [], view_state=view, height=300, duration_ms=11_000 * 100)
+        fig = vibrant_figure(series, [], view_state=view, height=300, duration_ms=30_000 * 100)
 
         traces = _scatter_traces(fig)
 
