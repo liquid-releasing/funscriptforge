@@ -54,26 +54,31 @@ If the preview looks wrong, move the slider back or choose a different transform
 
 ---
 
-## Device safety
+## Device awareness
 
-The **Device safety** checkbox (below the sliders) applies a velocity cap of 200 pos/s to the preview. Enable it if you are editing for a mechanical device and want to see exactly what the device output will look like.
-
-This is purely a preview setting — the cap is always applied independently at export time when you use the Device download tab.
+Device awareness is applied globally on the **Device tab** before you reach the Phrase Editor. All transforms in the Phrase Editor work on the already device-aware baseline — you don't need to think about device limits here. Every creative change you make is guaranteed to work on your selected devices.
 
 ---
 
-## Accept, Cancel, and navigation
+## Navigation and workflow
 
 | Button | What it does |
 |---|---|
-| **Accept** | Applies the transform. Phrase is marked as edited. Returns to Phrase Selector. |
-| **Cancel** | Discards the current transform selection. Returns to Phrase Selector without changing anything. |
-| **← Prev** | Saves the current selection and opens the previous phrase. |
-| **→ Next** | Saves the current selection and opens the next phrase. |
-| **✕** | Closes the Phrase Editor and returns to Phrase Selector (same as Cancel). |
+| **⏮ Prev** | Auto-accepts current transform, opens the previous phrase. |
+| **Next ⏭** | Auto-accepts current transform, opens the next phrase. |
+| **✓ Done** | Auto-accepts current transform, saves all phrase edits to chain, returns to Phrase Selector. |
+| **✕ Cancel phrase changes** | Discards ALL changes for this phrase (reverts to entry state). |
 
-!!! tip "Undo"
-    After accepting a transform, press **Ctrl+Z** (or **Cmd+Z** on Mac) to undo it. FunscriptForge keeps 50 levels of undo history.
+All navigation auto-accepts — you don't need a separate Accept button. Just pick a transform, adjust sliders, and move on. Cancel is the only way to discard changes.
+
+## Transform categories
+
+The transform picker shows four categories:
+
+1. **Tone** — all 6 tones (Tender → Dominant) with per-tone sliders + Impact
+2. **Behavior** — amplitude, smoothing, contrast, etc.
+3. **Structural** — tempo, replacement patterns
+4. **Plugins** — user-defined transforms (if any are loaded)
 
 ---
 

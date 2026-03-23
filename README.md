@@ -44,7 +44,7 @@ FunScriptForge guides you through a structured workflow. Each tab builds on the 
 | Tab | Purpose |
 |-----|---------|
 | **Project** | Load funscript, set output folder, add media (video/audio/captions), author info |
-| **Device** | Select target devices (Handy, OSR2, E-Stim FOC/Stereo), choose fix strategy, run assessment |
+| **Device** | Select target devices (Handy, OSR2, E-Stim FOC/Stereo, Generic/Intiface), apply device awareness |
 | **Tone** | Apply a global mood — 6 tones from Tender to Dominant, with contextual sliders |
 | **Phrases** | Per-phrase editing with transforms, live preview, Before/After charts |
 | **Patterns** | Batch transforms by behavioral tag across all matching phrases |
@@ -64,11 +64,12 @@ State flows through the chain: **Original → Device → Tone → Phrases → Ex
 
 ### Device Tab
 
-- Select target devices: Handy, OSR2, E-Stim FOC, E-Stim Stereo
-- Four fix strategies: Performance (default), Halve cycles, Shorten cycles, Rebuild from beat
-- Three application scopes: Entire funscript, Alternate by phrase, Random by phrase
-- Assessment runs on Accept — spinner shows cycle-by-cycle progress
-- Vibrant colour-coded Plotly chart generated and cached for all downstream tabs
+- Select target devices: Handy, OSR2, E-Stim FOC, E-Stim Stereo, Generic/Intiface
+- Device limits table shows combined constraints and which device is the bottleneck
+- Minimum-fix algorithm: analyzes violations, clamps only what exceeds limits, preserves the rest
+- Side-by-side preview: Original vs Device Aware, plus full-width result chart with stats
+- Intensity spikes slider for estim: None / Rare / Moderate / Frequent — allows occasional full-range cycles
+- Everything downstream (Tone, Phrases) works on the device-aware baseline
 
 ### Tone Tab
 
@@ -89,10 +90,13 @@ State flows through the chain: **Original → Device → Tone → Phrases → Ex
 
 ### Phrase Editor
 
-- Full-funscript colour-coded chart with phrase bounding boxes; click any phrase to open its detail panel
-- Per-phrase transform selection with live parameter sliders and Before/After preview
-- Cycle-based phrase split — slider selects the split boundary; a dashed line marks it on the chart
-- **Concat with Next Phrase** — two-step preview flow with Confirm/Cancel
+- Full-funscript colour-coded chart with white phrase bounding boxes; click any phrase to edit
+- **Tone category first** in transform picker — all 6 tones available per-phrase with Impact slider
+- Behavior, Structural, and Plugin categories follow
+- Auto-accept workflow: Prev/Next/Done navigation auto-accepts the current transform
+- Cancel reverts all changes for the phrase to entry state
+- Phrases Accept button saves all edits to chain with green guidance for next steps
+- Cycle-based phrase split and Concat with Next Phrase
 - **Large-file phrase highlight** — selected phrase renders with full velocity colour over grey background
 
 ### Pattern Editor

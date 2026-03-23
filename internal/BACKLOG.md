@@ -29,24 +29,22 @@ Consider: workflow mermaid diagram showing completed (filled) vs remaining (outl
 
 ---
 
-### Device Awareness tab (new — after Tone, before Phrases)
+### Device Awareness tab — IMPLEMENTED (2026-03-22)
 
-Apply device-safe fixes globally before phrase editing. Tab layout:
+Device tab applies minimum-fix clamp globally before Tone. Redesigned:
 
-- Device selection checkboxes (moved from Project tab)
-- Phrase detection settings (moved from top of Phrases)
-- Beat bar plotly (if video/audio loaded) for reference
-- Fix strategy: `[X] Performance [ ] Halve strokes [ ] Shorten strokes [ ] Beat`
-  - **Note:** "Rebuild from beats" requires pre-release testing. Mark as roadmap — do not ship without validation against multiple funscripts and beat data sources.
-- Apply scope: `[ ] Entire funscript [ ] Alternate by phrase [ ] Random by phrase`
-- Accept rebuilds phrase list, creates full-color chart for Phrases tab
-- Saves devices + decisions to .forge config
+- Device selection: Handy, OSR2, Estim FOC, Estim Stereo, Generic/Intiface
+- Limits table shows combined constraints + bottleneck device per parameter
+- Minimum-fix algorithm: only clamps violating actions, preserves the rest
+- Side-by-side preview: Original | Device Aware, plus full-width result chart + stats
+- Intensity spikes slider for estim (None/Rare/Moderate/Frequent)
+- Device specs in `forge/device_specs.json` — community-refinable without code changes
+- Vocabulary: "awareness" not "safe" (liability)
 
-Design: sections are [Headline][Small description][Plotly]
+**Decided:** Device before Tone. Device = physics, Tone = feel.
 
-Open question: Device fix before or after Tone? Leaning before — make it right sooner.
-
-Export change: device-specific subfolders (`output/Timeline1/handy/`, `output/Timeline1/estim-foc/`).
+**TODO:** Per-device export subfolders (`output/handy/`, `output/estim-stereo/`).
+**TODO:** Every transform that modifies positions should verify result stays within device limits.
 
 ---
 
