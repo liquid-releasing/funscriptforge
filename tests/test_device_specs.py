@@ -110,19 +110,21 @@ class TestApplyMinimumFix(unittest.TestCase):
     def test_fixes_violations(self):
         # Speed 1000 exceeds limit 400
         actions = [{"at": 0, "pos": 0}, {"at": 100, "pos": 100}]
-        fixed = apply_minimum_fix(actions, self._limits())
+        fixed, stats = apply_minimum_fix(actions, self._limits())
         # Fixed action should have reduced position
         self.assertLess(fixed[1]["pos"], 100)
         # Verify no more violations
         result = analyze_violations(fixed, self._limits())
         self.assertEqual(result["violation_count"], 0)
+        self.assertGreater(stats["actions_clamped"], 0)
 
     def test_preserves_ok_actions(self):
         # Slow: speed 10, well within limits
         actions = [{"at": 0, "pos": 50}, {"at": 1000, "pos": 60}]
-        fixed = apply_minimum_fix(actions, self._limits())
+        fixed, stats = apply_minimum_fix(actions, self._limits())
         self.assertEqual(fixed[0]["pos"], 50)
         self.assertEqual(fixed[1]["pos"], 60)
+        self.assertEqual(stats["actions_clamped"], 0)
 
     def test_fixes_delta_violations(self):
         # Delta 80 exceeds limit 60 — should be clamped
@@ -133,13 +135,13 @@ class TestApplyMinimumFix(unittest.TestCase):
             max_delta=60,
         )
         actions = [{"at": 0, "pos": 10}, {"at": 500, "pos": 90}]
-        fixed = apply_minimum_fix(actions, limits)
+        fixed, _ = apply_minimum_fix(actions, limits)
         delta = abs(fixed[1]["pos"] - fixed[0]["pos"])
         self.assertLessEqual(delta, 60)
 
     def test_clamps_within_position_range(self):
         actions = [{"at": 0, "pos": 0}, {"at": 100, "pos": 100}]
-        fixed = apply_minimum_fix(actions, self._limits())
+        fixed, _ = apply_minimum_fix(actions, self._limits())
         for a in fixed:
             self.assertGreaterEqual(a["pos"], 0)
             self.assertLessEqual(a["pos"], 100)
@@ -161,17 +163,18 @@ class TestIntensitySpikes(unittest.TestCase):
             {"at": 200, "pos": 0}, {"at": 300, "pos": 80},
         ]
         limits = self._estim_limits(max_delta=50)
-        fixed = apply_minimum_fix(actions, limits, intensity_spikes=0.0)
+        fixed, stats = apply_minimum_fix(actions, limits, intensity_spikes=0.0)
         for i in range(1, len(fixed)):
             delta = abs(fixed[i]["pos"] - fixed[i - 1]["pos"])
             self.assertLessEqual(delta, 50, f"Action {i} delta {delta} exceeds limit")
+        self.assertEqual(stats["spike_cycles"], 0)
 
     def test_full_spikes_allows_some_unclamped(self):
         # With 50% spikes, at least some actions should keep original delta
         actions = [{"at": i * 100, "pos": 0 if i % 2 == 0 else 90} for i in range(20)]
         limits = self._estim_limits(max_delta=50)
-        fixed_no_spike = apply_minimum_fix(actions, limits, intensity_spikes=0.0)
-        fixed_with_spike = apply_minimum_fix(actions, limits, intensity_spikes=0.5)
+        fixed_no_spike, stats_no = apply_minimum_fix(actions, limits, intensity_spikes=0.0)
+        fixed_with_spike, stats_yes = apply_minimum_fix(actions, limits, intensity_spikes=0.5)
         # With spikes, some actions should have larger delta than without
         max_delta_no = max(
             abs(fixed_no_spike[i]["pos"] - fixed_no_spike[i - 1]["pos"])
@@ -183,14 +186,22 @@ class TestIntensitySpikes(unittest.TestCase):
         )
         self.assertGreater(max_delta_with, max_delta_no,
                           "Spike mode should allow larger deltas than no-spike mode")
+        self.assertGreater(stats_yes["spike_cycles"], 0)
 
     def test_spikes_ignored_when_delta_is_100(self):
         # When max_delta=100 (no limit), spikes don't change anything
         actions = [{"at": 0, "pos": 0}, {"at": 100, "pos": 100}]
         limits = self._estim_limits(max_delta=100)
-        fixed_no = apply_minimum_fix(actions, limits, intensity_spikes=0.0)
-        fixed_yes = apply_minimum_fix(actions, limits, intensity_spikes=0.5)
+        fixed_no, _ = apply_minimum_fix(actions, limits, intensity_spikes=0.0)
+        fixed_yes, _ = apply_minimum_fix(actions, limits, intensity_spikes=0.5)
         self.assertEqual(fixed_no[1]["pos"], fixed_yes[1]["pos"])
+
+    def test_fix_stats_returned(self):
+        actions = [{"at": 0, "pos": 0}, {"at": 100, "pos": 100}]
+        _, stats = apply_minimum_fix(actions, self._estim_limits())
+        self.assertIn("actions_clamped", stats)
+        self.assertIn("spike_cycles", stats)
+        self.assertIn("total_cycles", stats)
 
 
 if __name__ == "__main__":

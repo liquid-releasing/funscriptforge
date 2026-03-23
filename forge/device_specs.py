@@ -162,7 +162,9 @@ def apply_minimum_fix(
             0.5 = every other cycle can spike.
         spike_seed: Random seed for reproducible spike placement.
 
-    Returns a new list (does not mutate input).
+    Returns:
+        Tuple of (fixed_actions, fix_stats) where fix_stats is a dict with
+        actions_clamped, spike_cycles, total_cycles.
     """
     import copy
     import random
@@ -170,13 +172,15 @@ def apply_minimum_fix(
     result = copy.deepcopy(actions)
 
     if len(result) < 2:
-        return result
+        return result, {"actions_clamped": 0, "spike_cycles": 0, "total_cycles": 0}
 
     # Identify cycles (direction changes) for spike selection
     _rng = random.Random(spike_seed)
-    _use_spikes = intensity_spikes > 0 and limits.max_delta < 100
+    _use_spikes = intensity_spikes > 0
     _cycle_idx = 0
     _prev_direction = 0
+    _spike_count = 0
+    _clamp_count = 0
 
     for i in range(1, len(result)):
         dt_ms = result[i]["at"] - result[i - 1]["at"]
@@ -191,10 +195,13 @@ def apply_minimum_fix(
 
         # Determine if this cycle is a spike cycle
         _is_spike = _use_spikes and _rng.random() < intensity_spikes
+        if _is_spike:
+            _spike_count += 1
 
         # Delta clamp (estim comfort — max position change per action)
         # Spike cycles skip the delta clamp (allowed full range)
         effective_delta = 100 if _is_spike else limits.max_delta
+        _clamped_this = False
         if abs_dp > effective_delta:
             new_pos = result[i - 1]["pos"] + (1 if dp > 0 else -1) * effective_delta
             result[i]["pos"] = int(round(max(
@@ -203,17 +210,27 @@ def apply_minimum_fix(
             )))
             dp = result[i]["pos"] - result[i - 1]["pos"]
             abs_dp = abs(dp)
+            _clamped_this = True
 
         # Speed clamp (mechanical devices — max position change per time)
         if dt_ms > 0:
             dt_s = dt_ms / 1000.0
             speed = abs_dp / dt_s
-            if speed > limits.max_speed:
+            if speed > limits.max_speed and not _is_spike:
                 max_dp = limits.max_speed * dt_s
                 new_pos = result[i - 1]["pos"] + (1 if dp > 0 else -1) * max_dp
                 result[i]["pos"] = int(round(max(
                     limits.position_min,
                     min(limits.position_max, new_pos),
                 )))
+                _clamped_this = True
 
-    return result
+        if _clamped_this:
+            _clamp_count += 1
+
+    _fix_stats = {
+        "actions_clamped": _clamp_count,
+        "spike_cycles": _spike_count,
+        "total_cycles": _cycle_idx,
+    }
+    return result, _fix_stats

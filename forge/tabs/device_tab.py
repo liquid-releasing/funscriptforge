@@ -175,7 +175,7 @@ def render():
         render_monochrome_from_arrays(times_s, positions, height=200, key="device_original")
     else:
         # Apply minimum fix (with intensity spikes if estim selected)
-        fixed_actions = apply_minimum_fix(actions, limits, intensity_spikes=_spike_fraction)
+        fixed_actions, fix_stats = apply_minimum_fix(actions, limits, intensity_spikes=_spike_fraction)
         fixed_positions = [a["pos"] for a in fixed_actions]
 
         # Re-analyze to confirm
@@ -198,7 +198,17 @@ def render():
         from forge.funscript import funscript_stats as _fs_stats
         _fixed_data = {"actions": fixed_actions}
         render_monochrome(fixed_actions, height=180)
-        render_stats_row(_fs_stats(_fixed_data))
+        _stats = _fs_stats(_fixed_data)
+        # Add spike info to stats row
+        _stats_cols = st.columns(6)
+        _stats_cols[0].metric("Duration", _stats.get("duration_fmt", "—"))
+        _stats_cols[1].metric("Actions", f"{_stats.get('action_count', 0):,}")
+        _stats_cols[2].metric("Avg speed", f"{_stats.get('avg_speed', 0):.0f}")
+        _stats_cols[3].metric("Clamped", f"{fix_stats['actions_clamped']:,}")
+        _stats_cols[4].metric("Spike cycles", f"{fix_stats['spike_cycles']:,}")
+        _stats_cols[5].metric("Total cycles", f"{fix_stats['total_cycles']:,}")
+        if fix_stats["spike_cycles"] > 0:
+            st.caption("Spike cycles can be edited in the Phrases tab.")
 
     st.divider()
 
@@ -243,7 +253,7 @@ def _apply_device_awareness(project, targets, actions, limits, already_aware, sp
     else:
         status.update(label=f"Applying minimum fix to {len(actions):,} actions…")
 
-        fixed_actions = apply_minimum_fix(actions, limits, intensity_spikes=spike_fraction)
+        fixed_actions, fix_stats = apply_minimum_fix(actions, limits, intensity_spikes=spike_fraction)
         analysis = analyze_violations(fixed_actions, limits)
 
         # Build funscript data with fixed actions
