@@ -931,17 +931,17 @@ def _render_save_cancel(phrase_idx: int, view_state) -> None:
             width="stretch",
             help="Discard all changes to this phrase",
         ):
-        # Restore chain to snapshot taken on entry
-        _chain_key = f"phrase_transform_chain_{phrase_idx}"
-        _snapshot_key = f"_phrase_chain_snapshot_{phrase_idx}"
-        _snapshot = st.session_state.get(_snapshot_key)
-        if _snapshot is not None:
-            st.session_state[_chain_key] = list(_snapshot)
-        else:
-            st.session_state.pop(_chain_key, None)
-        st.session_state.pop(_snapshot_key, None)
-        _clear_picker_state(phrase_idx)
-        st.rerun()
+            # Restore chain to snapshot taken on entry
+            _chain_key = f"phrase_transform_chain_{phrase_idx}"
+            _snapshot_key = f"_phrase_chain_snapshot_{phrase_idx}"
+            _snapshot = st.session_state.get(_snapshot_key)
+            if _snapshot is not None:
+                st.session_state[_chain_key] = list(_snapshot)
+            else:
+                st.session_state.pop(_chain_key, None)
+            st.session_state.pop(_snapshot_key, None)
+            _clear_picker_state(phrase_idx)
+            st.rerun()
 
 
 # ------------------------------------------------------------------
