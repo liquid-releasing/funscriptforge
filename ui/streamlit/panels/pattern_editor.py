@@ -1008,7 +1008,28 @@ def _apply_transform_to_window(
         return []
     slice_copy  = copy.deepcopy(window_actions)
     transformed = spec.apply(slice_copy, param_values)
-    return transformed
+    # Re-clamp to device limits after transform
+    return _reclamp_actions(transformed)
+
+
+def _reclamp_actions(actions: list) -> list:
+    """Re-clamp actions to device limits. Reads device settings from session state."""
+    forge = st.session_state.get("forge_project")
+    if not forge:
+        return actions
+    targets = forge.get("output_targets", [])
+    if not targets:
+        return actions
+
+    from forge.device_specs import combined_limits, apply_minimum_fix, INTENSITY_SPIKE_PRESETS
+    limits = combined_limits(targets)
+    if limits is None:
+        return actions
+
+    spike_name = forge.get("intensity_spikes", "None")
+    spike_fraction = INTENSITY_SPIKE_PRESETS.get(spike_name, 0.0)
+    fixed, _ = apply_minimum_fix(actions, limits, intensity_spikes=spike_fraction)
+    return fixed
 
 
 # ------------------------------------------------------------------
@@ -1092,7 +1113,7 @@ def _build_all_transforms(
                 continue
 
             seg_slice   = [a for a in result if seg_s <= a["at"] <= seg_e]
-            transformed = spec.apply(copy.deepcopy(seg_slice), param_values)
+            transformed = _reclamp_actions(spec.apply(copy.deepcopy(seg_slice), param_values))
 
             if spec.structural:
                 outside = [a for a in result if not (seg_s <= a["at"] <= seg_e)]

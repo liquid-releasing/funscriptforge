@@ -569,7 +569,8 @@ def _apply_transform_to_window(
     spec,
     param_values: dict,
 ) -> list:
-    """Deep-copy original_actions, apply spec only to the phrase slice."""
+    """Deep-copy original_actions, apply spec only to the phrase slice.
+    Re-clamps to device limits after transform."""
     phrase_start = phrase["start_ms"]
     phrase_end   = phrase["end_ms"]
 
@@ -580,14 +581,36 @@ def _apply_transform_to_window(
     if spec.structural:
         # Timestamps changed — replace the phrase slice wholesale.
         outside = [a for a in result if not (phrase_start <= a["at"] <= phrase_end)]
-        return sorted(outside + transformed, key=lambda a: a["at"])
+        result = sorted(outside + transformed, key=lambda a: a["at"])
+    else:
+        t_to_pos = {a["at"]: a["pos"] for a in transformed}
+        for a in result:
+            if a["at"] in t_to_pos:
+                a["pos"] = t_to_pos[a["at"]]
 
-    t_to_pos = {a["at"]: a["pos"] for a in transformed}
-    for a in result:
-        if a["at"] in t_to_pos:
-            a["pos"] = t_to_pos[a["at"]]
-
+    # Re-clamp to device limits after transform
+    result = _reclamp_actions_to_device_limits(result)
     return result
+
+
+def _reclamp_actions_to_device_limits(actions: list) -> list:
+    """Re-clamp actions to device limits. Reads device settings from session state."""
+    forge = st.session_state.get("forge_project")
+    if not forge:
+        return actions
+    targets = forge.get("output_targets", [])
+    if not targets:
+        return actions
+
+    from forge.device_specs import combined_limits, apply_minimum_fix, INTENSITY_SPIKE_PRESETS
+    limits = combined_limits(targets)
+    if limits is None:
+        return actions
+
+    spike_name = forge.get("intensity_spikes", "None")
+    spike_fraction = INTENSITY_SPIKE_PRESETS.get(spike_name, 0.0)
+    fixed, _ = apply_minimum_fix(actions, limits, intensity_spikes=spike_fraction)
+    return fixed
 
 
 # ------------------------------------------------------------------
