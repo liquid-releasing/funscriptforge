@@ -646,6 +646,7 @@ def _sidebar() -> None:
             "Device": st.session_state.get("device_accepted", False),
             "Tone": _progress.get("tone_applied", False),
             "Phrases": _progress.get("phrases_edited", False),
+            "Patterns": _progress.get("patterns_edited", False),
             "Export": _progress.get("exported", False),
         }
         _status.tone_name = _forge.get("tone", "")

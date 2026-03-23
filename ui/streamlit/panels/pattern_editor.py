@@ -685,21 +685,27 @@ def _render_controls(
 
     st.divider()
 
+    # Show green bar if transform was just applied
+    _last_applied = st.session_state.pop(f"_pe_last_applied_{selected_label}_{inst_idx}", None)
+    if _last_applied:
+        st.success(f"**{_last_applied}** applied to {selected_label} #{inst_idx + 1}.")
+
     # Apply to this instance only
     if st.button(
         "Apply",
         key=f"pe_apply_{selected_label}_{inst_idx}_single",
         width="stretch",
         type="primary",
-        help="Mark this instance as done and go to Export.",
+        help="Apply this transform to the current instance.",
     ):
-        proj = st.session_state.get("project")
-        if proj and proj.is_loaded:
-            for wi in proj.work_items:
-                if wi.start_ms == cycle["start_ms"]:
-                    proj.set_item_status(wi.id, "done")
-        st.session_state.goto_tab = 3
-        st.rerun(scope="app")
+        # Store name for green bar after rerun
+        from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
+        _seg_tx = _get_seg_transform(selected_label, inst_idx, 0)
+        _tx_key = _seg_tx.get("transform_key", "passthrough")
+        _tx_name = TRANSFORM_CATALOG.get(_tx_key)
+        st.session_state[f"_pe_last_applied_{selected_label}_{inst_idx}"] = _tx_name.name if _tx_name else _tx_key
+        st.session_state[f"pe_apply_{selected_label}_{inst_idx}"] = True
+        st.rerun()
 
     # Apply this instance's transform to all other instances of the same behavior
     if st.button(

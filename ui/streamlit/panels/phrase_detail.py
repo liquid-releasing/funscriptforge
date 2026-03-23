@@ -892,6 +892,16 @@ def _render_save_cancel(phrase_idx: int, view_state) -> None:
     """Apply accepts current transform and lets you add another.
     Cancel discards ALL changes for this phrase (entire chain)."""
 
+    # Show green guidance if a transform was just applied
+    _last_applied = st.session_state.pop(f"_phrase_last_applied_{phrase_idx}", None)
+    _chain_count = len(st.session_state.get(f"phrase_transform_chain_{phrase_idx}", []))
+    if _last_applied:
+        from forge.tabs._ui_helpers import success_guidance
+        if _chain_count > 1:
+            success_guidance(f"P{phrase_idx + 1}: {_chain_count} transforms applied.")
+        else:
+            success_guidance(f"**{_last_applied}** applied to P{phrase_idx + 1}.")
+
     col_apply, col_cancel = st.columns(2)
     with col_apply:
         if st.button(
@@ -901,6 +911,12 @@ def _render_save_cancel(phrase_idx: int, view_state) -> None:
             type="primary",
             help="Accept this transform and add another",
         ):
+            # Store what was applied for the green bar after rerun
+            _pending_key = st.session_state.get(f"txpick_{phrase_idx}_key", "passthrough")
+            if _pending_key != "passthrough":
+                from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
+                _name = TRANSFORM_CATALOG.get(_pending_key, None)
+                st.session_state[f"_phrase_last_applied_{phrase_idx}"] = _name.name if _name else _pending_key
             _accept_pending(phrase_idx)
             st.rerun()
 
