@@ -15,6 +15,34 @@ from forge_ui_components.funscript_chart.streamlit import render_monochrome_from
 
 _ASSETS = Path(__file__).parents[2] / "assets" / "tone_cards"
 
+
+def _reclamp_to_device_limits(times_ms: list, positions: list) -> list:
+    """Re-clamp positions to device limits after a transform.
+
+    Reads selected devices from session state and applies the minimum-fix
+    speed clamp. Returns the clamped positions list. If no devices are
+    selected, returns positions unchanged.
+    """
+    forge = st.session_state.get("forge_project")
+    if not forge:
+        return positions
+    targets = forge.get("output_targets", [])
+    if not targets:
+        return positions
+
+    from forge.device_specs import combined_limits, apply_minimum_fix, INTENSITY_SPIKE_PRESETS
+    limits = combined_limits(targets)
+    if limits is None:
+        return positions
+
+    # Build temporary actions list for the clamp
+    actions = [{"at": t, "pos": int(round(p))} for t, p in zip(times_ms, positions)]
+    # Read spike setting from project
+    spike_name = forge.get("intensity_spikes", "None")
+    spike_fraction = INTENSITY_SPIKE_PRESETS.get(spike_name, 0.0)
+    fixed, _ = apply_minimum_fix(actions, limits, intensity_spikes=spike_fraction)
+    return [a["pos"] for a in fixed]
+
 # Ordered by intensity: softest → hardest
 _TONES = [
     {
@@ -553,10 +581,12 @@ def _render_preview(selected: str | None):
             st.caption(f"**Before** — {source_label}")
             render_monochrome_from_arrays(times_s, positions, key="tone_before")
         with col_after:
-            st.caption(f"**After** — {selected} (impact {impact:.0%})")
             toned = _apply_tone_preview(times_s, positions, selected, slider_vals)
             # Blend: output = original + impact * (toned - original)
             modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
+            # Re-clamp to device limits
+            modified = _reclamp_to_device_limits(times, modified)
+            st.caption(f"**After** — {selected} (impact {impact:.0%}) · device aware")
             render_monochrome_from_arrays(times_s, modified, key="tone_after")
     else:
         st.caption("**Your funscript** — select a tone to see the preview")
@@ -684,6 +714,11 @@ def _apply_tone(tone_name: str):
             toned = _apply_tone_preview(times_s, positions, tone_name, slider_vals)
             # Apply impact blending
             modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
+
+            # Re-clamp to device limits after tone
+            status.update(label="Applying device awareness…")
+            modified = _reclamp_to_device_limits(times, modified)
+            status.write("✅ Device awareness re-applied after tone")
 
             # Save toned funscript to chain
             if project:
