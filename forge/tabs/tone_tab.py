@@ -526,7 +526,7 @@ def _render_preview(selected: str | None):
     if project:
         data = get_chain_funscript_for(project, "tone")
         if data:
-            source_label = "device-safe"
+            source_label = "device-aware"
 
     # Fall back to raw funscript if chain has nothing
     if not data:

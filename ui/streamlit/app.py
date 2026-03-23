@@ -353,10 +353,10 @@ def _media_picker_local(funscript_path: str, output_dir: str) -> None:
 
 _WORKFLOW_GUIDANCE = {
     "Project": "Set up your funscript, media, and export location",
-    "Device": "Make your funscript safe for your target device",
+    "Device": "Make your funscript device-aware",
     "Tone": "Choose how your output feels",
     "Phrases": "Fine-tune individual sections",
-    "Export": "Generate device-safe output files",
+    "Export": "Generate device-aware output files",
 }
 
 
@@ -879,7 +879,7 @@ def _render_welcome() -> None:
     st.markdown(
         "**FunscriptForge** analyses funscripts, detects phrase structure and motion "
         "patterns, and lets you apply per-phrase transforms before exporting a clean, "
-        "device-safe output file."
+        "device-aware output file."
     )
     st.divider()
 

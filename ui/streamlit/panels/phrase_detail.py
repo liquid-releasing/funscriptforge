@@ -44,70 +44,6 @@ from utils import ms_to_timestamp
 
 
 # ------------------------------------------------------------------
-# Device awareness helpers
-# ------------------------------------------------------------------
-
-def _check_quality_phrase(actions: list, phrase: dict) -> list:
-    """Run device-safety checks on the phrase window only.
-
-    Returns a list of ``{level, message, at}`` dicts (same format as the
-    export-panel quality gate).  Levels: ``"error"`` (velocity > 300 pos/s)
-    or ``"warning"`` (velocity 200–300 pos/s or interval < 50 ms).
-    """
-    start_ms = phrase["start_ms"]
-    end_ms   = phrase["end_ms"]
-    window   = [a for a in actions if start_ms <= a["at"] <= end_ms]
-    issues: list = []
-    for i in range(1, len(window)):
-        a0, a1 = window[i - 1], window[i]
-        dt_ms = a1["at"] - a0["at"]
-        if dt_ms <= 0:
-            continue
-        vel = abs(a1["pos"] - a0["pos"]) / dt_ms * 1000
-        if vel > 300:
-            issues.append({"level": "error",   "message": f"{vel:.0f} pos/s", "at": a0["at"]})
-        elif vel > 200:
-            issues.append({"level": "warning", "message": f"{vel:.0f} pos/s", "at": a0["at"]})
-        if dt_ms < 50:
-            issues.append({"level": "warning", "message": f"interval {dt_ms} ms", "at": a0["at"]})
-    return issues
-
-
-def _render_device_safety(phrase_idx: int) -> None:
-    """Enforce device awareness checkbox + status badge above Accept.
-
-    Checkbox is on by default.  When on, the Performance transform is applied
-    to the preview (and to the accepted chain) to cap velocity at 200 pos/s.
-    """
-    n_errors   = st.session_state.get(f"_ds_errors_{phrase_idx}",   0)
-    n_warnings = st.session_state.get(f"_ds_warnings_{phrase_idx}", 0)
-
-    if st.session_state.get(f"_ds_fix_{phrase_idx}"):
-        st.success("🛡 Device aware")
-    elif n_errors:
-        st.error(
-            f"⚠ {n_errors} error{'s' if n_errors != 1 else ''}"
-            + (f", {n_warnings} warning{'s' if n_warnings != 1 else ''}" if n_warnings else "")
-        )
-    elif n_warnings:
-        st.warning(f"⚠ {n_warnings} warning{'s' if n_warnings != 1 else ''}")
-    else:
-        st.success("✅ Device aware")
-
-    # Default from Device tab decision — if device fixes were applied, default on
-    _forge = st.session_state.get("forge_project")
-    _device_applied = bool(st.session_state.get("device_accepted")) or bool(
-        (_forge or {}).get("device_fix_strategies")
-    )
-    st.checkbox(
-        "Enforce device awareness",
-        value=st.session_state.get(f"device_safety_{phrase_idx}", _device_applied),
-        key=f"device_safety_{phrase_idx}",
-        help="Apply Performance transform to cap velocity. Inherited from Device tab settings.",
-    )
-
-
-# ------------------------------------------------------------------
 # Public entry point
 # ------------------------------------------------------------------
 
@@ -858,7 +794,7 @@ def _clear_all_split_state() -> None:
 
 def _accept_pending(phrase_idx: int) -> None:
     """Auto-accept any non-passthrough pending transform before navigating.
-    Also applies device safety Performance transform if enabled."""
+    Device awareness is handled globally on the Device tab."""
     from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
     _pending_key = st.session_state.get(f"txpick_{phrase_idx}_key", "passthrough")
     _chain_key = f"phrase_transform_chain_{phrase_idx}"
