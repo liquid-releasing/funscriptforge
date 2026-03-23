@@ -1371,10 +1371,68 @@ def build_parser() -> argparse.ArgumentParser:
     p_caps.add_argument("--print", action="store_true",
                         help="Also print all captions to stdout")
 
+    # --- device-aware ---
+    p_da = sub.add_parser(
+        "device-aware",
+        help="Apply device awareness (minimum-fix clamp) to a funscript",
+    )
+    p_da.add_argument("input", help="Input funscript path")
+    p_da.add_argument("--output", "-o", help="Output path (default: <input>.device-aware.funscript)")
+    p_da.add_argument(
+        "--devices", nargs="+", default=["handy"],
+        help="Device keys (handy, osr2, estim_foc, estim_stereo, generic). Default: handy",
+    )
+    p_da.add_argument(
+        "--spikes", type=float, default=0.0,
+        help="Intensity spike fraction 0.0-0.5 (estim only). Default: 0.0",
+    )
+
     # --- test ---
     sub.add_parser("test", help="Run unit tests")
 
     return parser
+
+
+def cmd_device_aware(args):
+    """Apply device awareness (minimum-fix clamp) to a funscript."""
+    from forge.device_specs import combined_limits, analyze_violations, apply_minimum_fix
+
+    with open(args.input, encoding="utf-8") as f:
+        data = json.load(f)
+
+    actions = data.get("actions", [])
+    limits = combined_limits(args.devices)
+    if limits is None:
+        print(f"Error: no valid devices in {args.devices}", file=sys.stderr)
+        sys.exit(1)
+
+    # Analyze
+    analysis = analyze_violations(actions, limits)
+    print(f"Device limits: {limits.name} (speed={limits.max_speed}, delta={limits.max_delta}, bpm={limits.max_bpm})")
+    print(f"Actions: {analysis['total_actions']:,}")
+    print(f"Violations: {analysis['violation_count']:,} ({analysis['percent_ok']:.0f}% OK)")
+    print(f"Max speed found: {analysis['max_speed_found']:.0f} (limit: {limits.max_speed})")
+
+    if analysis["violation_count"] == 0:
+        print("Already device aware — no changes needed.")
+        if not args.output:
+            return
+        # Still write output if requested
+        out = args.output
+    else:
+        # Apply fix
+        fixed_actions, fix_stats = apply_minimum_fix(
+            actions, limits, intensity_spikes=args.spikes,
+        )
+        print(f"Clamped: {fix_stats['actions_clamped']:,} actions")
+        print(f"Spike cycles: {fix_stats['spike_cycles']:,} / {fix_stats['total_cycles']:,}")
+
+        data["actions"] = fixed_actions
+        out = args.output or _default_path(args.input, ".device-aware.funscript")
+
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    print(f"Written: {out}")
 
 
 def _default_path(source: str, suffix: str) -> str:
@@ -1405,6 +1463,7 @@ def main():
         "suggest-tone":     cmd_suggest_tone,
         "beats":            cmd_beats,
         "parse-captions":   cmd_parse_captions,
+        "device-aware":     cmd_device_aware,
     }
     dispatch[args.command](args)
 
