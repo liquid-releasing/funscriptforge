@@ -46,7 +46,7 @@ from ui.streamlit.panels import catalog_view as catalog_view_panel
 from ui.streamlit.panels import export_panel
 from ui.streamlit.panels import pattern_editor as pattern_editor_panel
 from ui.streamlit.panels import transform_catalog as transform_catalog_panel
-from ui.streamlit.panels import retransforms as retransforms_panel
+from ui.streamlit.panels import stim_panel
 from ui.streamlit.panels import viewer as viewer_panel
 from forge.tabs import project_tab, device_tab, tone_tab, next_steps_tab
 
@@ -805,7 +805,7 @@ def _main() -> None:
 
     with tab_stim:
         st.session_state["active_tab"] = 3
-        retransforms_panel.render(project)
+        stim_panel.render(project)
 
     with tab_export:
         st.session_state["active_tab"] = 4
