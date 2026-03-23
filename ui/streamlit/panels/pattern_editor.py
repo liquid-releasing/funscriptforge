@@ -585,9 +585,20 @@ def _render_instance_table(
         },
     )
 
-    # Persist Apply states so _build_all_transforms can read them
+    # Persist Apply states and detect selection changes
+    _prev_selected = st.session_state.get("pe_selected_instance", 0)
+    _new_selected = _prev_selected
     for i, row in edited.iterrows():
-        st.session_state[f"pe_apply_{selected_label}_{i}"] = bool(row["Apply"])
+        _was_applied = st.session_state.get(f"pe_apply_{selected_label}_{i}", False)
+        _now_applied = bool(row["Apply"])
+        st.session_state[f"pe_apply_{selected_label}_{i}"] = _now_applied
+        # If user just checked this row, select it for editing
+        if _now_applied and not _was_applied:
+            _new_selected = i
+
+    if _new_selected != _prev_selected:
+        st.session_state.pe_selected_instance = _new_selected
+        st.rerun()
 
 
 # ------------------------------------------------------------------
