@@ -239,7 +239,7 @@ def render(project=None) -> None:
     st.divider()
 
     # ── Preview (blue) — generates channels ──────────────────────────────
-    if st.button("Preview channels", type="secondary", use_container_width=True,
+    if st.button("Preview channels", type="primary", use_container_width=True,
                  help="Generate channel previews from current settings."):
         with st.spinner("Generating channels…"):
             _apply_stim(forge, selected, slider_vals, save_to_disk=False)
@@ -410,10 +410,11 @@ def _apply_stim(forge, character_name, slider_vals, save_to_disk: bool = True):
     status.write(f"✅ Beta: {len(beta_t):,} points")
     status.write(f"✅ Pulse frequency: {len(pulse_t):,} points")
 
-    # Cache for preview
+    # Cache for preview and bump version for unique keys
     st.session_state["stim_alpha"] = (alpha_t, alpha_p)
     st.session_state["stim_beta"] = (beta_t, beta_p)
     st.session_state["stim_pulse"] = (pulse_t, pulse_p)
+    st.session_state["stim_preview_ver"] = st.session_state.get("stim_preview_ver", 0) + 1
 
     # Save settings and channel files to forge project (only on Accept)
     if forge and save_to_disk:
@@ -452,7 +453,8 @@ def _apply_stim(forge, character_name, slider_vals, save_to_disk: bool = True):
 
 
 def _render_channel_previews(forge, selected):
-    """Show input funscript + placeholder channel previews."""
+    """Show input funscript + channel previews."""
+    _ver = st.session_state.get("stim_preview_ver", 0)
     st.subheader("Channel previews")
 
     # Input funscript
@@ -482,24 +484,24 @@ def _render_channel_previews(forge, selected):
     col_input, col_ab, col_pv = st.columns(3)
     with col_input:
         st.caption("**Input funscript**")
-        render_monochrome_from_arrays(times_s, positions, height=150, key="stim_input")
+        render_monochrome_from_arrays(times_s, positions, height=150, key=f"stim_input_{_ver}")
 
     with col_ab:
         st.caption("**Alpha channel**")
         if _alpha:
-            render_monochrome_from_arrays(_alpha[0], _alpha[1], height=150, key="stim_alpha_preview")
+            render_monochrome_from_arrays(_alpha[0], _alpha[1], height=150, key=f"stim_alpha_preview_{_ver}")
         else:
             st.caption("_Select a character and click Accept to generate._")
         st.caption("**Beta channel**")
         if _beta:
-            render_monochrome_from_arrays(_beta[0], _beta[1], height=150, key="stim_beta_preview")
+            render_monochrome_from_arrays(_beta[0], _beta[1], height=150, key=f"stim_beta_preview_{_ver}")
         else:
             st.caption("_Select a character and click Accept to generate._")
 
     with col_pv:
         st.caption("**Pulse frequency**")
         if _pulse:
-            render_monochrome_from_arrays(_pulse[0], _pulse[1], height=150, key="stim_pulse_preview")
+            render_monochrome_from_arrays(_pulse[0], _pulse[1], height=150, key=f"stim_pulse_preview_{_ver}")
         else:
             st.caption("_Select a character and click Accept to generate._")
         st.caption("**Volume**")
