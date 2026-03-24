@@ -239,7 +239,7 @@ def render(project=None) -> None:
     st.divider()
 
     # ── Preview (blue) — generates channels ──────────────────────────────
-    if st.button("Preview channels", type="primary", use_container_width=True,
+    if st.button("👁 Preview channels", type="secondary", use_container_width=True,
                  help="Generate channel previews from current settings."):
         with st.spinner("Generating channels…"):
             _apply_stim(forge, selected, slider_vals, save_to_disk=False)
