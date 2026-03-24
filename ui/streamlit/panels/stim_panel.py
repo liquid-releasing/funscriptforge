@@ -104,26 +104,28 @@ _CHARACTERS: List[Dict[str, Any]] = [
 # Electrode path chart
 # ---------------------------------------------------------------------------
 
-def _path_points(shape: str) -> tuple[list[float], list[float]]:
+def _path_points(shape: str, radius: float = 0.4) -> tuple[list[float], list[float]]:
+    """Generate electrode path points. radius controls sweep width (from slider)."""
     n = 120
+    r = max(0.05, min(0.48, radius))
     if shape == "semi_circle":
         angles = [math.pi * i / (n - 1) for i in range(n)]
-        return [0.5 + 0.4 * math.cos(t) for t in angles], [0.5 + 0.4 * math.sin(t) for t in angles]
+        return [0.5 + r * math.cos(t) for t in angles], [0.5 + r * math.sin(t) for t in angles]
     elif shape == "three_quarter":
         angles = [1.5 * math.pi * i / (n - 1) + math.pi * 0.75 for i in range(n)]
-        return [0.5 + 0.4 * math.cos(t) for t in angles], [0.5 + 0.4 * math.sin(t) for t in angles]
+        return [0.5 + r * math.cos(t) for t in angles], [0.5 + r * math.sin(t) for t in angles]
     elif shape == "circle":
         angles = [2 * math.pi * i / (n - 1) for i in range(n)]
-        return [0.5 + 0.4 * math.cos(t) for t in angles], [0.5 + 0.4 * math.sin(t) for t in angles]
+        return [0.5 + r * math.cos(t) for t in angles], [0.5 + r * math.sin(t) for t in angles]
     else:  # zigzag
         xs = [i / (n - 1) for i in range(n)]
-        ys = [0.5 + 0.4 * math.sin(8 * math.pi * x) * (1 - x * 0.3) for x in xs]
+        ys = [0.5 + r * math.sin(8 * math.pi * x) * (1 - x * 0.3) for x in xs]
         return xs, ys
 
 
-def _path_chart(shape: str, color: str, height: int = 140) -> go.Figure:
+def _path_chart(shape: str, color: str, height: int = 140, radius: float = 0.4) -> go.Figure:
     _BG = "rgba(14,14,18,1)"
-    a, b = _path_points(shape)
+    a, b = _path_points(shape, radius)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=a, y=b, mode="lines",
                              line=dict(color=color, width=2.5),
@@ -154,7 +156,7 @@ def render(project=None) -> None:
     st.info(
         "**Stim** shapes how your funscript translates to electrical stimulation. "
         "Each character controls the electrode sweep path, pulse timing, and intensity curve. "
-        "Pick one, adjust the sliders, then Accept to generate the channel files."
+        "Pick one, adjust the sliders, preview the channels, then Accept."
     )
 
     selected = st.session_state.get("stim_character", None)
@@ -167,7 +169,7 @@ def render(project=None) -> None:
             border = f"border: 3px solid {char['color']};" if is_sel else "border: 1px solid #333;"
             opacity = "opacity: 1.0;" if is_sel else "opacity: 0.7;"
 
-            # Card front: name + tagline
+            # Card: name + tagline
             st.markdown(
                 f'<div style="padding: 8px; border-radius: 8px; {border} {opacity} text-align: center;">'
                 f'<strong style="color: {char["color"]};">{char["name"]}</strong><br>'
@@ -176,50 +178,42 @@ def render(project=None) -> None:
                 unsafe_allow_html=True,
             )
 
-            # Flip: info button toggles description
-            _flip_key = f"stim_flip_{char['name']}"
-            if st.button("ℹ️", key=f"stim_info_{char['name']}", use_container_width=True):
-                st.session_state[_flip_key] = not st.session_state.get(_flip_key, False)
+            # Electrode path chart as the "art"
+            st.plotly_chart(
+                _path_chart(char["path_shape"], char["color"]),
+                use_container_width=True,
+                config={"displayModeBar": False},
+                key=f"stim_path_{char['name']}",
+            )
 
-            if st.session_state.get(_flip_key, False):
-                st.caption(char["description"])
-            else:
-                # Electrode path chart as the "art"
-                st.plotly_chart(
-                    _path_chart(char["path_shape"], char["color"]),
-                    use_container_width=True,
-                    config={"displayModeBar": False},
-                    key=f"stim_path_{char['name']}",
-                )
-
-            # Select button
+            # Select button (always enabled — can re-select after Accept)
             if is_sel:
                 st.button("✓ Selected", key=f"stim_sel_{char['name']}", disabled=True, use_container_width=True)
             else:
                 if st.button("Select", key=f"stim_sel_{char['name']}", use_container_width=True):
                     st.session_state["stim_character"] = char["name"]
+                    # Clear cached channels on character change
+                    for k in ["stim_alpha", "stim_beta", "stim_pulse", "stim_accepted"]:
+                        st.session_state.pop(k, None)
                     st.rerun()
+
+            # Description in expander (flip replacement)
+            with st.expander("Details"):
+                st.caption(char["description"])
 
     if not selected:
         return
 
     st.divider()
 
-    # ── Sliders for selected character ────────────────────────────────────
+    # ── Sliders + dynamic path ────────────────────────────────────────────
     char_data = next(c for c in _CHARACTERS if c["name"] == selected)
 
-    # Electrode path (larger) + sliders side by side
     col_path, col_sliders = st.columns([1, 2])
-    with col_path:
-        st.plotly_chart(
-            _path_chart(char_data["path_shape"], char_data["color"], height=200),
-            use_container_width=True,
-            config={"displayModeBar": False},
-            key="stim_path_large",
-        )
 
+    # Read slider values first so path can respond
+    slider_vals = {}
     with col_sliders:
-        slider_vals = {}
         for sl in char_data["sliders"]:
             val = st.slider(
                 sl["label"],
@@ -232,12 +226,36 @@ def render(project=None) -> None:
             )
             slider_vals[sl["key"]] = val
 
+    # Dynamic path — radius responds to min_dist / arc_width slider
+    _radius = slider_vals.get("min_dist", 0.3)
+    with col_path:
+        st.plotly_chart(
+            _path_chart(char_data["path_shape"], char_data["color"], height=200, radius=_radius),
+            use_container_width=True,
+            config={"displayModeBar": False},
+            key="stim_path_large",
+        )
+
     st.divider()
 
-    # ── Accept ────────────────────────────────────────────────────────────
-    if st.button("Accept", type="primary", width="stretch",
-                 help="Generate estim channel files."):
-        _apply_stim(forge, selected, slider_vals)
+    # ── Preview (blue) — generates channels ──────────────────────────────
+    if st.button("Preview channels", type="secondary", use_container_width=True,
+                 help="Generate channel previews from current settings."):
+        with st.spinner("Generating channels…"):
+            _apply_stim(forge, selected, slider_vals, save_to_disk=False)
+        st.rerun()
+
+    st.divider()
+
+    # ── Channel previews ─────────────────────────────────────────────────
+    _render_channel_previews(forge, selected)
+
+    st.divider()
+
+    # ── Accept (red) at bottom — saves to disk ───────────────────────────
+    if st.button("Accept", type="primary", use_container_width=True,
+                 help="Save estim channel files to output folder."):
+        _apply_stim(forge, selected, slider_vals, save_to_disk=True)
         st.session_state["stim_accepted"] = True
         st.rerun()
 
@@ -250,26 +268,155 @@ def render(project=None) -> None:
 
     # Feedback prompt
     st.caption(
-        "💬 Want more sliders or different characters? "
+        "💬 Want more sliders or different stim shapes? "
         "Tell us on [Discord](https://discord.gg/funscriptforge) — "
         "your feedback shapes what we build next."
     )
-
-    st.divider()
 
     # ── Channel previews ──────────────────────────────────────────────────
     _render_channel_previews(forge, selected)
 
 
-def _apply_stim(forge, character_name, slider_vals):
-    """Generate estim channel files and save to output folder."""
+def _character_to_algorithm_params(character_name: str, slider_vals: dict) -> dict:
+    """Map our character + slider values to funscript-tools algorithm parameters."""
+    _MAP = {
+        "Gentle": {
+            "algorithm": "circular",
+            "min_distance_from_center": slider_vals.get("min_dist", 0.15),
+            "points_per_second": 25,
+            "speed_threshold_percent": 80,
+            "direction_change_probability": 0.0,
+        },
+        "Reactive": {
+            "algorithm": "circular",
+            "min_distance_from_center": 0.05,
+            "points_per_second": int(25 * slider_vals.get("freq_ramp", 1.2)),
+            "speed_threshold_percent": 30,
+            "direction_change_probability": 0.0,
+        },
+        "Scene Builder": {
+            "algorithm": "circular",
+            "min_distance_from_center": slider_vals.get("min_dist", 0.35),
+            "points_per_second": 25,
+            "speed_threshold_percent": int(slider_vals.get("freq_ramp", 7.0) * 10),
+            "direction_change_probability": 0.0,
+        },
+        "Unpredictable": {
+            "algorithm": "restim-original",
+            "min_distance_from_center": slider_vals.get("min_dist", 0.4),
+            "points_per_second": 25,
+            "speed_threshold_percent": 50,
+            "direction_change_probability": min(slider_vals.get("pulse_freq_ratio", 5.0) / 10.0, 0.8),
+        },
+        "Balanced": {
+            "algorithm": "circular",
+            "min_distance_from_center": slider_vals.get("min_dist", 0.3),
+            "points_per_second": 25,
+            "speed_threshold_percent": 50,
+            "direction_change_probability": 0.0,
+        },
+    }
+    return _MAP.get(character_name, _MAP["Balanced"])
+
+
+def _generate_channels(times_ms: list, positions: list, params: dict):
+    """Generate alpha/beta channels using funscript-tools adapter.
+
+    Returns (alpha_times_s, alpha_positions, beta_times_s, beta_positions,
+             pulse_times_s, pulse_positions) — all in seconds / 0-100 scale.
+    """
+    import sys
+    import numpy as np
+    _ft_root = str(Path(__file__).resolve().parents[3].parent / "funscript-tools")
+    if _ft_root not in sys.path:
+        sys.path.insert(0, _ft_root)
+
+    from funscript import Funscript
+    from processing.funscript_1d_to_2d import generate_alpha_beta_from_main
+
+    # Convert our format to funscript-tools format
+    times_s = [t / 1000.0 for t in times_ms]
+    positions_01 = [p / 100.0 for p in positions]
+    fs = Funscript(times_s, positions_01)
+
+    algorithm = params.get("algorithm", "circular")
+    alpha_fs, beta_fs = generate_alpha_beta_from_main(
+        fs,
+        speed_funscript=None,
+        points_per_second=params.get("points_per_second", 25),
+        algorithm=algorithm,
+        min_distance_from_center=params.get("min_distance_from_center", 0.1),
+        speed_threshold_percent=params.get("speed_threshold_percent", 50),
+        direction_change_probability=params.get("direction_change_probability", 0.1),
+    )
+
+    # Convert back to our format (seconds, 0-100)
+    alpha_t = list(alpha_fs.x)
+    alpha_p = [float(v) * 100.0 for v in alpha_fs.y]
+    beta_t = list(beta_fs.x)
+    beta_p = [float(v) * 100.0 for v in beta_fs.y]
+
+    # Generate simple pulse frequency from speed (derivative of position)
+    pos_arr = np.array(positions_01)
+    time_arr = np.array(times_s)
+    if len(pos_arr) > 1:
+        dt = np.diff(time_arr)
+        dp = np.abs(np.diff(pos_arr))
+        speed = np.where(dt > 0, dp / dt, 0)
+        # Normalize speed to 0-100 for pulse frequency
+        max_speed = np.percentile(speed, 95) if len(speed) > 0 else 1.0
+        pulse_p = list(np.clip(speed / max(max_speed, 0.001) * 100, 0, 100))
+        pulse_t = list(time_arr[:-1])
+    else:
+        pulse_t, pulse_p = times_s, [50.0] * len(times_s)
+
+    return alpha_t, alpha_p, beta_t, beta_p, pulse_t, pulse_p
+
+
+def _apply_stim(forge, character_name, slider_vals, save_to_disk: bool = True):
+    """Generate estim channel files. If save_to_disk=False, only cache for preview."""
     from datetime import datetime
+    import json
 
     status = st.status("Generating estim channels…", expanded=True)
     status.write(f"✅ Character: **{character_name}**")
 
-    # Save settings to forge project
-    if forge:
+    # Load the chain funscript
+    from forge.funscript import load_funscript, parse_actions
+    chain_path = st.session_state.get("chain_funscript_path", "")
+    funscript_path = st.session_state.get("funscript_path", "")
+    _path = chain_path if (chain_path and Path(chain_path).exists()) else funscript_path
+
+    if not _path or not Path(_path).exists():
+        status.update(label="No funscript loaded", state="error")
+        return
+
+    data = load_funscript(_path)
+    times, positions = parse_actions(data)
+    if not times:
+        status.update(label="Empty funscript", state="error")
+        return
+
+    # Map character to algorithm params
+    params = _character_to_algorithm_params(character_name, slider_vals)
+    status.write(f"⚙️ Algorithm: **{params['algorithm']}**")
+
+    # Generate channels
+    status.update(label=f"Generating {character_name} channels for {len(times):,} actions…")
+    alpha_t, alpha_p, beta_t, beta_p, pulse_t, pulse_p = _generate_channels(
+        times, positions, params
+    )
+    status.write(f"✅ Alpha: {len(alpha_t):,} points")
+    status.write(f"✅ Beta: {len(beta_t):,} points")
+    status.write(f"✅ Pulse frequency: {len(pulse_t):,} points")
+
+    # Cache for preview
+    st.session_state["stim_alpha"] = (alpha_t, alpha_p)
+    st.session_state["stim_beta"] = (beta_t, beta_p)
+    st.session_state["stim_pulse"] = (pulse_t, pulse_p)
+
+    # Save settings and channel files to forge project (only on Accept)
+    if forge and save_to_disk:
         forge["stim_character"] = character_name
         forge["stim_sliders"] = slider_vals
         forge.setdefault("progress", {})["stim_generated"] = True
@@ -282,15 +429,26 @@ def _apply_stim(forge, character_name, slider_vals):
 
         output_folder = forge.get("output_folder", "")
         if output_folder and Path(output_folder).exists():
+            # Save channel funscripts
+            def _save_channel(name, t_arr, p_arr):
+                actions = [{"at": int(t * 1000), "pos": int(round(max(0, min(100, p))))}
+                           for t, p in zip(t_arr, p_arr)]
+                out = {"actions": actions}
+                path = Path(output_folder) / f"{Path(_path).stem}.{name}.funscript"
+                path.write_text(json.dumps(out, indent=2), encoding="utf-8")
+                return str(path)
+
+            _save_channel("alpha", alpha_t, alpha_p)
+            _save_channel("beta", beta_t, beta_p)
+            _save_channel("pulse_frequency", pulse_t, pulse_p)
+            status.write("✅ Channel files saved to output folder")
+
             from forge.project import save_forge
             save_forge(forge)
             status.write("✅ Settings saved to project")
 
-            # TODO: Generate actual channel files using funscript-tools/restim
-            # For now, mark as generated
-            status.write("⚠️ Channel generation coming soon — settings saved for export")
-
-    status.update(label="Stim complete!", state="complete", expanded=False)
+    _label = "Stim complete!" if save_to_disk else "Preview ready"
+    status.update(label=_label, state="complete", expanded=False)
 
 
 def _render_channel_previews(forge, selected):
@@ -316,6 +474,11 @@ def _render_channel_previews(forge, selected):
         return
     times_s = [t / 1000.0 for t in times]
 
+    # Check for cached channel data
+    _alpha = st.session_state.get("stim_alpha")
+    _beta = st.session_state.get("stim_beta")
+    _pulse = st.session_state.get("stim_pulse")
+
     col_input, col_ab, col_pv = st.columns(3)
     with col_input:
         st.caption("**Input funscript**")
@@ -323,12 +486,21 @@ def _render_channel_previews(forge, selected):
 
     with col_ab:
         st.caption("**Alpha channel**")
-        st.info("Preview available after channel generation is implemented.", icon="🔧")
+        if _alpha:
+            render_monochrome_from_arrays(_alpha[0], _alpha[1], height=150, key="stim_alpha_preview")
+        else:
+            st.caption("_Select a character and click Accept to generate._")
         st.caption("**Beta channel**")
-        st.info("Preview available after channel generation is implemented.", icon="🔧")
+        if _beta:
+            render_monochrome_from_arrays(_beta[0], _beta[1], height=150, key="stim_beta_preview")
+        else:
+            st.caption("_Select a character and click Accept to generate._")
 
     with col_pv:
         st.caption("**Pulse frequency**")
-        st.info("Preview available after channel generation is implemented.", icon="🔧")
+        if _pulse:
+            render_monochrome_from_arrays(_pulse[0], _pulse[1], height=150, key="stim_pulse_preview")
+        else:
+            st.caption("_Select a character and click Accept to generate._")
         st.caption("**Volume**")
-        st.info("Preview available after channel generation is implemented.", icon="🔧")
+        st.caption("_Volume channel coming soon._")
