@@ -59,10 +59,52 @@
    - This means we're fundamentally changing scripts that experts designed
    - Possibly the clamp should be much higher (500-800?) or based on a different metric
 
+## Smoking Gun: Velocity Coefficient of Variation (CV)
+
+Micro-level cycle analysis comparing 1-minute windows at 5, 30, and 60 minutes:
+
+| Metric | RoD (curated, comfortable) | VictoriaOaks (stingy) |
+|--------|---------------------------|----------------------|
+| **Velocity CV** | **0.42–0.47** | **0.05–0.12** |
+| Unique positions | 2–5 | 17–21 |
+| Amplitude std | 0–1.9 | 4–11.5 |
+
+**Finding:** Stingy is NOT about speed. It's about **velocity consistency.**
+
+- RoD: high velocity (mean 343–691 pos/s) but HIGH variation (CV ~0.45). Each cycle is a different speed. This creates micro-rest — some cycles fast, some slower. The beat is relentless but the body gets micro-breaks.
+- VictoriaOaks: moderate velocity (mean 395–401 pos/s) but NEAR-ZERO variation (CV ~0.05–0.12). Every cycle is mechanically identical. This is what burns over time.
+
+**Stingy metric: CV < 0.15 sustained = stingy. CV > 0.30 = comfortable variation.**
+
+RoD uses fewer unique positions (simple 0→100→0) but varies the SPEED of each cycle.
+VictoriaOaks uses more positions but at relentlessly constant speed. It's a metronome.
+
+The "bump in the uptake" that makes RoD work is naturally varying cycle speed while preserving the beat.
+
+## Actionable Design
+
+### Hidden (automatic safety net)
+- Device awareness auto-detects segments with CV < 0.15
+- Applies minimum "humanize" — adds velocity variation to reach CV ~0.30
+- User never sees it, script won't burn
+- Like the speed clamp but for monotony
+
+### Visible (creative choice)
+- "Humanize" / "Groove" slider in Tone tab or Behavior catalog
+- 0.0 = mechanical precision, 1.0 = jazzy variation
+- Slightly varies cycle speed while preserving the beat pattern
+- Power users can turn it off
+
+### Where it lives
+- **Device tab:** flag CV < 0.15 like speed violations
+- **Tone tab:** tones naturally add CV variation (Tender = more, Dominant = less)
+- **Behavior catalog:** standalone "Humanize" transform
+
 ## Next Steps
 
+- [ ] Validate CV threshold (0.15) against more community scripts
+- [ ] Implement CV measurement in assessment pipeline
+- [ ] Design "humanize" algorithm (vary cycle speed ±N% per cycle)
 - [ ] Analyze RoD alpha/beta channels vs our generated channels
 - [ ] Research what restim's radial conversion does to velocity
-- [ ] Consider BPM + variation as the stingy metric instead of velocity
 - [ ] Consult edger/digit48 community for their comfort parameters
-- [ ] Re-evaluate device_specs.json thresholds based on findings
