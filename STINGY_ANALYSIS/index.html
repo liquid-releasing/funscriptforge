@@ -1269,6 +1269,67 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#smoking-gun-velocity-coefficient-of-variation-cv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Smoking Gun: Velocity Coefficient of Variation (CV)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#actionable-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Actionable Design
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Actionable Design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hidden-automatic-safety-net" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hidden (automatic safety net)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#visible-creative-choice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visible (creative choice)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#where-it-lives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it lives
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1476,13 +1537,72 @@
 <li>This means we're fundamentally changing scripts that experts designed</li>
 <li>Possibly the clamp should be much higher (500-800?) or based on a different metric</li>
 </ol>
+<h2 id="smoking-gun-velocity-coefficient-of-variation-cv">Smoking Gun: Velocity Coefficient of Variation (CV)<a class="headerlink" href="#smoking-gun-velocity-coefficient-of-variation-cv" title="Permanent link">&para;</a></h2>
+<p>Micro-level cycle analysis comparing 1-minute windows at 5, 30, and 60 minutes:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>RoD (curated, comfortable)</th>
+<th>VictoriaOaks (stingy)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Velocity CV</strong></td>
+<td><strong>0.42–0.47</strong></td>
+<td><strong>0.05–0.12</strong></td>
+</tr>
+<tr>
+<td>Unique positions</td>
+<td>2–5</td>
+<td>17–21</td>
+</tr>
+<tr>
+<td>Amplitude std</td>
+<td>0–1.9</td>
+<td>4–11.5</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Finding:</strong> Stingy is NOT about speed. It's about <strong>velocity consistency.</strong></p>
+<ul>
+<li>RoD: high velocity (mean 343–691 pos/s) but HIGH variation (CV ~0.45). Each cycle is a different speed. This creates micro-rest — some cycles fast, some slower. The beat is relentless but the body gets micro-breaks.</li>
+<li>VictoriaOaks: moderate velocity (mean 395–401 pos/s) but NEAR-ZERO variation (CV ~0.05–0.12). Every cycle is mechanically identical. This is what burns over time.</li>
+</ul>
+<p><strong>Stingy metric: CV &lt; 0.15 sustained = stingy. CV &gt; 0.30 = comfortable variation.</strong></p>
+<p>RoD uses fewer unique positions (simple 0→100→0) but varies the SPEED of each cycle.
+VictoriaOaks uses more positions but at relentlessly constant speed. It's a metronome.</p>
+<p>The "bump in the uptake" that makes RoD work is naturally varying cycle speed while preserving the beat.</p>
+<h2 id="actionable-design">Actionable Design<a class="headerlink" href="#actionable-design" title="Permanent link">&para;</a></h2>
+<h3 id="hidden-automatic-safety-net">Hidden (automatic safety net)<a class="headerlink" href="#hidden-automatic-safety-net" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Device awareness auto-detects segments with CV &lt; 0.15</li>
+<li>Applies minimum "humanize" — adds velocity variation to reach CV ~0.30</li>
+<li>User never sees it, script won't burn</li>
+<li>Like the speed clamp but for monotony</li>
+</ul>
+<h3 id="visible-creative-choice">Visible (creative choice)<a class="headerlink" href="#visible-creative-choice" title="Permanent link">&para;</a></h3>
+<ul>
+<li>"Humanize" / "Groove" slider in Tone tab or Behavior catalog</li>
+<li>0.0 = mechanical precision, 1.0 = jazzy variation</li>
+<li>Slightly varies cycle speed while preserving the beat pattern</li>
+<li>Power users can turn it off</li>
+</ul>
+<h3 id="where-it-lives">Where it lives<a class="headerlink" href="#where-it-lives" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Device tab:</strong> flag CV &lt; 0.15 like speed violations</li>
+<li><strong>Tone tab:</strong> tones naturally add CV variation (Tender = more, Dominant = less)</li>
+<li><strong>Behavior catalog:</strong> standalone "Humanize" transform</li>
+</ul>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
+<li>[ ] Validate CV threshold (0.15) against more community scripts</li>
+<li>[ ] Implement CV measurement in assessment pipeline</li>
+<li>[ ] Design "humanize" algorithm (vary cycle speed ±N% per cycle)</li>
 <li>[ ] Analyze RoD alpha/beta channels vs our generated channels</li>
 <li>[ ] Research what restim's radial conversion does to velocity</li>
-<li>[ ] Consider BPM + variation as the stingy metric instead of velocity</li>
 <li>[ ] Consult edger/digit48 community for their comfort parameters</li>
-<li>[ ] Re-evaluate device_specs.json thresholds based on findings</li>
 </ul>
 
 
