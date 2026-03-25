@@ -51,6 +51,7 @@ def _reset_downstream_state():
         "output_folder_input",
         # Acceptance flags
         "project_accepted", "device_accepted", "tone_accepted",
+        "phrases_accepted", "stim_accepted", "export_complete",
         # Device tab state
         "device_apply_scope",
         # Tone tab state
@@ -66,10 +67,14 @@ def _reset_downstream_state():
     ]
     for key in _keys_to_clear:
         st.session_state.pop(key, None)
-    # Clear dynamic keys (tone sliders, motion cache)
+    # Clear dynamic keys (tone sliders, motion cache, phrase chains, vibrant cache)
     for key in list(st.session_state.keys()):
         if key.startswith("tone_impact_") or key.startswith("tone_s") \
-                or key.startswith("motion_"):
+                or key.startswith("motion_") \
+                or key.startswith("phrase_transform_chain_") \
+                or key.startswith("_phrase_chain_snapshot_") \
+                or key.startswith("_phrase_last_applied_") \
+                or key.startswith("cached_vibrant"):
             st.session_state.pop(key, None)
 
 

@@ -46,7 +46,7 @@ from ui.streamlit.panels import catalog_view as catalog_view_panel
 from ui.streamlit.panels import export_panel
 from ui.streamlit.panels import pattern_editor as pattern_editor_panel
 from ui.streamlit.panels import transform_catalog as transform_catalog_panel
-from ui.streamlit.panels import retransforms as retransforms_panel
+from ui.streamlit.panels import stim_panel
 from ui.streamlit.panels import viewer as viewer_panel
 from forge.tabs import project_tab, device_tab, tone_tab, next_steps_tab
 
@@ -805,7 +805,7 @@ def _main() -> None:
 
     with tab_stim:
         st.session_state["active_tab"] = 3
-        retransforms_panel.render(project)
+        stim_panel.render(project)
 
     with tab_export:
         st.session_state["active_tab"] = 4
@@ -950,6 +950,10 @@ def _render_phrase_tab(project: Project) -> None:
     to avoid a one-render lag where the Editor would open for the previously-selected
     phrase rather than the one just clicked.
     """
+    if project.assessment is None:
+        st.info("Run **Accept** on the Project tab first to analyse your funscript.", icon="ℹ️")
+        return
+
     view_state = st.session_state.view_state
     assessment_dict = project.assessment.to_dict()
     phrases = assessment_dict.get("phrases", [])
@@ -1108,6 +1112,9 @@ def _render_phrase_editor_tab(project: Project) -> None:
 
 def _render_pattern_editor_tab(project: Project) -> None:
     """Tab 2 — Pattern Behaviors catalog (collapsible) then Pattern Editor."""
+    if project.assessment is None:
+        st.info("Run **Accept** on the Project tab first to analyse your funscript.", icon="ℹ️")
+        return
     with st.expander("Pattern Behaviors catalog", expanded=False):
         catalog_view_panel.render(project)
     pattern_editor_panel.render(project)
