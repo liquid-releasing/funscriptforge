@@ -182,7 +182,7 @@ def _render_quality_gate(project, plan: List[dict]) -> None:
 # ------------------------------------------------------------------
 
 def render(project: "Project") -> None:
-    """Render the Export tab."""
+    """Render the Export tab — simplified MVP layout."""
     if project is None or not project.is_loaded:
         st.info("Load a funscript first.")
         return
@@ -208,113 +208,33 @@ def render(project: "Project") -> None:
     completed_plan, recommended_plan = _build_plans(phrases, tag_to_idxs, bpm_threshold)
     full_plan = completed_plan + recommended_plan
 
-    # ----------------------------------------------------------------
-    # Preview chart — static, shows the proposed export at a glance
-    # ----------------------------------------------------------------
+    # ── 1. Preview chart ────────────────────────────────────────────
     _render_export_preview(project, assessment_dict, full_plan)
 
     st.divider()
 
-    # ----------------------------------------------------------------
-    # Header controls
-    # ----------------------------------------------------------------
-    col_chk, col_dl = st.columns([5, 3])
-
-    with col_chk:
-        blend_seams = st.checkbox(
+    # ── 2. Export options (collapsed) ───────────────────────────────
+    with st.expander("Export options", expanded=False):
+        st.checkbox(
             "Add blended seams to reduce abrupt style changes",
             value=True,
             key="export_blend_seams",
         )
-        final_smooth = st.checkbox(
+        st.checkbox(
             "Conduct final smooth for post process finishing",
             value=True,
             key="export_final_smooth",
         )
-    with col_dl:
-        _rej = st.session_state.export_rejected
-        _acc = st.session_state.export_accepted
-        active_entries = [
-            e for e in completed_plan if e["phrase_idx"] not in _rej
-        ] + [
-            e for e in recommended_plan
-            if e["phrase_idx"] in _acc and e["phrase_idx"] not in _rej
-        ]
-        _has_content = bool(active_entries or blend_seams or final_smooth)
-
-        tab_dev, tab_estim = st.tabs(["🔧 Device", "⚡ Estim"])
-
-        with tab_dev:
-            apply_safety = st.checkbox(
-                "Apply device awareness",
-                value=True,
-                key="export_device_awareness",
-                help="Apply device limits from the Device tab to the exported funscript.",
-            )
-            _confirmed_dev = st.checkbox(
-                "Ready to download",
-                key="export_confirmed_device",
-            )
-            if _has_content and _confirmed_dev:
-                dl_dev = _build_download_bytes_device(
-                    project, phrases, full_plan,
-                    blend_seams=blend_seams,
-                    final_smooth=final_smooth,
-                    apply_awareness=apply_safety,
-                )
-                st.download_button(
-                    "⬇ Download device funscript",
-                    data=dl_dev,
-                    file_name=f"{project.name}.device.funscript",
-                    mime="application/json",
-                    type="primary",
-                    key="dl_device",
-                )
-            else:
-                st.button(
-                    "⬇ Download device funscript",
-                    disabled=True,
-                    type="primary",
-                    key="dl_device_dis",
-                )
-
-        with tab_estim:
-            st.caption(
-                "Clean funscript for estim devices (Mk312, 2B, ET312). "
-                "Load into [funscript-tools](https://github.com/edger477/funscript-tools) "
-                "to generate multi-channel alpha/beta/pulse/volume files for restim."
-            )
-            _confirmed_estim = st.checkbox(
-                "Ready to download",
-                key="export_confirmed_estim",
-            )
-            if _has_content and _confirmed_estim:
-                dl_estim = _build_download_bytes(
-                    project, phrases, full_plan,
-                    blend_seams=blend_seams,
-                    final_smooth=final_smooth,
-                )
-                st.download_button(
-                    "⬇ Download estim funscript",
-                    data=dl_estim,
-                    file_name=f"{project.name}.estim.funscript",
-                    mime="application/json",
-                    type="primary",
-                    key="dl_estim",
-                )
-            else:
-                st.button(
-                    "⬇ Download estim funscript",
-                    disabled=True,
-                    type="primary",
-                    key="dl_estim_dis",
-                )
+        st.checkbox(
+            "Apply device awareness",
+            value=True,
+            key="export_device_awareness",
+            help="Apply device limits from the Device tab to the exported funscript.",
+        )
 
     st.divider()
 
-    # ----------------------------------------------------------------
-    # Section 1 — Completed transforms
-    # ----------------------------------------------------------------
+    # ── 3. Transform details (collapsed) ────────────────────────────
     rejected = st.session_state.export_rejected
     accepted = st.session_state.export_accepted
     done_active = sum(1 for e in completed_plan if e["phrase_idx"] not in rejected)
@@ -323,33 +243,31 @@ def render(project: "Project") -> None:
         if e["phrase_idx"] in accepted and e["phrase_idx"] not in rejected
     )
 
-    if done_active:
-        st.markdown(f"#### Completed transforms &nbsp; ✅ {done_active} will be exported")
-    else:
-        st.markdown("#### Completed transforms &nbsp; ⬜ none will be exported")
-    _render_completed(completed_plan)
+    with st.expander(
+        f"Completed transforms — {done_active} applied" if done_active
+        else "Completed transforms — none applied",
+        expanded=False,
+    ):
+        _render_completed(completed_plan)
+
+    with st.expander(
+        f"Recommended transforms — {rec_active} accepted" if rec_active
+        else "Recommended transforms — none accepted",
+        expanded=False,
+    ):
+        _render_recommended(recommended_plan)
 
     st.divider()
 
-    # ----------------------------------------------------------------
-    # Section 2 — Recommended transforms
-    # ----------------------------------------------------------------
-    if rec_active:
-        st.markdown(f"#### Recommended transforms &nbsp; ✅ {rec_active} will be exported")
-    else:
-        st.markdown("#### Recommended transforms &nbsp; ⬜ none will be exported")
-    _render_recommended(recommended_plan)
+    # ── 5. Quality gate (collapsed) ─────────────────────────────────
+    _render_quality_gate(project, full_plan)
 
     st.divider()
 
-    # ----------------------------------------------------------------
-    # Export to device subfolders + open folder
-    # ----------------------------------------------------------------
+    # ── 6. Export All + Open folder (at the bottom) ─────────────────
     _render_export_to_folder(project)
 
-    # ----------------------------------------------------------------
-    # Clamp warning (#9)
-    # ----------------------------------------------------------------
+    # Clamp warning
     clamp_count = st.session_state.get("export_clamp_count", 0)
     if clamp_count > 0:
         st.warning(
@@ -357,20 +275,6 @@ def render(project: "Project") -> None:
             f"the valid range [0, 100] after transforms. "
             f"Check amplitude settings if this is unexpected."
         )
-
-    st.divider()
-
-    # ----------------------------------------------------------------
-    # Section 3 — Quality gate (#13)
-    # ----------------------------------------------------------------
-    _render_quality_gate(project, full_plan)
-
-    st.divider()
-
-    # ----------------------------------------------------------------
-    # Section 4 — Full pipeline (BPM Transformer + Window Customizer)
-    # ----------------------------------------------------------------
-    _render_pipeline_section(project)
 
 
 # ------------------------------------------------------------------
@@ -1035,10 +939,7 @@ def _render_export_to_folder(project) -> None:
 
     st.subheader("Export to folder")
     st.caption(f"Output location: `{output_folder}`")
-
-    # Show what will be created
     for target in targets:
-        device_folder = os.path.join(output_folder, target)
         st.caption(f"  → `{target}/` — device-specific funscript")
 
     col_export, col_open = st.columns(2)

@@ -273,8 +273,6 @@ def render(project=None) -> None:
         "your feedback shapes what we build next."
     )
 
-    # ── Channel previews ──────────────────────────────────────────────────
-    _render_channel_previews(forge, selected)
 
 
 def _character_to_algorithm_params(character_name: str, slider_vals: dict) -> dict:
