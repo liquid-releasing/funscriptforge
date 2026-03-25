@@ -345,7 +345,8 @@ def render():
         disabled=not has_funscript,
         help="Save project and run analysis." if has_funscript else "Add a funscript first.",
     ):
-        _commit_project_to_disk(project)
+        with st.spinner("Analysing funscript…"):
+            _commit_project_to_disk(project)
         st.session_state["project_accepted"] = True
         st.rerun()
 

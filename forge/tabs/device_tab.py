@@ -219,7 +219,8 @@ def render():
         width="stretch",
         help="Apply device awareness and continue to Tone.",
     ):
-        _apply_device_awareness(project, selected_targets, actions, limits, _already_aware, _spike_fraction)
+        with st.spinner("Applying device awareness…"):
+            _apply_device_awareness(project, selected_targets, actions, limits, _already_aware, _spike_fraction)
         st.session_state["device_accepted"] = True
         st.rerun()
 

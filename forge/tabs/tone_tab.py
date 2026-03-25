@@ -197,7 +197,8 @@ def render():
             disabled=not selected,
             help="Apply this tone to your project." if selected else "Select a tone first.",
         ):
-            _apply_tone(selected)
+            with st.spinner("Applying tone…"):
+                _apply_tone(selected)
             st.session_state["tone_accepted"] = True
             st.rerun()
 
