@@ -951,7 +951,7 @@ def _render_export_to_folder(project) -> None:
             if st.button("Open folder", width="stretch"):
                 import subprocess, sys
                 if sys.platform == "win32":
-                    os.startfile(output_folder)
+                    subprocess.Popen(["explorer", output_folder.replace("/", "\\")])
                 elif sys.platform == "darwin":
                     subprocess.Popen(["open", output_folder])
                 else:
