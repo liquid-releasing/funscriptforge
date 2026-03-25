@@ -134,10 +134,11 @@ def analyze_violations(
 
 # Intensity spike presets: name → fraction of cycles allowed at full delta
 INTENSITY_SPIKE_PRESETS = {
-    "None":        0.0,
-    "⅛ Rare":      0.125,   # 1 in 8
-    "¼ Moderate":  0.25,    # 1 in 4
-    "½ Frequent":  0.50,    # 1 in 2
+    "None":           0.0,
+    "1/16 Seldom":    0.0625,  # 1 in 16
+    "⅛ Rare":         0.125,   # 1 in 8
+    "¼ Moderate":     0.25,    # 1 in 4
+    "½ Frequent":     0.50,    # 1 in 2
 }
 
 

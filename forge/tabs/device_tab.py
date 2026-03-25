@@ -114,6 +114,7 @@ def render():
 
         _labels = {
             "None": "All cycles smooth — no spikes",
+            "1/16 Seldom": "~1 in 16 cycles may spike",
             "⅛ Rare": "~1 in 8 cycles may spike",
             "¼ Moderate": "~1 in 4 cycles may spike",
             "½ Frequent": "~1 in 2 cycles may spike",
