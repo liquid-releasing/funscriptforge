@@ -36,7 +36,7 @@ def render():
     st.subheader("Output devices")
     st.caption("Select all devices you want to export for.")
 
-    saved_targets = (project or {}).get("output_targets", ["handy"])
+    saved_targets = (project or {}).get("output_targets", ["estim_foc", "estim_stereo"])
     selected_targets = []
     cols = st.columns(len(_TARGETS))
     for col, (key, label, desc) in zip(cols, _TARGETS):
