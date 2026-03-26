@@ -532,8 +532,9 @@ def _render_recommended(plan: List[dict]) -> None:
 # ------------------------------------------------------------------
 
 def _render_export_preview(project, assessment_dict: dict, plan: List[dict]) -> None:
-    """Render a static (non-interactive) chart of the proposed export actions."""
-    from forge_ui_components.funscript_chart.core import compute_chart_data, compute_annotation_bands, vibrant_figure
+    """Render a static vibrant PNG chart of the proposed export actions."""
+    from forge_ui_components.funscript_chart.core import compute_annotation_bands
+    from forge_ui_components.funscript_chart.static import render_vibrant_static
 
     # Read from chain if available, otherwise fall back to original
     _chain_path = st.session_state.get("chain_funscript_path")
@@ -546,23 +547,16 @@ def _render_export_preview(project, assessment_dict: dict, plan: List[dict]) -> 
     accepted: set = st.session_state.get("export_accepted", set())
     preview_actions = _apply_plan_transforms(original_actions, plan, rejected, accepted)
 
-    duration_ms = project.assessment.duration_ms
-    bands  = compute_annotation_bands(assessment_dict)
-    series = compute_chart_data(preview_actions)
+    bands = compute_annotation_bands(assessment_dict)
 
-    fig = vibrant_figure(
-        series, bands,
-        color_mode="velocity",
-        height=260,
-        duration_ms=duration_ms,
-        large_funscript_threshold=st.session_state.get("large_funscript_threshold", 100_000),
-    )
+    with st.spinner(f"Rendering export preview ({len(preview_actions):,} actions)…"):
+        png = render_vibrant_static(
+            preview_actions, bands,
+            height_px=280, width_px=1600,
+            show_labels=True,
+        )
+    st.image(png, use_container_width=True)
 
-    st.plotly_chart(
-        fig,
-        config={"displayModeBar": False, "staticPlot": True},
-        key="export_preview_chart",
-    )
     n_actions = len(preview_actions)
     st.caption(
         f"Export preview: {n_actions:,} actions after applying selected transforms. "

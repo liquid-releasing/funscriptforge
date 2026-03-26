@@ -40,10 +40,8 @@ def _selector_fragment(
 ) -> None:
     import json
     import time as _time
-    from forge_ui_components.funscript_chart.core import compute_chart_data, compute_annotation_bands
-    from forge_ui_components.funscript_chart.streamlit import render_vibrant
-
-    view_state = st.session_state.view_state
+    from forge_ui_components.funscript_chart.core import compute_annotation_bands
+    from forge_ui_components.funscript_chart.streamlit import render_static
 
     with open(funscript_path) as f:
         original_actions = json.load(f)["actions"]
@@ -66,43 +64,35 @@ def _selector_fragment(
     else:
         display_actions = original_actions
 
-    n_actions   = len(display_actions)
+    n_actions = len(display_actions)
 
-    # Use cached chart data if available (built by previous tab's Accept)
-    _cache_key = "cached_vibrant_series"
-    _cached_series = st.session_state.get(_cache_key)
+    # Use cached PNG if available
+    _cache_key = "cached_vibrant_png"
+    _cached_png = st.session_state.get(_cache_key)
     _cache_hit = (
-        _cached_series is not None
-        and not has_edits  # edits invalidate the cache
-        and len(_cached_series.times_ms) == n_actions
+        _cached_png is not None
+        and not has_edits
+        and st.session_state.get("cached_vibrant_png_count") == n_actions
     )
 
     _t0 = _time.time()
     if _cache_hit:
-        series = _cached_series
+        st.image(_cached_png, use_container_width=True)
     else:
-        spinner_msg = (
-            f"Building chart ({n_actions} actions — using fast rendering)…"
-            if n_actions > large_funscript_threshold
-            else f"Building chart ({n_actions} actions)…"
-        )
-        with st.spinner(spinner_msg):
-            series = compute_chart_data(display_actions)
+        with st.spinner(f"Rendering {n_actions:,} actions with velocity color…"):
+            from forge_ui_components.funscript_chart.static import render_vibrant_static
+            png = render_vibrant_static(
+                display_actions, bands,
+                height_px=380, width_px=1600,
+                show_labels=True,
+            )
+            st.image(png, use_container_width=True)
             if not has_edits:
-                st.session_state[_cache_key] = series
+                st.session_state[_cache_key] = png
+                st.session_state["cached_vibrant_png_count"] = n_actions
 
-    _chart_v = st.session_state.get("phrase_sel_chart_instance", 0)
-    ev = render_vibrant(
-        series, bands,
-        view_state=view_state,
-        color_mode=view_state.color_mode,
-        height=380,
-        duration_ms=duration_ms,
-        key=f"chart_phrase_sel_{_chart_v}",
-    )
     _elapsed = _time.time() - _t0
     st.caption(f"Chart {'(cached) ' if _cache_hit else ''}built in {_elapsed:.1f}s")
-    _handle_chart_event(ev, view_state, phrases)
 
 
 # ------------------------------------------------------------------
