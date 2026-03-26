@@ -139,9 +139,21 @@ def render(
     view_state.show_phrases = True
 
     # Heatmap: compact motion-intensity strip above the main chart.
-    # Always shows the full timeline regardless of zoom state.
+    # Uses edited actions if phrase transforms have been applied.
     st.markdown("**Funscript Heatmap**")
-    _render_heatmap(_fs_path, phrases, duration_ms)
+    _has_phrase_edits = any(
+        k.startswith("phrase_transform_chain_") and bool(st.session_state[k])
+        for k in st.session_state
+    )
+    if _has_phrase_edits:
+        import json as _json
+        from ui.streamlit.panels.phrase_detail import build_edited_actions
+        with open(_fs_path) as _f:
+            _orig = _json.load(_f)["actions"]
+        _edited = build_edited_actions(phrases, _orig)
+        _render_heatmap_from_actions(_edited, phrases, duration_ms)
+    else:
+        _render_heatmap(_fs_path, phrases, duration_ms)
 
     st.markdown("**Funscript Visualization**")
     # Full-funscript chart always visible (fragment keeps scroll/zoom cheap).
@@ -379,23 +391,30 @@ def _render_phrase_info(view_state, phrases: list) -> None:
 # ------------------------------------------------------------------
 
 def _render_heatmap(funscript_path: str, phrases: list, duration_ms: int) -> None:
-    """Compact motion-intensity strip above the main chart.
-
-    Bins action velocity (sum of |pos_diff|) into N_BINS buckets across the
-    full timeline and renders a single-row Plotly heatmap.  White vertical
-    lines mark phrase boundaries so the strip doubles as a phrase map.
-    """
+    """Compact motion-intensity strip — loads from file path."""
     import json
-    import plotly.graph_objects as go
-
-    _BG = "rgba(14,14,18,1)"
-
     if duration_ms <= 0 or not phrases:
         return
     try:
         with open(funscript_path) as f:
             actions = json.load(f)["actions"]
     except Exception:
+        return
+    _render_heatmap_from_actions(actions, phrases, duration_ms)
+
+
+def _render_heatmap_from_actions(actions: list, phrases: list, duration_ms: int) -> None:
+    """Compact motion-intensity strip above the main chart.
+
+    Bins action velocity (sum of |pos_diff|) into N_BINS buckets across the
+    full timeline and renders a single-row Plotly heatmap.  White vertical
+    lines mark phrase boundaries so the strip doubles as a phrase map.
+    """
+    import plotly.graph_objects as go
+
+    _BG = "rgba(14,14,18,1)"
+
+    if duration_ms <= 0 or not phrases:
         return
     if len(actions) < 2:
         return
