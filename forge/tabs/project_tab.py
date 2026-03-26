@@ -26,7 +26,7 @@ from forge.project import (
     save_forge,
 )
 from forge.funscript import funscript_stats, load_funscript
-from forge_ui_components.funscript_chart.streamlit import render_monochrome, render_stats_row
+from forge_ui_components.funscript_chart.streamlit import render_monochrome, render_static, render_stats_row
 from forge_ui_components.file_picker.core import (
     AUDIO_PICKER, CAPTIONS_PICKER, FUNSCRIPT_PICKER, VIDEO_PICKER,
     is_new_upload, mark_processed, resolve_file_path,
@@ -382,7 +382,7 @@ def _funscript_section(v: int):
         data = load_funscript(funscript_path)
         if data:
             actions = data.get("actions", [])
-            render_monochrome(actions)
+            render_static(actions, color_mode="monochrome")
             stats = funscript_stats(data)
             render_stats_row(stats)
         else:

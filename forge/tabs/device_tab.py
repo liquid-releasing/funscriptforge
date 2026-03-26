@@ -11,7 +11,7 @@ import streamlit as st
 
 from forge.project import save_forge, save_chain_funscript
 from forge.device_specs import load_device_specs, combined_limits, analyze_violations, apply_minimum_fix
-from forge_ui_components.funscript_chart.streamlit import render_monochrome_from_arrays
+from forge_ui_components.funscript_chart.streamlit import render_monochrome_from_arrays, render_static_from_arrays, render_static
 
 # Device targets
 _TARGETS = [
@@ -187,7 +187,7 @@ def render():
 
     if _already_aware and _groove == 0:
         st.caption("Your funscript already has good variation and is within device limits.")
-        render_monochrome_from_arrays(times_s, positions, height=200, key="device_original")
+        render_static_from_arrays(times_s, positions, height_px=200)
     else:
         # Apply full device awareness (humanize + backstop)
         fixed_actions, fix_stats = _apply_da(
@@ -198,7 +198,7 @@ def render():
         col_before, col_after = st.columns(2)
         with col_before:
             st.caption("**Original**")
-            render_monochrome_from_arrays(times_s, positions, key="device_before")
+            render_static_from_arrays(times_s, positions)
         with col_after:
             h_stats = fix_stats.get("humanize", {})
             _cv_before = h_stats.get("original_cv", 0)
@@ -208,14 +208,13 @@ def render():
                 f"**Device Aware** — CV {_cv_before:.2f} → {_cv_after:.2f}, "
                 f"{_win_mod} sections humanized"
             )
-            render_monochrome_from_arrays(times_s, fixed_positions, key="device_after")
+            render_static_from_arrays(times_s, fixed_positions)
 
         # Full-width device-aware chart + stats
         st.write("")
         st.subheader("Device-aware result")
-        from forge_ui_components.funscript_chart.streamlit import render_monochrome
         from forge.funscript import funscript_stats as _fs_stats
-        render_monochrome(fixed_actions, height=180)
+        render_static(fixed_actions, color_mode="monochrome", height_px=180)
         _stats = _fs_stats({"actions": fixed_actions})
         c_stats = fix_stats.get("clamp", {})
         _stats_cols = st.columns(5)

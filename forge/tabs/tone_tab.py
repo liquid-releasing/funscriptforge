@@ -11,7 +11,7 @@ from pathlib import Path
 import streamlit as st
 
 from forge.funscript import load_funscript, parse_actions
-from forge_ui_components.funscript_chart.streamlit import render_monochrome_from_arrays
+from forge_ui_components.funscript_chart.streamlit import render_monochrome_from_arrays, render_static_from_arrays
 
 _ASSETS = Path(__file__).parents[2] / "assets" / "tone_cards"
 
@@ -580,7 +580,7 @@ def _render_preview(selected: str | None):
         col_before, col_after = st.columns(2)
         with col_before:
             st.caption(f"**Before** — {source_label}")
-            render_monochrome_from_arrays(times_s, positions, key="tone_before")
+            render_static_from_arrays(times_s, positions)
         with col_after:
             toned = _apply_tone_preview(times_s, positions, selected, slider_vals)
             # Blend: output = original + impact * (toned - original)
@@ -588,7 +588,7 @@ def _render_preview(selected: str | None):
             # Re-clamp to device limits
             modified = _reclamp_to_device_limits(times, modified)
             st.caption(f"**After** — {selected} (impact {impact:.0%}) · device aware")
-            render_monochrome_from_arrays(times_s, modified, key="tone_after")
+            render_static_from_arrays(times_s, modified)
 
         # Stats comparison row
         import numpy as np
@@ -608,7 +608,7 @@ def _render_preview(selected: str | None):
         _sc[4].metric("Tone", f"{selected} @ {impact:.0%}")
     else:
         st.caption("**Your funscript** — select a tone to see the preview")
-        render_monochrome_from_arrays(times_s, positions, key="tone_original")
+        render_static_from_arrays(times_s, positions)
 
 
 def _apply_tone_preview(times_s: list, positions: list, tone_name: str,
