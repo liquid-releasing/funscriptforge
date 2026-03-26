@@ -129,12 +129,70 @@ Curated scripts run 700+ safely. The real protection is CV-based humanize, not
 velocity clamping. Speed clamp should be raised significantly (500–800?) or replaced
 entirely by CV-aware humanize.
 
+## Expanded Corpus (2026-03-25, 14 scripts total)
+
+| Script | V_med | CV | Streak | Low% | Quiet | Build | V*1-CV | Verdict |
+|--------|-------|-----|--------|------|-------|-------|--------|---------|
+| A Sinful XXX | 500 | 0.35 | 2m | 9% | 2m | **1.61** | 324 | Exceptional — escalates per section |
+| Celestial Succubus | 529 | 0.35 | 0m | 0% | 0m | **1.50** | 346 | Good variation, builds |
+| Magik3 Pt1 | 263 | 0.39 | 2m | 14% | 0m | 1.32 | 160 | Moderate, good CV |
+| Magik3 Pt2 | 281 | 0.10 | 6m | 52% | 0m | 1.28 | 252 | Low CV but builds |
+| Optikon Alpha | 258 | 0.02 | **26m** | **80%** | 0m | **2.29** | 253 | Hypnotic — massive escalation |
+| Optikon rest | 353 | 0.02 | **22m** | **93%** | 0m | 0.66 | 344 | Rest version — de-escalates |
+| Zer0 Game | 142 | 0.37 | 5m | 27% | **14m** | **2.40** | 93 | Slow burn — most rest, highest build |
+| Euphoria2 | 259 | 0.03 | 11m | 67% | **7m** | **2.06** | 252 | Hypnotic — slow deliberate, breaks |
+| RoD | **719** | 0.36 | 1m | 4% | 1m | 1.60 | 460 | Breathtaker — fast + varied |
+| **VictOaks STINGY** | 410 | 0.11 | 7m | 67% | **0m** | **1.05** | **363** | **STINGY — flat, no rest, monotone** |
+| IPZZ-125 | 120 | 0.36 | 0m | 0% | 1m | 1.28 | 77 | Generated, low intensity |
+
+### The Three Red Flags of Stingy
+
+A script is stingy when ALL THREE are present:
+
+1. **Low CV (< 0.15)** — mechanically uniform cycles, no micro-variation
+2. **Flat Build (≈ 1.0)** — no escalation over time, same intensity start to finish
+3. **Zero quiet windows** — no macro rest periods, relentless without breaks
+
+VictoriaOaks stingy is the ONLY script with all three: CV=0.11, Build=1.05, Quiet=0.
+
+Scripts with low CV that feel great compensate with:
+- **Escalation** (Optikon Build=2.29, Euphoria2 Build=2.06) — the journey keeps changing
+- **Rest periods** (Zer0 Game Quiet=14m, Euphoria2 Quiet=7m) — the body recovers
+- **Both** (Zer0 Game: Build=2.40 + Quiet=14m)
+
+### User-Described Experiences Match the Data
+
+- **A Sinful XXX** — "exceptional, increases in intensity each section" → Build=1.61, CV=0.35
+- **RoD** — "has me gasping, incredible edging build" → V=719, CV=0.36, Build=1.60
+- **Euphoria2** — "slow and deliberate, hypnotic, clearly defined patterns" → V=259, CV=0.03, Build=2.06, Quiet=7m
+- **Zer0 Game** — slow burn archetype → V=142, Build=2.40, Quiet=14m
+
+## FOC vs Stereo Comparison
+
+Analyzed Magik3 Pt1, Magik3 Pt2, and Zer0 Game with both FOC and stereo exports:
+
+| Channel | FOC vs Stereo |
+|---------|--------------|
+| Alpha | **IDENTICAL** |
+| Beta | **IDENTICAL** |
+| Pulse frequency | **IDENTICAL** |
+| Pulse rise time | **IDENTICAL** |
+| Pulse width | **IDENTICAL** |
+| **Volume** | **DIFFERENT** (action count and ranges differ) |
+| Frequency | **IDENTICAL** |
+
+**Finding:** The only difference between FOC and stereo is the volume channel,
+which controls L/R intensity balance for dual-electrode setups. Our Stim tab
+can use identical conversion for both; just generate different volume profiles.
+
 ## Next Steps
 
-- [ ] Validate CV threshold (0.15) against more community scripts (user bringing another)
-- [ ] Implement CV measurement in assessment pipeline
+- [ ] Implement three-factor stingy detection (CV + Build + Quiet) in assessment
 - [ ] Design "humanize" algorithm (vary cycle speed ±N% per cycle, target CV ~0.35)
-- [ ] Raise or remove estim speed clamp — replace with CV-aware humanize
+- [ ] Raise estim speed clamp significantly — curated scripts run 500-700+ pos/s safely
+- [ ] Add Build detection to assessment (escalation arc)
+- [ ] Add quiet/rest detection to assessment (macro breaks)
+- [ ] Generate different volume channels for FOC vs stereo export
 - [ ] Analyze RoD alpha/beta channels vs our generated channels
 - [ ] Research what restim's radial conversion does to velocity
 - [ ] Consult edger/digit48 community for their comfort parameters
