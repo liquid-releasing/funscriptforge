@@ -1330,6 +1330,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#retrospective-how-did-our-speed-clamp-actually-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Retrospective: How Did Our Speed Clamp Actually Work?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1595,11 +1606,33 @@ VictoriaOaks uses more positions but at relentlessly constant speed. It's a metr
 <li><strong>Tone tab:</strong> tones naturally add CV variation (Tender = more, Dominant = less)</li>
 <li><strong>Behavior catalog:</strong> standalone "Humanize" transform</li>
 </ul>
+<h2 id="retrospective-how-did-our-speed-clamp-actually-work">Retrospective: How Did Our Speed Clamp Actually Work?<a class="headerlink" href="#retrospective-how-did-our-speed-clamp-actually-work" title="Permanent link">&para;</a></h2>
+<p>Our current approach (clamp velocity to 250 pos/s) reduced Victoria Oaks stinginess,
+but <strong>for the wrong reason.</strong> The clamp forced cycles to slow down, and as a side
+effect introduced velocity variation — because the clamp hits different cycles
+differently depending on their original speed. This accidentally raised the CV.</p>
+<p>But it also fundamentally changed the script's character. We compressed a 410 pos/s
+median down to 250, which is more aggressive than necessary. The curated RoD runs
+at <strong>700+ pos/s</strong> and feels great because of its high CV (0.45).</p>
+<p><strong>What we should have done:</strong> leave the speed mostly alone, add velocity variation
+(humanize). Victoria Oaks at 400 pos/s with CV=0.40 would probably feel amazing —
+fast, relentless beat, but with the micro-rest that makes it sustainable.</p>
+<p><strong>What we actually did:</strong> brute-force slow it down. It works but it's like fixing a
+racecar by putting on smaller tires instead of adding better suspension.</p>
+<p>The intensity spikes slider was the right instinct — let some cycles punch through.
+But the real fix is the opposite: don't slow the fast ones, speed-vary ALL of them.</p>
+<p>We got lucky that the result still felt good. Now we know why, and we can do it
+intentionally.</p>
+<p><strong>Implication for device_specs.json:</strong> The estim max_speed of 250 pos/s is too low.
+Curated scripts run 700+ safely. The real protection is CV-based humanize, not
+velocity clamping. Speed clamp should be raised significantly (500–800?) or replaced
+entirely by CV-aware humanize.</p>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
-<li>[ ] Validate CV threshold (0.15) against more community scripts</li>
+<li>[ ] Validate CV threshold (0.15) against more community scripts (user bringing another)</li>
 <li>[ ] Implement CV measurement in assessment pipeline</li>
-<li>[ ] Design "humanize" algorithm (vary cycle speed ±N% per cycle)</li>
+<li>[ ] Design "humanize" algorithm (vary cycle speed ±N% per cycle, target CV ~0.35)</li>
+<li>[ ] Raise or remove estim speed clamp — replace with CV-aware humanize</li>
 <li>[ ] Analyze RoD alpha/beta channels vs our generated channels</li>
 <li>[ ] Research what restim's radial conversion does to velocity</li>
 <li>[ ] Consult edger/digit48 community for their comfort parameters</li>
