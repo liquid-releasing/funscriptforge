@@ -187,7 +187,7 @@ def render():
 
     if _already_aware and _groove == 0:
         st.caption("Your funscript already has good variation and is within device limits.")
-        render_static_from_arrays(times_s, positions, height_px=200)
+        render_static_from_arrays(times_s, positions, height_px=200, color_mode="velocity")
     else:
         # Apply full device awareness (humanize + backstop)
         fixed_actions, fix_stats = _apply_da(

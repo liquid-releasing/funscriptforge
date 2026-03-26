@@ -580,7 +580,7 @@ def _render_preview(selected: str | None):
         col_before, col_after = st.columns(2)
         with col_before:
             st.caption(f"**Before** — {source_label}")
-            render_static_from_arrays(times_s, positions)
+            render_static_from_arrays(times_s, positions, color_mode="velocity")
         with col_after:
             toned = _apply_tone_preview(times_s, positions, selected, slider_vals)
             # Blend: output = original + impact * (toned - original)
@@ -588,7 +588,7 @@ def _render_preview(selected: str | None):
             # Re-clamp to device limits
             modified = _reclamp_to_device_limits(times, modified)
             st.caption(f"**After** — {selected} (impact {impact:.0%}) · device aware")
-            render_static_from_arrays(times_s, modified)
+            render_static_from_arrays(times_s, modified, color_mode="velocity")
 
         # Stats comparison row
         import numpy as np
@@ -608,7 +608,7 @@ def _render_preview(selected: str | None):
         _sc[4].metric("Tone", f"{selected} @ {impact:.0%}")
     else:
         st.caption("**Your funscript** — select a tone to see the preview")
-        render_static_from_arrays(times_s, positions)
+        render_static_from_arrays(times_s, positions, color_mode="velocity")
 
 
 def _apply_tone_preview(times_s: list, positions: list, tone_name: str,
