@@ -34,6 +34,10 @@ if _ROOT not in sys.path:
 
 import streamlit as st
 
+# Pre-import Matplotlib to avoid cold-start delay on first chart render.
+import matplotlib
+matplotlib.use("Agg")
+
 # True when launched from launcher.py (desktop / PyInstaller).
 # False when accessed via the web UI or plain `streamlit run`.
 _IS_LOCAL = os.environ.get("FUNSCRIPT_FORGE_LOCAL") == "1"
