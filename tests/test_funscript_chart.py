@@ -151,18 +151,15 @@ class TestLargeThresholdConfigurable(unittest.TestCase):
 
         traces = _scatter_traces(fig)
 
-        # Grey-line mode: 2 traces only (no per-segment lines)
+        # With 6 actions (5 segments), under _MAX_SEGMENT_TRACES (600),
+        # so renders individual colored segments (5 line traces + 1 marker trace)
         self.assertEqual(
             len(traces),
-            2,
-            f"Expected 2 traces with threshold=5 and 6 actions, got {len(traces)}",
+            6,
+            f"Expected 6 traces (5 segments + 1 markers) with 6 actions, got {len(traces)}",
         )
 
-        grey_line = traces[0]
-        self.assertEqual(grey_line.mode, "lines")
-        self.assertIn("200,200,200", grey_line.line.color)
-
-        marker_trace = traces[1]
+        marker_trace = traces[-1]
         self.assertEqual(marker_trace.mode, "markers")
 
 
