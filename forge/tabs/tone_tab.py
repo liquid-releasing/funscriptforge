@@ -589,6 +589,23 @@ def _render_preview(selected: str | None):
             modified = _reclamp_to_device_limits(times, modified)
             st.caption(f"**After** — {selected} (impact {impact:.0%}) · device aware")
             render_monochrome_from_arrays(times_s, modified, key="tone_after")
+
+        # Stats comparison row
+        import numpy as np
+        _b_pos = np.array(positions, dtype=float)
+        _a_pos = np.array(modified, dtype=float)
+        _b_dt = np.diff(np.array(times, dtype=float))
+        _b_vel = np.where(_b_dt > 0, np.abs(np.diff(_b_pos)) / _b_dt * 1000, 0)
+        _a_vel = np.where(_b_dt > 0, np.abs(np.diff(_a_pos)) / _b_dt * 1000, 0)
+        _b_cv = float(np.std(_b_vel) / np.mean(_b_vel)) if np.mean(_b_vel) > 0 else 0
+        _a_cv = float(np.std(_a_vel) / np.mean(_a_vel)) if np.mean(_a_vel) > 0 else 0
+
+        _sc = st.columns(5)
+        _sc[0].metric("Avg speed", f"{np.mean(_b_vel):.0f} → {np.mean(_a_vel):.0f}")
+        _sc[1].metric("Range", f"{_b_pos.min():.0f}–{_b_pos.max():.0f} → {_a_pos.min():.0f}–{_a_pos.max():.0f}")
+        _sc[2].metric("CV", f"{_b_cv:.2f} → {_a_cv:.2f}")
+        _sc[3].metric("Actions", f"{len(positions):,}")
+        _sc[4].metric("Tone", f"{selected} @ {impact:.0%}")
     else:
         st.caption("**Your funscript** — select a tone to see the preview")
         render_monochrome_from_arrays(times_s, positions, key="tone_original")
