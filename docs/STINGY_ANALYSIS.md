@@ -100,11 +100,41 @@ The "bump in the uptake" that makes RoD work is naturally varying cycle speed wh
 - **Tone tab:** tones naturally add CV variation (Tender = more, Dominant = less)
 - **Behavior catalog:** standalone "Humanize" transform
 
+## Retrospective: How Did Our Speed Clamp Actually Work?
+
+Our current approach (clamp velocity to 250 pos/s) reduced Victoria Oaks stinginess,
+but **for the wrong reason.** The clamp forced cycles to slow down, and as a side
+effect introduced velocity variation — because the clamp hits different cycles
+differently depending on their original speed. This accidentally raised the CV.
+
+But it also fundamentally changed the script's character. We compressed a 410 pos/s
+median down to 250, which is more aggressive than necessary. The curated RoD runs
+at **700+ pos/s** and feels great because of its high CV (0.45).
+
+**What we should have done:** leave the speed mostly alone, add velocity variation
+(humanize). Victoria Oaks at 400 pos/s with CV=0.40 would probably feel amazing —
+fast, relentless beat, but with the micro-rest that makes it sustainable.
+
+**What we actually did:** brute-force slow it down. It works but it's like fixing a
+racecar by putting on smaller tires instead of adding better suspension.
+
+The intensity spikes slider was the right instinct — let some cycles punch through.
+But the real fix is the opposite: don't slow the fast ones, speed-vary ALL of them.
+
+We got lucky that the result still felt good. Now we know why, and we can do it
+intentionally.
+
+**Implication for device_specs.json:** The estim max_speed of 250 pos/s is too low.
+Curated scripts run 700+ safely. The real protection is CV-based humanize, not
+velocity clamping. Speed clamp should be raised significantly (500–800?) or replaced
+entirely by CV-aware humanize.
+
 ## Next Steps
 
-- [ ] Validate CV threshold (0.15) against more community scripts
+- [ ] Validate CV threshold (0.15) against more community scripts (user bringing another)
 - [ ] Implement CV measurement in assessment pipeline
-- [ ] Design "humanize" algorithm (vary cycle speed ±N% per cycle)
+- [ ] Design "humanize" algorithm (vary cycle speed ±N% per cycle, target CV ~0.35)
+- [ ] Raise or remove estim speed clamp — replace with CV-aware humanize
 - [ ] Analyze RoD alpha/beta channels vs our generated channels
 - [ ] Research what restim's radial conversion does to velocity
 - [ ] Consult edger/digit48 community for their comfort parameters
