@@ -87,42 +87,41 @@ def render():
     ]
     st.dataframe(pd.DataFrame(_limits_data), hide_index=True, use_container_width=True)
 
-    # ── Intensity spikes (estim only) ─────────────────────────────────────
-    _has_estim = any("estim" in t for t in selected_targets)
-    _spike_fraction = 0.0
+    # ── Groove (timing variation) ──────────────────────────────────────────
+    st.divider()
+    st.subheader("Groove — timing variation")
+    st.caption(
+        "Same beat, same intensity — cycles arrive at slightly different speeds "
+        "so your body can't predict the exact moment. Like a live drummer vs a drum machine."
+    )
 
-    if _has_estim:
-        from forge.device_specs import INTENSITY_SPIKE_PRESETS
+    _saved_groove = (project or {}).get("groove", 0.35)
+    _groove = st.slider(
+        "Groove",
+        min_value=0.0,
+        max_value=0.50,
+        value=float(_saved_groove),
+        step=0.05,
+        key="groove_slider",
+        help="0.0 = mechanical (no variation). 0.35 = natural (like expert scripts). 0.45 = jazzy.",
+    )
+    _groove_labels = {
+        0.0: "Mechanical — every cycle identical",
+        0.05: "Minimal variation",
+        0.10: "Subtle variation",
+        0.15: "Light groove",
+        0.20: "Moderate groove",
+        0.25: "Noticeable groove",
+        0.30: "Natural feel",
+        0.35: "Natural — like expert-crafted scripts",
+        0.40: "Expressive",
+        0.45: "Jazzy — loose, unpredictable",
+        0.50: "Maximum variation",
+    }
+    st.caption(_groove_labels.get(_groove, f"Groove: {_groove:.2f}"))
 
-        st.divider()
-        st.subheader("Intensity spikes")
-        st.caption(
-            "Estim can deliver occasional sharp intensity spikes for variety. "
-            "Most cycles stay smooth — the selected percentage can spike to full range randomly."
-        )
-
-        _saved_spike = (project or {}).get("intensity_spikes", "None")
-        _preset_names = list(INTENSITY_SPIKE_PRESETS.keys())
-        _spike_choice = st.select_slider(
-            "Spike frequency",
-            options=_preset_names,
-            value=_saved_spike if _saved_spike in _preset_names else "None",
-            key="intensity_spikes",
-            help="None = all smooth. Frequent = up to every other cycle can spike.",
-        )
-        _spike_fraction = INTENSITY_SPIKE_PRESETS[_spike_choice]
-
-        _labels = {
-            "None": "All cycles smooth — no spikes",
-            "1/16 Seldom": "~1 in 16 cycles may spike",
-            "⅛ Rare": "~1 in 8 cycles may spike",
-            "¼ Moderate": "~1 in 4 cycles may spike",
-            "½ Frequent": "~1 in 2 cycles may spike",
-        }
-        st.caption(_labels.get(_spike_choice, ""))
-
-        if project:
-            project["intensity_spikes"] = _spike_choice
+    if project:
+        project["groove"] = _groove
 
     st.divider()
 
@@ -146,70 +145,85 @@ def render():
     times_s = [t / 1000.0 for t in times]
 
     # Analyze current state
-    with st.spinner(f"Analyzing {len(actions):,} actions against device limits…"):
+    from forge.device_specs import detect_stingy, apply_device_awareness as _apply_da
+
+    with st.spinner(f"Analyzing {len(actions):,} actions…"):
         analysis = analyze_violations(actions, limits)
+        stingy = detect_stingy(actions)
 
     # ── Status ────────────────────────────────────────────────────────────
-    if analysis["violation_count"] == 0:
-        st.success(
-            f"✅ **Already device aware!** All {analysis['total_actions']:,} actions "
-            f"are within {limits.name} limits. No corrections needed."
-        )
-        _already_aware = True
-    else:
-        st.warning(
-            f"⚠️ **{analysis['violation_count']:,}** of **{analysis['total_actions']:,}** "
-            f"actions exceed device limits "
-            f"({analysis['percent_ok']:.0f}% OK). "
-            f"Max speed found: {analysis['max_speed_found']:.0f} "
-            f"(limit: {limits.max_speed:.0f})."
-        )
-        _already_aware = False
+    _status_cols = st.columns([3, 2])
+    with _status_cols[0]:
+        if analysis["violation_count"] == 0:
+            st.success(
+                f"✅ All {analysis['total_actions']:,} actions within speed limits."
+            )
+        else:
+            st.warning(
+                f"⚠️ {analysis['violation_count']:,} of {analysis['total_actions']:,} "
+                f"actions exceed speed limits ({analysis['percent_ok']:.0f}% OK)."
+            )
+    with _status_cols[1]:
+        if stingy["is_stingy"]:
+            st.error(
+                f"⚠️ **Monotone detected** — {stingy['monotone_pct']:.0f}% of sections "
+                f"have mechanical timing. Groove will add natural variation."
+            )
+        elif stingy["monotone_pct"] > 30:
+            st.info(
+                f"ℹ️ {stingy['monotone_pct']:.0f}% monotone sections "
+                f"(Build={stingy['build_ratio']:.1f}x, {stingy['quiet_windows']}m quiet). "
+                f"Groove can improve feel."
+            )
+        else:
+            st.success("✅ Good timing variation — natural feel.")
+
+    _already_aware = analysis["violation_count"] == 0 and stingy["monotone_pct"] < 5
 
     st.divider()
 
     # ── Side-by-side preview ──────────────────────────────────────────────
     st.subheader("Preview")
 
-    if _already_aware:
-        st.caption("Your funscript is already within device limits.")
+    if _already_aware and _groove == 0:
+        st.caption("Your funscript already has good variation and is within device limits.")
         render_monochrome_from_arrays(times_s, positions, height=200, key="device_original")
     else:
-        # Apply minimum fix (with intensity spikes if estim selected)
-        fixed_actions, fix_stats = apply_minimum_fix(actions, limits, intensity_spikes=_spike_fraction)
+        # Apply full device awareness (humanize + backstop)
+        fixed_actions, fix_stats = _apply_da(
+            actions, limits, groove=_groove,
+        )
         fixed_positions = [a["pos"] for a in fixed_actions]
-
-        # Re-analyze to confirm
-        post_analysis = analyze_violations(fixed_actions, limits)
 
         col_before, col_after = st.columns(2)
         with col_before:
             st.caption("**Original**")
             render_monochrome_from_arrays(times_s, positions, key="device_before")
         with col_after:
+            h_stats = fix_stats.get("humanize", {})
+            _cv_before = h_stats.get("original_cv", 0)
+            _cv_after = h_stats.get("result_cv", 0)
+            _win_mod = h_stats.get("windows_modified", 0)
             st.caption(
-                f"**Device Aware** — {post_analysis['percent_ok']:.0f}% preserved"
+                f"**Device Aware** — CV {_cv_before:.2f} → {_cv_after:.2f}, "
+                f"{_win_mod} sections humanized"
             )
             render_monochrome_from_arrays(times_s, fixed_positions, key="device_after")
 
-        # Full-width device-aware chart + stats (same layout as Project tab)
+        # Full-width device-aware chart + stats
         st.write("")
         st.subheader("Device-aware result")
-        from forge_ui_components.funscript_chart.streamlit import render_monochrome, render_stats_row
+        from forge_ui_components.funscript_chart.streamlit import render_monochrome
         from forge.funscript import funscript_stats as _fs_stats
-        _fixed_data = {"actions": fixed_actions}
         render_monochrome(fixed_actions, height=180)
-        _stats = _fs_stats(_fixed_data)
-        # Add spike info to stats row
-        _stats_cols = st.columns(6)
+        _stats = _fs_stats({"actions": fixed_actions})
+        c_stats = fix_stats.get("clamp", {})
+        _stats_cols = st.columns(5)
         _stats_cols[0].metric("Duration", _stats.get("duration_fmt", "—"))
         _stats_cols[1].metric("Actions", f"{_stats.get('action_count', 0):,}")
         _stats_cols[2].metric("Avg speed", f"{_stats.get('avg_speed', 0):.0f}")
-        _stats_cols[3].metric("Clamped", f"{fix_stats['actions_clamped']:,}")
-        _stats_cols[4].metric("Spike cycles", f"{fix_stats['spike_cycles']:,}")
-        _stats_cols[5].metric("Total cycles", f"{fix_stats['total_cycles']:,}")
-        if fix_stats["spike_cycles"] > 0:
-            st.caption("Spike cycles can be edited in the Phrases tab.")
+        _stats_cols[3].metric("Humanized", f"{h_stats.get('windows_modified', 0)} sections")
+        _stats_cols[4].metric("Speed-clamped", f"{c_stats.get('actions_clamped', 0):,}")
 
     st.divider()
 
@@ -221,7 +235,7 @@ def render():
         help="Apply device awareness and continue to Tone.",
     ):
         with st.spinner("Applying device awareness…"):
-            _apply_device_awareness(project, selected_targets, actions, limits, _already_aware, _spike_fraction)
+            _apply_device_awareness_to_chain(project, selected_targets, actions, limits, _already_aware, _groove)
         st.session_state["device_accepted"] = True
         st.rerun()
 
@@ -232,9 +246,10 @@ def render():
         )
 
 
-def _apply_device_awareness(project, targets, actions, limits, already_aware, spike_fraction=0.0):
-    """Apply minimum fix and save to chain."""
+def _apply_device_awareness_to_chain(project, targets, actions, limits, already_aware, groove=0.35):
+    """Apply humanize + speed backstop and save to chain."""
     from datetime import datetime
+    from forge.device_specs import apply_device_awareness as _apply_da
 
     if not project:
         return
@@ -242,10 +257,11 @@ def _apply_device_awareness(project, targets, actions, limits, already_aware, sp
     status = st.status("Applying device awareness…", expanded=True)
 
     project["output_targets"] = targets
+    project["groove"] = groove
     status.write(f"✅ Devices: {', '.join(targets)}")
 
-    if already_aware:
-        status.write("✅ No corrections needed — already within limits")
+    if already_aware and groove == 0:
+        status.write("✅ No corrections needed — already within limits with good variation")
         from forge.funscript import load_funscript
         funscript_path = st.session_state.get("funscript_path", "")
         fs_data = load_funscript(funscript_path)
@@ -253,26 +269,31 @@ def _apply_device_awareness(project, targets, actions, limits, already_aware, sp
             chain_path = save_chain_funscript(project, "device", fs_data)
             st.session_state["chain_funscript_path"] = chain_path
     else:
-        status.update(label=f"Applying minimum fix to {len(actions):,} actions…")
+        status.update(label=f"Humanizing + checking {len(actions):,} actions…")
 
-        fixed_actions, fix_stats = apply_minimum_fix(actions, limits, intensity_spikes=spike_fraction)
-        analysis = analyze_violations(fixed_actions, limits)
+        fixed_actions, fix_stats = _apply_da(actions, limits, groove=groove)
+        h_stats = fix_stats.get("humanize", {})
+        c_stats = fix_stats.get("clamp", {})
 
         # Build funscript data with fixed actions
         from forge.funscript import load_funscript
         funscript_path = st.session_state.get("funscript_path", "")
         fs_data = load_funscript(funscript_path)
         if fs_data:
+            # Update timestamps (humanize changes timing)
             for i, action in enumerate(fs_data.get("actions", [])):
                 if i < len(fixed_actions):
+                    action["at"] = fixed_actions[i]["at"]
                     action["pos"] = fixed_actions[i]["pos"]
 
             chain_path = save_chain_funscript(project, "device", fs_data)
             st.session_state["chain_funscript_path"] = chain_path
             status.write(
-                f"✅ {analysis['percent_ok']:.0f}% of original preserved — "
-                f"{analysis['violation_count']} actions corrected"
+                f"✅ CV {h_stats.get('original_cv', 0):.2f} → {h_stats.get('result_cv', 0):.2f} "
+                f"({h_stats.get('windows_modified', 0)} sections humanized)"
             )
+            if c_stats.get("actions_clamped", 0) > 0:
+                status.write(f"✅ {c_stats['actions_clamped']:,} actions speed-clamped")
 
         # Pre-compute vibrant chart data for Phrases tab
         status.update(label="Building chart data…")

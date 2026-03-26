@@ -37,14 +37,14 @@
     "estim_foc": {
       "name": "Estim — FOC",
       "type": "estim",
-      "max_speed": 250,
-      "max_bpm": 125,
-      "min_cycle_ms": 240,
+      "max_speed": 600,
+      "max_bpm": 300,
+      "min_cycle_ms": 100,
       "position_min": 0,
       "position_max": 100,
       "max_acceleration": 10000,
       "max_delta": 100,
-      "notes": "Single-channel estim. 125 BPM at full range is the comfort limit. Speed clamp reduces fast cycles. Intensity spikes allow occasional full-speed cycles. restim firmware adds internal ramping."
+      "notes": "Single-channel estim. Speed backstop at 600 pos/s (curated scripts run 700+). Primary protection is Groove (humanize) not speed clamp. restim firmware adds internal ramping."
     },
     "generic": {
       "name": "Generic / Intiface",
@@ -61,14 +61,14 @@
     "estim_stereo": {
       "name": "Estim — Stereo",
       "type": "estim",
-      "max_speed": 250,
-      "max_bpm": 125,
-      "min_cycle_ms": 240,
+      "max_speed": 600,
+      "max_bpm": 300,
+      "min_cycle_ms": 100,
       "position_min": 0,
       "position_max": 100,
       "max_acceleration": 10000,
       "max_delta": 100,
-      "notes": "Dual-channel estim. Same comfort limits as FOC. 125 BPM at full range. Speed clamp + intensity spikes."
+      "notes": "Dual-channel estim. Same limits as FOC. Primary protection is Groove (humanize). Volume channel differs from FOC for L/R balance."
     }
   }
 }
