@@ -487,25 +487,32 @@ def _render_channel_previews(forge, selected):
     col_input, col_ab, col_pv = st.columns(3)
     with col_input:
         st.caption("**Input funscript**")
-        render_monochrome_from_arrays(times_s, positions, height=150, key=f"stim_input_{_ver}")
+        # Use vibrant cache from latest chain stage
+        from forge_ui_components.funscript_chart.cache import ChartCache
+        _cache = ChartCache.from_session_state()
+        _png = _cache.render_latest_png(height_px=150, width_px=500)
+        if _png:
+            st.image(_png, use_container_width=True)
+        else:
+            render_monochrome_from_arrays(times_s, positions, height=150, key=f"stim_input_{_ver}")
 
     with col_ab:
         st.caption("**Alpha channel**")
         if _alpha:
             render_monochrome_from_arrays(_alpha[0], _alpha[1], height=150, key=f"stim_alpha_preview_{_ver}")
         else:
-            st.caption("_Select a character and click Accept to generate._")
+            st.caption("_Click **Preview** to generate channels._")
         st.caption("**Beta channel**")
         if _beta:
             render_monochrome_from_arrays(_beta[0], _beta[1], height=150, key=f"stim_beta_preview_{_ver}")
         else:
-            st.caption("_Select a character and click Accept to generate._")
+            st.caption("_Click **Preview** to generate channels._")
 
     with col_pv:
         st.caption("**Pulse frequency**")
         if _pulse:
             render_monochrome_from_arrays(_pulse[0], _pulse[1], height=150, key=f"stim_pulse_preview_{_ver}")
         else:
-            st.caption("_Select a character and click Accept to generate._")
+            st.caption("_Click **Preview** to generate channels._")
         st.caption("**Volume**")
         st.caption("_Volume channel coming soon._")
