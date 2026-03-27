@@ -87,42 +87,6 @@ def render():
     ]
     st.dataframe(pd.DataFrame(_limits_data), hide_index=True, use_container_width=True)
 
-    # ── Groove (timing variation) ──────────────────────────────────────────
-    st.divider()
-    st.subheader("Groove — timing variation")
-    st.caption(
-        "Same beat, same intensity — cycles arrive at slightly different speeds "
-        "so your body can't predict the exact moment. Like a live drummer vs a drum machine."
-    )
-
-    _saved_groove = (project or {}).get("groove", 0.35)
-    _groove = st.slider(
-        "Groove",
-        min_value=0.0,
-        max_value=0.50,
-        value=float(_saved_groove),
-        step=0.05,
-        key="groove_slider",
-        help="0.0 = mechanical (no variation). 0.35 = natural (like expert scripts). 0.45 = jazzy.",
-    )
-    _groove_labels = {
-        0.0: "Mechanical — every cycle identical",
-        0.05: "Minimal variation",
-        0.10: "Subtle variation",
-        0.15: "Light groove",
-        0.20: "Moderate groove",
-        0.25: "Noticeable groove",
-        0.30: "Natural feel",
-        0.35: "Natural — like expert-crafted scripts",
-        0.40: "Expressive",
-        0.45: "Jazzy — loose, unpredictable",
-        0.50: "Maximum variation",
-    }
-    st.caption(_groove_labels.get(_groove, f"Groove: {_groove:.2f}"))
-
-    if project:
-        project["groove"] = _groove
-
     st.divider()
 
     # ── Analysis ──────────────────────────────────────────────────────────
@@ -144,7 +108,6 @@ def render():
 
     times_s = [t / 1000.0 for t in times]
 
-    # Analyze current state
     from forge.device_specs import detect_stingy, apply_device_awareness as _apply_da
 
     with st.spinner(f"Analyzing {len(actions):,} actions…"):
@@ -182,36 +145,36 @@ def render():
 
     st.divider()
 
-    # ── Side-by-side preview ──────────────────────────────────────────────
+    # ── Device-aware preview (before Groove) ──────────────────────────────
     from forge_ui_components.funscript_chart.cache import ChartCache
     cache = ChartCache.from_session_state()
 
-    st.subheader("Preview")
+    _saved_groove = (project or {}).get("groove", 0.35)
 
-    if _already_aware and _groove == 0:
+    if _already_aware and _saved_groove == 0:
+        st.subheader("Device-aware")
         st.caption("Your funscript already has good variation and is within device limits.")
-        # Use original from cache
         png = cache.render_png("original", height_px=200, width_px=1400)
         if png:
             st.image(png, use_container_width=True)
+        _groove = 0.0
+        _fixed_actions = actions
+        _fix_stats = {"humanize": {}, "clamp": {}}
     else:
         # Apply full device awareness (humanize + backstop)
-        fixed_actions, fix_stats = _apply_da(
-            actions, limits, groove=_groove,
-        )
+        _groove = _saved_groove
+        _fixed_actions, _fix_stats = _apply_da(actions, limits, groove=_groove)
+        cache.set_stage("device", _fixed_actions)
 
-        # Cache device stage
-        cache.set_stage("device", fixed_actions)
-
+        st.subheader("Device-aware")
         col_before, col_after = st.columns(2)
         with col_before:
             st.caption("**Original**")
             png_orig = cache.render_png("original", height_px=180, width_px=700)
             if png_orig:
                 st.image(png_orig, use_container_width=True)
-            render_cv_strip(actions, title="Groove")
         with col_after:
-            h_stats = fix_stats.get("humanize", {})
+            h_stats = _fix_stats.get("humanize", {})
             _cv_before = h_stats.get("original_cv", 0)
             _cv_after = h_stats.get("result_cv", 0)
             _win_mod = h_stats.get("windows_modified", 0)
@@ -222,14 +185,57 @@ def render():
             png_dev = cache.render_png("device", height_px=180, width_px=700)
             if png_dev:
                 st.image(png_dev, use_container_width=True)
-            render_cv_strip(fixed_actions, title="Groove")
 
-        # Full-width device-aware result
-        st.write("")
-        st.subheader("Device-aware result")
-        from forge.funscript import funscript_stats as _fs_stats
-        png_result = cache.render_png("device", height_px=180, width_px=1400)
-        if png_result:
+    st.divider()
+
+    # ── Groove (timing variation) ──────────────────────────────────────────
+    st.subheader("Groove — timing variation")
+    st.caption(
+        "Same beat, same intensity — cycles arrive at slightly different speeds "
+        "so your body can't predict the exact moment. Like a live drummer vs a drum machine."
+    )
+
+    _groove = st.slider(
+        "Groove",
+        min_value=0.0,
+        max_value=0.50,
+        value=float(_saved_groove),
+        step=0.05,
+        key="groove_slider",
+        help="0.0 = mechanical (no variation). 0.35 = natural (like expert scripts). 0.45 = jazzy.",
+    )
+    _groove_labels = {
+        0.0: "Mechanical — every cycle identical",
+        0.05: "Minimal variation",
+        0.10: "Subtle variation",
+        0.15: "Light groove",
+        0.20: "Moderate groove",
+        0.25: "Noticeable groove",
+        0.30: "Natural feel",
+        0.35: "Natural — like expert-crafted scripts",
+        0.40: "Expressive",
+        0.45: "Jazzy — loose, unpredictable",
+        0.50: "Maximum variation",
+    }
+    st.caption(_groove_labels.get(_groove, f"Groove: {_groove:.2f}"))
+
+    if project:
+        project["groove"] = _groove
+
+    # CV heatmap strips (before/after groove)
+    col_cv_before, col_cv_after = st.columns(2)
+    with col_cv_before:
+        render_cv_strip(actions, title="Before")
+    with col_cv_after:
+        render_cv_strip(_fixed_actions, title="After groove")
+
+    st.divider()
+
+    # ── Device-aware and groove preview (full width) ──────────────────────
+    st.subheader("Device-aware and groove preview")
+    from forge.funscript import funscript_stats as _fs_stats
+    png_result = cache.render_png("device", height_px=180, width_px=1400)
+    if png_result:
             st.image(png_result, use_container_width=True)
         _stats = _fs_stats({"actions": fixed_actions})
         c_stats = fix_stats.get("clamp", {})
