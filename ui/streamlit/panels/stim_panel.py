@@ -186,19 +186,24 @@ def render(project=None) -> None:
                 key=f"stim_path_{char['name']}",
             )
 
-            # Select button (always enabled — can re-select after Accept)
+            # Select button
             if is_sel:
                 st.button("✓ Selected", key=f"stim_sel_{char['name']}", disabled=True, use_container_width=True)
             else:
                 if st.button("Select", key=f"stim_sel_{char['name']}", use_container_width=True):
                     st.session_state["stim_character"] = char["name"]
-                    # Clear cached channels on character change
                     for k in ["stim_alpha", "stim_beta", "stim_pulse", "stim_accepted"]:
                         st.session_state.pop(k, None)
                     st.rerun()
 
-            # Description in expander (flip replacement)
-            with st.expander("Details"):
+            # ℹ️ flip button (matches Tone tab pattern)
+            _flip_key = f"stim_flip_{char['name']}"
+            _is_flipped = st.session_state.get(_flip_key, False)
+            _flip_icon = "🖼️" if _is_flipped else "ℹ️"
+            if st.button(_flip_icon, key=f"stim_flip_btn_{char['name']}", use_container_width=True):
+                st.session_state[_flip_key] = not _is_flipped
+                st.rerun()
+            if _is_flipped:
                 st.caption(char["description"])
 
     if not selected:
