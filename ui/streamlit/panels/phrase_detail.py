@@ -811,6 +811,10 @@ def _render_nav_buttons(phrases: list, phrase_idx: int, view_state, duration_ms:
             st.session_state.phrase_sel_chart_instance = (
                 st.session_state.get("phrase_sel_chart_instance", 0) + 1
             )
+            # Clear chart cache so selector re-renders with edits
+            _cc = st.session_state.get("_chart_cache")
+            if _cc:
+                _cc._png_cache.clear()
             st.rerun()
 
 

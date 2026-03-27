@@ -447,7 +447,7 @@ def _render_heatmap_from_actions(actions: list, phrases: list, duration_ms: int)
             x0=ph["start_ms"], x1=ph["start_ms"],
             y0=0, y1=1,
             xref="x", yref="paper",
-            line=dict(color="rgba(255,255,255,0.85)", width=1),
+            line=dict(color="rgba(255,255,255,1.0)", width=2),
         )
         for ph in phrases
         if ph["start_ms"] > 0
