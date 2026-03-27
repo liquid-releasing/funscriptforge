@@ -580,12 +580,13 @@ def _render_preview(selected: str | None):
     if selected:
         slider_vals = _get_slider_values(selected)
         impact = st.session_state.get(f"tone_impact_{selected}", 1.0)
+        _TONE_H = 220
+        _TONE_W = 700
         col_before, col_after = st.columns(2)
         with col_before:
             st.caption(f"**Before** — {source_label}")
-            # Use device stage from cache (or original)
             _before_stage = "device" if cache.has_stage("device") else "original"
-            png_before = cache.render_png(_before_stage, height_px=180, width_px=700)
+            png_before = cache.render_png(_before_stage, height_px=_TONE_H, width_px=_TONE_W)
             if png_before:
                 st.image(png_before, use_container_width=True)
         with col_after:
@@ -593,8 +594,8 @@ def _render_preview(selected: str | None):
             modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
             modified = _reclamp_to_device_limits(times, modified)
             st.caption(f"**After** — {selected} (impact {impact:.0%}) · device aware")
-            # Tone preview is dynamic (changes with sliders), render fresh
-            render_static_from_arrays(times_s, modified, color_mode="velocity")
+            render_static_from_arrays(times_s, modified, color_mode="velocity",
+                                      height_px=_TONE_H, width_px=_TONE_W)
 
         # Stats comparison row
         import numpy as np
