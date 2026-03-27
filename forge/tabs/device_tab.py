@@ -11,7 +11,7 @@ import streamlit as st
 
 from forge.project import save_forge, save_chain_funscript
 from forge.device_specs import load_device_specs, combined_limits, analyze_violations, apply_minimum_fix
-from forge_ui_components.funscript_chart.streamlit import render_monochrome_from_arrays, render_static_from_arrays, render_static
+from forge_ui_components.funscript_chart.streamlit import render_monochrome_from_arrays, render_static_from_arrays, render_static, render_cv_strip
 
 # Device targets
 _TARGETS = [
@@ -198,7 +198,8 @@ def render():
         col_before, col_after = st.columns(2)
         with col_before:
             st.caption("**Original**")
-            render_static_from_arrays(times_s, positions)
+            render_static_from_arrays(times_s, positions, color_mode="velocity")
+            render_cv_strip(actions, title="Groove")
         with col_after:
             h_stats = fix_stats.get("humanize", {})
             _cv_before = h_stats.get("original_cv", 0)
@@ -208,13 +209,14 @@ def render():
                 f"**Device Aware** — CV {_cv_before:.2f} → {_cv_after:.2f}, "
                 f"{_win_mod} sections humanized"
             )
-            render_static_from_arrays(times_s, fixed_positions)
+            render_static_from_arrays(times_s, fixed_positions, color_mode="velocity")
+            render_cv_strip(fixed_actions, title="Groove")
 
         # Full-width device-aware chart + stats
         st.write("")
         st.subheader("Device-aware result")
         from forge.funscript import funscript_stats as _fs_stats
-        render_static(fixed_actions, color_mode="monochrome", height_px=180)
+        render_static(fixed_actions, color_mode="velocity", height_px=180)
         _stats = _fs_stats({"actions": fixed_actions})
         c_stats = fix_stats.get("clamp", {})
         _stats_cols = st.columns(5)
