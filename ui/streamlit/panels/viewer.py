@@ -50,9 +50,16 @@ def _selector_fragment(
 
     phrases = assessment_dict.get("phrases", [])
 
-    # Ensure bands are cached
-    if not cache.get_bands():
-        cache.set_bands(compute_annotation_bands(assessment_dict))
+    # Always sync bands with current assessment (may have changed via re-analyse)
+    _current_bands = compute_annotation_bands(assessment_dict)
+    _n_phrase_bands = sum(1 for b in _current_bands if b.kind == "phrase")
+    _n_cached_bands = sum(1 for b in cache.get_bands() if b.kind == "phrase")
+    if _n_phrase_bands != _n_cached_bands or not cache.get_bands():
+        cache.set_bands(_current_bands)
+
+    # Ensure latest chain data is in cache
+    if not cache.has_stage("original"):
+        cache.set_stage("original", original_actions)
 
     # Show edited version if any phrase transforms have been accepted
     from ui.streamlit.panels.phrase_detail import build_edited_actions
