@@ -169,24 +169,40 @@ def render(project=None) -> None:
             border = f"border: 3px solid {char['color']};" if is_sel else "border: 1px solid #333;"
             opacity = "opacity: 1.0;" if is_sel else "opacity: 0.7;"
 
-            # Card: name + tagline
+            # Title card: name + tagline
             st.markdown(
-                f'<div style="padding: 8px; border-radius: 8px; {border} {opacity} text-align: center;">'
+                f'<div style="padding: 8px; border-radius: 8px 8px 0 0; {border} {opacity} text-align: center;">'
                 f'<strong style="color: {char["color"]};">{char["name"]}</strong><br>'
                 f'<span style="font-size: 0.85em; color: #888;">{char["tagline"]}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
-            # Electrode path chart as the "art"
-            st.plotly_chart(
-                _path_chart(char["path_shape"], char["color"]),
-                use_container_width=True,
-                config={"displayModeBar": False},
-                key=f"stim_path_{char['name']}",
-            )
+            # ℹ️ flip button (between title and art, matches Tone pattern)
+            _flip_key = f"stim_flip_{char['name']}"
+            _is_flipped = st.session_state.get(_flip_key, False)
+            _flip_icon = "🖼️" if _is_flipped else "ℹ️"
+            if st.button(_flip_icon, key=f"stim_flip_btn_{char['name']}", use_container_width=True):
+                st.session_state[_flip_key] = not _is_flipped
+                st.rerun()
 
-            # Select button
+            # Flip area: electrode path art OR description
+            if _is_flipped:
+                st.markdown(
+                    f'<div style="padding: 8px; {border} border-radius: 0 0 8px 8px; {opacity}">'
+                    f'<span style="font-size: 0.75em; color: #ccc; line-height: 1.4;">'
+                    f'{char["description"]}</span></div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.plotly_chart(
+                    _path_chart(char["path_shape"], char["color"]),
+                    use_container_width=True,
+                    config={"displayModeBar": False},
+                    key=f"stim_path_{char['name']}",
+                )
+
+            # Select button at bottom
             if is_sel:
                 st.button("✓ Selected", key=f"stim_sel_{char['name']}", disabled=True, use_container_width=True)
             else:
@@ -195,16 +211,6 @@ def render(project=None) -> None:
                     for k in ["stim_alpha", "stim_beta", "stim_pulse", "stim_accepted"]:
                         st.session_state.pop(k, None)
                     st.rerun()
-
-            # ℹ️ flip button (matches Tone tab pattern)
-            _flip_key = f"stim_flip_{char['name']}"
-            _is_flipped = st.session_state.get(_flip_key, False)
-            _flip_icon = "🖼️" if _is_flipped else "ℹ️"
-            if st.button(_flip_icon, key=f"stim_flip_btn_{char['name']}", use_container_width=True):
-                st.session_state[_flip_key] = not _is_flipped
-                st.rerun()
-            if _is_flipped:
-                st.caption(char["description"])
 
     if not selected:
         return
