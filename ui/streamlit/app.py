@@ -769,15 +769,12 @@ def _main() -> None:
     )
 
     with tab_project:
-        st.session_state["active_tab"] = -3
         project_tab.render()
 
     with tab_device:
-        st.session_state["active_tab"] = -2
         device_tab.render()
 
     with tab_tone:
-        st.session_state["active_tab"] = -1
         tone_tab.render()
 
     if project is None or not project.is_loaded:
@@ -796,27 +793,21 @@ def _main() -> None:
         return
 
     with tab_phrase:
-        st.session_state["active_tab"] = 0
         _render_phrase_tab(project)
 
     with tab_pattern:
-        st.session_state["active_tab"] = 1
         _render_pattern_editor_tab(project)
 
     with tab_transforms:
-        st.session_state["active_tab"] = 2
         transform_catalog_panel.render()
 
     with tab_stim:
-        st.session_state["active_tab"] = 3
         stim_panel.render(project)
 
     with tab_export:
-        st.session_state["active_tab"] = 4
         export_panel.render(project)
 
     with tab_next:
-        st.session_state["active_tab"] = 5
         next_steps_tab.render()
 
     # Keyboard shortcuts — registered once per page load via a sentinel flag on
