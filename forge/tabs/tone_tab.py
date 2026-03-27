@@ -772,6 +772,8 @@ def _apply_tone(tone_name: str):
                     _assess_dict = _json.loads(_assess_path.read_text(encoding="utf-8"))
                     cache.set_bands(compute_annotation_bands(_assess_dict))
 
+                # Pre-render the PNG with bands for Phrases tab (instant on next visit)
+                cache.render_png("tone", with_bands=True, height_px=380, width_px=1600, show_labels=True)
                 status.write(f"✅ Chart cached: {len(toned_actions):,} actions")
 
         status.update(label="Tone applied!", state="complete", expanded=False)
