@@ -40,14 +40,19 @@ def _selector_fragment(
 ) -> None:
     import json
     import time as _time
+    from forge_ui_components.funscript_chart.cache import ChartCache
     from forge_ui_components.funscript_chart.core import compute_annotation_bands
-    from forge_ui_components.funscript_chart.streamlit import render_static
+
+    cache = ChartCache.from_session_state()
 
     with open(funscript_path) as f:
         original_actions = json.load(f)["actions"]
 
     phrases = assessment_dict.get("phrases", [])
-    bands   = compute_annotation_bands(assessment_dict)
+
+    # Ensure bands are cached
+    if not cache.get_bands():
+        cache.set_bands(compute_annotation_bands(assessment_dict))
 
     # Show edited version if any phrase transforms have been accepted
     from ui.streamlit.panels.phrase_detail import build_edited_actions
@@ -61,40 +66,32 @@ def _selector_fragment(
             "These edits have not been saved — ready for export.",
             icon="💾",
         )
-    else:
-        display_actions = original_actions
-
-    n_actions = len(display_actions)
-
-    # Use cached PNG if available — invalidate when chain path or edits change
-    _cache_key = "cached_vibrant_png"
-    _cached_png = st.session_state.get(_cache_key)
-    _cache_hit = (
-        _cached_png is not None
-        and not has_edits
-        and st.session_state.get("cached_vibrant_png_count") == n_actions
-        and st.session_state.get("cached_vibrant_png_source") == funscript_path
-    )
-
-    _t0 = _time.time()
-    if _cache_hit:
-        st.image(_cached_png, use_container_width=True)
-    else:
-        with st.spinner(f"Rendering {n_actions:,} actions with velocity color…"):
+        # Phrase edits need fresh render (can't use stage cache)
+        _t0 = _time.time()
+        with st.spinner(f"Rendering {len(display_actions):,} edited actions…"):
             from forge_ui_components.funscript_chart.static import render_vibrant_static
             png = render_vibrant_static(
-                display_actions, bands,
-                height_px=380, width_px=1600,
-                show_labels=True,
+                display_actions, cache.get_bands(),
+                height_px=380, width_px=1600, show_labels=True,
             )
             st.image(png, use_container_width=True)
-            if not has_edits:
-                st.session_state[_cache_key] = png
-                st.session_state["cached_vibrant_png_count"] = n_actions
-                st.session_state["cached_vibrant_png_source"] = funscript_path
-
-    _elapsed = _time.time() - _t0
-    st.caption(f"Chart {'(cached) ' if _cache_hit else ''}built in {_elapsed:.1f}s")
+        st.caption(f"Chart built in {_time.time()-_t0:.1f}s")
+    else:
+        # Use cache — latest stage with phrase bands
+        _t0 = _time.time()
+        _stage = "tone" if cache.has_stage("tone") else ("device" if cache.has_stage("device") else "original")
+        png = cache.render_png(_stage, with_bands=True, height_px=380, width_px=1600, show_labels=True)
+        if png:
+            st.image(png, use_container_width=True)
+            st.caption(f"Chart (cached) built in {_time.time()-_t0:.1f}s")
+        else:
+            # No cache — compute from file
+            with st.spinner(f"Rendering {len(original_actions):,} actions…"):
+                cache.set_stage("original", original_actions)
+                png = cache.render_png("original", with_bands=True, height_px=380, width_px=1600, show_labels=True)
+                if png:
+                    st.image(png, use_container_width=True)
+            st.caption(f"Chart built in {_time.time()-_t0:.1f}s")
 
 
 # ------------------------------------------------------------------

@@ -533,25 +533,45 @@ def _render_recommended(plan: List[dict]) -> None:
 
 def _render_export_preview(project, assessment_dict: dict, plan: List[dict]) -> None:
     """Render a static vibrant PNG chart of the proposed export actions."""
-    from forge_ui_components.funscript_chart.core import compute_annotation_bands
-    from forge_ui_components.funscript_chart.static import render_vibrant_static
+    from forge_ui_components.funscript_chart.cache import ChartCache
 
-    # Read from chain if available, otherwise fall back to original
+    cache = ChartCache.from_session_state()
+
+    # If no transforms applied, use the latest cached stage directly
+    rejected: set = st.session_state.get("export_rejected", set())
+    accepted: set = st.session_state.get("export_accepted", set())
+    n_active = sum(
+        1 for e in plan
+        if e["phrase_idx"] not in rejected
+        and (e.get("source") != "Recommended" or e["phrase_idx"] in accepted)
+    )
+
+    if n_active == 0:
+        # No transforms — use latest cache with bands
+        series, stage = cache.get_latest_series()
+        if series:
+            png = cache.render_png(stage, with_bands=True, height_px=280, width_px=1600, show_labels=True)
+            if png:
+                st.image(png, use_container_width=True)
+                st.caption(
+                    f"Export preview: {len(series.times_ms):,} actions (cached). "
+                    "Colour represents stroke velocity (blue = slow, red = fast)."
+                )
+                return
+
+    # Transforms applied — need fresh render with applied transforms
     _chain_path = st.session_state.get("chain_funscript_path")
     _fs_path = _chain_path if (_chain_path and os.path.isfile(_chain_path)) else _get_funscript_path(project)
     with open(_fs_path, encoding="utf-8") as f:
         fs_data = json.load(f)
 
     original_actions = fs_data.get("actions", [])
-    rejected: set = st.session_state.get("export_rejected", set())
-    accepted: set = st.session_state.get("export_accepted", set())
     preview_actions = _apply_plan_transforms(original_actions, plan, rejected, accepted)
 
-    bands = compute_annotation_bands(assessment_dict)
-
     with st.spinner(f"Rendering export preview ({len(preview_actions):,} actions)…"):
+        from forge_ui_components.funscript_chart.static import render_vibrant_static
         png = render_vibrant_static(
-            preview_actions, bands,
+            preview_actions, cache.get_bands(),
             height_px=280, width_px=1600,
             show_labels=True,
         )

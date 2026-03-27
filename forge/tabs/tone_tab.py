@@ -574,20 +574,26 @@ def _render_preview(selected: str | None):
 
     times_s = [t / 1000.0 for t in times]
 
+    from forge_ui_components.funscript_chart.cache import ChartCache
+    cache = ChartCache.from_session_state()
+
     if selected:
         slider_vals = _get_slider_values(selected)
         impact = st.session_state.get(f"tone_impact_{selected}", 1.0)
         col_before, col_after = st.columns(2)
         with col_before:
             st.caption(f"**Before** — {source_label}")
-            render_static_from_arrays(times_s, positions, color_mode="velocity")
+            # Use device stage from cache (or original)
+            _before_stage = "device" if cache.has_stage("device") else "original"
+            png_before = cache.render_png(_before_stage, height_px=180, width_px=700)
+            if png_before:
+                st.image(png_before, use_container_width=True)
         with col_after:
             toned = _apply_tone_preview(times_s, positions, selected, slider_vals)
-            # Blend: output = original + impact * (toned - original)
             modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
-            # Re-clamp to device limits
             modified = _reclamp_to_device_limits(times, modified)
             st.caption(f"**After** — {selected} (impact {impact:.0%}) · device aware")
+            # Tone preview is dynamic (changes with sliders), render fresh
             render_static_from_arrays(times_s, modified, color_mode="velocity")
 
         # Stats comparison row
@@ -608,7 +614,10 @@ def _render_preview(selected: str | None):
         _sc[4].metric("Tone", f"{selected} @ {impact:.0%}")
     else:
         st.caption("**Your funscript** — select a tone to see the preview")
-        render_static_from_arrays(times_s, positions, color_mode="velocity")
+        _before_stage = "device" if cache.has_stage("device") else "original"
+        png = cache.render_png(_before_stage, height_px=200, width_px=1400)
+        if png:
+            st.image(png, use_container_width=True)
 
 
 def _apply_tone_preview(times_s: list, positions: list, tone_name: str,
@@ -748,34 +757,21 @@ def _apply_tone(tone_name: str):
                 st.session_state["chain_funscript_path"] = chain_path
                 status.write("✅ Toned funscript saved to chain")
 
-                # Build and cache the full-color figure
-                from forge_ui_components.funscript_chart.core import monochrome_figure, compute_chart_data
-                fig = monochrome_figure(
-                    times_s, modified,
-                    color=tone_data["color"],
-                    height=300,
-                    show_axes=True,
-                    line_width=1.5,
-                )
-                st.session_state["cached_tone_chart"] = fig
-
-                # Pre-render vibrant PNG for Phrases tab
-                status.update(label="Building phrase chart…")
+                # Cache tone stage in ChartCache
+                status.update(label="Building chart cache…")
                 toned_actions = toned_data.get("actions", [])
-                from forge_ui_components.funscript_chart.static import render_vibrant_static
+                from forge_ui_components.funscript_chart.cache import ChartCache
                 from forge_ui_components.funscript_chart.core import compute_annotation_bands
-                _assess = st.session_state.get("forge_project", {})
+                cache = ChartCache.from_session_state()
+                cache.set_stage("tone", toned_actions)
+
+                # Cache phrase bands for Phrases tab
                 _assess_path = Path(project.get("output_folder", "")) / "_assessment.json"
                 if _assess_path.exists():
                     import json as _json
                     _assess_dict = _json.loads(_assess_path.read_text(encoding="utf-8"))
-                    _bands = compute_annotation_bands(_assess_dict)
-                else:
-                    _bands = []
-                _png = render_vibrant_static(toned_actions, _bands, height_px=380, width_px=1600, show_labels=True)
-                st.session_state["cached_vibrant_png"] = _png
-                st.session_state["cached_vibrant_png_count"] = len(toned_actions)
-                st.session_state["cached_vibrant_png_source"] = chain_path
+                    cache.set_bands(compute_annotation_bands(_assess_dict))
+
                 status.write(f"✅ Chart cached: {len(toned_actions):,} actions")
 
         status.update(label="Tone applied!", state="complete", expanded=False)

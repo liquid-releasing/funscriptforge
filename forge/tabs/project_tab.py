@@ -76,6 +76,8 @@ def _reset_downstream_state():
                 or key.startswith("_phrase_last_applied_") \
                 or key.startswith("cached_vibrant"):
             st.session_state.pop(key, None)
+    # Clear chart cache
+    st.session_state.pop("_chart_cache", None)
 
 
 def _default_output_for(funscript_path: str) -> Path:
@@ -382,8 +384,15 @@ def _funscript_section(v: int):
         data = load_funscript(funscript_path)
         if data:
             actions = data.get("actions", [])
-            with st.spinner(f"Rendering {len(actions):,} actions…"):
-                render_static(actions, color_mode="velocity")
+            # Use chart cache — set original stage
+            from forge_ui_components.funscript_chart.cache import ChartCache
+            cache = ChartCache.from_session_state()
+            if not cache.has_stage("original"):
+                with st.spinner(f"Rendering {len(actions):,} actions…"):
+                    cache.set_stage("original", actions)
+            png = cache.render_png("original", height_px=250, width_px=1400)
+            if png:
+                st.image(png, use_container_width=True)
             stats = funscript_stats(data)
             render_stats_row(stats)
         else:

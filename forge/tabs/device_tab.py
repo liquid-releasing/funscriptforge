@@ -183,22 +183,32 @@ def render():
     st.divider()
 
     # ── Side-by-side preview ──────────────────────────────────────────────
+    from forge_ui_components.funscript_chart.cache import ChartCache
+    cache = ChartCache.from_session_state()
+
     st.subheader("Preview")
 
     if _already_aware and _groove == 0:
         st.caption("Your funscript already has good variation and is within device limits.")
-        render_static_from_arrays(times_s, positions, height_px=200, color_mode="velocity")
+        # Use original from cache
+        png = cache.render_png("original", height_px=200, width_px=1400)
+        if png:
+            st.image(png, use_container_width=True)
     else:
         # Apply full device awareness (humanize + backstop)
         fixed_actions, fix_stats = _apply_da(
             actions, limits, groove=_groove,
         )
-        fixed_positions = [a["pos"] for a in fixed_actions]
+
+        # Cache device stage
+        cache.set_stage("device", fixed_actions)
 
         col_before, col_after = st.columns(2)
         with col_before:
             st.caption("**Original**")
-            render_static_from_arrays(times_s, positions, color_mode="velocity")
+            png_orig = cache.render_png("original", height_px=180, width_px=700)
+            if png_orig:
+                st.image(png_orig, use_container_width=True)
             render_cv_strip(actions, title="Groove")
         with col_after:
             h_stats = fix_stats.get("humanize", {})
@@ -209,14 +219,18 @@ def render():
                 f"**Device Aware** — CV {_cv_before:.2f} → {_cv_after:.2f}, "
                 f"{_win_mod} sections humanized"
             )
-            render_static_from_arrays(times_s, fixed_positions, color_mode="velocity")
+            png_dev = cache.render_png("device", height_px=180, width_px=700)
+            if png_dev:
+                st.image(png_dev, use_container_width=True)
             render_cv_strip(fixed_actions, title="Groove")
 
-        # Full-width device-aware chart + stats
+        # Full-width device-aware result
         st.write("")
         st.subheader("Device-aware result")
         from forge.funscript import funscript_stats as _fs_stats
-        render_static(fixed_actions, color_mode="velocity", height_px=180)
+        png_result = cache.render_png("device", height_px=180, width_px=1400)
+        if png_result:
+            st.image(png_result, use_container_width=True)
         _stats = _fs_stats({"actions": fixed_actions})
         c_stats = fix_stats.get("clamp", {})
         _stats_cols = st.columns(5)
