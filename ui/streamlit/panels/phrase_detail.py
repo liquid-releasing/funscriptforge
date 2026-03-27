@@ -418,110 +418,40 @@ def _render_chart(
     split_ms: Optional[int] = None,
     extra_phrase_end_ms: Optional[int] = None,
 ) -> None:
-    from forge_ui_components.funscript_chart.core import compute_chart_data, vibrant_figure
+    from forge_ui_components.funscript_chart.core import compute_chart_data, AnnotationBand
 
     sel_phrase = phrases[phrase_idx]
-
-    # Only compute chart data for the visible window — faster and gives
-    # window-relative colour normalisation for better detail.
-    window_actions = [a for a in actions if win_start <= a["at"] <= win_end]
-    s = compute_chart_data(window_actions)
-
-    # Build figure with no bands — avoids hit-target traces that extend beyond
-    # win_start/win_end and cause Plotly to auto-range to the full extent.
-
-    class _LocalVS:
-        zoom_start_ms      = win_start
-        zoom_end_ms        = win_end
-        color_mode         = view_state.color_mode
-        show_phrases       = False
-        selection_start_ms = sel_phrase["start_ms"]
-        selection_end_ms   = sel_phrase["end_ms"]
-        def has_zoom(self):      return True
-        def has_selection(self): return False
-
-    fig = vibrant_figure(
-        s, [],
-        view_state=_LocalVS(),
-        color_mode=view_state.color_mode,
-        height=260,
-        duration_ms=win_end - win_start,
-        large_funscript_threshold=2_500,
-    )
-
-    # Highlighted region — either single phrase or combined (concat preview)
     highlight_end = extra_phrase_end_ms if extra_phrase_end_ms else sel_phrase["end_ms"]
-    fig.add_vrect(
-        x0=sel_phrase["start_ms"], x1=highlight_end,
-        fillcolor="rgba(255,220,50,0.15)",
-        line_width=2, line_color="rgba(255,220,50,1.0)",
-        layer="below",
-    )
     label_text = (
         f"P{phrase_idx + 1} + P{phrase_idx + 2}" if extra_phrase_end_ms
         else f"P{phrase_idx + 1}"
     )
-    fig.add_annotation(
-        x=sel_phrase["start_ms"], y=97,
-        text=label_text,
-        showarrow=False,
-        xanchor="left", yanchor="top",
-        font=dict(size=11, color="rgba(255,220,50,1.0)"),
-        bgcolor="rgba(0,0,0,0)",
+
+    # Build a selected band for the highlighted phrase
+    selected_band = AnnotationBand(
+        kind="phrase",
+        start_ms=sel_phrase["start_ms"],
+        end_ms=highlight_end,
+        label=label_text,
+        color="rgba(255,220,50,1.0)",
+        name=label_text,
     )
 
-    # Add cycle number to dot hover tooltip
-    _project = st.session_state.get("project")
-    if _project and getattr(_project, "is_loaded", False):
-        _ph_cycles = sorted(
-            [cy for cy in _project.assessment.cycles
-             if sel_phrase["start_ms"] <= cy.start_ms and cy.end_ms <= sel_phrase["end_ms"]],
-            key=lambda cy: cy.start_ms,
-        )
-        if _ph_cycles:
-            def _cy_num(ms_val):
-                for j, cy in enumerate(_ph_cycles):
-                    if cy.start_ms <= ms_val <= cy.end_ms:
-                        return j + 1
-                return "—"
-            for trace in reversed(fig.data):
-                if getattr(trace, "mode", "") == "markers" and getattr(trace, "hovertemplate", ""):
-                    trace.customdata = [_cy_num(t) for t in trace.x]
-                    trace.hovertemplate = (
-                        "t=%{x} ms  pos=%{y}  cycle %{customdata}<extra></extra>"
-                    )
-                    break
+    # Only get actions in the visible window
+    window_actions = [a for a in actions if win_start <= a["at"] <= win_end]
 
-    # Split point marker
-    if split_ms is not None and win_start <= split_ms <= win_end:
-        fig.add_vline(
-            x=split_ms,
-            line_color="rgba(255,255,255,0.9)",
-            line_width=2,
-            line_dash="dash",
-            annotation_text="split",
-            annotation_font_size=10,
-            annotation_font_color="rgba(255,255,255,0.9)",
-        )
-
-    # Lock x-axis to the fixed window (no autorange)
-    fig.update_xaxes(range=[win_start, win_end], autorange=False)
-
-    # Dim areas outside the highlighted region
-    _DIM = "rgba(15,15,20,0.65)"
-    _highlight_end = extra_phrase_end_ms if extra_phrase_end_ms else sel_phrase["end_ms"]
-    if win_start < sel_phrase["start_ms"]:
-        fig.add_vrect(
-            x0=win_start, x1=sel_phrase["start_ms"],
-            fillcolor=_DIM, layer="above", line_width=0,
-        )
-    if _highlight_end < win_end:
-        fig.add_vrect(
-            x0=_highlight_end, x1=win_end,
-            fillcolor=_DIM, layer="above", line_width=0,
-        )
-
-    st.plotly_chart(fig, key=chart_key, config={"displayModeBar": False})
+    # Render as static PNG — fast, vibrant color with highlighted phrase
+    from forge_ui_components.funscript_chart.static import render_static_chart
+    series = compute_chart_data(window_actions)
+    png = render_static_chart(
+        series, [selected_band],
+        color_mode="velocity",
+        height_px=260,
+        width_px=1000,
+        show_labels=True,
+        selected_band=selected_band,
+    )
+    st.image(png, use_container_width=True)
 
 
 # ------------------------------------------------------------------
