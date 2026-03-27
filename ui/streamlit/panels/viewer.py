@@ -66,13 +66,14 @@ def _selector_fragment(
 
     n_actions = len(display_actions)
 
-    # Use cached PNG if available
+    # Use cached PNG if available — invalidate when chain path or edits change
     _cache_key = "cached_vibrant_png"
     _cached_png = st.session_state.get(_cache_key)
     _cache_hit = (
         _cached_png is not None
         and not has_edits
         and st.session_state.get("cached_vibrant_png_count") == n_actions
+        and st.session_state.get("cached_vibrant_png_source") == funscript_path
     )
 
     _t0 = _time.time()
@@ -90,6 +91,7 @@ def _selector_fragment(
             if not has_edits:
                 st.session_state[_cache_key] = png
                 st.session_state["cached_vibrant_png_count"] = n_actions
+                st.session_state["cached_vibrant_png_source"] = funscript_path
 
     _elapsed = _time.time() - _t0
     st.caption(f"Chart {'(cached) ' if _cache_hit else ''}built in {_elapsed:.1f}s")

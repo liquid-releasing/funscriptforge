@@ -759,11 +759,24 @@ def _apply_tone(tone_name: str):
                 )
                 st.session_state["cached_tone_chart"] = fig
 
-                # Pre-compute vibrant chart data for Phrases tab
-                status.update(label="Building chart data…")
+                # Pre-render vibrant PNG for Phrases tab
+                status.update(label="Building phrase chart…")
                 toned_actions = toned_data.get("actions", [])
-                st.session_state["cached_vibrant_series"] = compute_chart_data(toned_actions)
-                status.write(f"✅ Chart data cached: {len(times):,} actions")
+                from forge_ui_components.funscript_chart.static import render_vibrant_static
+                from forge_ui_components.funscript_chart.core import compute_annotation_bands
+                _assess = st.session_state.get("forge_project", {})
+                _assess_path = Path(project.get("output_folder", "")) / "_assessment.json"
+                if _assess_path.exists():
+                    import json as _json
+                    _assess_dict = _json.loads(_assess_path.read_text(encoding="utf-8"))
+                    _bands = compute_annotation_bands(_assess_dict)
+                else:
+                    _bands = []
+                _png = render_vibrant_static(toned_actions, _bands, height_px=380, width_px=1600, show_labels=True)
+                st.session_state["cached_vibrant_png"] = _png
+                st.session_state["cached_vibrant_png_count"] = len(toned_actions)
+                st.session_state["cached_vibrant_png_source"] = chain_path
+                status.write(f"✅ Chart cached: {len(toned_actions):,} actions")
 
         status.update(label="Tone applied!", state="complete", expanded=False)
 
