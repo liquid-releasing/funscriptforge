@@ -604,6 +604,11 @@ def _sidebar() -> None:
         st.session_state.last_loaded_cfg  = cfg_key
         st.session_state.last_loaded_file = selected_file
         st.session_state.view_state       = ViewState()
+        # Invalidate chart cache bands (phrase boundaries changed)
+        _cc = st.session_state.get("_chart_cache")
+        if _cc:
+            _cc.set_bands([])  # Force rebuild on next render
+            _cc._png_cache.clear()
         if _IS_LOCAL:
             _save_recents(output_dir, funscript_path)
         st.session_state.export_rejected  = set()
