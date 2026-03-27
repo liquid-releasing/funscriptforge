@@ -236,15 +236,16 @@ def render():
     from forge.funscript import funscript_stats as _fs_stats
     png_result = cache.render_png("device", height_px=180, width_px=1400)
     if png_result:
-            st.image(png_result, use_container_width=True)
-        _stats = _fs_stats({"actions": fixed_actions})
-        c_stats = fix_stats.get("clamp", {})
-        _stats_cols = st.columns(5)
-        _stats_cols[0].metric("Duration", _stats.get("duration_fmt", "—"))
-        _stats_cols[1].metric("Actions", f"{_stats.get('action_count', 0):,}")
-        _stats_cols[2].metric("Avg speed", f"{_stats.get('avg_speed', 0):.0f}")
-        _stats_cols[3].metric("Humanized", f"{h_stats.get('windows_modified', 0)} sections")
-        _stats_cols[4].metric("Speed-clamped", f"{c_stats.get('actions_clamped', 0):,}")
+        st.image(png_result, use_container_width=True)
+    h_stats = _fix_stats.get("humanize", {})
+    _stats = _fs_stats({"actions": _fixed_actions})
+    c_stats = _fix_stats.get("clamp", {})
+    _stats_cols = st.columns(5)
+    _stats_cols[0].metric("Duration", _stats.get("duration_fmt", "—"))
+    _stats_cols[1].metric("Actions", f"{_stats.get('action_count', 0):,}")
+    _stats_cols[2].metric("Avg speed", f"{_stats.get('avg_speed', 0):.0f}")
+    _stats_cols[3].metric("Humanized", f"{h_stats.get('windows_modified', 0)} sections")
+    _stats_cols[4].metric("Speed-clamped", f"{c_stats.get('actions_clamped', 0):,}")
 
     st.divider()
 

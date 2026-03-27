@@ -547,10 +547,10 @@ def _render_export_preview(project, assessment_dict: dict, plan: List[dict]) -> 
     )
 
     if n_active == 0:
-        # No transforms — use latest cache with bands
+        # No transforms — use latest cache without phrase boundaries
         series, stage = cache.get_latest_series()
         if series:
-            png = cache.render_png(stage, with_bands=True, height_px=280, width_px=1600, show_labels=True)
+            png = cache.render_png(stage, with_bands=False, height_px=280, width_px=1600)
             if png:
                 st.image(png, use_container_width=True)
                 st.caption(
