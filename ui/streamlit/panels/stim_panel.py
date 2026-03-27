@@ -466,58 +466,41 @@ def _render_channel_previews(forge, selected):
     _ver = st.session_state.get("stim_preview_ver", 0)
     st.subheader("Channel previews")
 
-    # Input funscript
-    from forge.funscript import load_funscript, parse_actions
-    funscript_path = st.session_state.get("funscript_path", "")
-    chain_path = st.session_state.get("chain_funscript_path", "")
-    _path = chain_path if (chain_path and Path(chain_path).exists()) else funscript_path
-
-    if not _path or not Path(_path).exists():
-        st.caption("No funscript loaded.")
-        return
-
-    data = load_funscript(_path)
-    if not data:
-        return
-
-    times, positions = parse_actions(data)
-    if not times:
-        return
-    times_s = [t / 1000.0 for t in times]
-
     # Check for cached channel data
     _alpha = st.session_state.get("stim_alpha")
     _beta = st.session_state.get("stim_beta")
     _pulse = st.session_state.get("stim_pulse")
 
+    from forge_ui_components.funscript_chart.cache import ChartCache
+    _cache = ChartCache.from_session_state()
+
     col_input, col_ab, col_pv = st.columns(3)
     with col_input:
         st.caption("**Input funscript**")
-        # Use vibrant cache from latest chain stage
-        from forge_ui_components.funscript_chart.cache import ChartCache
-        _cache = ChartCache.from_session_state()
         _png = _cache.render_latest_png(height_px=150, width_px=500)
         if _png:
             st.image(_png, use_container_width=True)
         else:
             render_monochrome_from_arrays(times_s, positions, height=150, key=f"stim_input_{_ver}")
 
+    from forge_ui_components.funscript_chart.streamlit import render_static_from_arrays
+
     with col_ab:
         st.caption("**Alpha channel**")
         if _alpha:
-            render_monochrome_from_arrays(_alpha[0], _alpha[1], height=150, key=f"stim_alpha_preview_{_ver}")
+            render_static_from_arrays(_alpha[0], _alpha[1], height_px=150, width_px=500)
         else:
             st.caption("_Click **Preview** to generate channels._")
         st.caption("**Beta channel**")
         if _beta:
-            render_monochrome_from_arrays(_beta[0], _beta[1], height=150, key=f"stim_beta_preview_{_ver}")
+            render_static_from_arrays(_beta[0], _beta[1], height_px=150, width_px=500)
         else:
             st.caption("_Click **Preview** to generate channels._")
 
     with col_pv:
         st.caption("**Pulse frequency**")
         if _pulse:
-            render_monochrome_from_arrays(_pulse[0], _pulse[1], height=150, key=f"stim_pulse_preview_{_ver}")
+            render_static_from_arrays(_pulse[0], _pulse[1], height_px=150, width_px=500)
         else:
             st.caption("_Click **Preview** to generate channels._")
         st.caption("**Volume**")
