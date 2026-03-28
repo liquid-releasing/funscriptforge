@@ -164,7 +164,9 @@ def render():
         # Apply full device awareness (humanize + backstop)
         _groove = _saved_groove
         _fixed_actions, _fix_stats = _apply_da(actions, limits, groove=_groove)
-        cache.set_stage("device", _fixed_actions)
+        # Only set device stage if not already cached (avoids wiping tone/phrases)
+        if not cache.has_stage("device"):
+            cache.set_stage("device", _fixed_actions)
 
         st.subheader("Device-aware")
         col_before, col_after = st.columns(2)
