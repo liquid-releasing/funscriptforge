@@ -44,37 +44,30 @@ def _selector_fragment(
     from forge_ui_components.funscript_chart.core import compute_annotation_bands
 
     cache = ChartCache.from_session_state()
-
-    with open(funscript_path) as f:
-        original_actions = json.load(f)["actions"]
-
     phrases = assessment_dict.get("phrases", [])
 
-    # Always sync bands with current assessment (may have changed via re-analyse)
+    # Always sync bands with current assessment
     _current_bands = compute_annotation_bands(assessment_dict)
     _n_phrase_bands = sum(1 for b in _current_bands if b.kind == "phrase")
     _n_cached_bands = sum(1 for b in cache.get_bands() if b.kind == "phrase")
     if _n_phrase_bands != _n_cached_bands or not cache.get_bands():
         cache.set_bands(_current_bands)
 
-    # Ensure latest chain data is in cache
-    if not cache.has_stage("original"):
-        cache.set_stage("original", original_actions)
-
-    # Show edited version if any phrase transforms have been accepted
+    # Check for phrase edits
     from ui.streamlit.panels.phrase_detail import build_edited_actions
     has_edits = any(
         k.startswith("phrase_transform_chain_") and bool(st.session_state[k])
         for k in st.session_state
     )
+
+    _t0 = _time.time()
+
     if has_edits:
+        # Phrase edits — must read file and apply edits for fresh render
+        with open(funscript_path) as f:
+            original_actions = json.load(f)["actions"]
         display_actions = build_edited_actions(phrases, original_actions)
-        st.info(
-            "These edits have not been saved — ready for export.",
-            icon="💾",
-        )
-        # Phrase edits need fresh render (can't use stage cache)
-        _t0 = _time.time()
+        st.info("These edits have not been saved — ready for export.", icon="💾")
         with st.spinner(f"Rendering {len(display_actions):,} edited actions…"):
             from forge_ui_components.funscript_chart.static import render_vibrant_static
             png = render_vibrant_static(
@@ -84,20 +77,22 @@ def _selector_fragment(
             st.image(png, use_container_width=True)
         st.caption(f"Chart built in {_time.time()-_t0:.1f}s")
     else:
-        # Use cache — latest stage with phrase bands
-        _t0 = _time.time()
+        # No edits — use cache (latest stage: tone > device > original)
         _stage = "tone" if cache.has_stage("tone") else ("device" if cache.has_stage("device") else "original")
         png = cache.render_png(_stage, with_bands=True, height_px=380, width_px=1600, show_labels=True)
         if png:
             st.image(png, use_container_width=True)
-            st.caption(f"Chart (cached) built in {_time.time()-_t0:.1f}s")
+            st.caption(f"Chart (cached from {_stage}) built in {_time.time()-_t0:.1f}s")
         else:
-            # No cache — compute from file
+            # No cache at all — compute from file
+            with open(funscript_path) as f:
+                original_actions = json.load(f)["actions"]
             with st.spinner(f"Rendering {len(original_actions):,} actions…"):
                 cache.set_stage("original", original_actions)
                 png = cache.render_png("original", with_bands=True, height_px=380, width_px=1600, show_labels=True)
                 if png:
                     st.image(png, use_container_width=True)
+            st.caption(f"Chart built in {_time.time()-_t0:.1f}s")
             st.caption(f"Chart built in {_time.time()-_t0:.1f}s")
 
 
