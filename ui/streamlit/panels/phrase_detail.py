@@ -129,26 +129,8 @@ def _detail_fragment(
         st.error(f"Could not parse funscript: {_e}")
         return
 
-    split_mode     = st.session_state.get(f"split_mode_{phrase_idx}", False)
-    concat_preview = st.session_state.get(f"concat_preview_{phrase_idx}", False)
-    next_phrase    = phrases[phrase_idx + 1] if phrase_idx < len(phrases) - 1 else None
-
-    # Derive split_ms from the cycle slider before the chart renders
-    split_ms = None
-    if split_mode:
-        _split_cycle = st.session_state.get(f"split_cycle_{phrase_idx}")
-        if _split_cycle is not None:
-            try:
-                _project = st.session_state.project
-                _ph_cycles = sorted(
-                    [cy for cy in _project.assessment.cycles
-                     if phrase["start_ms"] <= cy.start_ms and cy.end_ms <= phrase["end_ms"]],
-                    key=lambda cy: cy.start_ms,
-                )
-                if _split_cycle < len(_ph_cycles):
-                    split_ms = _ph_cycles[_split_cycle].start_ms
-            except (AttributeError, KeyError, TypeError):
-                split_ms = None  # assessment not ready or phrase dict missing keys
+    # Split/Join removed for v1 — auto-scaled phrase detection handles boundaries.
+    # Fine-grained cycle editing belongs in a dedicated editor (v2).
 
     # ------------------------------------------------------------------
     # Build baseline: apply accepted transform chain to original_actions
@@ -165,28 +147,21 @@ def _detail_fragment(
     else:
         baseline_actions = original_actions
 
-    # When previewing a concat, extend win_end to cover the next phrase too
-    if concat_preview and next_phrase:
-        win_end = min(duration_ms, max(win_end, next_phrase["end_ms"] + 5_000))
-
     # ------------------------------------------------------------------
-    # Resolve pending transform (only needed when not in split/concat mode)
+    # Resolve pending transform
     # ------------------------------------------------------------------
-    if not split_mode and not concat_preview:
-        from ui.streamlit.transform_picker import get_picker_key
-        transform_key = get_picker_key(f"txpick_{phrase_idx}")
+    from ui.streamlit.transform_picker import get_picker_key
+    transform_key = get_picker_key(f"txpick_{phrase_idx}")
 
-        spec = TRANSFORM_CATALOG.get(transform_key, TRANSFORM_CATALOG["passthrough"])
+    spec = TRANSFORM_CATALOG.get(transform_key, TRANSFORM_CATALOG["passthrough"])
 
-        param_values: Dict[str, Any] = {}
-        for pk, param in spec.params.items():
-            sv = st.session_state.get(f"param_{phrase_idx}_{pk}")
-            param_values[pk] = sv if sv is not None else param.default
+    param_values: Dict[str, Any] = {}
+    for pk, param in spec.params.items():
+        sv = st.session_state.get(f"param_{phrase_idx}_{pk}")
+        param_values[pk] = sv if sv is not None else param.default
 
-        # Preview applies pending transform on top of the accepted baseline
-        # Device awareness is already applied globally on the Device tab —
-        # no per-phrase device checks needed here.
-        preview_actions = _apply_transform_to_window(baseline_actions, phrase, spec, param_values)
+    # Preview applies pending transform on top of the accepted baseline
+    preview_actions = _apply_transform_to_window(baseline_actions, phrase, spec, param_values)
 
     # ------------------------------------------------------------------
     # Layout:
@@ -243,17 +218,8 @@ def _detail_fragment(
 
     with col_content:
         _chain_label = f" ({len(_chain)} accepted)" if _chain else ""
-        if concat_preview and next_phrase:
-            combined_end_ms = next_phrase["end_ms"]
-            st.subheader(f"P{phrase_idx + 1} + P{phrase_idx + 2} — Combined preview")
-            st.caption(
-                f"Combined span: {_mts(phrase['start_ms'])} → {_mts(combined_end_ms)} "
-                f"({(combined_end_ms - phrase['start_ms']) / 1000:.1f} s)"
-            )
-        else:
-            combined_end_ms = None
-            st.subheader(f"P{phrase_idx + 1} — Baseline{_chain_label}")
-            st.caption(_phrase_description(phrase))
+        st.subheader(f"P{phrase_idx + 1} — Baseline{_chain_label}")
+        st.caption(_phrase_description(phrase))
 
         _render_chart(
             actions=baseline_actions,
@@ -263,42 +229,28 @@ def _detail_fragment(
             win_end=win_end,
             view_state=view_state,
             chart_key=f"detail_orig_{phrase_idx}_{win_start}",
-            split_ms=split_ms,
-            extra_phrase_end_ms=combined_end_ms,
         )
 
-        if not split_mode and not concat_preview:
-            st.subheader(f"Preview — {spec.name}")
-            st.caption(_phrase_description(phrase))
-            _render_chart(
-                actions=preview_actions,
-                phrases=phrases,
-                phrase_idx=phrase_idx,
-                win_start=win_start,
-                win_end=win_end,
-                view_state=view_state,
-                chart_key=f"detail_prev_{phrase_idx}_{win_start}_{transform_key}",
-            )
-            _render_preview_stats(preview_actions, phrase)
-            st.caption("*(not saved)*")
+        st.subheader(f"Preview — {spec.name}")
+        st.caption(_phrase_description(phrase))
+        _render_chart(
+            actions=preview_actions,
+            phrases=phrases,
+            phrase_idx=phrase_idx,
+            win_start=win_start,
+            win_end=win_end,
+            view_state=view_state,
+            chart_key=f"detail_prev_{phrase_idx}_{win_start}_{transform_key}",
+        )
+        _render_preview_stats(preview_actions, phrase)
+        st.caption("*(not saved)*")
 
     with col_transform:
-        # Nav always at the top — matches Pattern Editor layout
         _render_nav_buttons(phrases, phrase_idx, view_state, duration_ms)
         st.write("")
-        if concat_preview and next_phrase:
-            _render_concat_preview_controls(phrase_idx, phrase, next_phrase, view_state, duration_ms)
-        elif split_mode:
-            confirmed_split_ms = _render_split_controls(
-                phrase_idx, phrase, original_actions, view_state, duration_ms
-            )
-            if confirmed_split_ms is not None:
-                _split_phrase(phrase_idx, confirmed_split_ms, view_state, duration_ms)
-        else:
-            _render_transform_controls(phrase, bpm_threshold, phrase_idx)
-            st.write("")
-            _render_save_cancel(phrase_idx, view_state, phrases)
-            _render_edit_phrase(phrases, phrase_idx, view_state, duration_ms)
+        _render_transform_controls(phrase, bpm_threshold, phrase_idx)
+        st.write("")
+        _render_save_cancel(phrase_idx, view_state, phrases)
 
 
 # ------------------------------------------------------------------
