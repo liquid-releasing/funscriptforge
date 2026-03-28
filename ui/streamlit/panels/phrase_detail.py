@@ -759,7 +759,14 @@ def _accept_pending(phrase_idx: int) -> None:
             pk: st.session_state.get(f"param_{phrase_idx}_{pk}", p.default)
             for pk, p in TRANSFORM_CATALOG[_pending_key].params.items()
         }
-        _cur_chain.append({"transform_key": _pending_key, "param_values": _pv})
+        # Store time range for time-based matching (survives phrase re-detection)
+        _ph = phrases[phrase_idx] if phrase_idx < len(phrases) else {}
+        _cur_chain.append({
+            "transform_key": _pending_key,
+            "param_values": _pv,
+            "start_ms": _ph.get("start_ms", 0),
+            "end_ms": _ph.get("end_ms", 0),
+        })
         _changed = True
 
     if _changed:

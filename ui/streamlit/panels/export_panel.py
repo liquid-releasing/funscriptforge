@@ -292,6 +292,35 @@ def _build_plans(
     completed: List[dict] = []
     recommended: List[dict] = []
 
+    # Collect all stored transforms (keyed by old phrase index) with their time ranges
+    _all_stored_transforms = []
+    for key in st.session_state:
+        if key.startswith("phrase_transform_chain_"):
+            try:
+                old_idx = int(key.split("_")[-1])
+            except ValueError:
+                continue
+            chain = st.session_state[key]
+            non_pt = [t for t in chain if t.get("transform_key", "passthrough") != "passthrough"]
+            if non_pt:
+                # Get time range from the transform's stored metadata
+                _start = non_pt[0].get("start_ms", 0)
+                _end = non_pt[0].get("end_ms", 0)
+                # Fallback: if no time range stored, try to match from old phrases
+                if _start == 0 and _end == 0 and old_idx < len(phrases):
+                    _start = phrases[old_idx].get("start_ms", 0)
+                    _end = phrases[old_idx].get("end_ms", 0)
+                _all_stored_transforms.append({
+                    "start_ms": _start, "end_ms": _end,
+                    "chain": non_pt, "source": "Phrase Editor",
+                })
+
+    def _overlaps(a_start, a_end, b_start, b_end, min_pct=0.3):
+        """Check if two time ranges overlap by at least min_pct."""
+        overlap = max(0, min(a_end, b_end) - max(a_start, b_start))
+        shorter = min(a_end - a_start, b_end - b_start)
+        return shorter > 0 and (overlap / shorter) >= min_pct
+
     for idx, phrase in enumerate(phrases):
         old_bpm    = phrase.get("bpm", 0.0)
         old_cycles = phrase.get("cycle_count") or 0
@@ -320,21 +349,26 @@ def _build_plans(
                 entry["chain"] = chain
             return entry
 
-        # 1. Phrase Editor — accepted chain (new format)
-        _chain = st.session_state.get(f"phrase_transform_chain_{idx}", [])
-        _non_pt = [t for t in _chain if t.get("transform_key", "passthrough") != "passthrough"]
-        if _non_pt:
-            _last   = _non_pt[-1]
-            _specs  = [TRANSFORM_CATALOG.get(t["transform_key"]) for t in _non_pt]
-            _names  = [s.name if s else t["transform_key"] for s, t in zip(_specs, _non_pt)]
-            _tx_name = _names[0] if len(_names) == 1 else " → ".join(_names)
-            _entry  = _make_entry(_last["transform_key"], _last.get("param_values", {}),
-                                  "Phrase Editor", chain=_non_pt)
-            _entry["tx_name"] = _tx_name
-            completed.append(_entry)
+        # 1. Phrase Editor — match by time overlap (not index)
+        _matched = False
+        for stored in _all_stored_transforms:
+            if _overlaps(phrase["start_ms"], phrase["end_ms"],
+                        stored["start_ms"], stored["end_ms"]):
+                _last = stored["chain"][-1]
+                _specs = [TRANSFORM_CATALOG.get(t["transform_key"]) for t in stored["chain"]]
+                _names = [s.name if s else t["transform_key"] for s, t in zip(_specs, stored["chain"])]
+                _tx_name = _names[0] if len(_names) == 1 else " → ".join(_names)
+                _entry = _make_entry(_last["transform_key"], _last.get("param_values", {}),
+                                     "Phrase Editor", chain=stored["chain"])
+                _entry["tx_name"] = _tx_name
+                completed.append(_entry)
+                _matched = True
+                break
+
+        if _matched:
             continue
 
-        # 2. Pattern Editor
+        # 2. Pattern Editor — match by tag + index within tag group
         tx_key: Optional[str] = None
         param_values: dict = {}
         source: Optional[str] = None
