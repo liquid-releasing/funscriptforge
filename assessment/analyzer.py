@@ -39,6 +39,8 @@ class AnalyzerConfig:
     amplitude_tolerance: float = 0.30
     # After phrase detection, merge any phrase shorter than this into its
     # shortest neighbour.  Set to 0 to disable.
+    # NOTE: if auto_scale_phrases is True, this is auto-adjusted based on
+    # funscript duration (see _auto_scale_phrase_params).
     min_phrase_duration_ms: int = 20_000
     # During phrase detection, force a phrase boundary once the accumulated
     # duration would exceed this value even if the pattern is still uniform.
@@ -47,6 +49,10 @@ class AnalyzerConfig:
     max_phrase_duration_ms: int = 300_000  # 5 minutes
     # Flag BPM transitions whose absolute percentage change exceeds this value
     bpm_change_threshold_pct: float = 40.0
+    # Auto-scale phrase parameters based on funscript duration.
+    # Short scripts (3min) keep tight detection; long scripts (90min) use
+    # wider tolerances to avoid over-segmentation.
+    auto_scale_phrases: bool = True
 
     def __post_init__(self) -> None:
         if self.min_velocity < 0:
@@ -131,6 +137,8 @@ class FunscriptAnalyzer:
         _cb("Detecting patterns…")
         patterns = self._detect_patterns(cycles)
         _cb("Detecting phrases…")
+        if self.config.auto_scale_phrases:
+            self._auto_scale_phrase_params()
         phrases = self._detect_phrases(patterns)
         _cb("Detecting BPM transitions…")
         bpm_transitions = self._detect_bpm_transitions(phrases)
@@ -157,6 +165,40 @@ class FunscriptAnalyzer:
             phrases=phrases,
             bpm_transitions=bpm_transitions,
         )
+
+    def _auto_scale_phrase_params(self) -> None:
+        """Scale phrase detection parameters based on funscript duration.
+
+        Short scripts (3min) keep tight detection (~7-10 phrases).
+        Long scripts (90min) use wider tolerances (~15-25 phrases).
+        """
+        if not self._actions:
+            return
+
+        dur_ms = self._actions[-1]["at"] - self._actions[0]["at"]
+        dur_min = dur_ms / 60_000
+
+        # Target ~10-25 phrases regardless of duration.
+        # Formula: duration / 15 gives ~15 phrases, with floor and ceiling.
+        # 3min → 12s, 10min → 40s, 30min → 120s, 90min → 360s (capped at 180s)
+        target_phrases = 15
+        scaled_min = max(10_000, int(dur_ms / target_phrases))
+        scaled_min = min(scaled_min, 180_000)  # Cap at 3 minutes
+
+        # Scale amplitude tolerance: 0.40 base, up to 0.55 for long scripts
+        # Higher tolerance = fewer phrase splits on amplitude changes
+        if dur_min > 10:
+            scaled_amp_tol = min(0.55, 0.40 + (dur_min - 10) * 0.002)
+        else:
+            scaled_amp_tol = 0.40
+
+        # Scale max phrase duration proportionally
+        scaled_max = max(300_000, int(dur_min * 5000))  # 5s per minute
+        scaled_max = min(scaled_max, 600_000)  # Cap at 10 minutes
+
+        self.config.min_phrase_duration_ms = scaled_min
+        self.config.amplitude_tolerance = scaled_amp_tol
+        self.config.max_phrase_duration_ms = scaled_max
 
     # ------------------------------------------------------------------
     # Phase detection
