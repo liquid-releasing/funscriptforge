@@ -934,9 +934,8 @@ def _render_welcome() -> None:
 
     st.divider()
     st.caption(
-        "Tip: **Phrase detection settings** in the Phrase Selector tab control how "
-        "aggressively short phrases are merged and how sensitive the amplitude-change "
-        "detector is. Re-analyse any time after adjusting them."
+        "Tip: Phrase detection is automatic — it adapts to your funscript's length. "
+        "Use **Split** and **Join** in the phrase editor to fine-tune boundaries."
     )
 
 
@@ -984,32 +983,8 @@ def _render_phrase_selector_tab(project: Project) -> None:
     view_state = st.session_state.view_state
     assessment_dict = project.assessment.to_dict()
 
-    with st.expander("Phrase detection settings", expanded=False):
-        _dc1, _dc2 = st.columns(2)
-        _min_phrase_s = _dc1.slider(
-            "Min phrase length (s)", min_value=5, max_value=120,
-            value=st.session_state.get("min_phrase_s", 20), step=5,
-            key="min_phrase_s",
-            help="Phrases shorter than this are merged into a neighbour.",
-        )
-        _amp_sensitivity = _dc2.select_slider(
-            "Amplitude sensitivity",
-            options=["Low (0.35)", "Medium (0.30)", "High (0.25)"],
-            value=st.session_state.get("amp_sensitivity", "Medium (0.30)"),
-            key="amp_sensitivity",
-            help="How much stroke-depth change triggers a new phrase.",
-        )
-        _last_cfg = st.session_state.get("last_loaded_cfg")
-        _loaded_file = st.session_state.get("last_loaded_file", "")
-        _settings_changed = (
-            _last_cfg is not None
-            and (_min_phrase_s, _amp_sensitivity) != (_last_cfg[1], _last_cfg[2])
-        )
-        if _settings_changed:
-            st.info("Settings changed — click **Re-analyse** to apply.")
-        if st.button("Re-analyse", type="primary", key="reanalyse_btn"):
-            st.session_state.reanalyse_requested = True
-            st.rerun()
+    # Phrase detection is auto-scaled based on funscript duration.
+    # Users can fine-tune with split/join in the phrase editor.
 
     viewer_panel.render(
         project, view_state,
