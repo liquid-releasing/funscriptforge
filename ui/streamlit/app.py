@@ -570,11 +570,23 @@ def _sidebar() -> None:
 
         if file_changed and not _reanalyse_requested and _has_cache:
             try:
-                st.session_state.project = Project.from_funscript(
-                    _analyse_path,
-                    existing_assessment_path=_cached_assessment,
+                # Check if cached assessment is from old algorithm (too many phrases)
+                import json as _json_check
+                _cached_data = _json_check.loads(
+                    open(_cached_assessment, encoding="utf-8").read()
                 )
-                _used_cache = True
+                _n_cached_phrases = len(_cached_data.get("phrases", []))
+                _dur_ms = _cached_data.get("duration_ms", 0)
+                _target_max = max(25, int(_dur_ms / 60_000 / 15 * 1000 / 1000))  # rough target
+                # If cached has way too many phrases, re-analyze with new algorithm
+                if _n_cached_phrases > _target_max * 3:
+                    pass  # fall through to full analysis
+                else:
+                    st.session_state.project = Project.from_funscript(
+                        _analyse_path,
+                        existing_assessment_path=_cached_assessment,
+                    )
+                    _used_cache = True
             except Exception:
                 pass  # fall through to full analysis
 
