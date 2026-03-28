@@ -44,7 +44,7 @@ _IS_LOCAL = os.environ.get("FUNSCRIPT_FORGE_LOCAL") == "1"
 
 from ui.common.project import Project
 from ui.common.view_state import ViewState
-from ui.common.work_items import ItemType, WorkItem  # WorkItem kept for sidebar manual-add
+# WorkItem/ItemType removed — worklist replaced by visual editors + device awareness
 from ui.streamlit.panels import assessment as assessment_panel
 from ui.streamlit.panels import catalog_view as catalog_view_panel
 from ui.streamlit.panels import export_panel
@@ -495,9 +495,7 @@ def _sidebar() -> None:
 
     selected_file = os.path.basename(funscript_path)
 
-    # Detection settings live in the Phrase Selector tab; read from session state here.
-    min_phrase_s    = st.session_state.get("min_phrase_s", 20)
-    amp_sensitivity = st.session_state.get("amp_sensitivity", "Medium (0.30)")
+    # Phrase detection is auto-scaled — no user settings needed
 
     # --- Chart / transform settings ---
     with st.sidebar.expander("Chart settings"):
@@ -527,24 +525,19 @@ def _sidebar() -> None:
     st.session_state.large_funscript_threshold = int(large_funscript_threshold)
     st.session_state.bpm_threshold = float(bpm_threshold)
 
-    amp_tol_map = {"Low (0.35)": 0.35, "Medium (0.30)": 0.30, "High (0.25)": 0.25}
-
     from assessment.analyzer import AnalyzerConfig
-    analyzer_cfg = AnalyzerConfig(
-        min_phrase_duration_ms=min_phrase_s * 1000,
-        amplitude_tolerance=amp_tol_map[amp_sensitivity],
-    )
+    analyzer_cfg = AnalyzerConfig()  # Auto-scaling handles phrase detection params
+
     # Include chain path in config key so assessment re-runs after Device/Tone Accept
     _chain_path = st.session_state.get("chain_funscript_path", "")
     _effective_path = _chain_path if (_chain_path and os.path.isfile(_chain_path)) else funscript_path
-    cfg_key = (_effective_path, min_phrase_s, amp_sensitivity)
+    cfg_key = (_effective_path,)
 
     # Auto-load only when the effective file changes (chain or original);
     # settings changes require an explicit Re-analyse click so rapid slider
     # adjustments don't trigger a full re-assessment on every interaction.
     _last_cfg = st.session_state.last_loaded_cfg
-    file_changed     = _last_cfg is None or cfg_key[0] != _last_cfg[0]
-    settings_changed = not file_changed and cfg_key != _last_cfg
+    file_changed = _last_cfg is None or cfg_key != _last_cfg
 
     _reanalyse_requested = st.session_state.pop("reanalyse_requested", False)
 
