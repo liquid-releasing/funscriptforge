@@ -381,15 +381,26 @@ def _funscript_section(v: int):
     )
 
     if funscript_path and Path(funscript_path).exists():
-        data = load_funscript(funscript_path)
+        from forge_ui_components.funscript_chart.cache import ChartCache
+        cache = ChartCache.from_session_state()
+
+        if not cache.has_stage("original"):
+            # First load — show progress while parsing + rendering
+            with st.status("Loading funscript…", expanded=True) as status:
+                status.write("Reading file…")
+                data = load_funscript(funscript_path)
+                if data:
+                    actions = data.get("actions", [])
+                    status.write(f"✅ {len(actions):,} actions loaded")
+                    status.update(label=f"Rendering {len(actions):,} actions…")
+                    cache.set_stage("original", actions)
+                    status.write("✅ Chart ready")
+                    status.update(label="Funscript loaded!", state="complete", expanded=False)
+        else:
+            data = load_funscript(funscript_path)
+
         if data:
             actions = data.get("actions", [])
-            # Use chart cache — set original stage
-            from forge_ui_components.funscript_chart.cache import ChartCache
-            cache = ChartCache.from_session_state()
-            if not cache.has_stage("original"):
-                with st.spinner(f"Rendering {len(actions):,} actions…"):
-                    cache.set_stage("original", actions)
             png = cache.render_png("original", height_px=250, width_px=1400)
             if png:
                 st.image(png, use_container_width=True)
