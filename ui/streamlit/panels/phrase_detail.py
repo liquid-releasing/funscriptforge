@@ -297,7 +297,7 @@ def _detail_fragment(
         else:
             _render_transform_controls(phrase, bpm_threshold, phrase_idx)
             st.write("")
-            _render_save_cancel(phrase_idx, view_state)
+            _render_save_cancel(phrase_idx, view_state, phrases)
             _render_edit_phrase(phrases, phrase_idx, view_state, duration_ms)
 
 
@@ -745,7 +745,7 @@ def _clear_all_split_state() -> None:
 # Phrase navigation buttons
 # ------------------------------------------------------------------
 
-def _accept_pending(phrase_idx: int) -> None:
+def _accept_pending(phrase_idx: int, phrases: list = None) -> None:
     """Auto-accept any non-passthrough pending transform before navigating.
     Device awareness is handled globally on the Device tab."""
     from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
@@ -760,7 +760,7 @@ def _accept_pending(phrase_idx: int) -> None:
             for pk, p in TRANSFORM_CATALOG[_pending_key].params.items()
         }
         # Store time range for time-based matching (survives phrase re-detection)
-        _ph = phrases[phrase_idx] if phrase_idx < len(phrases) else {}
+        _ph = (phrases[phrase_idx] if phrases and phrase_idx < len(phrases) else {})
         _cur_chain.append({
             "transform_key": _pending_key,
             "param_values": _pv,
@@ -790,7 +790,7 @@ def _render_nav_buttons(phrases: list, phrase_idx: int, view_state, duration_ms:
         if st.button("⏮ Prev", key="pd_phrase_prev",
                      disabled=(phrase_idx == 0),
                      width="stretch"):
-            _accept_pending(phrase_idx)
+            _accept_pending(phrase_idx, phrases)
             _clear_all_split_state()
             _select_and_zoom(phrases[phrase_idx - 1], view_state, duration_ms)
             st.session_state["phrase_table_ver"] = st.session_state.get("phrase_table_ver", 0) + 1
@@ -800,7 +800,7 @@ def _render_nav_buttons(phrases: list, phrase_idx: int, view_state, duration_ms:
         if st.button("Next ⏭", key="pd_phrase_next",
                      disabled=(phrase_idx >= n - 1),
                      width="stretch"):
-            _accept_pending(phrase_idx)
+            _accept_pending(phrase_idx, phrases)
             _clear_all_split_state()
             _select_and_zoom(phrases[phrase_idx + 1], view_state, duration_ms)
             st.session_state["phrase_table_ver"] = st.session_state.get("phrase_table_ver", 0) + 1
@@ -810,7 +810,7 @@ def _render_nav_buttons(phrases: list, phrase_idx: int, view_state, duration_ms:
         if st.button("✓ Done", key="pd_done",
                      width="stretch", type="primary",
                      help="Save all phrase edits and return to overview"):
-            _accept_pending(phrase_idx)
+            _accept_pending(phrase_idx, phrases)
             _save_phrase_edits_to_chain(phrases)
             view_state.clear_selection()
             view_state.reset_zoom()
@@ -829,7 +829,7 @@ def _render_nav_buttons(phrases: list, phrase_idx: int, view_state, duration_ms:
 # Save / Cancel buttons
 # ------------------------------------------------------------------
 
-def _render_save_cancel(phrase_idx: int, view_state) -> None:
+def _render_save_cancel(phrase_idx: int, view_state, phrases: list = None) -> None:
     """Apply accepts current transform and lets you add another.
     Cancel discards ALL changes for this phrase (entire chain)."""
 
@@ -858,7 +858,7 @@ def _render_save_cancel(phrase_idx: int, view_state) -> None:
                 from pattern_catalog.phrase_transforms import TRANSFORM_CATALOG
                 _name = TRANSFORM_CATALOG.get(_pending_key, None)
                 st.session_state[f"_phrase_last_applied_{phrase_idx}"] = _name.name if _name else _pending_key
-            _accept_pending(phrase_idx)
+            _accept_pending(phrase_idx, phrases)
             st.rerun()
 
     _chain_count = len(st.session_state.get(f"phrase_transform_chain_{phrase_idx}", []))
@@ -929,7 +929,7 @@ def _render_edit_phrase(
             width="stretch",
         ):
             # Step 1: accept any pending transform, enter preview mode
-            _accept_pending(phrase_idx)
+            _accept_pending(phrase_idx, phrases)
             st.session_state[f"concat_preview_{phrase_idx}"] = True
             st.rerun()
 
