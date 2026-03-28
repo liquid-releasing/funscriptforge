@@ -236,9 +236,11 @@ def render():
     # CV heatmap strips (before/after groove)
     col_cv_before, col_cv_after = st.columns(2)
     with col_cv_before:
-        render_cv_strip(actions, title="Before")
+        st.caption("**Groove — before**")
+        render_cv_strip(actions, title="")
     with col_cv_after:
-        render_cv_strip(_fixed_actions, title="After groove")
+        st.caption("**Groove — after**")
+        render_cv_strip(_fixed_actions, title="")
 
     st.divider()
 
