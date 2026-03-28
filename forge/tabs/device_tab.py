@@ -151,6 +151,8 @@ def render():
 
     _saved_groove = (project or {}).get("groove", 0.35)
 
+    _device_accepted = st.session_state.get("device_accepted", False)
+
     if _already_aware and _saved_groove == 0:
         st.subheader("Device-aware")
         st.caption("Your funscript already has good variation and is within device limits.")
@@ -160,13 +162,20 @@ def render():
         _groove = 0.0
         _fixed_actions = actions
         _fix_stats = {"humanize": {}, "clamp": {}}
+    elif _device_accepted and cache.has_stage("device"):
+        # Already accepted and cached — skip computation, just render from cache
+        _groove = _saved_groove
+        _fixed_actions = actions  # placeholder, not used for rendering
+        _fix_stats = {"humanize": st.session_state.get("_device_h_stats", {}),
+                      "clamp": st.session_state.get("_device_c_stats", {})}
     else:
-        # Apply full device awareness (humanize + backstop)
+        # First time or groove changed — compute device awareness
         _groove = _saved_groove
         _fixed_actions, _fix_stats = _apply_da(actions, limits, groove=_groove)
-        # Only set device stage if not already cached (avoids wiping tone/phrases)
-        if not cache.has_stage("device"):
-            cache.set_stage("device", _fixed_actions)
+        cache.set_stage("device", _fixed_actions)
+        # Cache stats for future reruns
+        st.session_state["_device_h_stats"] = _fix_stats.get("humanize", {})
+        st.session_state["_device_c_stats"] = _fix_stats.get("clamp", {})
 
         st.subheader("Device-aware")
         col_before, col_after = st.columns(2)
