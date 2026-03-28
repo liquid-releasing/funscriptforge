@@ -766,16 +766,39 @@ def _apply_tone(tone_name: str):
                 cache = ChartCache.from_session_state()
                 cache.set_stage("tone", toned_actions)
 
-                # Cache phrase bands for Phrases tab
-                _assess_path = Path(project.get("output_folder", "")) / "_assessment.json"
-                if _assess_path.exists():
-                    import json as _json
-                    _assess_dict = _json.loads(_assess_path.read_text(encoding="utf-8"))
-                    cache.set_bands(compute_annotation_bands(_assess_dict))
+                # Re-run phrase detection on toned funscript
+                status.update(label="Detecting phrases on toned funscript…")
+                import tempfile, json as _json
+                _tmp = Path(tempfile.mkdtemp()) / "toned.funscript"
+                _tmp.write_text(_json.dumps(toned_data), encoding="utf-8")
+                from assessment.analyzer import FunscriptAnalyzer
+                _analyzer = FunscriptAnalyzer()
+                _analyzer.load(str(_tmp))
+                _toned_result = _analyzer.analyze()
+                _tmp.unlink()
 
-                # Pre-render the PNG with bands for Phrases tab (instant on next visit)
+                # Save updated assessment
+                _assess_path = Path(project.get("output_folder", "")) / "_assessment.json"
+                _assess_dict = _toned_result.to_dict()
+                _assess_path.write_text(_json.dumps(_assess_dict, indent=2), encoding="utf-8")
+
+                # Update project with new assessment
+                from ui.common.project import Project
+                st.session_state.project = Project.from_funscript(
+                    str(_tmp) if _tmp.exists() else chain_path,
+                    existing_assessment_path=str(_assess_path),
+                )
+                status.write(f"✅ {len(_toned_result.phrases)} phrases detected on toned version")
+
+                # Cache bands + pre-render PNG
+                cache.set_bands(compute_annotation_bands(_assess_dict))
                 cache.render_png("tone", with_bands=True, height_px=380, width_px=1600, show_labels=True)
                 status.write(f"✅ Chart cached: {len(toned_actions):,} actions")
+
+                # Clear old phrase transforms (they reference old phrase indices)
+                for k in list(st.session_state.keys()):
+                    if k.startswith("phrase_transform_chain_") or k.startswith("_phrase_"):
+                        st.session_state.pop(k, None)
 
         status.update(label="Tone applied!", state="complete", expanded=False)
 
