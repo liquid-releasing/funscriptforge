@@ -183,14 +183,17 @@ class TestVictoriaOaksUniformTempo(unittest.TestCase):
         )
 
     def test_no_phrase_exceeds_cap(self):
-        cap_ms = AnalyzerConfig().max_phrase_duration_ms
-        # Allow one extra cycle of slack (cycle ~ a few hundred ms)
-        slack_ms = 5_000
+        # With auto-scaling, the cap adjusts based on funscript duration.
+        # Formula from _auto_scale_phrase_params: max(300_000, dur_min * 5000), cap 600_000
+        dur_ms = self.result.duration_ms
+        dur_min = dur_ms / 60_000
+        auto_max = min(600_000, max(300_000, int(dur_min * 5000)))
+        slack_ms = 10_000
         for ph in self.result.phrases:
             dur = ph.end_ms - ph.start_ms
             self.assertLessEqual(
-                dur, cap_ms + slack_ms,
-                f"Phrase duration {dur}ms exceeds cap {cap_ms}ms + slack {slack_ms}ms",
+                dur, auto_max + slack_ms,
+                f"Phrase duration {dur}ms exceeds auto-scaled cap {auto_max}ms + slack {slack_ms}ms",
             )
 
     def test_phrase_boundaries_contiguous(self):

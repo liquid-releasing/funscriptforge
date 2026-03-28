@@ -218,7 +218,11 @@ class TestUniformTempoSegmentation(unittest.TestCase):
         return path
 
     def _analyze(self, path: str, max_dur: int, min_dur: int = 0) -> "AssessmentResult":
-        cfg = AnalyzerConfig(max_phrase_duration_ms=max_dur, min_phrase_duration_ms=min_dur)
+        cfg = AnalyzerConfig(
+            max_phrase_duration_ms=max_dur,
+            min_phrase_duration_ms=min_dur,
+            auto_scale_phrases=False,  # Tests use explicit params
+        )
         a = FunscriptAnalyzer(config=cfg)
         a.load(path)
         return a.analyze()
