@@ -977,6 +977,11 @@ def _render_phrase_tab(project: Project) -> None:
             # Bump version so the widget reinitialises with no selection next render.
             st.session_state["phrase_table_ver"] = _tver + 1
 
+    # Safety net: Done button sets this flag to guarantee return to selector
+    if st.session_state.pop("_force_phrase_selector", False):
+        view_state.clear_selection()
+        view_state.reset_zoom()
+
     if view_state.has_selection():
         _render_phrase_editor_tab(project)
     else:
@@ -1079,6 +1084,7 @@ def _render_phrase_editor_tab(project: Project) -> None:
     if st.button("✕  Close and return to Phrase Selector", key="editor_close"):
         view_state.clear_selection()
         view_state.reset_zoom()
+        st.session_state["_force_phrase_selector"] = True
         st.session_state["phrase_table_ver"] = st.session_state.get("phrase_table_ver", 0) + 1
         st.rerun()
 

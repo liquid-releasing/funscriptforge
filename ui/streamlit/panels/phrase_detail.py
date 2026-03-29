@@ -231,19 +231,25 @@ def _detail_fragment(
             chart_key=f"detail_orig_{phrase_idx}_{win_start}",
         )
 
-        st.subheader(f"Preview — {spec.name}")
-        st.caption(_phrase_description(phrase))
-        _render_chart(
-            actions=preview_actions,
-            phrases=phrases,
-            phrase_idx=phrase_idx,
-            win_start=win_start,
-            win_end=win_end,
-            view_state=view_state,
-            chart_key=f"detail_prev_{phrase_idx}_{win_start}_{transform_key}",
-        )
-        _render_preview_stats(preview_actions, phrase)
-        st.caption("*(not saved)*")
+        if transform_key == "passthrough" and _chain:
+            st.info(
+                f"**{len(_chain)} transform{'s' if len(_chain) > 1 else ''}** applied to baseline. "
+                "Select another transform to preview additional changes, or click **Done** to finish."
+            )
+        else:
+            st.subheader(f"Preview — {spec.name}")
+            st.caption(_phrase_description(phrase))
+            _render_chart(
+                actions=preview_actions,
+                phrases=phrases,
+                phrase_idx=phrase_idx,
+                win_start=win_start,
+                win_end=win_end,
+                view_state=view_state,
+                chart_key=f"detail_prev_{phrase_idx}_{win_start}_{transform_key}",
+            )
+            _render_preview_stats(preview_actions, phrase)
+            st.caption("*(not saved)*")
 
     with col_transform:
         _render_nav_buttons(phrases, phrase_idx, view_state, duration_ms)
@@ -766,6 +772,8 @@ def _render_nav_buttons(phrases: list, phrase_idx: int, view_state, duration_ms:
             _save_phrase_edits_to_chain(phrases)
             view_state.clear_selection()
             view_state.reset_zoom()
+            # Flag forces selector view on next render (safety net)
+            st.session_state["_force_phrase_selector"] = True
             st.session_state["phrase_table_ver"] = st.session_state.get("phrase_table_ver", 0) + 1
             st.session_state.phrase_sel_chart_instance = (
                 st.session_state.get("phrase_sel_chart_instance", 0) + 1
