@@ -1,0 +1,2186 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The professional post-processor for haptic script creators.">
+      
+      
+      
+        <link rel="canonical" href="https://help.funscriptforge.com/ARCHITECTURE_stim_and_events/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Stim Tab & Enhance Tab Architecture - FunscriptForge</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#stim-tab-enhance-tab-architecture" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="FunscriptForge" class="md-header__button md-logo" aria-label="FunscriptForge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            FunscriptForge
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Stim Tab &amp; Enhance Tab Architecture
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/liquid-releasing/funscriptforge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    liquid-releasing/funscriptforge
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../overview/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Overview
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../getting-started/install/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../concepts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Concepts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../guide/phrase-editor/" class="md-tabs__link">
+          
+  
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/cli/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../troubleshooting/" class="md-tabs__link">
+          
+  
+  
+  Troubleshooting
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="FunscriptForge" class="md-nav__button md-logo" aria-label="FunscriptForge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    FunscriptForge
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/liquid-releasing/funscriptforge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    liquid-releasing/funscriptforge
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/forge-your-first-funscript/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Forge Your First Funscript
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/phrase-editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Phrase Editor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/pattern-editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pattern Editor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/media-player/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Media Player
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/transforms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transforms
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/behavioral-tags/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Behavioral Tags
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/device-safety/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Device Safety
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Definitions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Troubleshooting
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/loading-a-script/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Loading a Script
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/media-player/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Media Player
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/transforms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transforms
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-users-should-think-about-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How users should think about it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#relationship-to-funscript-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Relationship to funscript-tools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stim-tab-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stim Tab Design
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stim Tab Design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#device-selector" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Device Selector
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#character-config-mapping" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Character → Config Mapping
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#preview-functions-no-io" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preview Functions (no I/O)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enhancement-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enhancement System
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Enhancement System">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-enhancements-are" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What enhancements are
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#processing-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Processing order
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enhancements-ship-with-funscriptforge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enhancements (ship with FunScriptForge)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-these-dont-duplicate-tone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why these don't duplicate Tone
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#advanced-event-library-gateway-to-funscript-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced event library (gateway to funscript-tools)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-eventsyml-is-an-export-artifact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The .events.yml is an export artifact
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#event-catalog-visualization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Event catalog visualization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#event-axis-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Event axis coverage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enhance-tab-new-tab-after-stim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enhance Tab (new tab, after Stim)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Enhance Tab (new tab, after Stim)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layout-concept" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layout concept
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enhancement-suggestions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enhancement suggestions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#export-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Export integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forgegen-integration-future" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        forgegen integration (future)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#processing-time-budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Processing Time Budget
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation Plan
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Implementation Plan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-1-stim-tab-refinement-current" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 1: Stim tab refinement (current)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-2-event-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 2: Event catalog
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-3-enhance-tab-one-evening-session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3: Enhance tab (one evening session)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-4-forgegen-integration-future" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 4: forgegen integration (future)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="stim-tab-enhance-tab-architecture">Stim Tab &amp; Enhance Tab Architecture<a class="headerlink" href="#stim-tab-enhance-tab-architecture" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>FunScriptForge wraps edger's funscript-tools workflow and makes it approachable.
+We are the gateway into more sophisticated work that funscript-tools enables.</p>
+</blockquote>
+<h2 id="how-users-should-think-about-it">How users should think about it<a class="headerlink" href="#how-users-should-think-about-it" title="Permanent link">&para;</a></h2>
+<p>Your funscript describes <strong>what happens</strong> — strokes, speed, rhythm.</p>
+<p>The <strong>Stim tab</strong> decides <strong>how that feels</strong> — where the sensation moves,
+how sharp or gentle, how the intensity builds. Pick a style, see a preview,
+done.</p>
+<p>The <strong>Enhance tab</strong> adds <strong>moments</strong> — an edge here, a texture change there.
+These enhance what's already playing. They don't replace the funscript,
+they layer on top of it at the phrases you choose.</p>
+<p>That's it: <strong>what happens → how it feels → special moments.</strong></p>
+<p>The Enhance tab lets casual users implement feels that previously required
+hand-editing YAML, understanding signal processing, or reverse-engineering
+hardware protocols. The complexity behind Edge, Throb, Deny — that's real
+engineering by edger and AquariumParrot. But the user just sees a name,
+a suggestion, and an Accept button.</p>
+<p>Everything below is implementation detail.</p>
+<hr />
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>The Stim tab and Enhance tab are the estim-specific layers of FunScriptForge.
+They sit after the funscript chain (Original → Device → Tone → Phrases) and
+control how the funscript translates into multi-channel electrical stimulation.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Our chain:   Original → Device → Tone → Phrases
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>                                           ↓
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Stim tab:    User picks algorithm + creative knobs (global settings)
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>                                           ↓
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Enhance tab:  User assigns events to phrases (per-phrase channel effects)
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>                                           ↓
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>Export:      cli.process() → 10 channel files → process_events() enhances them → final output
+</code></pre></div>
+<h2 id="relationship-to-funscript-tools">Relationship to funscript-tools<a class="headerlink" href="#relationship-to-funscript-tools" title="Permanent link">&para;</a></h2>
+<p>We wrap edger's exposed workflow — not cherry-picked parameters:</p>
+<table>
+<thead>
+<tr>
+<th>edger's workflow step</th>
+<th>FunScriptForge surface</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Load funscript</td>
+<td><strong>Project tab</strong> (already done)</td>
+</tr>
+<tr>
+<td>Configure (algorithm, freq, pulse, volume)</td>
+<td><strong>Stim tab</strong> — our UI over his config</td>
+</tr>
+<tr>
+<td>Process (generate output files)</td>
+<td><strong>Export</strong> — calls <code>cli.process()</code></td>
+</tr>
+<tr>
+<td>Apply custom events at timecodes</td>
+<td><strong>Enhance tab</strong> — our phrase editor generates <code>.events.yml</code></td>
+</tr>
+</tbody>
+</table>
+<p>Credit where due: funscript-tools is edger's work. The MCB and Clutch event
+libraries are reverse-engineered by AquariumParrot from their respective
+SuperCollider scripts. We build the usability layer.</p>
+<h2 id="stim-tab-design">Stim Tab Design<a class="headerlink" href="#stim-tab-design" title="Permanent link">&para;</a></h2>
+<h3 id="purpose">Purpose<a class="headerlink" href="#purpose" title="Permanent link">&para;</a></h3>
+<p>Global estim configuration. User makes three creative decisions that control
+how the funscript maps to electrical stimulation channels.</p>
+<h3 id="layout">Layout<a class="headerlink" href="#layout" title="Permanent link">&para;</a></h3>
+<p><strong>Top:</strong> Character cards (Gentle, Reactive, Scene Builder, Unpredictable, Balanced)
+— same as today. Select one to set the algorithm preset.</p>
+<p><strong>Middle:</strong> Sliders with live matplotlib preview</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>┌──────────────────────┬─────────────────────────────────┐
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>│                      │                                 │
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│   [Matplotlib        │   Slider: Sweep width           │
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│    preview with      │   ─────────●──────────          │
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>│    fixed 0-1 axes]   │                                 │
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>│                      │   Slider: Build speed            │
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│   Updates live as    │   ──────────────●─────          │
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>│   sliders move.      │                                 │
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>│   User sees the      │   Slider: ...                   │
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>│   delta.             │                                 │
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>│                      │                                 │
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>└──────────────────────┴─────────────────────────────────┘
+</code></pre></div>
+<p>Key: Matplotlib on the LEFT with fixed x/y axes so the user can see how much
+each slider changes the output. Replaces Plotly path chart.</p>
+<p><strong>Bottom:</strong> Device selector → expected output files</p>
+<h3 id="device-selector">Device Selector<a class="headerlink" href="#device-selector" title="Permanent link">&para;</a></h3>
+<p>User picks their device target. This determines which output files get generated:</p>
+<table>
+<thead>
+<tr>
+<th>Device target</th>
+<th>Output files</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>2-channel (2B, legacy)</strong></td>
+<td>alpha, beta</td>
+<td>18 seconds to generate</td>
+</tr>
+<tr>
+<td><strong>3-phase (stereo stim)</strong></td>
+<td>alpha, beta, prostate variants, frequency, pulse_frequency, pulse_width, pulse_rise, volume, volume-prostate (10 files)</td>
+<td>2-3 minutes. Default for most users.</td>
+</tr>
+<tr>
+<td><strong>4-phase (FOC, experimental)</strong></td>
+<td>All 3-phase + E1-E4 motion axes (14 files)</td>
+<td>Several minutes. New FOC hardware only.</td>
+</tr>
+</tbody>
+</table>
+<p>Each device bucket shows its expected output file list so the user knows
+what they'll get before committing.</p>
+<blockquote>
+<p><strong>Open question:</strong> How does restim consume these files per device type?
+Must test before locking device buckets.</p>
+</blockquote>
+<h3 id="character-config-mapping">Character → Config Mapping<a class="headerlink" href="#character-config-mapping" title="Permanent link">&para;</a></h3>
+<p>Characters are presets over funscript-tools config. Each maps to:
+- <code>alpha_beta_generation.algorithm</code> (circular, top-left-right, top-right-left, restim-original)
+- Frequency blend ratios (<code>ramp_combine_ratio</code>, <code>pulse_combine_ratio</code>)
+- Pulse shape (<code>pulse_width_min/max</code>, <code>pulse_rise_min/max</code>)
+- Points per second, speed threshold, direction change probability</p>
+<p>Power users expand to see the underlying config. Defaults handle 80% of cases.</p>
+<h3 id="preview-functions-no-io">Preview Functions (no I/O)<a class="headerlink" href="#preview-functions-no-io" title="Permanent link">&para;</a></h3>
+<p>funscript-tools exposes three preview functions callable without processing:
+- <code>cli.preview_electrode_path()</code> — algorithm path visualization
+- <code>cli.preview_frequency_blend()</code> — frequency blending strategy
+- <code>cli.preview_pulse_shape()</code> — pulse characteristics</p>
+<p>These power the live matplotlib previews on the Stim tab.</p>
+<h2 id="enhancement-system">Enhancement System<a class="headerlink" href="#enhancement-system" title="Permanent link">&para;</a></h2>
+<h3 id="what-enhancements-are">What enhancements are<a class="headerlink" href="#what-enhancements-are" title="Permanent link">&para;</a></h3>
+<p>Enhancements are <strong>composable, multi-axis effects</strong> applied to the generated
+output channel files at specific timecodes. They are NOT funscript transforms
+— they operate on alpha, beta, volume, pulse_frequency, pulse_width, and
+frequency channels AFTER <code>cli.process()</code> generates them.</p>
+<p>Each event is a sequence of operations:
+- <code>apply_linear_change</code> — linear ramp on an axis (with ramp_in/ramp_out)
+- <code>apply_modulation</code> — sinusoidal/waveform modulation on an axis</p>
+<p>Events don't rebuild the funscript — they <strong>enhance</strong> it. The baseline channels
+carry the funscript's intent; events layer additional sensation on top
+(additive mode is the default for most events).</p>
+<p>Events are <strong>composable</strong>: multiple events at the same timecode hit different
+axes. Edge builds tension on volume/pulse, freq_shift changes texture,
+pulse_wobble changes feel — all stackable.</p>
+<h3 id="processing-order">Processing order<a class="headerlink" href="#processing-order" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>cli.process()        → generates baseline channel files
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>process_events()     → modifies those files at phrase timecodes
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>                       (reads .events.yml, applies to channel .funscript files)
+</code></pre></div>
+<p>Sequential, not separate. Events enhance the generated channels — they layer
+on top of the baseline, they don't replace it.</p>
+<h3 id="enhancements-ship-with-funscriptforge">Enhancements (ship with FunScriptForge)<a class="headerlink" href="#enhancements-ship-with-funscriptforge" title="Permanent link">&para;</a></h3>
+<p>Twelve enhancements ship with FunScriptForge. These are NOT transforms —
+Tone shapes the funscript, Enhancements layer sensation onto the output
+channels. They operate on completely different things and never conflict.</p>
+<table>
+<thead>
+<tr>
+<th>Enhancement</th>
+<th>Source event</th>
+<th>What it does to the channels</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Edge</strong></td>
+<td><code>edge</code></td>
+<td>Tension build — pulse_freq ramp + volume buzz + pulse_width modulation</td>
+</tr>
+<tr>
+<td><strong>Ruin</strong></td>
+<td><code>ruin</code></td>
+<td>Volume drops away, slow recovery — creates a hole</td>
+</tr>
+<tr>
+<td><strong>Tranquil</strong></td>
+<td><code>tranquil</code></td>
+<td>Gentle volume oscillation — a breath</td>
+</tr>
+<tr>
+<td><strong>Tease</strong></td>
+<td><code>mcb_tease</code></td>
+<td>Low, slow oscillation on volume</td>
+</tr>
+<tr>
+<td><strong>Throb</strong></td>
+<td><code>mcb_throb</code></td>
+<td>Pulsating rhythm on volume</td>
+</tr>
+<tr>
+<td><strong>Deny</strong></td>
+<td><code>mcb_denial</code></td>
+<td>Pulls back volume + locks pulse rate — creates contrast</td>
+</tr>
+<tr>
+<td><strong>Intensity Build</strong></td>
+<td><code>mcb_intensity_build</code></td>
+<td>Linear volume ramp up</td>
+</tr>
+<tr>
+<td><strong>Release</strong></td>
+<td><code>mcb_release</code></td>
+<td>Gradual power reduction</td>
+</tr>
+<tr>
+<td><strong>Calm</strong></td>
+<td><code>mcb_calm</code></td>
+<td>Very slow sway, slightly below baseline</td>
+</tr>
+<tr>
+<td><strong>Shift Up</strong></td>
+<td><code>clutch_freq_shift_up</code></td>
+<td>Carrier frequency jump — texture change</td>
+</tr>
+<tr>
+<td><strong>Shift Down</strong></td>
+<td><code>clutch_freq_shift_down</code></td>
+<td>Carrier frequency drop — opposite texture</td>
+</tr>
+<tr>
+<td><strong>Wobble</strong></td>
+<td><code>clutch_pulse_wobble</code></td>
+<td>Pulse width variation — tactile texture</td>
+</tr>
+</tbody>
+</table>
+<h3 id="why-these-dont-duplicate-tone">Why these don't duplicate Tone<a class="headerlink" href="#why-these-dont-duplicate-tone" title="Permanent link">&para;</a></h3>
+<p>Tone operates on the <strong>funscript</strong> (position data, timing, rhythm).
+Enhancements operate on the <strong>output channels</strong> (volume, pulse_frequency,
+frequency, pulse_width, alpha, beta). Different layers entirely.</p>
+<p>A phrase can have Tone "Gentle" AND Enhancement "Edge" — Tone shapes the
+stroke pattern, Edge layers tension onto the electrical channels. No conflict.</p>
+<h3 id="advanced-event-library-gateway-to-funscript-tools">Advanced event library (gateway to funscript-tools)<a class="headerlink" href="#advanced-event-library-gateway-to-funscript-tools" title="Permanent link">&para;</a></h3>
+<p>The full catalog (30+ events including MCB and Clutch libraries by
+AquariumParrot) lives in funscript-tools. Power users can access them
+through edger's Custom Event Builder:</p>
+<blockquote>
+<p>"Want more enhancements? funscript-tools has 30+ events including
+reverse-engineered effects from MCB and Clutch hardware.
+[Link to funscript-tools]"</p>
+</blockquote>
+<p>We are the gateway. Power users graduate to the full toolkit.</p>
+<h3 id="the-eventsyml-is-an-export-artifact">The <code>.events.yml</code> is an export artifact<a class="headerlink" href="#the-eventsyml-is-an-export-artifact" title="Permanent link">&para;</a></h3>
+<p>We export the generated <code>.events.yml</code> alongside the channel files in the
+output folder. It's human-readable YAML. The user can:</p>
+<ol>
+<li><strong>Edit by hand</strong> — tweak timing, swap events, adjust params</li>
+<li><strong>Open in edger's Custom Event Builder</strong> — full visual editor with
+   access to all 30+ events, parameter controls, timeline view</li>
+<li><strong>Re-run <code>process_events()</code></strong> — apply their changes without re-exporting</li>
+</ol>
+<p>This is the graduation path. We make it easy, the YAML makes it portable,
+edger's tools make it powerful. The user's work isn't locked in our UI.</p>
+<h3 id="event-catalog-visualization">Event catalog visualization<a class="headerlink" href="#event-catalog-visualization" title="Permanent link">&para;</a></h3>
+<p>Each event is deterministic math — <code>apply_linear_change</code> and <code>apply_modulation</code>
+with known parameters. We render previews directly from the YAML definitions
+without touching any funscript data.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>┌─────────────────────────────────────────┐
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>│  Edge                                   │
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>│  &quot;Builds tension across multiple        │
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>│   channels simultaneously&quot;              │
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>│                                         │
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>│  pulse_freq   ╱‾‾‾‾‾‾‾‾‾‾‾             │
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>│  volume       ∿∿∿∿∿∿∿∿∿∿∿∿             │
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>│  pulse_width  ∿∿∿∿∿∿∿∿∿∿∿∿             │
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>│                                         │
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>│  Duration: 15s    Mode: additive        │
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>│  Axes: pulse_frequency, volume,         │
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>│        volume-prostate, pulse_width     │
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>└─────────────────────────────────────────┘
+</code></pre></div>
+<p>Each catalog card shows:
+- <strong>Name + description</strong> — what it feels like
+- <strong>Matplotlib mini-charts</strong> per axis it touches (fixed x = 0 to duration, fixed y = 0 to 1)
+- <strong>Duration and mode</strong> (additive vs overwrite)
+- <strong>Axes affected</strong> — so user knows what channels change</p>
+<p>Previews generate automatically from YAML. If edger adds a new event, the
+preview renders without code changes.</p>
+<h3 id="event-axis-coverage">Event axis coverage<a class="headerlink" href="#event-axis-coverage" title="Permanent link">&para;</a></h3>
+<p>No single event is comprehensive — they're surgical by design:</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>pulse_freq</th>
+<th>volume</th>
+<th>alpha</th>
+<th>beta</th>
+<th>frequency</th>
+<th>pulse_width</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>edge</td>
+<td>X</td>
+<td>X</td>
+<td></td>
+<td></td>
+<td></td>
+<td>X</td>
+</tr>
+<tr>
+<td>freq_shift</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>X</td>
+<td></td>
+</tr>
+<tr>
+<td>pulse_wobble</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td>X</td>
+</tr>
+<tr>
+<td>mcb_edge_ce</td>
+<td>X</td>
+<td>X</td>
+<td>X</td>
+<td>X</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>This is the composability model. Stack events to cover more axes.</p>
+<h2 id="enhance-tab-new-tab-after-stim">Enhance Tab (new tab, after Stim)<a class="headerlink" href="#enhance-tab-new-tab-after-stim" title="Permanent link">&para;</a></h2>
+<h3 id="purpose_1">Purpose<a class="headerlink" href="#purpose_1" title="Permanent link">&para;</a></h3>
+<p>Per-phrase event assignment. The user sees their phrases and picks which
+events to apply to each one.</p>
+<h3 id="layout-concept">Layout concept<a class="headerlink" href="#layout-concept" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>┌─────────────────────────────────────────────────────────┐
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>│  [Full funscript visualization with phrase boundaries]  │
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>├────────┬──────────┬───────────┬──────────────┬──────────┤
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│ Phrase │ Time     │ Duration  │ Event        │ Preview  │
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>├────────┼──────────┼───────────┼──────────────┼──────────┤
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>│ 1      │ 0:00     │ 45s       │ —            │          │
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>│ 2      │ 0:45     │ 1:10      │ Edge         │ [mini]   │
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>│ 3      │ 1:55     │ 0:30      │ —            │          │
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│ 4      │ 2:25     │ 1:05      │ Freq Shift ↑ │ [mini]   │
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>│ ...    │          │           │              │          │
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>└────────┴──────────┴───────────┴──────────────┴──────────┘
+</code></pre></div>
+<ul>
+<li>Funscript on top for spatial reference</li>
+<li>Table of phrases with suggested enhancements pre-filled</li>
+<li>Mini preview renders per enhancement</li>
+<li>User reviews, tweaks if they want, clicks <strong>Accept</strong></li>
+<li>Accept bakes selections into export — generates <code>.events.yml</code> automatically</li>
+<li>No sliders for v1 — defaults are tuned</li>
+<li>Duration is always <code>phrase.end_ms - phrase.start_ms</code> — the enhancement fills the phrase</li>
+<li>"— " (blank) = no enhancement, phrase passes through unchanged</li>
+<li>Near-zero effort: open tab, glance, Accept</li>
+</ul>
+<h3 id="enhancement-suggestions">Enhancement suggestions<a class="headerlink" href="#enhancement-suggestions" title="Permanent link">&para;</a></h3>
+<p>We already analyze each phrase (pace, intensity, arc shape). The suggestion
+engine recommends enhancements that amplify what the funscript is already doing:</p>
+<table>
+<thead>
+<tr>
+<th>Phrase pattern</th>
+<th>Suggested enhancement</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>High energy, trending up</td>
+<td><strong>Edge</strong> or <strong>Intensity Build</strong></td>
+<td>Amplify the climax</td>
+</tr>
+<tr>
+<td>Sudden drop after peak</td>
+<td><strong>Ruin</strong> or <strong>Release</strong></td>
+<td>Punctuate the comedown</td>
+</tr>
+<tr>
+<td>Slow, low energy</td>
+<td><strong>Tranquil</strong> or <strong>Calm</strong></td>
+<td>Breathe with the pause</td>
+</tr>
+<tr>
+<td>Long steady plateau</td>
+<td><strong>Wobble</strong> or <strong>Throb</strong></td>
+<td>Add interest to flat sections</td>
+</tr>
+<tr>
+<td>Mood/texture change</td>
+<td><strong>Shift Up</strong> or <strong>Shift Down</strong></td>
+<td>Mark the transition</td>
+</tr>
+<tr>
+<td>Teasing, variable pace</td>
+<td><strong>Tease</strong></td>
+<td>Match the playfulness</td>
+</tr>
+<tr>
+<td>Sharp contrast moment</td>
+<td><strong>Deny</strong></td>
+<td>Heighten the contrast</td>
+</tr>
+</tbody>
+</table>
+<p>The suggestion appears as a subtle hint next to each phrase row.
+User can accept, pick a different one, or leave blank. Same pattern as
+Tone suggestions — analyze, recommend, let the user decide.</p>
+<h3 id="export-integration">Export integration<a class="headerlink" href="#export-integration" title="Permanent link">&para;</a></h3>
+<p>At export time, we generate the <code>.events.yml</code> from phrase assignments:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">events</span><span class="p">:</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">45000</span><span class="w">        </span><span class="c1"># phrase 2 start_ms</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">edge</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nt">params</span><span class="p">:</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">70000</span><span class="w">  </span><span class="c1"># phrase 2 end_ms - start_ms</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">145000</span><span class="w">       </span><span class="c1"># phrase 4 start_ms</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">clutch_freq_shift_up</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">    </span><span class="nt">params</span><span class="p">:</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">65000</span>
+</code></pre></div>
+<p>Then:
+1. <code>cli.process()</code> — generates 10 channel files from Stim config
+2. <code>process_events()</code> — applies events from generated <code>.events.yml</code>
+3. Output folder has final files ready for restim</p>
+<h3 id="forgegen-integration-future">forgegen integration (future)<a class="headerlink" href="#forgegen-integration-future" title="Permanent link">&para;</a></h3>
+<p>The event library is the content generation seed for forgegen:
+- Beat detection says "climax at 3:42" → assign <code>edge</code>
+- Energy drops at 5:10 → assign nothing (let baseline carry)
+- Scene texture change at 7:00 → assign <code>clutch_freq_shift_up</code></p>
+<p>Three layers, one catalog:
+1. <strong>FunScriptForge</strong> (manual) — user picks events, assigns to phrases
+2. <strong>forgegen</strong> (auto) — algorithm picks events based on analysis
+3. <strong>funscript-tools</strong> (engine) — executes them all via <code>process_events()</code></p>
+<h2 id="processing-time-budget">Processing Time Budget<a class="headerlink" href="#processing-time-budget" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Victoria Oaks benchmark</th>
+<th>When it runs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stim preview</td>
+<td>Instant</td>
+<td>Stim tab (preview functions, no I/O)</td>
+</tr>
+<tr>
+<td>2D generation</td>
+<td>~18 seconds</td>
+<td>Export (alpha + beta only)</td>
+</tr>
+<tr>
+<td>3-phase generation</td>
+<td>2-3 minutes</td>
+<td>Export (10 files)</td>
+</tr>
+<tr>
+<td>Event application</td>
+<td>Seconds</td>
+<td>Export (after generation)</td>
+</tr>
+</tbody>
+</table>
+<p>Stim tab is interactive. Export is async with progress bar.</p>
+<h2 id="implementation-plan">Implementation Plan<a class="headerlink" href="#implementation-plan" title="Permanent link">&para;</a></h2>
+<h3 id="phase-1-stim-tab-refinement-current">Phase 1: Stim tab refinement (current)<a class="headerlink" href="#phase-1-stim-tab-refinement-current" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Replace Plotly path chart with matplotlib (fixed axes, live update)</li>
+<li>[ ] Add device selector with expected output file list</li>
+<li>[ ] Wire <code>cli.preview_*()</code> functions for live previews</li>
+<li>[ ] Test restim device consumption to validate device buckets</li>
+</ul>
+<h3 id="phase-2-event-catalog">Phase 2: Event catalog<a class="headerlink" href="#phase-2-event-catalog" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Parse <code>config.event_definitions.yml</code> for starter events (edge, freq_shift, pulse_wobble)</li>
+<li>[ ] Render matplotlib preview cards from YAML definitions</li>
+<li>[ ] Build event catalog component (reusable)</li>
+</ul>
+<h3 id="phase-3-enhance-tab-one-evening-session">Phase 3: Enhance tab (one evening session)<a class="headerlink" href="#phase-3-enhance-tab-one-evening-session" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Parse phrase analysis → auto-suggest enhancements</li>
+<li>[ ] Phrase table with suggestions pre-filled + dropdown override</li>
+<li>[ ] Accept writes selections to session state</li>
+<li>[ ] Export generates <code>.events.yml</code> from accepted selections</li>
+<li>[ ] Wire into export pipeline: <code>cli.process()</code> then <code>process_events()</code></li>
+<li>No sliders. No parameter UI. Defaults from YAML. Table + Accept.</li>
+</ul>
+<h3 id="phase-4-forgegen-integration-future">Phase 4: forgegen integration (future)<a class="headerlink" href="#phase-4-forgegen-integration-future" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Auto-assign events based on scene analysis</li>
+<li>[ ] Suggestion engine: "this phrase looks like a climax → try Edge?"</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      &copy; 2026 Liquid Releasing. Licensed under the MIT License.
+    </div>
+  
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/liquid-releasing/funscriptforge" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
