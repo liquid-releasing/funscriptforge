@@ -292,88 +292,135 @@ Point-in-time enchantment placement. The user watches the video within a
 phrase, stops at the moment something happens, and drops an enchantment
 on that exact timecode. Enchantments are moments, not phrase-wide blankets.
 
+This feature is about micro-updates within a phrase — not about the full
+funscript. The UI is scoped tight to keep focus.
+
 ### Layout
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  [Phrase selector]  ◄ Phrase 3 of 20 ►                      │
-├─────────────────────────────────────────────────────────────┤
-│  [Funscript waveform — scoped to selected phrase]           │
-├─────────────────────────────────┬───────────────────────────┤
-│   Editing Phrase 3                                          │
-│   Tone: Tease | Transforms: Halve, Normalize                │
-│   Stim: Reactive                                            │
-│   [Video player]                │   Enchantment catalog     │
-│   Scoped to current phrase      │                           │
-│   Shows 30-90s, not 2 hours     │   ○ Cum                  │
-│                                 │   ○ Edge                 │
-│   [━━━━━━●━━━━━━━━━]            │   ○ Fast                 │
-│   1:45        2:15              │   ○ Lube                 │
-│                                 │   ○ Medium               │
-│   Timecode: 1:52.300            │   ○ Slow                 │
-│                                 │   ○ Stay                 │
-│                                 │   ○ Ruin                 │
-│                                 │   ○ Stop                 │
-│                                 │   ○ Tranquil             │
-│                                 │                           │
-│                                 │  [Duration  ━━━●━━━━]     │
-│                                 │  [Intensity ━━━━●━━]      │
-│                                 │                           │
-│                                 │  [+ Add]                  │
-│   ┌─ Active: Edge (1:52-2:07) 🗑─┐                          │
-│   └──────────────────────────────┘                          │
-├─────────────────────────────────┴───────────────────────────┤
-│                                                             │
-│  ┌──────────┬──────────────┬──────────┬───┐                 │
-│  │ Timecode │ Enchantment  │ Duration │   │                 │
-│  ├──────────┼──────────────┼──────────┼───┤                 │
-│  │ 1:52     │ Edge         │ 15s      │ 🗑 │                │
-│  │ 2:03     │ Cum          │ 15s      │ 🗑 │                │
-│  │ 2:41     │ Tranquil     │ 20s      │ 🗑 │                │
-│  └──────────┴──────────────┴──────────┴───┘                 │
-│                                                             │
-│                        [Accept]                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────┬──────────────┐
+│  [Vibrant phrase chart — dimmed context]     │ ◄Prev [P__] │
+│  Current phrase highlighted, neighbors dim   │    Next►     │
+├─────────────────────────────────────────────┴──────────────┤
+│  Phrase stats table (start, end, duration, BPM, cycles)    │
+├────────────────────────────────────────────────────────────┤
+│  Editing Phrase 3                                          │
+│  Tone: Tease | Transforms: Halve, Normalize                │
+│  Stim: Reactive                                            │
+├─────────────────────────────────┬──────────────────────────┤
+│                                 │                          │
+│   [Video player]                │   Enchantment catalog    │
+│   Scoped to current phrase      │                          │
+│                                 │   ○ Cum                 │
+│   [━━━━━━●━━━━━━━━━]            │   ○ Edge                │
+│   1:45        2:15              │   ○ Fast                │
+│                                 │   ○ Lube                │
+│   Timecode: 1:52.300            │   ○ Medium              │
+│                                 │   ○ Slow                │
+│   Active: Edge (1:52-2:07) 🗑    │   ○ Stay               │
+│                                 │   ○ Ruin                │
+│  ─── or if no video: ───        │   ○ Stop               │
+│                                 │   ○ Tranquil            │
+│   Timecode: [____1:52.300___]   │                          │
+│   (editable input field)        │  [Duration  ━━━●━━━━]    │
+│                                 │  [Intensity ━━━━●━━]     │
+│                                 │                          │
+│                                 │  [+ Add]                 │
+├─────────────────────────────────┴──────────────────────────┤
+│                                                            │
+│  Enchantments for Phrase 3:                                │
+│  ┌──────────┬──────────────┬──────────┬───┐                │
+│  │ Timecode │ Enchantment  │ Duration │   │                │
+│  ├──────────┼──────────────┼──────────┼───┤                │
+│  │ 1:52     │ Edge         │ 15s      │ 🗑 │               │
+│  │ 2:03     │ Cum          │ 15s      │ 🗑 │               │
+│  │ 2:41     │ Tranquil     │ 20s      │ 🗑 │               │
+│  └──────────┴──────────────┴──────────┴───┘                │
+│                                                            │
+│                       [Accept]                             │
+└────────────────────────────────────────────────────────────┘
 ```
+
+### Top section — context, not editing
+
+The top of the tab shows context for the current phrase. You can see it,
+you can't change it here:
+
+- **Vibrant phrase chart** — same velocity-colored PNG as the phrase editor,
+  dimmed on neighboring phrases. Shows the shape of what you're enhancing.
+- **Prev / [Go to P__] / Next** — navigate phrases. Prev and Next step
+  through sequentially. "Go to P__" dropdown lets you jump to any phrase
+  directly without clicking through all of them.
+- **Stats table** — start, end, duration, BPM, cycles. Read-only.
+- **Context bar** — Editing Phrase 3 | Tone applied | Transforms applied |
+  Stim character. Every upstream decision visible in one place.
+
+### Middle section — video + catalog
+
+Two panels side by side:
+
+**Left panel (video/timecode):**
+- Video player scoped to current phrase (30-90s, not 2 hours)
+- Timecode display below video
+- Active enchantment indicator — as video plays, shows which enchantment
+  the playhead is inside (name + time range + trashcan). Enchantments
+  light up as you watch. When in a gap: empty (ready to add).
+- If no video: timecode edit field (user types or clicks funscript waveform)
+
+**Right panel (catalog + controls):**
+- Enchantment list — all 10 basics. Click to select.
+- Duration slider (default from YAML)
+- Intensity slider (scales the right params per family)
+- Add button — places enchantment at current timecode
+
+### Bottom section — phrase enchantment table + Accept
+
+- Table shows enchantments for THIS phrase only
+- Columns: Timecode, Enchantment name, Duration, Trashcan
+- Each row = one `.events.yml` entry. What you see is what exports.
+- **Accept** saves all enchantments (all phrases) to `.events.yml` on disk
+
+### Accept and navigation
+
+- Accept persists to disk but is not the main action
+- The real workflow is **Prev/Next** — scroll to top, move to the next
+  phrase, keep building. Work is kept in session across phrases.
+- Adding enchantments is implied acceptance — rows are kept as you
+  navigate. Accept just writes the file.
 
 ### Workflow
 
-1. **Pick a phrase** from the selector → everything scopes to that chunk
-2. **Watch the video** within that phrase — stop at the moment
-3. **Click an enchantment** from the catalog list
-4. **Adjust Duration / Intensity** if you want (defaults are fine)
-5. **Click Add** → row appears in the table, video positions to end of the enchantment (timecode + duration). User sees exactly where the effect ends — no mental math. They can keep watching forward, rewind, or place another enchantment right there.
+1. Tab opens on Phrase 1 — see the chart, stats, context
+2. **Watch the video** — stop at the moment
+3. **Click an enchantment** from the catalog
+4. **Adjust Duration / Intensity** if desired (defaults are fine)
+5. **Click Add** → row appears in table, video jumps to end of enchantment
 6. **Repeat** for other moments in this phrase
-7. **Next phrase** — table shows that phrase's enchantments (previous phrase's work is kept automatically)
-8. When done with all phrases, **Accept** → saves merged `.events.yml` to the working folder
+7. **Prev/Next** (or "Go to P__") to move to next phrase — work is kept
+8. When done, **Accept** → saves `.events.yml` to disk
 
 ### Key design decisions
 
-- **Phrase-scoped everything** — video, funscript, table all show only the
+- **Phrase-scoped everything** — video, chart, table all show only the
   current phrase. You never get lost in a two-hour video.
+- **Context is read-only** — the chart, stats, tone, transforms, stim
+  are shown for reference but can't be changed here. This tab is only
+  about placing enchantments.
 - **The table IS the YAML** — each row maps to one event entry. What you
-  see is what gets exported. The table for each phrase shows only that
-  phrase's enchantments.
+  see is what gets exported.
 - **Two sliders, not five** — Duration and Intensity. Intensity scales
   the right params behind the scenes (volume_boost, buzz_intensity,
   stroke_intensity depending on the enchantment family).
 - **Timecode from video** — stop the video, click Add. No millisecond typing.
-- **No video? Still works** — timecode input field appears. User clicks
-  the funscript waveform or types the time manually.
-- **Live active enchantment display** — as the video plays, the area
-  below the timecode shows which enchantment is currently active and its
-  time range. When the playhead is in a gap, it's empty (ready to add).
-  Trashcan right there for quick removal without scrolling to the table.
-  You see enchantments light up as you watch the phrase.
+- **No video? Still works** — timecode edit field appears instead.
+- **Live active enchantment display** — enchantments light up as the
+  video plays. Trashcan right there for quick removal.
 - **Overlap prevention** — can't place an enchantment where one already
   exists. Add is disabled when playhead is inside an active enchantment.
-- **One enchantment per timecode** — no stacking in v1. The YAML format
-  supports composing multiple events at the same timecode, but we don't
-  expose that until we understand axis overlap behavior. Power users can
+- **One enchantment per timecode** — no stacking in v1. Power users can
   stack by editing the exported `.events.yml` directly.
-- **Implied acceptance** — adding a row saves it in session. Switching
-  phrases keeps your work. No per-row or per-phrase accept. The final
-  Accept at the bottom saves everything to `.events.yml` at once.
+- **Implied acceptance** — adding rows keeps them in session across phrase
+  navigation. Accept persists to disk but isn't required to keep working.
 - **Trashcan removes a row** — simple, no confirmation needed.
 - **Extensible catalog** — users can add MCB, Clutch, or custom events.
   If the YAML definitions are present, they show up in the catalog list.
@@ -429,6 +476,16 @@ Three layers, one catalog:
 Stim tab is interactive. Export is async with progress bar.
 
 ## Implementation Plan
+
+### Phase 0: PhraseNavigator shared component
+- [ ] Extract top section from phrase_detail.py into reusable PhraseNavigator:
+  - Vibrant phrase chart (dimmed context, read-only)
+  - Prev / Go to P__ / Next navigation
+  - Stats table (read-only)
+  - Context bar (phrase # + tone + transforms + stim)
+- [ ] Phrase editor uses PhraseNavigator + transform controls
+- [ ] Enchantment tab uses PhraseNavigator + video + catalog
+- Build once during Enchantment tab work, not before
 
 ### Phase 1: Stim tab refinement (current)
 - [ ] Replace Plotly path chart with matplotlib (fixed axes, live update)
