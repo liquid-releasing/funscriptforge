@@ -1480,6 +1480,50 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#top-section-context-not-editing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Top section — context, not editing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#middle-section-video-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Middle section — video + catalog
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bottom-section-phrase-enchantment-table-accept" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bottom section — phrase enchantment table + Accept
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#accept-and-navigation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accept and navigation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#workflow" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1550,6 +1594,17 @@
   
     <nav class="md-nav" aria-label="Implementation Plan">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-0-phrasenavigator-shared-component" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 0: PhraseNavigator shared component
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#phase-1-stim-tab-refinement-current" class="md-nav__link">
@@ -2003,85 +2058,126 @@ preview renders without code changes.</p>
 <p>Point-in-time enchantment placement. The user watches the video within a
 phrase, stops at the moment something happens, and drops an enchantment
 on that exact timecode. Enchantments are moments, not phrase-wide blankets.</p>
+<p>This feature is about micro-updates within a phrase — not about the full
+funscript. The UI is scoped tight to keep focus.</p>
 <h3 id="layout_1">Layout<a class="headerlink" href="#layout_1" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>┌─────────────────────────────────────────────────────────────┐
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>│  [Phrase selector]  ◄ Phrase 3 of 20 ►                      │
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>├─────────────────────────────────────────────────────────────┤
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│  [Funscript waveform — scoped to selected phrase]           │
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>├─────────────────────────────────┬───────────────────────────┤
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>│   Editing Phrase 3                                          │
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>│   Tone: Tease | Transforms: Halve, Normalize                │
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>│   Stim: Reactive                                            │
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│   [Video player]                │   Enchantment catalog     │
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>│   Scoped to current phrase      │                           │
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>│   Shows 30-90s, not 2 hours     │   ○ Cum                  │
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>│                                 │   ○ Edge                 │
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>│   [━━━━━━●━━━━━━━━━]            │   ○ Fast                 │
-<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>│   1:45        2:15              │   ○ Lube                 │
-<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>│                                 │   ○ Medium               │
-<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>│   Timecode: 1:52.300            │   ○ Slow                 │
-<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>│                                 │   ○ Stay                 │
-<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>│                                 │   ○ Ruin                 │
-<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>│                                 │   ○ Stop                 │
-<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>│                                 │   ○ Tranquil             │
-<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>│                                 │                           │
-<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>│                                 │  [Duration  ━━━●━━━━]     │
-<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>│                                 │  [Intensity ━━━━●━━]      │
-<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>│                                 │                           │
-<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>│                                 │  [+ Add]                  │
-<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>│   ┌─ Active: Edge (1:52-2:07) 🗑─┐                          │
-<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>│   └──────────────────────────────┘                          │
-<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a>├─────────────────────────────────┴───────────────────────────┤
-<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a>│                                                             │
-<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a>│  ┌──────────┬──────────────┬──────────┬───┐                 │
-<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a>│  │ Timecode │ Enchantment  │ Duration │   │                 │
-<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a>│  ├──────────┼──────────────┼──────────┼───┤                 │
-<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a>│  │ 1:52     │ Edge         │ 15s      │ 🗑 │                │
-<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a>│  │ 2:03     │ Cum          │ 15s      │ 🗑 │                │
-<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a>│  │ 2:41     │ Tranquil     │ 20s      │ 🗑 │                │
-<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a>│  └──────────┴──────────────┴──────────┴───┘                 │
-<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a>│                                                             │
-<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a>│                        [Accept]                             │
-<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a>└─────────────────────────────────────────────────────────────┘
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>┌─────────────────────────────────────────────┬──────────────┐
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>│  [Vibrant phrase chart — dimmed context]     │ ◄Prev [P__] │
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>│  Current phrase highlighted, neighbors dim   │    Next►     │
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>├─────────────────────────────────────────────┴──────────────┤
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>│  Phrase stats table (start, end, duration, BPM, cycles)    │
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>├────────────────────────────────────────────────────────────┤
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>│  Editing Phrase 3                                          │
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>│  Tone: Tease | Transforms: Halve, Normalize                │
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│  Stim: Reactive                                            │
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>├─────────────────────────────────┬──────────────────────────┤
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>│                                 │                          │
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>│   [Video player]                │   Enchantment catalog    │
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>│   Scoped to current phrase      │                          │
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>│                                 │   ○ Cum                 │
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>│   [━━━━━━●━━━━━━━━━]            │   ○ Edge                │
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>│   1:45        2:15              │   ○ Fast                │
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>│                                 │   ○ Lube                │
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>│   Timecode: 1:52.300            │   ○ Medium              │
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>│                                 │   ○ Slow                │
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>│   Active: Edge (1:52-2:07) 🗑    │   ○ Stay               │
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>│                                 │   ○ Ruin                │
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>│  ─── or if no video: ───        │   ○ Stop               │
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>│                                 │   ○ Tranquil            │
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>│   Timecode: [____1:52.300___]   │                          │
+<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>│   (editable input field)        │  [Duration  ━━━●━━━━]    │
+<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>│                                 │  [Intensity ━━━━●━━]     │
+<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>│                                 │                          │
+<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a>│                                 │  [+ Add]                 │
+<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a>├─────────────────────────────────┴──────────────────────────┤
+<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a>│                                                            │
+<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a>│  Enchantments for Phrase 3:                                │
+<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a>│  ┌──────────┬──────────────┬──────────┬───┐                │
+<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a>│  │ Timecode │ Enchantment  │ Duration │   │                │
+<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a>│  ├──────────┼──────────────┼──────────┼───┤                │
+<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a>│  │ 1:52     │ Edge         │ 15s      │ 🗑 │               │
+<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a>│  │ 2:03     │ Cum          │ 15s      │ 🗑 │               │
+<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a>│  │ 2:41     │ Tranquil     │ 20s      │ 🗑 │               │
+<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a>│  └──────────┴──────────────┴──────────┴───┘                │
+<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a>│                                                            │
+<a id="__codelineno-4-40" name="__codelineno-4-40" href="#__codelineno-4-40"></a>│                       [Accept]                             │
+<a id="__codelineno-4-41" name="__codelineno-4-41" href="#__codelineno-4-41"></a>└────────────────────────────────────────────────────────────┘
 </code></pre></div>
+<h3 id="top-section-context-not-editing">Top section — context, not editing<a class="headerlink" href="#top-section-context-not-editing" title="Permanent link">&para;</a></h3>
+<p>The top of the tab shows context for the current phrase. You can see it,
+you can't change it here:</p>
+<ul>
+<li><strong>Vibrant phrase chart</strong> — same velocity-colored PNG as the phrase editor,
+  dimmed on neighboring phrases. Shows the shape of what you're enhancing.</li>
+<li><strong>Prev / [Go to P__] / Next</strong> — navigate phrases. Prev and Next step
+  through sequentially. "Go to P__" dropdown lets you jump to any phrase
+  directly without clicking through all of them.</li>
+<li><strong>Stats table</strong> — start, end, duration, BPM, cycles. Read-only.</li>
+<li><strong>Context bar</strong> — Editing Phrase 3 | Tone applied | Transforms applied |
+  Stim character. Every upstream decision visible in one place.</li>
+</ul>
+<h3 id="middle-section-video-catalog">Middle section — video + catalog<a class="headerlink" href="#middle-section-video-catalog" title="Permanent link">&para;</a></h3>
+<p>Two panels side by side:</p>
+<p><strong>Left panel (video/timecode):</strong>
+- Video player scoped to current phrase (30-90s, not 2 hours)
+- Timecode display below video
+- Active enchantment indicator — as video plays, shows which enchantment
+  the playhead is inside (name + time range + trashcan). Enchantments
+  light up as you watch. When in a gap: empty (ready to add).
+- If no video: timecode edit field (user types or clicks funscript waveform)</p>
+<p><strong>Right panel (catalog + controls):</strong>
+- Enchantment list — all 10 basics. Click to select.
+- Duration slider (default from YAML)
+- Intensity slider (scales the right params per family)
+- Add button — places enchantment at current timecode</p>
+<h3 id="bottom-section-phrase-enchantment-table-accept">Bottom section — phrase enchantment table + Accept<a class="headerlink" href="#bottom-section-phrase-enchantment-table-accept" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Table shows enchantments for THIS phrase only</li>
+<li>Columns: Timecode, Enchantment name, Duration, Trashcan</li>
+<li>Each row = one <code>.events.yml</code> entry. What you see is what exports.</li>
+<li><strong>Accept</strong> saves all enchantments (all phrases) to <code>.events.yml</code> on disk</li>
+</ul>
+<h3 id="accept-and-navigation">Accept and navigation<a class="headerlink" href="#accept-and-navigation" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Accept persists to disk but is not the main action</li>
+<li>The real workflow is <strong>Prev/Next</strong> — scroll to top, move to the next
+  phrase, keep building. Work is kept in session across phrases.</li>
+<li>Adding enchantments is implied acceptance — rows are kept as you
+  navigate. Accept just writes the file.</li>
+</ul>
 <h3 id="workflow">Workflow<a class="headerlink" href="#workflow" title="Permanent link">&para;</a></h3>
 <ol>
-<li><strong>Pick a phrase</strong> from the selector → everything scopes to that chunk</li>
-<li><strong>Watch the video</strong> within that phrase — stop at the moment</li>
-<li><strong>Click an enchantment</strong> from the catalog list</li>
-<li><strong>Adjust Duration / Intensity</strong> if you want (defaults are fine)</li>
-<li><strong>Click Add</strong> → row appears in the table, video positions to end of the enchantment (timecode + duration). User sees exactly where the effect ends — no mental math. They can keep watching forward, rewind, or place another enchantment right there.</li>
+<li>Tab opens on Phrase 1 — see the chart, stats, context</li>
+<li><strong>Watch the video</strong> — stop at the moment</li>
+<li><strong>Click an enchantment</strong> from the catalog</li>
+<li><strong>Adjust Duration / Intensity</strong> if desired (defaults are fine)</li>
+<li><strong>Click Add</strong> → row appears in table, video jumps to end of enchantment</li>
 <li><strong>Repeat</strong> for other moments in this phrase</li>
-<li><strong>Next phrase</strong> — table shows that phrase's enchantments (previous phrase's work is kept automatically)</li>
-<li>When done with all phrases, <strong>Accept</strong> → saves merged <code>.events.yml</code> to the working folder</li>
+<li><strong>Prev/Next</strong> (or "Go to P__") to move to next phrase — work is kept</li>
+<li>When done, <strong>Accept</strong> → saves <code>.events.yml</code> to disk</li>
 </ol>
 <h3 id="key-design-decisions">Key design decisions<a class="headerlink" href="#key-design-decisions" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>Phrase-scoped everything</strong> — video, funscript, table all show only the
+<li><strong>Phrase-scoped everything</strong> — video, chart, table all show only the
   current phrase. You never get lost in a two-hour video.</li>
+<li><strong>Context is read-only</strong> — the chart, stats, tone, transforms, stim
+  are shown for reference but can't be changed here. This tab is only
+  about placing enchantments.</li>
 <li><strong>The table IS the YAML</strong> — each row maps to one event entry. What you
-  see is what gets exported. The table for each phrase shows only that
-  phrase's enchantments.</li>
+  see is what gets exported.</li>
 <li><strong>Two sliders, not five</strong> — Duration and Intensity. Intensity scales
   the right params behind the scenes (volume_boost, buzz_intensity,
   stroke_intensity depending on the enchantment family).</li>
 <li><strong>Timecode from video</strong> — stop the video, click Add. No millisecond typing.</li>
-<li><strong>No video? Still works</strong> — timecode input field appears. User clicks
-  the funscript waveform or types the time manually.</li>
-<li><strong>Live active enchantment display</strong> — as the video plays, the area
-  below the timecode shows which enchantment is currently active and its
-  time range. When the playhead is in a gap, it's empty (ready to add).
-  Trashcan right there for quick removal without scrolling to the table.
-  You see enchantments light up as you watch the phrase.</li>
+<li><strong>No video? Still works</strong> — timecode edit field appears instead.</li>
+<li><strong>Live active enchantment display</strong> — enchantments light up as the
+  video plays. Trashcan right there for quick removal.</li>
 <li><strong>Overlap prevention</strong> — can't place an enchantment where one already
   exists. Add is disabled when playhead is inside an active enchantment.</li>
-<li><strong>One enchantment per timecode</strong> — no stacking in v1. The YAML format
-  supports composing multiple events at the same timecode, but we don't
-  expose that until we understand axis overlap behavior. Power users can
+<li><strong>One enchantment per timecode</strong> — no stacking in v1. Power users can
   stack by editing the exported <code>.events.yml</code> directly.</li>
-<li><strong>Implied acceptance</strong> — adding a row saves it in session. Switching
-  phrases keeps your work. No per-row or per-phrase accept. The final
-  Accept at the bottom saves everything to <code>.events.yml</code> at once.</li>
+<li><strong>Implied acceptance</strong> — adding rows keeps them in session across phrase
+  navigation. Accept persists to disk but isn't required to keep working.</li>
 <li><strong>Trashcan removes a row</strong> — simple, no confirmation needed.</li>
 <li><strong>Extensible catalog</strong> — users can add MCB, Clutch, or custom events.
   If the YAML definitions are present, they show up in the catalog list.
@@ -2151,6 +2247,17 @@ At export time, all phrase <code>.events.yml</code> files merge into one:</p>
 </table>
 <p>Stim tab is interactive. Export is async with progress bar.</p>
 <h2 id="implementation-plan">Implementation Plan<a class="headerlink" href="#implementation-plan" title="Permanent link">&para;</a></h2>
+<h3 id="phase-0-phrasenavigator-shared-component">Phase 0: PhraseNavigator shared component<a class="headerlink" href="#phase-0-phrasenavigator-shared-component" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Extract top section from phrase_detail.py into reusable PhraseNavigator:</li>
+<li>Vibrant phrase chart (dimmed context, read-only)</li>
+<li>Prev / Go to P__ / Next navigation</li>
+<li>Stats table (read-only)</li>
+<li>Context bar (phrase # + tone + transforms + stim)</li>
+<li>[ ] Phrase editor uses PhraseNavigator + transform controls</li>
+<li>[ ] Enchantment tab uses PhraseNavigator + video + catalog</li>
+<li>Build once during Enchantment tab work, not before</li>
+</ul>
 <h3 id="phase-1-stim-tab-refinement-current">Phase 1: Stim tab refinement (current)<a class="headerlink" href="#phase-1-stim-tab-refinement-current" title="Permanent link">&para;</a></h3>
 <ul>
 <li>[ ] Replace Plotly path chart with matplotlib (fixed axes, live update)</li>
