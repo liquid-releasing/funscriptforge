@@ -110,9 +110,18 @@ def render():
 
     from forge.device_specs import detect_stingy, apply_device_awareness as _apply_da
 
-    with st.spinner(f"Analyzing {len(actions):,} actions…"):
-        analysis = analyze_violations(actions, limits)
-        stingy = detect_stingy(actions)
+    # Cache analysis results so we don't re-analyze on every Streamlit rerun
+    _analysis_cache_key = f"_device_analysis_{len(actions)}_{id(limits)}"
+    if st.session_state.get("_device_analysis_key") == _analysis_cache_key:
+        analysis = st.session_state["_device_analysis"]
+        stingy = st.session_state["_device_stingy"]
+    else:
+        with st.spinner(f"Analyzing {len(actions):,} actions…"):
+            analysis = analyze_violations(actions, limits)
+            stingy = detect_stingy(actions)
+        st.session_state["_device_analysis_key"] = _analysis_cache_key
+        st.session_state["_device_analysis"] = analysis
+        st.session_state["_device_stingy"] = stingy
 
     # ── Status ────────────────────────────────────────────────────────────
     _status_cols = st.columns([3, 2])
