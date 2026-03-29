@@ -448,6 +448,21 @@ def _render_heatmap_from_actions(actions: list, phrases: list, duration_ms: int)
         if ph["start_ms"] > 0
     ]
 
+    # Phrase ID labels — white text on dark background at top of each phrase
+    annotations = [
+        dict(
+            x=ph["start_ms"] + (ph["end_ms"] - ph["start_ms"]) / 2,
+            y=1,
+            xref="x", yref="paper",
+            text=f"<b>P{i + 1}</b>",
+            showarrow=False,
+            font=dict(color="white", size=8),
+            bgcolor="rgba(0,0,0,0.6)",
+            yanchor="top",
+        )
+        for i, ph in enumerate(phrases)
+    ]
+
     fig = go.Figure(go.Heatmap(
         z=[activity],
         x=bin_centers,
@@ -463,6 +478,7 @@ def _render_heatmap_from_actions(actions: list, phrases: list, duration_ms: int)
         paper_bgcolor=_BG,
         plot_bgcolor=_BG,
         shapes=shapes,
+        annotations=annotations,
         xaxis=dict(
             showgrid=False, zeroline=False, showticklabels=False,
             range=[0, duration_ms],

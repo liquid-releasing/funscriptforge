@@ -259,12 +259,9 @@ def render(project: "Project") -> None:
 
     st.divider()
 
-    # ── 5. Quality gate (collapsed) ─────────────────────────────────
-    _render_quality_gate(project, full_plan)
+    # Quality gate removed — Device tab handles device awareness.
 
-    st.divider()
-
-    # ── 6. Export All + Open folder (at the bottom) ─────────────────
+    # ── 5. Export All + Open folder (at the bottom) ─────────────────
     _render_export_to_folder(project)
 
     # Clamp warning
@@ -1036,15 +1033,24 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
     actions = fs_data.get("actions", [])
     status.write(f"✅ {len(actions):,} actions to export")
 
-    for target in targets:
-        device_folder = os.path.join(output_folder, target)
-        os.makedirs(device_folder, exist_ok=True)
+    # Write main funscript to output folder (flat — restim-compatible naming)
+    stem = forge_project['name']
+    out_path = os.path.join(output_folder, f"{stem}.funscript")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(fs_data, f, indent=2)
+    status.write(f"✅ `{stem}.funscript` (main)")
 
-        # Write the funscript
-        out_path = os.path.join(device_folder, f"{forge_project['name']}.funscript")
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(fs_data, f, indent=2)
-        status.write(f"✅ `{target}/{forge_project['name']}.funscript`")
+    # Write estim channel files if they exist (from Stim tab)
+    _channel_names = ["alpha", "beta", "pulse_frequency"]
+    for ch_name in _channel_names:
+        ch_data = st.session_state.get(f"stim_{ch_name}")
+        if ch_data:
+            ch_actions = [{"at": int(t * 1000), "pos": int(round(max(0, min(100, p))))}
+                          for t, p in zip(ch_data[0], ch_data[1])]
+            ch_path = os.path.join(output_folder, f"{stem}.{ch_name}.funscript")
+            with open(ch_path, "w", encoding="utf-8") as f:
+                json.dump({"actions": ch_actions}, f, indent=2)
+            status.write(f"✅ `{stem}.{ch_name}.funscript`")
 
     # Copy input media to top-level output folder
     from forge.project import get_input_file

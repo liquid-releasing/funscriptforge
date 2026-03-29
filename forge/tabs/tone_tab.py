@@ -582,20 +582,21 @@ def _render_preview(selected: str | None):
         impact = st.session_state.get(f"tone_impact_{selected}", 1.0)
         _TONE_H = 220
         _TONE_W = 700
-        col_before, col_after = st.columns(2)
+        toned = _apply_tone_preview(times_s, positions, selected, slider_vals)
+        modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
+        modified = _reclamp_to_device_limits(times, modified)
+
+        col_after, col_before = st.columns(2)
+        with col_after:
+            st.caption(f"**After** — {selected} (impact {impact:.0%}) · device aware")
+            render_static_from_arrays(times_s, modified, color_mode="velocity",
+                                      height_px=_TONE_H, width_px=_TONE_W)
         with col_before:
             st.caption(f"**Before** — {source_label}")
             _before_stage = "device" if cache.has_stage("device") else "original"
             png_before = cache.render_png(_before_stage, height_px=_TONE_H, width_px=_TONE_W)
             if png_before:
                 st.image(png_before, use_container_width=True)
-        with col_after:
-            toned = _apply_tone_preview(times_s, positions, selected, slider_vals)
-            modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
-            modified = _reclamp_to_device_limits(times, modified)
-            st.caption(f"**After** — {selected} (impact {impact:.0%}) · device aware")
-            render_static_from_arrays(times_s, modified, color_mode="velocity",
-                                      height_px=_TONE_H, width_px=_TONE_W)
 
         # Stats comparison row
         import numpy as np
