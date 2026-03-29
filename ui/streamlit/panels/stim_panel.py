@@ -477,19 +477,19 @@ def _render_channel_previews(forge, selected):
     col_input, col_ab, col_pv = st.columns(3)
     with col_input:
         st.caption("**Input funscript**")
-        # Show the latest chain stage (tone > device > original)
+        # Show the latest chain stage (phrases > tone > device > original)
         _png = _cache.render_latest_png(height_px=150, width_px=500)
         if _png:
             st.image(_png, use_container_width=True)
         else:
-            # Fallback: read from chain funscript path
-            _chain_path = st.session_state.get("chain_funscript_path", "")
-            if _chain_path and Path(_chain_path).exists():
-                import json as _json
-                _chain_data = _json.loads(Path(_chain_path).read_text(encoding="utf-8"))
-                _chain_actions = _chain_data.get("actions", [])
-                _ct = [a["at"] / 1000.0 for a in _chain_actions]
-                _cp = [a["pos"] for a in _chain_actions]
+            # Fallback: read latest from disk chain
+            from forge.project import get_latest_funscript
+            _proj = st.session_state.get("forge_project")
+            _latest_data, _latest_stage = get_latest_funscript(_proj) if _proj else (None, "")
+            if _latest_data:
+                _la = _latest_data.get("actions", [])
+                _ct = [a["at"] / 1000.0 for a in _la]
+                _cp = [a["pos"] for a in _la]
                 from forge_ui_components.funscript_chart.streamlit import render_static_from_arrays
                 render_static_from_arrays(_ct, _cp, height_px=150, width_px=500)
             else:
