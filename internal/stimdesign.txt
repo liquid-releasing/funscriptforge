@@ -1,0 +1,91 @@
+Edger has updated the funscript-tools generator from a single funscript to 2d. those are the alpha and beta files.
+
+## user decisions
+
+### out user device selection decisions:
+
+- 2d (alpha and beta) supported by 2b and ??
+- 3 phase (the others) supported by stereo stim <- this is my personal default and what we do. bug: it goes in the wrong folder.
+	- question: does restim support a different output for 3 phases?
+- new 4 phase experimental supported by the new FOC stim only 
+
+In the funscriptforge ui, we automate that process by showing the most influential knobs. And when we export, we use funscript-tools to generate some of the files. (the 10 documented ones). https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#the-ten-output-files
+"Think of the alpha/beta pair as where you feel it, frequency as how fast, pulse shape as what kind, and volume as how strong."
+
+we provide the choices on the motion axis 3p tab. and generate the prostate files by default. <-- this is a great choice
+
+### funscript generation times
+
+Response for victoriaoaks
+
+convert to 2d basic | 18seconds | | alpha and beta only
+process to 3p | 2 or 3 minutes | this is what we do i think. | 10 files
+process all files | several minutes _i gave up counting that high_ | 14 files or something
+
+### User creative decisions
+
+We support the creative decisions: 
+- https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#1-algorithm--where-the-sensation-moves
+what he thinks users want to change
+- https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#key-config-settings
+
+### output best practices
+
+https://github.com/edger477/funscript-tools/blob/main/FUNDAMENTAL_OPERATIONS.md#iv-best-practices
+
+[!NOTE] a typical workflow is now supported based on our work
+
+### our export should do these scenarios
+
+- generate 2d legacy
+- generate 3phase plus prostate
+
+#### generate 2d (legacy)
+
+from the generate 2d button
+
+```
+  alpha                          2.4 KB
+  beta                           2.4 KB
+```
+
+See https://github.com/edger477/funscript-tools/blob/main/processing/funscript_1d_to_2d.py
+
+#### default
+
+our output should probably use python example from here:
+https://github.com/edger477/funscript-tools/blob/main/examples/process_default.py
+
+we will get
+
+```text
+  alpha                          2.4 KB
+  alpha-prostate                 1.8 KB
+  beta                           2.4 KB
+  beta-prostate                  1.8 KB
+  frequency                      1.2 KB
+  pulse_frequency                1.3 KB
+  pulse_rise_time                1.1 KB
+  pulse_width                    1.2 KB
+  volume                         1.1 KB
+  volume-prostate                1.0 KB
+```
+
+these should go in the correct subfolder on our export.
+
+## transform/event library
+
+the event processor is the beginning of an editor where you give it timecodes and which (our word is transform) event you want to run.
+https://github.com/edger477/funscript-tools/blob/main/claudedocs/CUSTOM_EVENTS_UI_REDESIGN.md
+
+Edger calls it Custom Event Builder.
+https://github.com/edger477/funscript-tools/blob/main/processing/event_processor.py
+
+where are the event library? and how is he describing them? are they similar to our transforms?
+
+https://github.com/edger477/funscript-tools/blob/main/%40analysis/sample_events.yaml
+
+
+
+
+ 
