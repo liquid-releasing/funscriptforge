@@ -582,9 +582,17 @@ def _render_preview(selected: str | None):
         impact = st.session_state.get(f"tone_impact_{selected}", 1.0)
         _TONE_H = 220
         _TONE_W = 700
-        toned = _apply_tone_preview(times_s, positions, selected, slider_vals)
-        modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
-        modified = _reclamp_to_device_limits(times, modified)
+
+        # Cache tone preview to avoid recomputing on every Streamlit rerun
+        _tone_cache_key = f"{selected}_{impact}_{hash(str(slider_vals))}_{len(positions)}"
+        _cached = st.session_state.get("_tone_preview_cache", {})
+        if _cached.get("key") == _tone_cache_key:
+            modified = _cached["modified"]
+        else:
+            toned = _apply_tone_preview(times_s, positions, selected, slider_vals)
+            modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
+            modified = _reclamp_to_device_limits(times, modified)
+            st.session_state["_tone_preview_cache"] = {"key": _tone_cache_key, "modified": modified}
 
         col_after, col_before = st.columns(2)
         with col_after:
