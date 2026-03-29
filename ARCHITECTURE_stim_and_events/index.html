@@ -1364,10 +1364,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#enhancements-ship-with-funscriptforge" class="md-nav__link">
+  <a href="#enchantments-ship-with-funscriptforge" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Enhancements (ship with FunScriptForge)
+        Enchantments (ship with FunScriptForge)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#user-controls-per-enchantment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User controls per enchantment
       
     </span>
   </a>
@@ -1435,15 +1446,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#enhance-tab-new-tab-after-stim" class="md-nav__link">
+  <a href="#enchantment-tab-new-tab-after-stim" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Enhance Tab (new tab, after Stim)
+        Enchantment Tab (new tab, after Stim)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Enhance Tab (new tab, after Stim)">
+    <nav class="md-nav" aria-label="Enchantment Tab (new tab, after Stim)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1458,10 +1469,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#layout-concept" class="md-nav__link">
+  <a href="#layout_1" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Layout concept
+        Layout
       
     </span>
   </a>
@@ -1469,10 +1480,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#enhancement-suggestions" class="md-nav__link">
+  <a href="#workflow" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Enhancement suggestions
+        Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#key-design-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key design decisions
       
     </span>
   </a>
@@ -1541,10 +1563,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#phase-2-event-catalog" class="md-nav__link">
+  <a href="#phase-2-enchantment-catalog" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Phase 2: Event catalog
+        Phase 2: Enchantment catalog
       
     </span>
   </a>
@@ -1552,10 +1574,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#phase-3-enhance-tab-one-evening-session" class="md-nav__link">
+  <a href="#phase-3-enchantment-tab-one-evening-session" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Phase 3: Enhance tab (one evening session)
+        Phase 3: Enchantment tab (one evening session)
       
     </span>
   </a>
@@ -1755,81 +1777,121 @@ pulse_wobble changes feel — all stackable.</p>
 </code></pre></div>
 <p>Sequential, not separate. Events enhance the generated channels — they layer
 on top of the baseline, they don't replace it.</p>
-<h3 id="enhancements-ship-with-funscriptforge">Enhancements (ship with FunScriptForge)<a class="headerlink" href="#enhancements-ship-with-funscriptforge" title="Permanent link">&para;</a></h3>
-<p>Twelve enhancements ship with FunScriptForge. These are NOT transforms —
-Tone shapes the funscript, Enhancements layer sensation onto the output
-channels. They operate on completely different things and never conflict.</p>
+<h3 id="enchantments-ship-with-funscriptforge">Enchantments (ship with FunScriptForge)<a class="headerlink" href="#enchantments-ship-with-funscriptforge" title="Permanent link">&para;</a></h3>
+<p>Ten enchantments ship with FunScriptForge — the General events from
+funscript-tools v2.2.0. These are NOT funscript transforms — Tone shapes
+the funscript, Enchantments layer sensation onto the output channels.
+They operate on completely different things and never conflict.</p>
+<p>Three families:</p>
+<p><strong>Buzz family</strong> — modulate volume + pulse to create intensity effects:</p>
 <table>
 <thead>
 <tr>
-<th>Enhancement</th>
-<th>Source event</th>
-<th>What it does to the channels</th>
+<th>Enchantment</th>
+<th>Feel</th>
+<th>Key params</th>
+<th>Mode</th>
 </tr>
 </thead>
 <tbody>
 <tr>
+<td><strong>Cum</strong></td>
+<td>Release — high pulse, slow 1.5Hz throb, wide pulse sweep</td>
+<td>volume_boost: +0.2, pulse_freq: 90→80</td>
+<td>additive</td>
+</tr>
+<tr>
 <td><strong>Edge</strong></td>
-<td><code>edge</code></td>
-<td>Tension build — pulse_freq ramp + volume buzz + pulse_width modulation</td>
+<td>Tension build — pulse ramp, 10Hz volume buzz</td>
+<td>volume_boost: +0.15, pulse_freq: 40→50</td>
+<td>additive</td>
 </tr>
 <tr>
-<td><strong>Ruin</strong></td>
-<td><code>ruin</code></td>
-<td>Volume drops away, slow recovery — creates a hole</td>
-</tr>
-<tr>
-<td><strong>Tranquil</strong></td>
-<td><code>tranquil</code></td>
-<td>Gentle volume oscillation — a breath</td>
-</tr>
-<tr>
-<td><strong>Tease</strong></td>
-<td><code>mcb_tease</code></td>
-<td>Low, slow oscillation on volume</td>
-</tr>
-<tr>
-<td><strong>Throb</strong></td>
-<td><code>mcb_throb</code></td>
-<td>Pulsating rhythm on volume</td>
-</tr>
-<tr>
-<td><strong>Deny</strong></td>
-<td><code>mcb_denial</code></td>
-<td>Pulls back volume + locks pulse rate — creates contrast</td>
-</tr>
-<tr>
-<td><strong>Intensity Build</strong></td>
-<td><code>mcb_intensity_build</code></td>
-<td>Linear volume ramp up</td>
-</tr>
-<tr>
-<td><strong>Release</strong></td>
-<td><code>mcb_release</code></td>
-<td>Gradual power reduction</td>
-</tr>
-<tr>
-<td><strong>Calm</strong></td>
-<td><code>mcb_calm</code></td>
-<td>Very slow sway, slightly below baseline</td>
-</tr>
-<tr>
-<td><strong>Shift Up</strong></td>
-<td><code>clutch_freq_shift_up</code></td>
-<td>Carrier frequency jump — texture change</td>
-</tr>
-<tr>
-<td><strong>Shift Down</strong></td>
-<td><code>clutch_freq_shift_down</code></td>
-<td>Carrier frequency drop — opposite texture</td>
-</tr>
-<tr>
-<td><strong>Wobble</strong></td>
-<td><code>clutch_pulse_wobble</code></td>
-<td>Pulse width variation — tactile texture</td>
+<td><strong>Stay</strong></td>
+<td>Hold — locked high pulse, subtle 15Hz hum</td>
+<td>volume_boost: +0.1, pulse_freq: +80</td>
+<td>additive</td>
 </tr>
 </tbody>
 </table>
+<p><strong>Stroke family</strong> — modulate alpha (spatial movement) + volume:</p>
+<table>
+<thead>
+<tr>
+<th>Enchantment</th>
+<th>Feel</th>
+<th>Key params</th>
+<th>Mode</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Slow</strong></td>
+<td>Pull back — quarter-speed alpha, volume reduction</td>
+<td>stroke_freq: 0.25, volume_boost: -0.1</td>
+<td>additive</td>
+</tr>
+<tr>
+<td><strong>Medium</strong></td>
+<td>Neutral — moderate movement, no volume change</td>
+<td>stroke_freq: 1.0, volume_boost: 0.0</td>
+<td>additive</td>
+</tr>
+<tr>
+<td><strong>Fast</strong></td>
+<td>Speed up — fast alpha, volume push</td>
+<td>stroke_freq: 2.0, volume_boost: +0.03</td>
+<td>additive</td>
+</tr>
+<tr>
+<td><strong>Lube</strong></td>
+<td>Ease off — gentle movement, pull back intensity</td>
+<td>stroke_freq: 0.5, volume_boost: -0.1</td>
+<td>additive</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Control family</strong> — overwrite or gently shape the signal:</p>
+<table>
+<thead>
+<tr>
+<th>Enchantment</th>
+<th>Feel</th>
+<th>Key params</th>
+<th>Mode</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Ruin</strong></td>
+<td>Kill — volume to zero, 10s ramp recovery</td>
+<td>duration: 30s, ramp_in: 10s</td>
+<td>overwrite</td>
+</tr>
+<tr>
+<td><strong>Stop</strong></td>
+<td>Floor — volume to minimum, hold</td>
+<td>duration: 30s, vol: 0.05→0.1</td>
+<td>overwrite</td>
+</tr>
+<tr>
+<td><strong>Tranquil</strong></td>
+<td>Breathe — gentle 15Hz volume oscillation</td>
+<td>duration: 20s, osc_amplitude: 0.5</td>
+<td>additive</td>
+</tr>
+</tbody>
+</table>
+<p>Users can add more enchantments from edger's MCB and Clutch libraries
+(30+ events, credit: AquariumParrot). We ship the basics, docs show how
+to extend.</p>
+<h3 id="user-controls-per-enchantment">User controls per enchantment<a class="headerlink" href="#user-controls-per-enchantment" title="Permanent link">&para;</a></h3>
+<p>Only two sliders in our UI:
+- <strong>Duration</strong> — how long the effect lasts (default from YAML)
+- <strong>Intensity</strong> — scales volume_boost / buzz_intensity / stroke_intensity
+  proportionally (maps to the right params behind the scenes)</p>
+<p>Ruin and Stop only need Duration (they're already all-or-nothing).
+Event Time comes from the video player position — no typing.</p>
 <h3 id="why-these-dont-duplicate-tone">Why these don't duplicate Tone<a class="headerlink" href="#why-these-dont-duplicate-tone" title="Permanent link">&para;</a></h3>
 <p>Tone operates on the <strong>funscript</strong> (position data, timing, rhythm).
 Enhancements operate on the <strong>output channels</strong> (volume, pulse_frequency,
@@ -1936,110 +1998,124 @@ preview renders without code changes.</p>
 </tbody>
 </table>
 <p>This is the composability model. Stack events to cover more axes.</p>
-<h2 id="enhance-tab-new-tab-after-stim">Enhance Tab (new tab, after Stim)<a class="headerlink" href="#enhance-tab-new-tab-after-stim" title="Permanent link">&para;</a></h2>
+<h2 id="enchantment-tab-new-tab-after-stim">Enchantment Tab (new tab, after Stim)<a class="headerlink" href="#enchantment-tab-new-tab-after-stim" title="Permanent link">&para;</a></h2>
 <h3 id="purpose_1">Purpose<a class="headerlink" href="#purpose_1" title="Permanent link">&para;</a></h3>
-<p>Per-phrase event assignment. The user sees their phrases and picks which
-events to apply to each one.</p>
-<h3 id="layout-concept">Layout concept<a class="headerlink" href="#layout-concept" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>┌─────────────────────────────────────────────────────────┐
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>│  [Full funscript visualization with phrase boundaries]  │
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>├────────┬──────────┬───────────┬──────────────┬──────────┤
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│ Phrase │ Time     │ Duration  │ Event        │ Preview  │
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>├────────┼──────────┼───────────┼──────────────┼──────────┤
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>│ 1      │ 0:00     │ 45s       │ —            │          │
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>│ 2      │ 0:45     │ 1:10      │ Edge         │ [mini]   │
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>│ 3      │ 1:55     │ 0:30      │ —            │          │
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│ 4      │ 2:25     │ 1:05      │ Freq Shift ↑ │ [mini]   │
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>│ ...    │          │           │              │          │
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>└────────┴──────────┴───────────┴──────────────┴──────────┘
+<p>Point-in-time enchantment placement. The user watches the video within a
+phrase, stops at the moment something happens, and drops an enchantment
+on that exact timecode. Enchantments are moments, not phrase-wide blankets.</p>
+<h3 id="layout_1">Layout<a class="headerlink" href="#layout_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>┌─────────────────────────────────────────────────────────────┐
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>│  [Phrase selector]  ◄ Phrase 3 of 20 ►                      │
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>├─────────────────────────────────────────────────────────────┤
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│  [Funscript waveform — scoped to selected phrase]           │
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>├─────────────────────────────────┬───────────────────────────┤
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>│   Editing Phrase 3                                          │
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>│   Tone: Tease | Transforms: Halve, Normalize                │
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>│   Stim: Reactive                                            │
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│   [Video player]                │   Enchantment catalog     │
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>│   Scoped to current phrase      │                           │
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>│   Shows 30-90s, not 2 hours     │   ○ Cum                  │
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>│                                 │   ○ Edge                 │
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>│   [━━━━━━●━━━━━━━━━]            │   ○ Fast                 │
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>│   1:45        2:15              │   ○ Lube                 │
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>│                                 │   ○ Medium               │
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>│   Timecode: 1:52.300            │   ○ Slow                 │
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>│                                 │   ○ Stay                 │
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>│                                 │   ○ Ruin                 │
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>│                                 │   ○ Stop                 │
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>│                                 │   ○ Tranquil             │
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>│                                 │                           │
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>│                                 │  [Duration  ━━━●━━━━]     │
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>│                                 │  [Intensity ━━━━●━━]      │
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>│                                 │                           │
+<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>│                                 │  [+ Add]                  │
+<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>│   ┌─ Active: Edge (1:52-2:07) 🗑─┐                          │
+<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>│   └──────────────────────────────┘                          │
+<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a>├─────────────────────────────────┴───────────────────────────┤
+<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a>│                                                             │
+<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a>│  ┌──────────┬──────────────┬──────────┬───┐                 │
+<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a>│  │ Timecode │ Enchantment  │ Duration │   │                 │
+<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a>│  ├──────────┼──────────────┼──────────┼───┤                 │
+<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a>│  │ 1:52     │ Edge         │ 15s      │ 🗑 │                │
+<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a>│  │ 2:03     │ Cum          │ 15s      │ 🗑 │                │
+<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a>│  │ 2:41     │ Tranquil     │ 20s      │ 🗑 │                │
+<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a>│  └──────────┴──────────────┴──────────┴───┘                 │
+<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a>│                                                             │
+<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a>│                        [Accept]                             │
+<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a>└─────────────────────────────────────────────────────────────┘
 </code></pre></div>
+<h3 id="workflow">Workflow<a class="headerlink" href="#workflow" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Pick a phrase</strong> from the selector → everything scopes to that chunk</li>
+<li><strong>Watch the video</strong> within that phrase — stop at the moment</li>
+<li><strong>Click an enchantment</strong> from the catalog list</li>
+<li><strong>Adjust Duration / Intensity</strong> if you want (defaults are fine)</li>
+<li><strong>Click Add</strong> → row appears in the table, video positions to end of the enchantment (timecode + duration). User sees exactly where the effect ends — no mental math. They can keep watching forward, rewind, or place another enchantment right there.</li>
+<li><strong>Repeat</strong> for other moments in this phrase</li>
+<li><strong>Next phrase</strong> — table shows that phrase's enchantments (previous phrase's work is kept automatically)</li>
+<li>When done with all phrases, <strong>Accept</strong> → saves merged <code>.events.yml</code> to the working folder</li>
+</ol>
+<h3 id="key-design-decisions">Key design decisions<a class="headerlink" href="#key-design-decisions" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Funscript on top for spatial reference</li>
-<li>Table of phrases with suggested enhancements pre-filled</li>
-<li>Mini preview renders per enhancement</li>
-<li>User reviews, tweaks if they want, clicks <strong>Accept</strong></li>
-<li>Accept bakes selections into export — generates <code>.events.yml</code> automatically</li>
-<li>No sliders for v1 — defaults are tuned</li>
-<li>Duration is always <code>phrase.end_ms - phrase.start_ms</code> — the enhancement fills the phrase</li>
-<li>"— " (blank) = no enhancement, phrase passes through unchanged</li>
-<li>Near-zero effort: open tab, glance, Accept</li>
+<li><strong>Phrase-scoped everything</strong> — video, funscript, table all show only the
+  current phrase. You never get lost in a two-hour video.</li>
+<li><strong>The table IS the YAML</strong> — each row maps to one event entry. What you
+  see is what gets exported. The table for each phrase shows only that
+  phrase's enchantments.</li>
+<li><strong>Two sliders, not five</strong> — Duration and Intensity. Intensity scales
+  the right params behind the scenes (volume_boost, buzz_intensity,
+  stroke_intensity depending on the enchantment family).</li>
+<li><strong>Timecode from video</strong> — stop the video, click Add. No millisecond typing.</li>
+<li><strong>No video? Still works</strong> — timecode input field appears. User clicks
+  the funscript waveform or types the time manually.</li>
+<li><strong>Live active enchantment display</strong> — as the video plays, the area
+  below the timecode shows which enchantment is currently active and its
+  time range. When the playhead is in a gap, it's empty (ready to add).
+  Trashcan right there for quick removal without scrolling to the table.
+  You see enchantments light up as you watch the phrase.</li>
+<li><strong>Overlap prevention</strong> — can't place an enchantment where one already
+  exists. Add is disabled when playhead is inside an active enchantment.</li>
+<li><strong>One enchantment per timecode</strong> — no stacking in v1. The YAML format
+  supports composing multiple events at the same timecode, but we don't
+  expose that until we understand axis overlap behavior. Power users can
+  stack by editing the exported <code>.events.yml</code> directly.</li>
+<li><strong>Implied acceptance</strong> — adding a row saves it in session. Switching
+  phrases keeps your work. No per-row or per-phrase accept. The final
+  Accept at the bottom saves everything to <code>.events.yml</code> at once.</li>
+<li><strong>Trashcan removes a row</strong> — simple, no confirmation needed.</li>
+<li><strong>Extensible catalog</strong> — users can add MCB, Clutch, or custom events.
+  If the YAML definitions are present, they show up in the catalog list.
+  We ship the 10 basics. Docs show how to add more.</li>
 </ul>
-<h3 id="enhancement-suggestions">Enhancement suggestions<a class="headerlink" href="#enhancement-suggestions" title="Permanent link">&para;</a></h3>
-<p>We already analyze each phrase (pace, intensity, arc shape). The suggestion
-engine recommends enhancements that amplify what the funscript is already doing:</p>
-<table>
-<thead>
-<tr>
-<th>Phrase pattern</th>
-<th>Suggested enhancement</th>
-<th>Why</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>High energy, trending up</td>
-<td><strong>Edge</strong> or <strong>Intensity Build</strong></td>
-<td>Amplify the climax</td>
-</tr>
-<tr>
-<td>Sudden drop after peak</td>
-<td><strong>Ruin</strong> or <strong>Release</strong></td>
-<td>Punctuate the comedown</td>
-</tr>
-<tr>
-<td>Slow, low energy</td>
-<td><strong>Tranquil</strong> or <strong>Calm</strong></td>
-<td>Breathe with the pause</td>
-</tr>
-<tr>
-<td>Long steady plateau</td>
-<td><strong>Wobble</strong> or <strong>Throb</strong></td>
-<td>Add interest to flat sections</td>
-</tr>
-<tr>
-<td>Mood/texture change</td>
-<td><strong>Shift Up</strong> or <strong>Shift Down</strong></td>
-<td>Mark the transition</td>
-</tr>
-<tr>
-<td>Teasing, variable pace</td>
-<td><strong>Tease</strong></td>
-<td>Match the playfulness</td>
-</tr>
-<tr>
-<td>Sharp contrast moment</td>
-<td><strong>Deny</strong></td>
-<td>Heighten the contrast</td>
-</tr>
-</tbody>
-</table>
-<p>The suggestion appears as a subtle hint next to each phrase row.
-User can accept, pick a different one, or leave blank. Same pattern as
-Tone suggestions — analyze, recommend, let the user decide.</p>
 <h3 id="export-integration">Export integration<a class="headerlink" href="#export-integration" title="Permanent link">&para;</a></h3>
-<p>At export time, we generate the <code>.events.yml</code> from phrase assignments:</p>
+<p>Accept saves the <code>.events.yml</code> per phrase to the working folder.
+At export time, all phrase <code>.events.yml</code> files merge into one:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">events</span><span class="p">:</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">45000</span><span class="w">        </span><span class="c1"># phrase 2 start_ms</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">112300</span><span class="w">       </span><span class="c1"># absolute timecode from phrase 3</span>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">edge</span>
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nt">params</span><span class="p">:</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">70000</span><span class="w">  </span><span class="c1"># phrase 2 end_ms - start_ms</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">145000</span><span class="w">       </span><span class="c1"># phrase 4 start_ms</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">clutch_freq_shift_up</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15000</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">123000</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cum</span>
 <a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">    </span><span class="nt">params</span><span class="p">:</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">65000</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15000</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">161000</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tranquil</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">    </span><span class="nt">params</span><span class="p">:</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20000</span>
 </code></pre></div>
 <p>Then:
 1. <code>cli.process()</code> — generates 10 channel files from Stim config
-2. <code>process_events()</code> — applies events from generated <code>.events.yml</code>
-3. Output folder has final files ready for restim</p>
+2. <code>process_events()</code> — applies enchantments from merged <code>.events.yml</code>
+3. Output folder has final files + the <code>.events.yml</code> (editable, portable)</p>
 <h3 id="forgegen-integration-future">forgegen integration (future)<a class="headerlink" href="#forgegen-integration-future" title="Permanent link">&para;</a></h3>
-<p>The event library is the content generation seed for forgegen:
-- Beat detection says "climax at 3:42" → assign <code>edge</code>
-- Energy drops at 5:10 → assign nothing (let baseline carry)
-- Scene texture change at 7:00 → assign <code>clutch_freq_shift_up</code></p>
+<p>The enchantment catalog is the content generation seed for forgegen:
+- Beat detection says "hit at 3:42.300" → place <code>edge</code> at that timecode
+- Energy drops at 5:10 → place <code>tranquil</code>
+- Scene texture change at 7:00 → place <code>fast</code></p>
 <p>Three layers, one catalog:
-1. <strong>FunScriptForge</strong> (manual) — user picks events, assigns to phrases
-2. <strong>forgegen</strong> (auto) — algorithm picks events based on analysis
+1. <strong>FunScriptForge</strong> (manual) — user watches video, places enchantments
+2. <strong>forgegen</strong> (auto) — algorithm places enchantments based on analysis
 3. <strong>funscript-tools</strong> (engine) — executes them all via <code>process_events()</code></p>
 <h2 id="processing-time-budget">Processing Time Budget<a class="headerlink" href="#processing-time-budget" title="Permanent link">&para;</a></h2>
 <table>
@@ -2082,20 +2158,23 @@ Tone suggestions — analyze, recommend, let the user decide.</p>
 <li>[ ] Wire <code>cli.preview_*()</code> functions for live previews</li>
 <li>[ ] Test restim device consumption to validate device buckets</li>
 </ul>
-<h3 id="phase-2-event-catalog">Phase 2: Event catalog<a class="headerlink" href="#phase-2-event-catalog" title="Permanent link">&para;</a></h3>
+<h3 id="phase-2-enchantment-catalog">Phase 2: Enchantment catalog<a class="headerlink" href="#phase-2-enchantment-catalog" title="Permanent link">&para;</a></h3>
 <ul>
-<li>[ ] Parse <code>config.event_definitions.yml</code> for starter events (edge, freq_shift, pulse_wobble)</li>
+<li>[ ] Parse <code>config.event_definitions.yml</code> for the 10 basic enchantments</li>
 <li>[ ] Render matplotlib preview cards from YAML definitions</li>
-<li>[ ] Build event catalog component (reusable)</li>
+<li>[ ] Build enchantment catalog component (reusable list)</li>
 </ul>
-<h3 id="phase-3-enhance-tab-one-evening-session">Phase 3: Enhance tab (one evening session)<a class="headerlink" href="#phase-3-enhance-tab-one-evening-session" title="Permanent link">&para;</a></h3>
+<h3 id="phase-3-enchantment-tab-one-evening-session">Phase 3: Enchantment tab (one evening session)<a class="headerlink" href="#phase-3-enchantment-tab-one-evening-session" title="Permanent link">&para;</a></h3>
 <ul>
-<li>[ ] Parse phrase analysis → auto-suggest enhancements</li>
-<li>[ ] Phrase table with suggestions pre-filled + dropdown override</li>
-<li>[ ] Accept writes selections to session state</li>
-<li>[ ] Export generates <code>.events.yml</code> from accepted selections</li>
+<li>[ ] Phrase selector scoping (video + funscript + table per phrase)</li>
+<li>[ ] Video player scoped to phrase time range</li>
+<li>[ ] Enchantment catalog list with click-to-select</li>
+<li>[ ] Duration + Intensity sliders (two only)</li>
+<li>[ ] Add button → row in table (timecode from video position)</li>
+<li>[ ] Trashcan delete per row</li>
+<li>[ ] Accept saves merged <code>.events.yml</code> to working folder</li>
 <li>[ ] Wire into export pipeline: <code>cli.process()</code> then <code>process_events()</code></li>
-<li>No sliders. No parameter UI. Defaults from YAML. Table + Accept.</li>
+<li>[ ] Docs: how to add custom enchantments (MCB, Clutch, user-defined)</li>
 </ul>
 <h3 id="phase-4-forgegen-integration-future">Phase 4: forgegen integration (future)<a class="headerlink" href="#phase-4-forgegen-integration-future" title="Permanent link">&para;</a></h3>
 <ul>
