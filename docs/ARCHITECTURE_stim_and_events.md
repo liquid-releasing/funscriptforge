@@ -158,26 +158,53 @@ process_events()     → modifies those files at phrase timecodes
 Sequential, not separate. Events enhance the generated channels — they layer
 on top of the baseline, they don't replace it.
 
-### Enhancements (ship with FunScriptForge)
+### Enchantments (ship with FunScriptForge)
 
-Twelve enhancements ship with FunScriptForge. These are NOT transforms —
-Tone shapes the funscript, Enhancements layer sensation onto the output
-channels. They operate on completely different things and never conflict.
+Ten enchantments ship with FunScriptForge — the General events from
+funscript-tools v2.2.0. These are NOT funscript transforms — Tone shapes
+the funscript, Enchantments layer sensation onto the output channels.
+They operate on completely different things and never conflict.
 
-| Enhancement | Source event | What it does to the channels |
-|---|---|---|
-| **Edge** | `edge` | Tension build — pulse_freq ramp + volume buzz + pulse_width modulation |
-| **Ruin** | `ruin` | Volume drops away, slow recovery — creates a hole |
-| **Tranquil** | `tranquil` | Gentle volume oscillation — a breath |
-| **Tease** | `mcb_tease` | Low, slow oscillation on volume |
-| **Throb** | `mcb_throb` | Pulsating rhythm on volume |
-| **Deny** | `mcb_denial` | Pulls back volume + locks pulse rate — creates contrast |
-| **Intensity Build** | `mcb_intensity_build` | Linear volume ramp up |
-| **Release** | `mcb_release` | Gradual power reduction |
-| **Calm** | `mcb_calm` | Very slow sway, slightly below baseline |
-| **Shift Up** | `clutch_freq_shift_up` | Carrier frequency jump — texture change |
-| **Shift Down** | `clutch_freq_shift_down` | Carrier frequency drop — opposite texture |
-| **Wobble** | `clutch_pulse_wobble` | Pulse width variation — tactile texture |
+Three families:
+
+**Buzz family** — modulate volume + pulse to create intensity effects:
+
+| Enchantment | Feel | Key params | Mode |
+|---|---|---|---|
+| **Cum** | Release — high pulse, slow 1.5Hz throb, wide pulse sweep | volume_boost: +0.2, pulse_freq: 90→80 | additive |
+| **Edge** | Tension build — pulse ramp, 10Hz volume buzz | volume_boost: +0.15, pulse_freq: 40→50 | additive |
+| **Stay** | Hold — locked high pulse, subtle 15Hz hum | volume_boost: +0.1, pulse_freq: +80 | additive |
+
+**Stroke family** — modulate alpha (spatial movement) + volume:
+
+| Enchantment | Feel | Key params | Mode |
+|---|---|---|---|
+| **Slow** | Pull back — quarter-speed alpha, volume reduction | stroke_freq: 0.25, volume_boost: -0.1 | additive |
+| **Medium** | Neutral — moderate movement, no volume change | stroke_freq: 1.0, volume_boost: 0.0 | additive |
+| **Fast** | Speed up — fast alpha, volume push | stroke_freq: 2.0, volume_boost: +0.03 | additive |
+| **Lube** | Ease off — gentle movement, pull back intensity | stroke_freq: 0.5, volume_boost: -0.1 | additive |
+
+**Control family** — overwrite or gently shape the signal:
+
+| Enchantment | Feel | Key params | Mode |
+|---|---|---|---|
+| **Ruin** | Kill — volume to zero, 10s ramp recovery | duration: 30s, ramp_in: 10s | overwrite |
+| **Stop** | Floor — volume to minimum, hold | duration: 30s, vol: 0.05→0.1 | overwrite |
+| **Tranquil** | Breathe — gentle 15Hz volume oscillation | duration: 20s, osc_amplitude: 0.5 | additive |
+
+Users can add more enchantments from edger's MCB and Clutch libraries
+(30+ events, credit: AquariumParrot). We ship the basics, docs show how
+to extend.
+
+### User controls per enchantment
+
+Only two sliders in our UI:
+- **Duration** — how long the effect lasts (default from YAML)
+- **Intensity** — scales volume_boost / buzz_intensity / stroke_intensity
+  proportionally (maps to the right params behind the scenes)
+
+Ruin and Stop only need Duration (they're already all-or-nothing).
+Event Time comes from the video player position — no typing.
 
 ### Why these don't duplicate Tone
 
@@ -257,89 +284,137 @@ No single event is comprehensive — they're surgical by design:
 
 This is the composability model. Stack events to cover more axes.
 
-## Enhance Tab (new tab, after Stim)
+## Enchantment Tab (new tab, after Stim)
 
 ### Purpose
 
-Per-phrase event assignment. The user sees their phrases and picks which
-events to apply to each one.
+Point-in-time enchantment placement. The user watches the video within a
+phrase, stops at the moment something happens, and drops an enchantment
+on that exact timecode. Enchantments are moments, not phrase-wide blankets.
 
-### Layout concept
+### Layout
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  [Full funscript visualization with phrase boundaries]  │
-├────────┬──────────┬───────────┬──────────────┬──────────┤
-│ Phrase │ Time     │ Duration  │ Event        │ Preview  │
-├────────┼──────────┼───────────┼──────────────┼──────────┤
-│ 1      │ 0:00     │ 45s       │ —            │          │
-│ 2      │ 0:45     │ 1:10      │ Edge         │ [mini]   │
-│ 3      │ 1:55     │ 0:30      │ —            │          │
-│ 4      │ 2:25     │ 1:05      │ Freq Shift ↑ │ [mini]   │
-│ ...    │          │           │              │          │
-└────────┴──────────┴───────────┴──────────────┴──────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  [Phrase selector]  ◄ Phrase 3 of 20 ►                      │
+├─────────────────────────────────────────────────────────────┤
+│  [Funscript waveform — scoped to selected phrase]           │
+├─────────────────────────────────┬───────────────────────────┤
+│   Editing Phrase 3                                          │
+│   Tone: Tease | Transforms: Halve, Normalize                │
+│   Stim: Reactive                                            │
+│   [Video player]                │   Enchantment catalog     │
+│   Scoped to current phrase      │                           │
+│   Shows 30-90s, not 2 hours     │   ○ Cum                  │
+│                                 │   ○ Edge                 │
+│   [━━━━━━●━━━━━━━━━]            │   ○ Fast                 │
+│   1:45        2:15              │   ○ Lube                 │
+│                                 │   ○ Medium               │
+│   Timecode: 1:52.300            │   ○ Slow                 │
+│                                 │   ○ Stay                 │
+│                                 │   ○ Ruin                 │
+│                                 │   ○ Stop                 │
+│                                 │   ○ Tranquil             │
+│                                 │                           │
+│                                 │  [Duration  ━━━●━━━━]     │
+│                                 │  [Intensity ━━━━●━━]      │
+│                                 │                           │
+│                                 │  [+ Add]                  │
+│   ┌─ Active: Edge (1:52-2:07) 🗑─┐                          │
+│   └──────────────────────────────┘                          │
+├─────────────────────────────────┴───────────────────────────┤
+│                                                             │
+│  ┌──────────┬──────────────┬──────────┬───┐                 │
+│  │ Timecode │ Enchantment  │ Duration │   │                 │
+│  ├──────────┼──────────────┼──────────┼───┤                 │
+│  │ 1:52     │ Edge         │ 15s      │ 🗑 │                │
+│  │ 2:03     │ Cum          │ 15s      │ 🗑 │                │
+│  │ 2:41     │ Tranquil     │ 20s      │ 🗑 │                │
+│  └──────────┴──────────────┴──────────┴───┘                 │
+│                                                             │
+│                        [Accept]                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-- Funscript on top for spatial reference
-- Table of phrases with suggested enhancements pre-filled
-- Mini preview renders per enhancement
-- User reviews, tweaks if they want, clicks **Accept**
-- Accept bakes selections into export — generates `.events.yml` automatically
-- No sliders for v1 — defaults are tuned
-- Duration is always `phrase.end_ms - phrase.start_ms` — the enhancement fills the phrase
-- "— " (blank) = no enhancement, phrase passes through unchanged
-- Near-zero effort: open tab, glance, Accept
+### Workflow
 
-### Enhancement suggestions
+1. **Pick a phrase** from the selector → everything scopes to that chunk
+2. **Watch the video** within that phrase — stop at the moment
+3. **Click an enchantment** from the catalog list
+4. **Adjust Duration / Intensity** if you want (defaults are fine)
+5. **Click Add** → row appears in the table, video positions to end of the enchantment (timecode + duration). User sees exactly where the effect ends — no mental math. They can keep watching forward, rewind, or place another enchantment right there.
+6. **Repeat** for other moments in this phrase
+7. **Next phrase** — table shows that phrase's enchantments (previous phrase's work is kept automatically)
+8. When done with all phrases, **Accept** → saves merged `.events.yml` to the working folder
 
-We already analyze each phrase (pace, intensity, arc shape). The suggestion
-engine recommends enhancements that amplify what the funscript is already doing:
+### Key design decisions
 
-| Phrase pattern | Suggested enhancement | Why |
-|---|---|---|
-| High energy, trending up | **Edge** or **Intensity Build** | Amplify the climax |
-| Sudden drop after peak | **Ruin** or **Release** | Punctuate the comedown |
-| Slow, low energy | **Tranquil** or **Calm** | Breathe with the pause |
-| Long steady plateau | **Wobble** or **Throb** | Add interest to flat sections |
-| Mood/texture change | **Shift Up** or **Shift Down** | Mark the transition |
-| Teasing, variable pace | **Tease** | Match the playfulness |
-| Sharp contrast moment | **Deny** | Heighten the contrast |
-
-The suggestion appears as a subtle hint next to each phrase row.
-User can accept, pick a different one, or leave blank. Same pattern as
-Tone suggestions — analyze, recommend, let the user decide.
+- **Phrase-scoped everything** — video, funscript, table all show only the
+  current phrase. You never get lost in a two-hour video.
+- **The table IS the YAML** — each row maps to one event entry. What you
+  see is what gets exported. The table for each phrase shows only that
+  phrase's enchantments.
+- **Two sliders, not five** — Duration and Intensity. Intensity scales
+  the right params behind the scenes (volume_boost, buzz_intensity,
+  stroke_intensity depending on the enchantment family).
+- **Timecode from video** — stop the video, click Add. No millisecond typing.
+- **No video? Still works** — timecode input field appears. User clicks
+  the funscript waveform or types the time manually.
+- **Live active enchantment display** — as the video plays, the area
+  below the timecode shows which enchantment is currently active and its
+  time range. When the playhead is in a gap, it's empty (ready to add).
+  Trashcan right there for quick removal without scrolling to the table.
+  You see enchantments light up as you watch the phrase.
+- **Overlap prevention** — can't place an enchantment where one already
+  exists. Add is disabled when playhead is inside an active enchantment.
+- **One enchantment per timecode** — no stacking in v1. The YAML format
+  supports composing multiple events at the same timecode, but we don't
+  expose that until we understand axis overlap behavior. Power users can
+  stack by editing the exported `.events.yml` directly.
+- **Implied acceptance** — adding a row saves it in session. Switching
+  phrases keeps your work. No per-row or per-phrase accept. The final
+  Accept at the bottom saves everything to `.events.yml` at once.
+- **Trashcan removes a row** — simple, no confirmation needed.
+- **Extensible catalog** — users can add MCB, Clutch, or custom events.
+  If the YAML definitions are present, they show up in the catalog list.
+  We ship the 10 basics. Docs show how to add more.
 
 ### Export integration
 
-At export time, we generate the `.events.yml` from phrase assignments:
+Accept saves the `.events.yml` per phrase to the working folder.
+At export time, all phrase `.events.yml` files merge into one:
 
 ```yaml
 events:
-  - time: 45000        # phrase 2 start_ms
+  - time: 112300       # absolute timecode from phrase 3
     name: edge
     params:
-      duration_ms: 70000  # phrase 2 end_ms - start_ms
-  - time: 145000       # phrase 4 start_ms
-    name: clutch_freq_shift_up
+      duration_ms: 15000
+  - time: 123000
+    name: cum
     params:
-      duration_ms: 65000
+      duration_ms: 15000
+  - time: 161000
+    name: tranquil
+    params:
+      duration_ms: 20000
 ```
 
 Then:
 1. `cli.process()` — generates 10 channel files from Stim config
-2. `process_events()` — applies events from generated `.events.yml`
-3. Output folder has final files ready for restim
+2. `process_events()` — applies enchantments from merged `.events.yml`
+3. Output folder has final files + the `.events.yml` (editable, portable)
 
 ### forgegen integration (future)
 
-The event library is the content generation seed for forgegen:
-- Beat detection says "climax at 3:42" → assign `edge`
-- Energy drops at 5:10 → assign nothing (let baseline carry)
-- Scene texture change at 7:00 → assign `clutch_freq_shift_up`
+The enchantment catalog is the content generation seed for forgegen:
+- Beat detection says "hit at 3:42.300" → place `edge` at that timecode
+- Energy drops at 5:10 → place `tranquil`
+- Scene texture change at 7:00 → place `fast`
 
 Three layers, one catalog:
-1. **FunScriptForge** (manual) — user picks events, assigns to phrases
-2. **forgegen** (auto) — algorithm picks events based on analysis
+1. **FunScriptForge** (manual) — user watches video, places enchantments
+2. **forgegen** (auto) — algorithm places enchantments based on analysis
 3. **funscript-tools** (engine) — executes them all via `process_events()`
 
 ## Processing Time Budget
@@ -361,18 +436,21 @@ Stim tab is interactive. Export is async with progress bar.
 - [ ] Wire `cli.preview_*()` functions for live previews
 - [ ] Test restim device consumption to validate device buckets
 
-### Phase 2: Event catalog
-- [ ] Parse `config.event_definitions.yml` for starter events (edge, freq_shift, pulse_wobble)
+### Phase 2: Enchantment catalog
+- [ ] Parse `config.event_definitions.yml` for the 10 basic enchantments
 - [ ] Render matplotlib preview cards from YAML definitions
-- [ ] Build event catalog component (reusable)
+- [ ] Build enchantment catalog component (reusable list)
 
-### Phase 3: Enhance tab (one evening session)
-- [ ] Parse phrase analysis → auto-suggest enhancements
-- [ ] Phrase table with suggestions pre-filled + dropdown override
-- [ ] Accept writes selections to session state
-- [ ] Export generates `.events.yml` from accepted selections
+### Phase 3: Enchantment tab (one evening session)
+- [ ] Phrase selector scoping (video + funscript + table per phrase)
+- [ ] Video player scoped to phrase time range
+- [ ] Enchantment catalog list with click-to-select
+- [ ] Duration + Intensity sliders (two only)
+- [ ] Add button → row in table (timecode from video position)
+- [ ] Trashcan delete per row
+- [ ] Accept saves merged `.events.yml` to working folder
 - [ ] Wire into export pipeline: `cli.process()` then `process_events()`
-- No sliders. No parameter UI. Defaults from YAML. Table + Accept.
+- [ ] Docs: how to add custom enchantments (MCB, Clutch, user-defined)
 
 ### Phase 4: forgegen integration (future)
 - [ ] Auto-assign events based on scene analysis
