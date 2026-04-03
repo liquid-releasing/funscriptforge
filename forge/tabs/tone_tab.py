@@ -164,8 +164,12 @@ def render():
     if selected:
         st.divider()
         # Impact slider — always on top, scales the whole tone effect
+        # Restore saved impact from project (survives Accept rerun)
         if f"tone_impact_{selected}" not in st.session_state:
-            st.session_state[f"tone_impact_{selected}"] = 1.0
+            _project = st.session_state.get("forge_project", {})
+            _saved_sliders = _project.get("tone_sliders", {})
+            _saved_impact = _saved_sliders.get("impact", 1.0) if _project.get("tone") == selected else 1.0
+            st.session_state[f"tone_impact_{selected}"] = _saved_impact
         st.slider(
             "Impact — how much of this tone to apply",
             min_value=0.0,
@@ -594,17 +598,17 @@ def _render_preview(selected: str | None):
             modified = _reclamp_to_device_limits(times, modified)
             st.session_state["_tone_preview_cache"] = {"key": _tone_cache_key, "modified": modified}
 
-        col_after, col_before = st.columns(2)
-        with col_after:
-            st.caption(f"**After** — {selected} (impact {impact:.0%}) · device aware")
-            render_static_from_arrays(times_s, modified, color_mode="velocity",
-                                      height_px=_TONE_H, width_px=_TONE_W)
+        col_before, col_after = st.columns(2)
         with col_before:
             st.caption(f"**Before** — {source_label}")
             _before_stage = "device" if cache.has_stage("device") else "original"
             png_before = cache.render_png(_before_stage, height_px=_TONE_H, width_px=_TONE_W)
             if png_before:
                 st.image(png_before, use_container_width=True)
+        with col_after:
+            st.caption(f"**After** — {selected} (impact {impact:.0%}) · device aware")
+            render_static_from_arrays(times_s, modified, color_mode="velocity",
+                                      height_px=_TONE_H, width_px=_TONE_W)
 
         # Stats comparison row
         import numpy as np
@@ -787,7 +791,9 @@ def _apply_tone(tone_name: str):
                 _tmp.unlink()
 
                 # Save updated assessment
-                _assess_path = Path(project.get("output_folder", "")) / "_assessment.json"
+                _forge_dir = Path(project.get("output_folder", "")) / ".forge"
+                _forge_dir.mkdir(parents=True, exist_ok=True)
+                _assess_path = _forge_dir / "_assessment.json"
                 _assess_dict = _toned_result.to_dict()
                 _assess_path.write_text(_json.dumps(_assess_dict, indent=2), encoding="utf-8")
 

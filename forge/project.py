@@ -90,11 +90,17 @@ def get_input_file(project: dict, role: str) -> Optional[str]:
 _CHAIN_STAGES = ["original", "device", "tone", "phrases"]
 
 
-def save_chain_funscript(project: dict, stage: str, data: dict) -> str:
-    """Save a funscript state to the output folder at the given chain stage.
-    Returns the path to the saved file."""
-    folder = Path(project.get("output_folder", ""))
+def _chain_folder(project: dict) -> Path:
+    """Internal working folder for chain state — hidden from user output."""
+    folder = Path(project.get("output_folder", "")) / ".forge"
     folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def save_chain_funscript(project: dict, stage: str, data: dict) -> str:
+    """Save a funscript state to the .forge subfolder at the given chain stage.
+    Returns the path to the saved file."""
+    folder = _chain_folder(project)
     path = folder / f"_funscript_{stage}.json"
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     return str(path)
@@ -102,10 +108,14 @@ def save_chain_funscript(project: dict, stage: str, data: dict) -> str:
 
 def load_chain_funscript(project: dict, stage: str) -> Optional[dict]:
     """Load a funscript state from the chain. Returns None if not saved yet."""
-    folder = Path(project.get("output_folder", ""))
+    folder = _chain_folder(project)
     path = folder / f"_funscript_{stage}.json"
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8"))
+    # Fallback: check old location (top-level output folder) for migration
+    old_path = Path(project.get("output_folder", "")) / f"_funscript_{stage}.json"
+    if old_path.exists():
+        return json.loads(old_path.read_text(encoding="utf-8"))
     return None
 
 

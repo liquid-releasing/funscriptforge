@@ -548,8 +548,14 @@ def _sidebar() -> None:
     # Full analysis on first load runs on Project Accept, not here.
     _forge_proj = st.session_state.get("forge_project")
     _output_folder = _forge_proj.get("output_folder", "") if _forge_proj else ""
-    _cached_assessment = os.path.join(_output_folder, "_assessment.json") if _output_folder else ""
+    _cached_assessment = os.path.join(_output_folder, ".forge", "_assessment.json") if _output_folder else ""
     _has_cache = _cached_assessment and os.path.isfile(_cached_assessment)
+    # Fallback: check old location for migration
+    if not _has_cache and _output_folder:
+        _old_cache = os.path.join(_output_folder, "_assessment.json")
+        if os.path.isfile(_old_cache):
+            _cached_assessment = _old_cache
+            _has_cache = True
 
     _should_analyze = not _media_only and (_reanalyse_requested or (file_changed and _has_cache))
     if _should_analyze:

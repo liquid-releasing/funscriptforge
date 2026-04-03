@@ -439,12 +439,15 @@ def _apply_stim(forge, character_name, slider_vals, save_to_disk: bool = True):
 
         output_folder = forge.get("output_folder", "")
         if output_folder and Path(output_folder).exists():
+            # Use project name as stem (matches funscript-tools convention)
+            _project_name = forge.get("name", Path(_path).stem)
+
             # Save channel funscripts
             def _save_channel(name, t_arr, p_arr):
                 actions = [{"at": int(t * 1000), "pos": int(round(max(0, min(100, p))))}
                            for t, p in zip(t_arr, p_arr)]
                 out = {"actions": actions}
-                path = Path(output_folder) / f"{Path(_path).stem}.{name}.funscript"
+                path = Path(output_folder) / f"{_project_name}.{name}.funscript"
                 path.write_text(json.dumps(out, indent=2), encoding="utf-8")
                 return str(path)
 
@@ -477,23 +480,22 @@ def _render_channel_previews(forge, selected):
     col_input, col_ab, col_pv = st.columns(3)
     with col_input:
         st.caption("**Input funscript**")
-        # Show the latest chain stage (phrases > tone > device > original)
-        _png = _cache.render_latest_png(height_px=150, width_px=500)
-        if _png:
-            st.image(_png, use_container_width=True)
-        else:
-            # Fallback: read latest from disk chain
-            from forge.project import get_latest_funscript
-            _proj = st.session_state.get("forge_project")
-            _latest_data, _latest_stage = get_latest_funscript(_proj) if _proj else (None, "")
-            if _latest_data:
-                _la = _latest_data.get("actions", [])
-                _ct = [a["at"] / 1000.0 for a in _la]
-                _cp = [a["pos"] for a in _la]
-                from forge_ui_components.funscript_chart.streamlit import render_static_from_arrays
-                render_static_from_arrays(_ct, _cp, height_px=150, width_px=500)
+        # Read from chain (latest stage) — same path as channel generation
+        from forge.funscript import load_funscript, parse_actions
+        _chain_path = st.session_state.get("chain_funscript_path", "")
+        _fs_path = st.session_state.get("funscript_path", "")
+        _input_path = _chain_path if (_chain_path and Path(_chain_path).exists()) else _fs_path
+        if _input_path and Path(_input_path).exists():
+            _input_data = load_funscript(_input_path)
+            _input_times, _input_pos = parse_actions(_input_data)
+            if _input_times:
+                _input_t_s = [t / 1000.0 for t in _input_times]
+                render_static_from_arrays(_input_t_s, _input_pos, color_mode="velocity",
+                                          height_px=150, width_px=500)
             else:
-                st.caption("_Load a funscript on the Project tab._")
+                st.caption("_Empty funscript._")
+        else:
+            st.caption("_Load a funscript on the Project tab._")
 
     from forge_ui_components.funscript_chart.streamlit import render_static_from_arrays
 

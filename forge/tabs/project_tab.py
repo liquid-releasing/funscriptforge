@@ -145,7 +145,13 @@ def _commit_project_to_disk(project: dict | None) -> None:
     # Skip if cached assessment exists on disk (resume case)
     funscript_path = st.session_state.get("funscript_path", "")
     import json as _json
-    assessment_path = Path(folder) / "_assessment.json"
+    _forge_dir = Path(folder) / ".forge"
+    _forge_dir.mkdir(parents=True, exist_ok=True)
+    assessment_path = _forge_dir / "_assessment.json"
+    # Fallback: check old location for migration
+    _old_assess = Path(folder) / "_assessment.json"
+    if not assessment_path.exists() and _old_assess.exists():
+        assessment_path = _old_assess
 
     if funscript_path and Path(funscript_path).exists():
         if assessment_path.exists() and not st.session_state.get("project"):
