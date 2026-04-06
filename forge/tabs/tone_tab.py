@@ -204,6 +204,10 @@ def render():
             with st.spinner("Applying tone…"):
                 _apply_tone(selected)
             st.session_state["tone_accepted"] = True
+            # Sync cfg_key so sidebar doesn't re-trigger analysis
+            _chain = st.session_state.get("chain_funscript_path", "")
+            if _chain:
+                st.session_state["last_loaded_cfg"] = (_chain,)
             st.rerun()
 
     if st.session_state.get("tone_accepted"):
@@ -596,7 +600,13 @@ def _render_preview(selected: str | None):
             toned = _apply_tone_preview(times_s, positions, selected, slider_vals)
             modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
             modified = _reclamp_to_device_limits(times, modified)
-            st.session_state["_tone_preview_cache"] = {"key": _tone_cache_key, "modified": modified}
+            # Render After PNG and cache alongside modified positions
+            from forge_ui_components.funscript_chart.static import render_vibrant_static
+            _after_actions = [{"at": int(t * 1000), "pos": int(p)} for t, p in zip(times_s, modified)]
+            _after_png = render_vibrant_static(_after_actions, height_px=_TONE_H, width_px=_TONE_W)
+            st.session_state["_tone_preview_cache"] = {
+                "key": _tone_cache_key, "modified": modified, "after_png": _after_png,
+            }
 
         col_before, col_after = st.columns(2)
         with col_before:
@@ -607,8 +617,12 @@ def _render_preview(selected: str | None):
                 st.image(png_before, use_container_width=True)
         with col_after:
             st.caption(f"**After** — {selected} (impact {impact:.0%}) · device aware")
-            render_static_from_arrays(times_s, modified, color_mode="velocity",
-                                      height_px=_TONE_H, width_px=_TONE_W)
+            _after_png = st.session_state.get("_tone_preview_cache", {}).get("after_png")
+            if _after_png:
+                st.image(_after_png, use_container_width=True)
+            else:
+                render_static_from_arrays(times_s, modified, color_mode="velocity",
+                                          height_px=_TONE_H, width_px=_TONE_W)
 
         # Stats comparison row
         import numpy as np
@@ -742,6 +756,7 @@ def _apply_tone(tone_name: str):
             chain_data = load_funscript(funscript_path)
 
     if chain_data:
+        import time as _time
         status = st.status("Applying tone…", expanded=True)
         status.write(f"✅ Tone set to **{tone_name}**")
 
@@ -749,17 +764,21 @@ def _apply_tone(tone_name: str):
         if times:
             slider_vals = _get_slider_values(tone_name)
             impact = st.session_state.get(f"tone_impact_{tone_name}", 1.0)
-            status.update(label=f"Applying tone to {len(times):,} actions…")
-            times_s = [t / 1000.0 for t in times]
-            tone_data = next(t for t in _TONES if t["name"] == tone_name)
-            toned = _apply_tone_preview(times_s, positions, tone_name, slider_vals)
-            # Apply impact blending
-            modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
 
-            # Re-clamp to device limits after tone
-            status.update(label="Applying device awareness…")
-            modified = _reclamp_to_device_limits(times, modified)
-            status.write("✅ Device awareness re-applied after tone")
+            # --- Optimization #2: reuse preview if config matches ---
+            _accept_key = f"{tone_name}_{impact}_{hash(str(slider_vals))}_{len(positions)}"
+            _cached_preview = st.session_state.get("_tone_preview_cache", {})
+            if _cached_preview.get("key") == _accept_key:
+                modified = _cached_preview["modified"]
+                status.write("✅ Reusing preview — tone transform already computed")
+            else:
+                status.update(label=f"Applying tone to {len(times):,} actions…")
+                times_s = [t / 1000.0 for t in times]
+                toned = _apply_tone_preview(times_s, positions, tone_name, slider_vals)
+                modified = [p + impact * (t - p) for p, t in zip(positions, toned)]
+                status.update(label="Applying device awareness…")
+                modified = _reclamp_to_device_limits(times, modified)
+                status.write("✅ Tone transform + device awareness applied")
 
             # Save toned funscript to chain
             if project:
@@ -772,38 +791,70 @@ def _apply_tone(tone_name: str):
                 status.write("✅ Toned funscript saved to chain")
 
                 # Cache tone stage in ChartCache
-                status.update(label="Building chart cache…")
-                toned_actions = toned_data.get("actions", [])
                 from forge_ui_components.funscript_chart.cache import ChartCache
                 from forge_ui_components.funscript_chart.core import compute_annotation_bands
                 cache = ChartCache.from_session_state()
+                toned_actions = toned_data.get("actions", [])
                 cache.set_stage("tone", toned_actions)
 
-                # Re-run phrase detection on toned funscript
-                status.update(label="Detecting phrases on toned funscript…")
-                import tempfile, json as _json
-                _tmp = Path(tempfile.mkdtemp()) / "toned.funscript"
-                _tmp.write_text(_json.dumps(toned_data), encoding="utf-8")
-                from assessment.analyzer import FunscriptAnalyzer
-                _analyzer = FunscriptAnalyzer()
-                _analyzer.load(str(_tmp))
-                _toned_result = _analyzer.analyze()
-                _tmp.unlink()
+                # --- Optimization #2: skip phrase re-detection if config unchanged ---
+                _last_accept = st.session_state.get("_tone_accept_cache", {})
+                if _last_accept.get("key") == _accept_key:
+                    # Same config — reuse cached assessment
+                    _assess_path = _last_accept["assess_path"]
+                    _assess_dict = _last_accept["assess_dict"]
+                    _n_phrases = _last_accept["n_phrases"]
+                    from ui.common.project import Project
+                    st.session_state.project = Project.from_funscript(
+                        chain_path,
+                        existing_assessment_path=_assess_path,
+                    )
+                    status.write(f"✅ Reusing assessment — {_n_phrases} phrases (unchanged config)")
+                else:
+                    # Re-run phrase detection on toned funscript
+                    # --- Optimization #4: honest progress messaging ---
+                    _t0 = _time.time()
+                    status.update(
+                        label="Re-detecting phrases on toned funscript — "
+                              "this takes 15-60s for long funscripts…"
+                    )
+                    import tempfile, json as _json
+                    _tmp = Path(tempfile.mkdtemp()) / "toned.funscript"
+                    _tmp.write_text(_json.dumps(toned_data), encoding="utf-8")
+                    from assessment.analyzer import FunscriptAnalyzer
+                    _analyzer = FunscriptAnalyzer()
+                    _analyzer.load(str(_tmp))
+                    _toned_result = _analyzer.analyze()
+                    _tmp.unlink()
+                    _elapsed = _time.time() - _t0
 
-                # Save updated assessment
-                _forge_dir = Path(project.get("output_folder", "")) / ".forge"
-                _forge_dir.mkdir(parents=True, exist_ok=True)
-                _assess_path = _forge_dir / "_assessment.json"
-                _assess_dict = _toned_result.to_dict()
-                _assess_path.write_text(_json.dumps(_assess_dict, indent=2), encoding="utf-8")
+                    # Save updated assessment
+                    _forge_dir = Path(project.get("output_folder", "")) / ".forge"
+                    _forge_dir.mkdir(parents=True, exist_ok=True)
+                    _assess_path = str(_forge_dir / "_assessment.json")
+                    _assess_dict = _toned_result.to_dict()
+                    Path(_assess_path).write_text(
+                        _json.dumps(_assess_dict, indent=2), encoding="utf-8"
+                    )
 
-                # Update project with new assessment
-                from ui.common.project import Project
-                st.session_state.project = Project.from_funscript(
-                    str(_tmp) if _tmp.exists() else chain_path,
-                    existing_assessment_path=str(_assess_path),
-                )
-                status.write(f"✅ {len(_toned_result.phrases)} phrases detected on toned version")
+                    # Update project with new assessment
+                    from ui.common.project import Project
+                    st.session_state.project = Project.from_funscript(
+                        chain_path,
+                        existing_assessment_path=_assess_path,
+                    )
+                    _n_phrases = len(_toned_result.phrases)
+                    status.write(
+                        f"✅ {_n_phrases} phrases detected on toned version ({_elapsed:.1f}s)"
+                    )
+
+                    # Cache for next Accept with same config
+                    st.session_state["_tone_accept_cache"] = {
+                        "key": _accept_key,
+                        "assess_path": _assess_path,
+                        "assess_dict": _assess_dict,
+                        "n_phrases": _n_phrases,
+                    }
 
                 # Cache bands + pre-render PNG
                 cache.set_bands(compute_annotation_bands(_assess_dict))

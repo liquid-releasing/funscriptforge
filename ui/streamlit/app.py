@@ -228,11 +228,15 @@ def _project_picker_local(output_dir: str) -> None:
                     fs = get_input_file(loaded, "funscript")
                     if fs:
                         st.session_state["funscript_path"] = fs
-                    # Restore chain path
+                    # Restore chain path (.forge/ subfolder first, then legacy top-level)
                     for stage in ["phrases", "tone", "device"]:
-                        chain_file = os.path.join(folder, f"_funscript_{stage}.json")
+                        chain_file = os.path.join(folder, ".forge", f"_funscript_{stage}.json")
                         if os.path.isfile(chain_file):
                             st.session_state["chain_funscript_path"] = chain_file
+                            break
+                        legacy_file = os.path.join(folder, f"_funscript_{stage}.json")
+                        if os.path.isfile(legacy_file):
+                            st.session_state["chain_funscript_path"] = legacy_file
                             break
                     # Restore accepted flags from progress
                     _prog = loaded.get("progress", {})
@@ -244,6 +248,10 @@ def _project_picker_local(output_dir: str) -> None:
                     if _prog.get("phrases_edited"):
                         pass  # phrase chains restored via chain_funscript_path
                     st.session_state["project_accepted"] = True
+                    # Pre-set cfg_key so sidebar doesn't re-trigger analysis
+                    _chain = st.session_state.get("chain_funscript_path", "")
+                    _eff = _chain if (_chain and os.path.isfile(_chain)) else (fs or "")
+                    st.session_state["last_loaded_cfg"] = (_eff,)
                     st.rerun()
         st.sidebar.markdown("---")
 
@@ -1061,6 +1069,10 @@ def _render_phrase_selector_tab(project: Project) -> None:
 
         status.update(label="Phrases complete!", state="complete", expanded=False)
         st.session_state["phrases_accepted"] = True
+        # Sync cfg_key so sidebar doesn't re-trigger analysis
+        _cp = st.session_state.get("chain_funscript_path", "")
+        if _cp:
+            st.session_state["last_loaded_cfg"] = (_cp,)
         st.rerun()
 
     if st.session_state.get("phrases_accepted"):

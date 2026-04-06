@@ -109,6 +109,21 @@ def process(funscript_path: str, config: dict,
     return cli.process(funscript_path, config, on_progress)
 
 
+def preview_output(source: dict, config: dict, output_type: str = "alpha") -> dict:
+    """Preview a single channel without file I/O.
+
+    Args:
+        source: {x: list[float], y: list[float]} — the input funscript data.
+        config: Full config dict (from build_config()).
+        output_type: Channel to preview (alpha, beta, frequency, volume, speed).
+
+    Returns:
+        {output_x, output_y, label, available: bool}
+    """
+    cli = _ensure_cli()
+    return cli.preview_output(source, config, output_type)
+
+
 def list_outputs(directory: str, stem: str) -> list[dict]:
     """List generated output files for a stem in a directory.
 

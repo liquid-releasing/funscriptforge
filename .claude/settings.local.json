@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git checkout improve_assessment)"
+      "Bash(git checkout improve_assessment)",
+      "Bash(python -m pytest tests/ -x -q)"
     ]
   }
 }

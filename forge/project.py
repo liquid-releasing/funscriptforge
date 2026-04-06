@@ -112,10 +112,14 @@ def load_chain_funscript(project: dict, stage: str) -> Optional[dict]:
     path = folder / f"_funscript_{stage}.json"
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8"))
-    # Fallback: check old location (top-level output folder) for migration
+    # Fallback: check old location (top-level output folder) and migrate
     old_path = Path(project.get("output_folder", "")) / f"_funscript_{stage}.json"
     if old_path.exists():
-        return json.loads(old_path.read_text(encoding="utf-8"))
+        data = json.loads(old_path.read_text(encoding="utf-8"))
+        # Migrate: move to .forge/ subfolder and remove old file
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        old_path.unlink()
+        return data
     return None
 
 

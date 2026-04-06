@@ -147,9 +147,19 @@ def _run_process(funscript_path: str, preset_name: str, slider_overrides: dict,
 
     config = build_config(preset_name, slider_overrides, output_dir=output_dir)
 
+    import time as _time
+    _t0 = _time.time()
+
     def _progress(pct, msg):
         if pct >= 0:
-            status.update(label=f"{msg} ({pct}%)")
+            _elapsed = _time.time() - _t0
+            if pct < 20 and _elapsed > 5:
+                status.update(
+                    label=f"{msg} — generating channels, "
+                          f"this takes 2-3 min for long funscripts…"
+                )
+            else:
+                status.update(label=f"{msg} ({pct}%)")
 
     status.update(label=f"Running funscript-tools pipeline ({preset_name})…")
     result = process(funscript_path, config, _progress)
@@ -208,6 +218,12 @@ def render(project=None) -> None:
     )
 
     selected = st.session_state.get("stim_character", None)
+
+    # Pre-cache all electrode path PNGs so first card render is instant
+    if "_stim_pngs_cached" not in st.session_state:
+        for _name, _style in _CARD_STYLE.items():
+            _render_path_png(_style["path_shape"], _style["color"])
+        st.session_state["_stim_pngs_cached"] = True
 
     # ── Character cards ───────────────────────────────────────────────
     preset_names = list(presets.keys())
@@ -275,6 +291,11 @@ def render(project=None) -> None:
     with col_sliders:
         for sl in slider_defs:
             cv = sl["cv"]
+            # Show min/max labels flanking the slider
+            _min_label = sl.get("min_label", "")
+            _max_label = sl.get("max_label", "")
+            if _min_label or _max_label:
+                st.caption(f"← {_min_label}  · · ·  {_max_label} →")
             val = st.slider(
                 sl["label"],
                 min_value=float(sl["from_"]),
@@ -294,24 +315,59 @@ def render(project=None) -> None:
 
     st.divider()
 
+    # ── Preview display mode ─────────────────────────────────────────
+    _display_mode = st.radio(
+        "Preview display",
+        ["2D (alpha + beta)", "3-phase (all channels)"],
+        index=1,
+        horizontal=True,
+        help="Controls which channels are shown in the preview below. "
+             "Does not affect the exported output.",
+        key="stim_display_mode",
+    )
+
     # ── Preview button — generates to temp dir ────────────────────────
     _input_path = _get_input_funscript_path()
     if not _input_path:
         st.warning("Load a funscript on the Project tab first.")
         return
 
-    if st.button("👁 Preview channels", type="secondary", use_container_width=True,
+    # Config hash for reuse detection (Preview → Accept skip)
+    _stim_config_key = f"{selected}_{hash(str(sorted(slider_vals.items())))}_{_input_path}"
+
+    _est_time = "~18s" if not is_3phase else "2-3 min"
+    if st.button(f"👁 Preview channels ({_est_time})", type="secondary", use_container_width=True,
                  help="Generate channel previews from current settings."):
         with st.status("Generating preview…", expanded=True) as status:
             _tmp = tempfile.mkdtemp(prefix="stim_preview_")
-            # Copy input funscript to temp dir so process() can find it
             _tmp_input = Path(_tmp) / Path(_input_path).name
             _tmp_input.write_text(Path(_input_path).read_text(encoding="utf-8"), encoding="utf-8")
 
-            result = _run_process(str(_tmp_input), selected, slider_vals, _tmp, status)
+            # 2D mode: skip prostate generation (the bottleneck)
+            _extra_overrides = dict(slider_vals)
+            if not is_3phase:
+                from forge.funscript_tools import build_config as _bc
+                _cfg = _bc(selected, slider_vals, output_dir=_tmp)
+                _cfg.setdefault("prostate_generation", {})["generate_prostate_files"] = False
+                from forge.funscript_tools import process as _proc
+                def _progress(pct, msg):
+                    if pct >= 0:
+                        status.update(label=f"{msg} ({pct}%)")
+                status.update(label=f"Generating 2D preview ({selected})…")
+                result = _proc(str(_tmp_input), _cfg, _progress)
+                if not result["success"]:
+                    status.update(label=f"Error: {result['error']}", state="error")
+                    result = None
+                else:
+                    for out in result["outputs"]:
+                        status.write(f"✅ {out['suffix']} ({out['size_bytes'] / 1024:.1f} KB)")
+            else:
+                result = _run_process(str(_tmp_input), selected, slider_vals, _tmp, status)
+
             if result:
                 st.session_state["stim_preview_dir"] = _tmp
                 st.session_state["stim_preview_stem"] = _tmp_input.stem
+                st.session_state["stim_preview_config_key"] = _stim_config_key
                 status.update(label="Preview ready", state="complete", expanded=False)
         st.rerun()
 
@@ -328,6 +384,8 @@ def render(project=None) -> None:
         if not forge or not forge.get("output_folder"):
             st.error("Accept on the Project tab first.")
         else:
+            import shutil as _shutil
+
             output_folder = forge["output_folder"]
             Path(output_folder).mkdir(parents=True, exist_ok=True)
 
@@ -338,13 +396,36 @@ def render(project=None) -> None:
                 Path(_input_path).read_text(encoding="utf-8"), encoding="utf-8"
             )
 
+            # Check if Preview already generated with same config
+            _prev_key = st.session_state.get("stim_preview_config_key")
+            _prev_dir = st.session_state.get("stim_preview_dir", "")
+            _can_reuse = (
+                _prev_key == _stim_config_key
+                and _prev_dir
+                and _prev_dir != output_folder
+                and Path(_prev_dir).exists()
+            )
+
             with st.status("Generating estim channels…", expanded=True) as status:
                 status.write(f"✅ Character: **{selected}**")
                 status.write(f"✅ Input: {main_output.name}")
 
-                result = _run_process(str(main_output), selected, slider_vals,
-                                      output_folder, status)
-                if result:
+                if _can_reuse:
+                    # Copy preview files instead of regenerating
+                    _copied = 0
+                    for f in Path(_prev_dir).glob("*.funscript"):
+                        if f.name != main_output.name:
+                            _shutil.copy2(f, Path(output_folder) / f.name)
+                            _copied += 1
+                    status.write(f"✅ Reusing preview — {_copied} files copied (config unchanged)")
+                    # Build result from copied files
+                    from forge.funscript_tools import list_outputs
+                    result = {"success": True, "outputs": list_outputs(output_folder, project_name)}
+                else:
+                    result = _run_process(str(main_output), selected, slider_vals,
+                                          output_folder, status)
+
+                if result and result.get("success"):
                     # Save settings to forge project
                     forge["stim_character"] = selected
                     forge["stim_sliders"] = slider_vals
@@ -362,10 +443,11 @@ def render(project=None) -> None:
                     # Store for preview
                     st.session_state["stim_preview_dir"] = output_folder
                     st.session_state["stim_preview_stem"] = project_name
+                    st.session_state["stim_preview_config_key"] = _stim_config_key
                     st.session_state["stim_accepted"] = True
                     st.session_state["stim_result"] = result
 
-                    n_files = len(result["outputs"])
+                    n_files = len(result.get("outputs", []))
                     status.update(label=f"Stim complete — {n_files} channel files generated",
                                   state="complete", expanded=False)
             st.rerun()
@@ -390,29 +472,36 @@ def render(project=None) -> None:
 # ── Channel preview rendering ─────────────────────────────────────────
 
 def _render_channel_previews() -> None:
-    """Show input funscript + all generated channel previews.
+    """Show input funscript + generated channel previews.
 
     Reads channel files from disk (preview temp dir or output folder).
+    Display mode (2D vs 3-phase) controls which channels are shown.
     """
     preview_dir = st.session_state.get("stim_preview_dir")
     preview_stem = st.session_state.get("stim_preview_stem")
+    is_3phase = "3-phase" in st.session_state.get("stim_display_mode", "3-phase")
 
     st.subheader("Channel previews")
 
-    # Input funscript
-    _input_path = _get_input_funscript_path()
-
-    # Key channels to show (funscript-tools generates these)
-    _CHANNELS = [
-        ("alpha", "Alpha — electrode position L/R"),
-        ("beta", "Beta — electrode position U/D"),
-        ("pulse_frequency", "Pulse frequency — intensity tracking"),
-        ("frequency", "Frequency — primary modulation"),
-        ("volume", "Volume — overall level"),
+    # 2D: just alpha + beta
+    # 3-phase: 3-column grid of 9 channels
+    _CHANNELS_2D = [
+        ("alpha", "Alpha L/R"),
+        ("beta", "Beta U/D"),
+    ]
+    # 3-phase: rows of 3 grouped by function
+    _CHANNELS_3PHASE = [
+        # Row 1: position channels
+        [("alpha", "Alpha L/R"), ("beta", "Beta U/D"), ("pulse_frequency", "Pulse freq")],
+        # Row 2: modulation channels
+        [("frequency", "Frequency"), ("volume", "Volume"), ("pulse_rise_time", "Pulse rise")],
+        # Row 3: prostate variants
+        [("alpha-prostate", "Alpha prost."), ("beta-prostate", "Beta prost."), ("volume-prostate", "Vol. prost.")],
     ]
 
     # Row 1: Input funscript (full width)
     st.caption("**Input funscript**")
+    _input_path = _get_input_funscript_path()
     if _input_path:
         from forge.funscript import load_funscript, parse_actions
         _data = load_funscript(_input_path)
@@ -424,15 +513,36 @@ def _render_channel_previews() -> None:
     else:
         st.caption("_Load a funscript on the Project tab._")
 
-    # Row 2+: Generated channels
+    # Generated channels
     if not preview_dir or not preview_stem:
         st.caption("_Click **Preview** or **Accept** to generate channels._")
         return
 
-    # Show all channels that exist
-    for suffix, label in _CHANNELS:
-        channel_data = _read_channel_from_file(preview_dir, preview_stem, suffix)
-        if channel_data:
-            st.caption(f"**{label}**")
-            render_static_from_arrays(channel_data[0], channel_data[1],
-                                      height_px=120, width_px=1200)
+    _CH_H = 120
+    _CH_W = 400
+
+    if not is_3phase:
+        # 2D: two columns
+        cols = st.columns(2)
+        for col, (suffix, label) in zip(cols, _CHANNELS_2D):
+            with col:
+                channel_data = _read_channel_from_file(preview_dir, preview_stem, suffix)
+                if channel_data:
+                    st.caption(f"**{label}**")
+                    render_static_from_arrays(channel_data[0], channel_data[1],
+                                              height_px=_CH_H, width_px=_CH_W)
+                else:
+                    st.caption(f"**{label}** — _not generated_")
+    else:
+        # 3-phase: 3x3 grid
+        for row in _CHANNELS_3PHASE:
+            cols = st.columns(3)
+            for col, (suffix, label) in zip(cols, row):
+                with col:
+                    channel_data = _read_channel_from_file(preview_dir, preview_stem, suffix)
+                    if channel_data:
+                        st.caption(f"**{label}**")
+                        render_static_from_arrays(channel_data[0], channel_data[1],
+                                                  height_px=_CH_H, width_px=_CH_W)
+                    else:
+                        st.caption(f"**{label}** — _not generated_")
