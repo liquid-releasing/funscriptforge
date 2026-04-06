@@ -130,9 +130,6 @@ if "proposed_actions" not in st.session_state:
 if "last_loaded_file" not in st.session_state:
     st.session_state.last_loaded_file = None
 
-if "large_funscript_threshold" not in st.session_state:
-    st.session_state.large_funscript_threshold = 100_000  # force vibrant colors for all funscripts
-
 if "last_assessment_elapsed" not in st.session_state:
     st.session_state.last_assessment_elapsed = None
 
@@ -507,35 +504,8 @@ def _sidebar() -> None:
 
     selected_file = os.path.basename(funscript_path)
 
-    # Phrase detection is auto-scaled — no user settings needed
-
-    # --- Chart / transform settings ---
-    with st.sidebar.expander("Chart settings"):
-        large_funscript_threshold = st.number_input(
-            "Fast rendering threshold (actions)",
-            min_value=100,
-            max_value=200_000,
-            value=100_000,
-            step=500,
-            help=(
-                "Funscripts with more actions than this use a single grey "
-                "connecting line for speed.  Smaller funscripts use per-segment "
-                "coloured lines that match the dot colours."
-            ),
-        )
-        bpm_threshold = st.number_input(
-            "Transform BPM threshold",
-            min_value=40,
-            max_value=300,
-            value=120,
-            step=5,
-            help=(
-                "Phrases at or above this BPM are suggested the Amplitude Scale "
-                "transform; phrases below are suggested Passthrough."
-            ),
-        )
-    st.session_state.large_funscript_threshold = int(large_funscript_threshold)
-    st.session_state.bpm_threshold = float(bpm_threshold)
+    # Chart/transform settings use sensible defaults (set at session init).
+    # BPM threshold is also adjustable in the Export pipeline panel.
 
     from assessment.analyzer import AnalyzerConfig
     analyzer_cfg = AnalyzerConfig()  # Auto-scaling handles phrase detection params
@@ -1020,10 +990,7 @@ def _render_phrase_selector_tab(project: Project) -> None:
     # Phrase detection is auto-scaled based on funscript duration.
     # Users can fine-tune with split/join in the phrase editor.
 
-    viewer_panel.render(
-        project, view_state,
-        large_funscript_threshold=st.session_state.large_funscript_threshold,
-    )
+    viewer_panel.render(project, view_state)
 
     with st.expander("Assessment details", expanded=False):
         assessment_panel.render(project)

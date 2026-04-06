@@ -36,7 +36,6 @@ def _selector_fragment(
     funscript_path: str,
     assessment_dict: dict,
     duration_ms: int,
-    large_funscript_threshold: int,
 ) -> None:
     import json
     import time as _time
@@ -93,7 +92,6 @@ def _selector_fragment(
                 if png:
                     st.image(png, use_container_width=True)
             st.caption(f"Chart built in {_time.time()-_t0:.1f}s")
-            st.caption(f"Chart built in {_time.time()-_t0:.1f}s")
 
 
 # ------------------------------------------------------------------
@@ -104,7 +102,6 @@ def render(
     project,
     view_state,
     proposed_actions: Optional[List[dict]] = None,
-    large_funscript_threshold: int = 10_000,
 ) -> None:
     """Render the Phrase Selector.
 
@@ -162,7 +159,6 @@ def render(
         funscript_path=_fs_path,
         assessment_dict=assessment_dict,
         duration_ms=duration_ms,
-        large_funscript_threshold=large_funscript_threshold,
     )
 
     # Phrase table always visible below the chart.

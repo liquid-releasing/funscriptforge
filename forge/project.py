@@ -40,7 +40,7 @@ def default_forge(name: str, output_folder: str) -> dict:
 def forge_path(output_folder: str) -> Path:
     folder = Path(output_folder)
     # use first .forge file found, or derive from folder name
-    existing = list(folder.glob("*.forge"))
+    existing = [p for p in folder.glob("*.forge") if p.is_file()]
     if existing:
         return existing[0]
     return folder / f"{folder.name}.forge"
@@ -48,8 +48,11 @@ def forge_path(output_folder: str) -> Path:
 
 def load_forge(output_folder: str) -> Optional[dict]:
     path = forge_path(output_folder)
-    if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+    if path.is_file():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
     return None
 
 

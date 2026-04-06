@@ -81,8 +81,9 @@ def _reset_downstream_state():
 
 
 def _default_output_for(funscript_path: str) -> Path:
-    stem = Path(funscript_path).name.split(".")[0]
-    return _ASSETS_OUTPUT / stem
+    """Default output folder: .forge/ subfolder next to the input funscript."""
+    fs = Path(funscript_path)
+    return fs.parent / ".forge" / fs.name.split(".")[0]
 
 
 
@@ -99,10 +100,28 @@ def _commit_project_to_disk(project: dict | None) -> None:
     status = st.status("Preparing your project…", expanded=True)
 
     status.update(label="Creating output folder…")
-    Path(folder).mkdir(parents=True, exist_ok=True)
+    try:
+        Path(folder).mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        st.error(
+            f"**Cannot create output folder.**\n\n"
+            f"`{folder}`\n\n"
+            f"{exc.strerror}. Check that the folder is not locked by another "
+            f"program and that you have write permission."
+        )
+        return
 
     status.update(label="Saving project file…")
-    save_forge(project)
+    try:
+        save_forge(project)
+    except OSError as exc:
+        st.error(
+            f"**Cannot save project file.**\n\n"
+            f"`{folder}`\n\n"
+            f"{exc.strerror}. Close any program that may have this file open "
+            f"and try again."
+        )
+        return
     status.write(f"✅ Saved to `{Path(folder).name}.forge`")
 
     # Run beat analysis if we have audio or video
@@ -266,7 +285,10 @@ def render():
         funscript_path = st.session_state.get("funscript_path", "")
         if funscript_path and funscript_path != get_input_file(project, "funscript"):
             add_input_file(project, "funscript", funscript_path)
-            save_forge(project)
+            try:
+                save_forge(project)
+            except OSError:
+                pass  # folder may not exist yet — will be created on Accept
 
     st.divider()
 
