@@ -238,14 +238,18 @@ def _project_picker_local(output_dir: str) -> None:
                         if os.path.isfile(legacy_file):
                             st.session_state["chain_funscript_path"] = legacy_file
                             break
-                    # Restore accepted flags from progress
+                    # Restore accepted flags — only if chain files actually exist
                     _prog = loaded.get("progress", {})
-                    if loaded.get("output_targets"):
+                    _forge_sub = os.path.join(folder, ".forge")
+                    def _chain_exists(stage):
+                        return (os.path.isfile(os.path.join(_forge_sub, f"_funscript_{stage}.json"))
+                                or os.path.isfile(os.path.join(folder, f"_funscript_{stage}.json")))
+                    if loaded.get("output_targets") and _chain_exists("device"):
                         st.session_state["device_accepted"] = True
-                    if _prog.get("tone_applied"):
+                    if _prog.get("tone_applied") and _chain_exists("tone"):
                         st.session_state["tone_accepted"] = True
                         st.session_state["tone_global"] = loaded.get("tone")
-                    if _prog.get("phrases_edited"):
+                    if _prog.get("phrases_edited") and _chain_exists("phrases"):
                         pass  # phrase chains restored via chain_funscript_path
                     st.session_state["project_accepted"] = True
                     # Pre-set cfg_key so sidebar doesn't re-trigger analysis
@@ -669,11 +673,17 @@ def _sidebar() -> None:
 
     if _forge:
         _progress = _forge.get("progress", {})
+        # Validate progress flags against actual chain files on disk
+        _out = _forge.get("output_folder", "")
+        def _has_chain(stage):
+            _sub = os.path.join(_out, ".forge", f"_funscript_{stage}.json")
+            _old = os.path.join(_out, f"_funscript_{stage}.json")
+            return os.path.isfile(_sub) or os.path.isfile(_old) if _out else False
         _status.tabs_completed = {
             "Project": st.session_state.get("project_accepted", False),
-            "Device": st.session_state.get("device_accepted", False),
-            "Tone": _progress.get("tone_applied", False),
-            "Phrases": _progress.get("phrases_edited", False),
+            "Device": st.session_state.get("device_accepted", False) and _has_chain("device"),
+            "Tone": _progress.get("tone_applied", False) and _has_chain("tone"),
+            "Phrases": _progress.get("phrases_edited", False) and _has_chain("phrases"),
             "Patterns": _progress.get("patterns_edited", False),
             "Export": _progress.get("exported", False),
         }

@@ -53,10 +53,24 @@ def load_forge(output_folder: str) -> Optional[dict]:
     return None
 
 
+def _json_safe(obj):
+    """Convert numpy/non-standard types to JSON-serializable Python types."""
+    import numpy as np
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, Path):
+        return str(obj)
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+
 def save_forge(project: dict) -> None:
     path = forge_path(project["output_folder"])
     Path(project["output_folder"]).mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(project, indent=2), encoding="utf-8")
+    path.write_text(json.dumps(project, indent=2, default=_json_safe), encoding="utf-8")
 
 
 def add_input_file(project: dict, role: str, path: str) -> dict:
