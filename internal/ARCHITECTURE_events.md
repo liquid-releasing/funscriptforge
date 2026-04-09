@@ -1,136 +1,5 @@
-# Stim Tab & Enhance Tab Architecture
-
-> FunScriptForge wraps edger's funscript-tools workflow and makes it approachable.
-> We are the gateway into more sophisticated work that funscript-tools enables.
-
-Determine where this conflicts with C:\Users\bruce\Projects\funscript-updater\internal\tab_updates\events_tab_new.md and C:\Users\bruce\Projects\funscript-updater\internal\tab_updates\stim_tab_update.md
-
-## How users should think about it
-
-Your funscript describes **what happens** — strokes, speed, rhythm.
-
-The **Stim tab** decides **how that feels** — where the sensation moves,
-how sharp or gentle, how the intensity builds. Pick a style, see a preview,
-done.
-
-The **Enhance tab** adds **moments** — an edge here, a texture change there.
-These enhance what's already playing. They don't replace the funscript,
-they layer on top of it at the phrases you choose.
-
-That's it: **what happens → how it feels → special moments.**
-
-The Enhance tab lets casual users implement feels that previously required
-hand-editing YAML, understanding signal processing, or reverse-engineering
-hardware protocols. The complexity behind Edge, Throb, Deny — that's real
-engineering by edger and AquariumParrot. But the user just sees a name,
-a suggestion, and an Accept button.
-
-Everything below is implementation detail.
-
----
-
-## Overview
-
-The Stim tab and Enhance tab are the estim-specific layers of FunScriptForge.
-They sit after the funscript chain (Original → Device → Tone → Phrases) and
-control how the funscript translates into multi-channel electrical stimulation.
-
-```
-Our chain:   Original → Device → Tone → Phrases
-                                           ↓
-Stim tab:    User picks algorithm + creative knobs (global settings)
-                                           ↓
-Enhance tab:  User assigns events to phrases (per-phrase channel effects)
-                                           ↓
-Export:      cli.process() → 10 channel files → process_events() enhances them → final output
-```
-
-## Relationship to funscript-tools
-
-We wrap edger's exposed workflow — not cherry-picked parameters:
-
-| edger's workflow step | FunScriptForge surface |
-|---|---|
-| Load funscript | **Project tab** (already done) |
-| Configure (algorithm, freq, pulse, volume) | **Stim tab** — our UI over his config |
-| Process (generate output files) | **Export** — calls `cli.process()` |
-| Apply custom events at timecodes | **Enhance tab** — our phrase editor generates `.events.yml` |
-
-Credit where due: funscript-tools is edger's work. The MCB and Clutch event
-libraries are reverse-engineered by AquariumParrot from their respective
-SuperCollider scripts. We build the usability layer.
-
-## Stim Tab Design
-
-### Purpose
-Global estim configuration. User makes three creative decisions that control
-how the funscript maps to electrical stimulation channels.
-
-### Layout
-
-**Top:** Character cards (Gentle, Reactive, Scene Builder, Unpredictable, Balanced)
-— same as today. Select one to set the algorithm preset.
-
-**Middle:** Sliders with live matplotlib preview
-
-```
-┌──────────────────────┬─────────────────────────────────┐
-│                      │                                 │
-│   [Matplotlib        │   Slider: Sweep width           │
-│    preview with      │   ─────────●──────────          │
-│    fixed 0-1 axes]   │                                 │
-│                      │   Slider: Build speed            │
-│   Updates live as    │   ──────────────●─────          │
-│   sliders move.      │                                 │
-│   User sees the      │   Slider: ...                   │
-│   delta.             │                                 │
-│                      │                                 │
-└──────────────────────┴─────────────────────────────────┘
-```
-
-Key: Matplotlib on the LEFT with fixed x/y axes so the user can see how much
-each slider changes the output. Replaces Plotly path chart.
-
-**Bottom:** Device selector → expected output files
-
-### Device Selector
-
-User picks their device target. This determines which output files get generated:
-
-| Device target | Output files | Notes |
-|---|---|---|
-| **2-channel (2B, legacy)** | alpha, beta | 18 seconds to generate |
-| **3-phase (stereo stim)** | alpha, beta, prostate variants, frequency, pulse_frequency, pulse_width, pulse_rise, volume, volume-prostate (10 files) | 2-3 minutes. Default for most users. |
-| **4-phase (FOC, experimental)** | All 3-phase + E1-E4 motion axes (14 files) | Several minutes. New FOC hardware only. |
-
-Each device bucket shows its expected output file list so the user knows
-what they'll get before committing.
-
-> **Open question:** How does restim consume these files per device type?
-> Must test before locking device buckets.
-
-### Character → Config Mapping
-
-Characters are presets over funscript-tools config. Each maps to:
-- `alpha_beta_generation.algorithm` (circular, top-left-right, top-right-left, restim-original)
-- Frequency blend ratios (`ramp_combine_ratio`, `pulse_combine_ratio`)
-- Pulse shape (`pulse_width_min/max`, `pulse_rise_min/max`)
-- Points per second, speed threshold, direction change probability
-
-Power users expand to see the underlying config. Defaults handle 80% of cases.
-
-### Preview Functions (no I/O)
-
-funscript-tools exposes three preview functions callable without processing:
-- `cli.preview_electrode_path()` — algorithm path visualization
-- `cli.preview_frequency_blend()` — frequency blending strategy
-- `cli.preview_pulse_shape()` — pulse characteristics
-
-These power the live matplotlib previews on the Stim tab.
 
 ## Enhancement System
-
-### What enhancements are
 
 Enhancements are **composable, multi-axis effects** applied to the generated
 output channel files at specific timecodes. They are NOT funscript transforms
@@ -145,9 +14,7 @@ Events don't rebuild the funscript — they **enhance** it. The baseline channel
 carry the funscript's intent; events layer additional sensation on top
 (additive mode is the default for most events).
 
-Events are **composable**: multiple events at the same timecode hit different
-axes. Edge builds tension on volume/pulse, freq_shift changes texture,
-pulse_wobble changes feel — all stackable.
+Events are **composable**: multiple events at the same timecode hit different axes. Edge builds tension on volume/pulse, freq_shift changes texture, pulse_wobble changes feel — all stackable.
 
 ### Processing order
 
@@ -157,14 +24,13 @@ process_events()     → modifies those files at phrase timecodes
                        (reads .events.yml, applies to channel .funscript files)
 ```
 
-Sequential, not separate. Events enhance the generated channels — they layer
-on top of the baseline, they don't replace it.
+Sequential, not separate. Events enhance the generated channels — they layer on top of the baseline, they don't replace it.
 
 ### Enchantments (ship with FunScriptForge)
 
-Ten enchantments ship with FunScriptForge — the General events from
-funscript-tools v2.2.0. These are NOT funscript transforms — Tone shapes
+Ten enchantments ship with FunScriptForge — the General events from funscript-tools v2.2.0. These are NOT funscript transforms — Tone shapes
 the funscript, Enchantments layer sensation onto the output channels.
+
 They operate on completely different things and never conflict.
 
 Three families:
@@ -194,18 +60,12 @@ Three families:
 | **Stop** | Floor — volume to minimum, hold | duration: 30s, vol: 0.05→0.1 | overwrite |
 | **Tranquil** | Breathe — gentle 15Hz volume oscillation | duration: 20s, osc_amplitude: 0.5 | additive |
 
-Users can add more enchantments from edger's MCB and Clutch libraries
-(30+ events, credit: AquariumParrot). We ship the basics, docs show how
-to extend.
-
 ### User controls per enchantment
 
-Only two sliders in our UI:
-- **Duration** — selected from video or from events.txt file
-- **Intensity** — scales volume_boost / buzz_intensity / stroke_intensity
-  proportionally (maps to the right params behind the scenes)
+Only one slider in our UI:
 
-Ruin and Stop only need Duration (they're already all-or-nothing).
+- **Intensity** — scales volume_boost / buzz_intensity / stroke_intensity proportionally (maps to the right params behind the scenes)
+
 Event Time comes from the video player position — no typing.
 
 ### Why these don't duplicate Tone
@@ -317,23 +177,24 @@ Point-in-time enchantment placement. The user watches the video within a
 phrase, stops at the moment something happens, and drops an enchantment
 on that exact timecode. Enchantments are moments, not phrase-wide blankets.
 
-This feature is about micro-updates within a phrase — not about the full
-funscript. The UI is scoped tight to keep focus.
+This feature is about micro-updates within a phrase — not about the full funscript. The UI is scoped tight to keep focus.
 
 ### Layout
-
-discussion
 
 Under my new framing, user inputs without a video player, although that whole process is a lot of copy and paste in mpv.
 
 So your complete workflow is:
 
+0. start at the beginning phrase.
 1. Play the video
-2. When you find a point of interest, use Ctrl+Right/Left to step frame-by-frame
-3. Open Navigate > Goto to see and copy the exact timecode
-Use that timecode to find related sections or mark key points
+2. When you find a point of interest, pause and adjust. use Ctrl+Right/Left to step frame-by-frame
+3. User clicks to enter a start time. 
+4. User plays video, finds a point of interest, pause and adjust. 
+5. User clicks end time. (This sets the duration)
+6. User selects Enchantment from catalog. Clicks [+Add]
+7. when user gets to end of phrase, click NEXT to start the next phrase.
 
-If we put a video player in, we are set. but will we run into streamlit?
+NOTE: Timecodes and time offsets are both shown.
 
 ```
 ┌─────────────────────────────────────────────┬──────────────┐
@@ -353,16 +214,18 @@ If we put a video player in, we are set. but will we run into streamlit?
 │   [━━━━━━●━━━━━━━━━]            │   ○ Edge                │
 │   1:45        2:15              │   ○ Fast                │
 │                                 │   ○ Lube                │
-│   Timecode: 1:52.300            │   ○ Medium              │
-│                                 │   ○ Slow                │
-│   Active: Edge (1:52-2:07) 🗑    │   ○ Stay               │
+│   Timecode Begin: [button 
+            or time 1:52.300]     │   ○ Medium              │
+│   Timecode End:   [button 
+            or time 1:52.300]      │   ○ Slow                │
+│   Active: Edge (1:52-2:07) 🗑    │   ○ Stay                │
 │                                 │   ○ Ruin                │
-│  ─── or if no video: ───        │   ○ Stop               │
+│  ─── or if no video: ───        │   ○ Stop                │
 │                                 │   ○ Tranquil            │
-│   Timecode: [____1:52.300___]   │                          │
-│   (editable input field)        │  [Duration  ━━━●━━━━]    │
-│                                 │  [Intensity ━━━━●━━]     │
-│                                 │                          │
+│   Begin Timecode: [_1:52.300]   |                         |
+│   End Timecode: [__1:52.300__]  | [Intensity ━━━━●━━]     │
+│   (editable input field)        │                         │
+│                                 │  Description             |│                                 │                          │
 │                                 │  [+ Add]                 │
 ├─────────────────────────────────┴──────────────────────────┤
 │                                                            │
@@ -374,7 +237,7 @@ If we put a video player in, we are set. but will we run into streamlit?
 │  │ 2:03     │ Cum          │ 15s      │ 🗑 │               │
 │  │ 2:41     │ Tranquil     │ 20s      │ 🗑 │               │
 │  └──────────┴──────────────┴──────────┴───┘                │
-│                                                            │
+│                      [Load prebuilt]                       │
 │                       [Accept]                             │
 └────────────────────────────────────────────────────────────┘
 ```
@@ -403,13 +266,14 @@ Two panels side by side:
 - Active enchantment indicator — as video plays, shows which enchantment
   the playhead is inside (name + time range + trashcan). Enchantments
   light up as you watch. When in a gap: empty (ready to add).
-- If no video: timecode edit field (user types or clicks funscript waveform)
+- If no video: timecode edit field (user types)
+- Add button — places enchantment at current timecode. and sets timers end timer to begin and end timer is blank.
 
 **Right panel (catalog + controls):**
 - Enchantment list — all 10 basics. Click to select.
 - Duration slider (default from YAML)
 - Intensity slider (scales the right params per family)
-- Add button — places enchantment at current timecode
+
 
 ### Bottom section — phrase enchantment table + Accept
 
@@ -426,17 +290,6 @@ Two panels side by side:
 - Adding enchantments is implied acceptance — rows are kept as you
   navigate. Accept just writes the file.
 
-### Workflow
-
-1. Tab opens on Phrase 1 — see the chart, stats, context
-2. **Watch the video** — stop at the moment
-3. **Click an enchantment** from the catalog
-4. **Adjust Duration / Intensity** if desired (defaults are fine)
-5. **Click Add** → row appears in table, video jumps to end of enchantment
-6. **Repeat** for other moments in this phrase
-7. **Prev/Next** (or "Go to P__") to move to next phrase — work is kept
-8. When done, **Accept** → saves `.events.yml` to disk
-
 ### Key design decisions
 
 - **Phrase-scoped everything** — video, chart, table all show only the
@@ -446,7 +299,7 @@ Two panels side by side:
   about placing enchantments.
 - **The table IS the YAML** — each row maps to one event entry. What you
   see is what gets exported.
-- **Two sliders, not five** — Duration and Intensity. Intensity scales
+- **One sliders, not five** — Intensity. Intensity scales
   the right params behind the scenes (volume_boost, buzz_intensity,
   stroke_intensity depending on the enchantment family).
 - **Timecode from video** — stop the video, click Add. No millisecond typing.
@@ -464,9 +317,13 @@ Two panels side by side:
   If the YAML definitions are present, they show up in the catalog list.
   We ship the 10 basics. Docs show how to add more.
 
+### Load prebuilt
+
+User can write their own YAML file and upload it from the `Load prebuilt` button, which shows a OS-specific file selection YAML. Selection can go across phrases. It's a way to use one a user may have written by hand.
+
 ### Export integration
 
-Accept saves the `.events.yml` per phrase to the working folder.
+Accept saves the `phraseX.events.yml` per phrase to the working folder.
 At export time, all phrase `.events.yml` files merge into one:
 
 ```yaml

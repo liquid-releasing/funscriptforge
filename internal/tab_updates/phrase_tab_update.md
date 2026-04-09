@@ -1,1 +1,2 @@
- Done without Accept on phrases — ambiguous behavior
+ Change button from Done to **Accept and Done** 
+eliminating ambiguous behavior

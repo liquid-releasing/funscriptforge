@@ -46,13 +46,30 @@ def _ensure_cli():
 # ── Public API (the adapter boundary) ────────────────────────────────
 
 
-def get_presets() -> dict[str, dict]:
-    """Return the built-in character presets from funscript-tools.
+def get_builtin_presets() -> dict[str, dict]:
+    """Return the raw BUILTIN_PRESETS from funscript-tools (no user overrides).
 
-    Each preset has: description, config (dict), sliders (list of dicts).
+    Use this when you specifically want the upstream defaults — for example,
+    when generating the user's stim_presets.json file. Most callers should
+    use ``get_presets()`` instead, which honors user overrides.
     """
     cli = _ensure_cli()
     return dict(cli.BUILTIN_PRESETS)
+
+
+def get_presets() -> dict[str, dict]:
+    """Return character presets, merged with the user's stim_presets.json.
+
+    First call writes the default config file if it does not yet exist.
+    Errors are swallowed silently here — the stim panel calls into
+    ``forge.stim_config.merged_presets`` directly when it needs to display
+    a courtesy banner about a corrupt user file.
+
+    Each preset has: description, config (dict), sliders (list of dicts).
+    """
+    from forge.stim_config import merged_presets
+    presets, _err = merged_presets()
+    return presets
 
 
 def get_default_config() -> dict:

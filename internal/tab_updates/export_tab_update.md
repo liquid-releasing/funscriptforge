@@ -25,15 +25,7 @@ Add checkbox "Copy media to output directory" with info, copy one copy. If check
 
 User selects one or more devices for export.
 
-## Generate TCode
 
-For those devices that are not estim, let's generate TCode.
-
-- OSR
-
-What others support tcode? Handy? Intaface?
-
-For Possible code sample for Funscript to Timed T-code see tcodenewfeature.md. code should output timing data too.
 
 ## Handy, OSR, Intiface
 

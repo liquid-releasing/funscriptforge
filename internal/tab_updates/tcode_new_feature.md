@@ -9,7 +9,15 @@ A	Auxiliary axis (e.g., twist)
 B	Auxiliary axis (e.g., pitch)
 V	Vibration
 
-## Generate tcode
+## Generate TCode
+
+For those devices that are not estim, let's generate TCode.
+
+- OSR
+
+What others support tcode? Handy? Intaface?
+
+For Possible code sample for Funscript to Timed T-code see tcodenewfeature.md. code should output timing data too.
 
 Start with
 
@@ -38,8 +46,6 @@ An OSR2+ can move on the following axis:
 [quote="Yoooi, post:1, topic:23006"]
 Axis Description Valid file names L0 Up/Down **`<video name>.funscript`** L1 Forward/Backward **`<video name>.surge.funscript`** L2 Left/Right **`<video name>.sway.funscript`** R0 Twist **`<video name>.twist.funscript`** R1 Roll **`<video name>.roll.funscript`** R2 Pitch **`<video name>.pitch.funscript`**
 [/quote]
-
-
 
 ## References
 

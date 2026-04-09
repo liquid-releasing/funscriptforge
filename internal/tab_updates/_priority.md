@@ -6,12 +6,15 @@
 USER TEST
 
 5. export (but not tcode)
-6.  Done without Accept on phrases — ambiguous behavior
+6.  Fix ambiguous **Accept**. change button to **Accept and Done** on phrases 
 
 DEPLOYMENT 0.1 alpha
 
-7. assemble
-8. events (aka enchantment and export) [video player or not?]
-9. forgegen audio
+7. events (aka enchantment and export) [video player or not?]
+8. forgegen audio
+
+TODO 1.1 UPDATE
+
+9. assemble
 10. forgegen video
-10. multi-axis and tcode and export
+11. multi-axis and tcode and export

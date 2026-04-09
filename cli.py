@@ -1387,10 +1387,88 @@ def build_parser() -> argparse.ArgumentParser:
         help="Intensity spike fraction 0.0-0.5 (estim only). Default: 0.0",
     )
 
+    # --- stim-config ---
+    p_sc = sub.add_parser(
+        "stim-config",
+        help="Manage the user's stim_presets.json (overrides for built-in characters)",
+    )
+    p_sc_grp = p_sc.add_mutually_exclusive_group(required=True)
+    p_sc_grp.add_argument(
+        "--ensure", action="store_true",
+        help="Write the built-in defaults to the config file if it does not exist (idempotent).",
+    )
+    p_sc_grp.add_argument(
+        "--show", action="store_true",
+        help="Print the config file path and its current contents.",
+    )
+    p_sc_grp.add_argument(
+        "--reset", action="store_true",
+        help="Overwrite the config file with built-in defaults (destructive).",
+    )
+
     # --- test ---
     sub.add_parser("test", help="Run unit tests")
 
     return parser
+
+
+def cmd_stim_config(args):
+    """Manage the user's stim_presets.json file."""
+    from forge.stim_config import (
+        ensure_user_config,
+        load_user_config,
+        user_config_path,
+    )
+    from forge.funscript_tools import AVAILABLE, get_builtin_presets
+
+    path = user_config_path()
+
+    if args.show:
+        print(f"Config path: {path}")
+        if not path.is_file():
+            print("(file does not exist — run with --ensure to create it)")
+            return
+        data, err = load_user_config()
+        if err:
+            print(f"Error: {err}", file=sys.stderr)
+            sys.exit(1)
+        print(json.dumps(data, indent=2))
+        return
+
+    if args.ensure:
+        if not AVAILABLE:
+            print(
+                "Error: funscript-tools is not available. "
+                "Cannot generate default presets.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        try:
+            written = ensure_user_config()
+        except OSError as exc:
+            print(f"Error: cannot write {path}: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if written.stat().st_size > 0 and path.exists():
+            print(f"Config file: {written}")
+        return
+
+    if args.reset:
+        if not AVAILABLE:
+            print(
+                "Error: funscript-tools is not available. "
+                "Cannot generate default presets.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            defaults = get_builtin_presets()
+            path.write_text(json.dumps(defaults, indent=2), encoding="utf-8")
+        except OSError as exc:
+            print(f"Error: cannot write {path}: {exc}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Reset to built-in defaults: {path}")
+        return
 
 
 def cmd_device_aware(args):
@@ -1464,6 +1542,7 @@ def main():
         "beats":            cmd_beats,
         "parse-captions":   cmd_parse_captions,
         "device-aware":     cmd_device_aware,
+        "stim-config":      cmd_stim_config,
     }
     dispatch[args.command](args)
 

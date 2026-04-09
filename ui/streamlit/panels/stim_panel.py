@@ -113,12 +113,30 @@ def _get_input_funscript_path() -> str | None:
     return None
 
 
-def _get_presets() -> dict:
-    """Load presets from funscript-tools, cached in session state."""
+def _get_presets() -> tuple[dict, str | None]:
+    """Load presets, cached in session state.
+
+    Returns (presets, error_message). The error_message is non-None when
+    the user's stim_presets.json exists but couldn't be parsed — the panel
+    surfaces it as a courtesy banner so the user knows their hand-edits
+    were ignored.
+
+    On first call, attempts to seed the user config file with the
+    built-in defaults so the user has something to edit.
+    """
     if "stim_presets" not in st.session_state:
-        from forge.funscript_tools import get_presets
-        st.session_state["stim_presets"] = get_presets()
-    return st.session_state["stim_presets"]
+        from forge.stim_config import ensure_user_config, merged_presets
+        try:
+            ensure_user_config()
+        except OSError:
+            pass  # config dir may be unwritable; merged_presets will fall back
+        presets, err = merged_presets()
+        st.session_state["stim_presets"] = presets
+        st.session_state["stim_presets_error"] = err
+    return (
+        st.session_state["stim_presets"],
+        st.session_state.get("stim_presets_error"),
+    )
 
 
 def _collect_slider_cv_values(preset_name: str, presets: dict) -> dict:
@@ -206,10 +224,18 @@ def render(project=None) -> None:
         )
         return
 
-    presets = _get_presets()
+    presets, _presets_err = _get_presets()
     if not presets:
         st.error("No presets found in funscript-tools.")
         return
+
+    if _presets_err:
+        from forge.stim_config import user_config_path
+        st.warning(
+            f"⚠️ Your stim presets file at `{user_config_path()}` could not "
+            f"be loaded — using built-in defaults.\n\n"
+            f"Reason: {_presets_err}"
+        )
 
     st.info(
         "**Stim** shapes how your funscript translates to electrical stimulation. "
@@ -315,15 +341,21 @@ def render(project=None) -> None:
 
     st.divider()
 
-    # ── Preview display mode ─────────────────────────────────────────
+    # ── Stim channel display ─────────────────────────────────────────
+    # Controls how much of the pipeline runs on Preview. Accept always
+    # generates the full 3-phase output regardless of this setting.
     _display_mode = st.radio(
-        "Preview display",
-        ["2D (alpha + beta)", "3-phase (all channels)"],
-        index=1,
+        "Stim channel display",
+        ["2D (alpha + beta)", "3-phase (10 channels)"],
+        index=0,  # Default 2D — fast feedback for slider tweaking
         horizontal=True,
-        help="Controls which channels are shown in the preview below. "
-             "Does not affect the exported output.",
+        help="2D previews in ~18s; 3-phase previews everything in 2-3 minutes. "
+             "Pick 3-phase only when you're ready to fine-tune.",
         key="stim_display_mode",
+    )
+    st.caption(
+        "🎯 **Targeting:** stim device (3-phase). Accept always generates the "
+        "full 3-phase output — this radio only changes how much you see while editing."
     )
 
     # ── Preview button — generates to temp dir ────────────────────────
