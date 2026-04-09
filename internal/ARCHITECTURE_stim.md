@@ -68,48 +68,84 @@ how the funscript maps to electrical stimulation channels.
 
 ### Config files
 
-Characters (Gentle, Reactive, Scene Builder, Unpredictable, Balanced) are set in config files.
+Characters (Gentle, Reactive, Scene Builder, Unpredictable, Balanced) are set
+in a JSON config file that lives in the OS app-config directory:
 
-The first time the user goes to this tab, the config files are generated and put into a folder used by the application. Users can hand edit the config files themselves. 
+| Platform | Path |
+| --- | --- |
+| Windows | `%APPDATA%\funscriptforge\stim_presets.json` |
+| macOS | `~/Library/Application Support/funscriptforge/stim_presets.json` |
+| Linux | `$XDG_CONFIG_HOME/funscriptforge/stim_presets.json` |
 
-We generate defaults. (No need to provide an editor or sliders)
+The first time the user opens the Stim tab, the file is created using
+funscript-tools' `BUILTIN_PRESETS` as defaults. Users can hand-edit the
+file to override any field; on subsequent loads we deep-merge their
+overrides over the built-ins. Custom user-defined preset names are kept,
+so power users can author their own characters.
 
-[Named config profiles](https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#the-three-creative-decisions)
+If the user file is corrupt (invalid JSON, top-level array instead of
+object, etc.) the stim panel renders a warning banner at the top of the
+tab so the user knows their hand-edits were ignored, and falls back to
+the built-in defaults so the tab still works.
 
-Config files are saved using [Automatin with `--json`](https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#automating-with---json)
+CLI commands for managing the file (no UI):
 
-Use the currrent defaults we use for Gentle, Reactive, Scene Builder, Unpredictable, Balanced
+```bash
+python cli.py stim-config --ensure   # write defaults if missing (idempotent)
+python cli.py stim-config --show     # print the path and current contents
+python cli.py stim-config --reset    # overwrite with built-in defaults
+```
+
+Reference: funscript-tools [Named config profiles](https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#the-three-creative-decisions)
+and [Automating with `--json`](https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#automating-with---json).
 
 ### Layout
 
-**Top:** Character cards (Gentle, Reactive, Scene Builder, Unpredictable, Balanced)
-— same as today. Select one to set the algorithm preset.
+**Top:** Character cards (Gentle, Reactive, Scene Builder, Unpredictable,
+Balanced) — same as today. Select one to set the algorithm preset.
 
-**Middle:**
+**Middle:** Sliders bound to the selected character's slider definitions
+(one row per slider, with min/max labels from the preset). Slider values
+override the preset config in memory only — they do not write back to the
+JSON file. For persistent overrides, hand-edit the config file.
 
-Display the two most relevant sliders for the user to change.
+The static electrode-path PNG renders next to the sliders as a visual
+reference for the selected character. All five path PNGs are pre-cached
+on first stim tab visit for instant character switching.
 
-Instead, we read the config file selected and display png charts of the named config in the documentation.
+**Bottom:**
 
-**Bottom:** 
+- [Display Selector](#display-selector)
+- Preview button → runs the pipeline matching the Display Selector
+- Channel previews (read from disk)
+- Accept button → always generates the full set (see [Accept](#accept-button-functionality))
 
-- [Device Selector](#device-selector)
-- [Bottom section](#bottom-section)
+### Display Selector
 
-### Device Selector
+A radio above the Preview button labelled **Stim channel display**.
+This is **not** a device target — it controls how much of the pipeline
+runs on Preview so the user can iterate quickly.
 
-User picks their device target. This determines which output files get generated:
-
-| Device target | Output files | Notes |
+| Display option | Preview cost | What it shows |
 |---|---|---|
-| **2-channel (2B, legacy)** | alpha, beta | 18 seconds to generate |
-| **3-phase (stereo stim)** | alpha, beta, prostate variants, frequency, pulse_frequency, pulse_width, pulse_rise, volume, volume-prostate (10 files) | 2-3 minutes. Default for most users. |
-| **4-phase (FOC, experimental)** | All 3-phase + E1-E4 motion axes (14 files) | Not active selection |
+| **2D (alpha + beta)** *(default)* | ~18 seconds | Input + alpha + beta only |
+| **3-phase (10 channels)** | 2-3 minutes | Input + 9 channels in a 3×3 grid |
 
-Each device bucket shows its expected output file list so the user knows what they'll get before committing.
+Default is **2D** because most slider iteration only needs alpha/beta to
+judge the change. The user explicitly opts in to the 3-phase wait when
+they're ready to fine-tune the full output.
 
-> **Open question:** How does restim consume these files per device type?
-> Must test before locking device buckets.
+A caption under the radio acknowledges what the user is targeting:
+
+> 🎯 Targeting: stim device. Accept always generates the full set —
+> this radio only changes how much you see while editing.
+
+**4-phase (FOC) is intentionally not offered.** FOC users graduate to
+funscript-tools directly — same gateway pattern as advanced enchantments.
+
+> **Note on restim:** restim consumes the generated funscript files at
+> export time, not from this tab. The Display Selector only affects what
+> we render in the preview area.
 
 ### Character → Config Mapping
 
@@ -130,99 +166,92 @@ funscript-tools exposes three preview functions callable without processing:
 
 These power the live matplotlib previews on the Stim tab.
 
-#### Documentation update
+### Channel previews
 
-The sim tab documents should describe what the sliders mean.
+Layout depends on the [Display Selector](#display-selector) choice.
 
-The charts display the [Three creative decisions](https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#the-three-creative-decisions) such as
+**Display 2D** — Input + alpha + beta only:
 
-| | Description | Value | Chart | Result | Notes |
-| - | - | - | - | - | - |
-| **Min distance** | The `min_distance_from_center` config setting (0.1–0.9) controls how far from center the electrode can range. Higher = wider sweep, more pronounced movement. | low (0.1) | ████░░░░░░   | electrode stays near center — subtle | |
-| **Frequency blend** | The frequency output is a blend of two signals:<p/>
-**Scene energy (ramp):** A slow-building intensity curve that rises and falls with the overall pace of a scene. Think of it as the "mood arc."<p/>**Action speed:** Direct tracking of how fast the source funscript is moving.<p/>
-  Fast strokes → faster pulse rate, immediately. | ratio 5 |  ████████░░░░  | 50% / 50%  ← default, balanced | **Rule of thumb:**
-- Fast, intense content → lower ratio (reactive)
-- Slow, scene-building content → higher ratio (gradual build)
-- Mixed content → default (5)|
-| **Pulse shape: Width** | how long each pulse lasts | wide    |▐███████▌   |  long, full pulses — more "filled in" sensation | The config sets a min and max for width — the output file sweeps between them based
-on the source funscript's intensity. |
-| ((Rise time: Attack)) | how the pulse attacks |  ▐█▌  ▐█▌ <p>   ▐/▌  ▐\▌ | immediate onset, hard edge | The config sets a min and max for attack — the output file sweeps between them based on the source funscript's intensity. |
-
-The values in the value and chart columns reflect the user decision on the character selected.
-
-### Bottom section
-
-default is two-phase
-
-#### Display 2d shows original, alpha and beta only
-
-Rows of the original and preview
-
+```text
 [ Input funscript — full width, vibrant ]
 
 [ Alpha L/R    ] [ Beta U/D     ]
+```
 
-see [funscript_1d_to_2d.py](https://github.com/edger477/funscript-tools/blob/main/processing/funscript_1d_to_2d.py) to calculate the 2d values. Use defaults.
+See [funscript_1d_to_2d.py](https://github.com/edger477/funscript-tools/blob/main/processing/funscript_1d_to_2d.py)
+for the alpha/beta computation. We use defaults.
 
-#### Display 3 phase
+**Display 3-phase** — Input + 9 channels in a 3×3 grid grouped by function:
 
-as described in notes. three-column layout makes sense for the channels:
-
+```text
 [ Input funscript — full width, vibrant ]
 
 [ Alpha L/R    ] [ Beta U/D     ] [ Pulse freq   ]
-[ Frequency    ] [ Volume       ] [ Pulse rise    ]
-[ Alpha prost. ] [ Beta prost.  ] [ Vol. prost.   ]
+[ Frequency    ] [ Volume       ] [ Pulse rise   ]
+[ Alpha prost. ] [ Beta prost.  ] [ Vol. prost.  ]
+```
 
-Compact, all visible at once, grouped by function. The input stays full-width on top as the reference. Each row is a logical group: position channels, modulation channels, prostate variants.
-
-#### No display ooption for 4 phase
-
-Use three phase.
+Compact, all visible at once. The input stays full-width on top as the
+reference. Each row is a logical group: position channels, modulation
+channels, prostate variants.
 
 #### funscript generation test results times
 
-Response for victoriaoaks
+Response for VictoriaOaks (~30-minute funscript):
 
-| Technique | time | note |
-| - | - | - |
-| convert to 2d basic | 18seconds | alpha and beta only |
-| process to 3p | 2 or 3 minutes | this is what we do i think.  10 files |
+| Technique | Time | Note |
+| --- | --- | --- |
+| convert to 2D basic | 18 seconds | alpha and beta only |
+| process to 3-phase | 2-3 minutes | full 10-file output |
 
-## Accept button response
+## Accept button functionality
 
-Radio above Accept
+Accept **always generates the full set** of channel files — alpha, beta,
+prostate variants, frequency, pulse_frequency, pulse_width, pulse_rise,
+volume, volume-prostate. The cost to the user is waiting for everything
+to be generated; the benefit is that **device selection is deferred to
+the Export tab**, where the user picks which subset of files to copy
+into per-device output folders without re-running the pipeline.
 
-- Generate 2d (for 2b, 312)
-- Generate 3-phase (for stereo stim, Tingler, ZC95, NeoStim, FOC-Stim)
-- Generate all including 4-phase (for Foc-Stim)
+Optimization: when the user has just run Preview with the same config
+hash, Accept reuses the preview files instead of regenerating them. The
+common path (Preview to verify, then Accept) is therefore close to free.
 
-### Accept button functionality
-
-Save the funscripts into our temp folder for copying into folders during export. No regeneration for export.
-
-Remember which selection the user made. We will reuse it on export.
+Settings (character + slider values) are saved to the project file so
+the same settings are reused on Export.
 
 ### Export behavior
 
-And when we export, we use funscript-tools to generate some of the files. (the 10 documented ones). https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#the-ten-output-files
+Export uses funscript-tools to generate the [ten output files](https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#the-ten-output-files).
+restim consumes these files at export time, not from the Stim tab.
+
+## Future work (after user testing)
+
+### Documentation: Three creative decisions reference
+
+The Stim tab user docs should describe what the sliders mean using
+funscript-tools' [three creative decisions](https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#the-three-creative-decisions)
+framing. Sketch of the table to build out:
+
+| Decision | Description | Example value | Visual | Result |
+| --- | --- | --- | --- | --- |
+| **Min distance** | `min_distance_from_center` (0.1–0.9). Higher = wider sweep, more pronounced movement. | low (0.1) | `████░░░░░░` | electrode stays near center — subtle |
+| **Frequency blend** | Blend of scene energy (ramp) vs action speed. Lower ratio = reactive; higher = scene-building. | ratio 5 | `████████░░` | 50/50 — balanced default |
+| **Pulse width** | How long each pulse lasts. Min/max sweep based on intensity. | wide | `▐███████▌` | long, full pulses — "filled in" sensation |
+| **Pulse rise (attack)** | How the pulse attacks. Min/max sweep based on intensity. | sharp | `▐█▌ ▐█▌` | immediate onset, hard edge |
+
+This is **future work** — write the docs after user testing tells us
+which decisions need the most explanation.
 
 ## References
 
 ### User creative decisions
 
-We support the creative decisions:
-- https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#1-algorithm--where-the-sensation-moves
+We support the creative decisions documented in funscript-tools:
 
-what he thinks users want to change
-- https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#key-config-settings
+- [Algorithm — where the sensation moves](https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#1-algorithm--where-the-sensation-moves)
+- [Key config settings](https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#key-config-settings)
 
-### output best practices
+### Output best practices
 
-https://github.com/edger477/funscript-tools/blob/main/FUNDAMENTAL_OPERATIONS.md#iv-best-practices
-
-## Bug fixes
-
-9. Old chain files in output — pre-.forge/ projects still have _funscript_*.json at top level
-10. Stim 20s to respond to character selection — pre-cache path PNGs
+[FUNDAMENTAL_OPERATIONS.md](https://github.com/edger477/funscript-tools/blob/main/FUNDAMENTAL_OPERATIONS.md#iv-best-practices)
