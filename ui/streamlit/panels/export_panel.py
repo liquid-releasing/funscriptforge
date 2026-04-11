@@ -19,6 +19,7 @@ import copy
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 import streamlit as st
@@ -963,11 +964,81 @@ def _render_pipeline_section(project) -> None:
 
 
 # ------------------------------------------------------------------
-# Export to device subfolders
+# Export device groups
 # ------------------------------------------------------------------
 
+# Mechanical = single checkbox; expanded internally to MECHANICAL_KEYS so the
+# Device tab limits code (which still keys off output_targets) keeps working.
+# Limits source for mechanical = handy (most restrictive).
+MECHANICAL_KEYS = ("handy", "osr2", "generic")
+
+# Estim devices — five separate checkboxes. For this PR they are metadata only:
+# the contents of estim/ are identical regardless of which estim device is
+# checked, because audio synthesis is deferred to a later PR.
+ESTIM_DEVICES = (
+    ("legacy",     "Audio 3-phase — continuous (legacy 2b/312)"),
+    ("stereostim", "Audio 3-phase — pulse (Tingler/ZC) — default"),
+    ("foc3phase",  "FOC-Stim — 3-phase"),
+    ("foc4phase",  "FOC-Stim — 4-phase"),
+    ("neostim",    "NeoStim — 3-phase"),
+)
+ESTIM_KEYS = tuple(k for k, _ in ESTIM_DEVICES)
+
+
+def _split_targets(targets: list) -> tuple[bool, list[str]]:
+    """Split a flat output_targets list into (mechanical_on, estim_keys)."""
+    mech_on = any(t in MECHANICAL_KEYS for t in targets)
+    estim   = [t for t in targets if t in ESTIM_KEYS]
+    return mech_on, estim
+
+
+def _render_device_selection(forge_project: dict) -> None:
+    """Two checkbox groups: Mechanical (single) + Estim (five). Writes
+    output_targets back to the forge project."""
+    saved = forge_project.get("output_targets", [])
+    saved_mech, saved_estim = _split_targets(saved)
+
+    st.subheader("Export devices")
+    st.caption("Pick the devices you want files for. Each group writes to its own subfolder.")
+
+    col_mech, col_estim = st.columns([1, 2])
+
+    with col_mech:
+        st.markdown("**Mechanical**")
+        mech_on = st.checkbox(
+            "Mechanical (Handy / OSR / Intiface)",
+            value=saved_mech,
+            key="export_mech_checkbox",
+            help="Single 1D funscript for The Handy, OSR2, and Intiface-compatible "
+                 "Bluetooth devices. Limits driven by The Handy (most restrictive).",
+        )
+
+    with col_estim:
+        st.markdown("**Estim**")
+        new_estim = []
+        for key, label in ESTIM_DEVICES:
+            checked = st.checkbox(
+                label,
+                value=(key in saved_estim) or (not saved_estim and key == "stereostim"),
+                key=f"export_estim_{key}",
+            )
+            if checked:
+                new_estim.append(key)
+
+    # Rebuild flat output_targets
+    new_targets: list[str] = []
+    if mech_on:
+        new_targets.extend(MECHANICAL_KEYS)
+    new_targets.extend(new_estim)
+    if new_targets != saved:
+        forge_project["output_targets"] = new_targets
+
+    if not mech_on and not new_estim:
+        st.caption("⚠️ Pick at least one device to enable export.")
+
+
 def _render_export_to_folder(project) -> None:
-    """Export funscripts to device-specific subfolders in the output directory."""
+    """Export funscripts to mechanical/ + estim/ subfolders in the output directory."""
     forge_project = st.session_state.get("forge_project")
     if not forge_project:
         return
@@ -977,15 +1048,20 @@ def _render_export_to_folder(project) -> None:
         st.caption("Set an export location in the **Project** tab first.")
         return
 
+    _render_device_selection(forge_project)
+
     targets = forge_project.get("output_targets", [])
-    if not targets:
-        st.caption("Select output devices in the **Device** tab first.")
+    mech_on, estim_on = _split_targets(targets)
+    if not mech_on and not estim_on:
         return
 
+    st.divider()
     st.subheader("Export to folder")
     st.caption(f"Output location: `{output_folder}`")
-    for target in targets:
-        st.caption(f"  → `{target}/` — device-specific funscript")
+    if mech_on:
+        st.caption("  → top-level base files + `mechanical/` subfolder")
+    if estim_on:
+        st.caption("  → top-level base files + `estim/` subfolder")
 
     col_export, col_open = st.columns(2)
     with col_export:
@@ -1013,11 +1089,25 @@ def _render_export_to_folder(project) -> None:
 
 
 def _do_export_to_folders(forge_project: dict, project) -> None:
-    """Write funscripts to device subfolders."""
+    """Write the project to its output folder.
+
+    Layout:
+        {output_folder}/
+          {stem}.funscript               ← always
+          {stem}.heatmap.png             ← always
+          {stem}.<media>                 ← copied media + audio + captions
+          {stem}.forgetmpl               ← always
+          mechanical/{stem}.funscript    ← if any mechanical device selected
+          estim/                         ← if any estim device selected
+            {stem}.funscript
+            {stem}.alpha.funscript
+            … all channel files produced by funscript-tools …
+    """
     from forge.project import get_latest_funscript, save_forge
 
     output_folder = forge_project.get("output_folder", "")
     targets = forge_project.get("output_targets", [])
+    mech_on, estim_on = _split_targets(targets)
 
     status = st.status("Exporting…", expanded=True)
 
@@ -1033,54 +1123,21 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
     actions = fs_data.get("actions", [])
     status.write(f"✅ {len(actions):,} actions to export")
 
-    # Write main funscript to output folder (flat — restim-compatible naming)
-    stem = forge_project['name']
-    out_path = os.path.join(output_folder, f"{stem}.funscript")
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(fs_data, f, indent=2)
-    status.write(f"✅ `{stem}.funscript` (main)")
+    # ── Top-level base files ─────────────────────────────────────────
+    Path(output_folder).mkdir(parents=True, exist_ok=True)
 
-    # Generate estim channel files via funscript-tools if a stim preset is configured
-    _stim_character = forge_project.get("stim_character")
-    if _stim_character:
-        from forge.funscript_tools import (
-            AVAILABLE as _FT_AVAILABLE,
-            build_config,
-            list_outputs,
-            process,
-        )
-        if not _FT_AVAILABLE:
-            status.write("⚠️ funscript-tools not available — skipping estim channel generation")
-        else:
-            _slider_vals = forge_project.get("stim_sliders", {}) or {}
-            # Reuse existing channel files if stim Accept already generated them
-            _existing = [
-                o for o in list_outputs(output_folder, stem)
-                if not o["path"].endswith(f"{stem}.funscript")
-            ]
-            if _existing:
-                status.write(
-                    f"✅ Reusing {len(_existing)} estim channel file(s) from Stim tab "
-                    f"({_stim_character})"
-                )
-                for _o in _existing:
-                    status.write(f"   • {os.path.basename(_o['path'])}")
-            else:
-                status.write(f"⏳ Generating estim channels ({_stim_character})…")
-                try:
-                    _cfg = build_config(_stim_character, _slider_vals,
-                                        output_dir=output_folder)
-                    _result = process(out_path, _cfg,
-                                      lambda pct, msg: status.update(label=f"{msg} ({pct}%)")
-                                      if pct >= 0 else None)
-                    if _result.get("success"):
-                        for _o in _result.get("outputs", []):
-                            _kb = _o["size_bytes"] / 1024
-                            status.write(f"✅ `{os.path.basename(_o['path'])}` ({_kb:.1f} KB)")
-                    else:
-                        status.write(f"⚠️ Channel generation failed: {_result.get('error')}")
-                except Exception as _exc:
-                    status.write(f"⚠️ Channel generation error: {_exc}")
+    stem = forge_project["name"]
+    base_path = os.path.join(output_folder, f"{stem}.funscript")
+    with open(base_path, "w", encoding="utf-8") as f:
+        json.dump(fs_data, f, indent=2)
+    status.write(f"✅ `{stem}.funscript` (top-level base)")
+
+    # Heatmap PNG of the main funscript
+    try:
+        _write_heatmap_png(actions, os.path.join(output_folder, f"{stem}.heatmap.png"))
+        status.write(f"✅ `{stem}.heatmap.png`")
+    except Exception as _exc:
+        status.write(f"⚠️ Heatmap generation failed: {_exc}")
 
     # Copy input media to top-level output folder
     from forge.project import get_input_file
@@ -1092,6 +1149,20 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
             if not os.path.exists(dest):
                 shutil.copy2(src, dest)
                 status.write(f"✅ Copied {os.path.basename(src)}")
+
+    # ── Mechanical subfolder ─────────────────────────────────────────
+    if mech_on:
+        mech_dir = Path(output_folder) / "mechanical"
+        mech_dir.mkdir(exist_ok=True)
+        mech_fs = mech_dir / f"{stem}.funscript"
+        with open(mech_fs, "w", encoding="utf-8") as f:
+            json.dump(fs_data, f, indent=2)
+        status.write(f"✅ `mechanical/{stem}.funscript`")
+
+    # ── Estim subfolder ──────────────────────────────────────────────
+    if estim_on:
+        _write_estim_subfolder(forge_project, base_path, stem,
+                               Path(output_folder), status)
 
     # Export workflow template (.forgetmpl)
     _export_template(forge_project, output_folder, status)
@@ -1109,7 +1180,113 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
     save_forge(forge_project)
 
     st.session_state["export_complete"] = True
-    status.update(label=f"Exported to {len(targets)} device(s)!", state="complete", expanded=False)
+    _summary_bits = []
+    if mech_on:
+        _summary_bits.append("mechanical")
+    if estim_on:
+        _summary_bits.append("estim")
+    status.update(label=f"Exported ({' + '.join(_summary_bits)})",
+                  state="complete", expanded=False)
+
+
+def _write_heatmap_png(actions: list, dest_path: str) -> None:
+    """Render a velocity-colored heatmap PNG of the main funscript."""
+    from forge_ui_components.funscript_chart.core import compute_chart_data
+    from forge_ui_components.funscript_chart.static import render_static_chart
+
+    series = compute_chart_data(actions)
+    png = render_static_chart(series, color_mode="velocity",
+                              height_px=200, width_px=1600,
+                              show_labels=False)
+    with open(dest_path, "wb") as f:
+        f.write(png)
+
+
+def _write_estim_subfolder(forge_project: dict, base_funscript_path: str,
+                           stem: str, output_root: Path, status) -> None:
+    """Populate {output_root}/estim/ with the main funscript + every channel
+    file funscript-tools produces.
+
+    Three sources, in priority order:
+      1. Stim Accept already produced channel files at the output root —
+         move them into estim/ alongside a copy of the base funscript.
+      2. A Stim character preset is configured but no files exist yet —
+         call funscript_tools.process() with the preset against the base
+         funscript, writing into estim/.
+      3. No Stim preset at all — call funscript_tools.process_with_default_config()
+         against the base funscript, writing edger's defaults into estim/.
+    """
+    from forge.funscript_tools import (
+        AVAILABLE as _FT_AVAILABLE,
+        build_config,
+        list_outputs,
+        process,
+        process_with_default_config,
+    )
+
+    estim_dir = output_root / "estim"
+    estim_dir.mkdir(exist_ok=True)
+
+    # Always write the main funscript into estim/
+    estim_main = estim_dir / f"{stem}.funscript"
+    with open(base_funscript_path, encoding="utf-8") as _src:
+        _src_text = _src.read()
+    estim_main.write_text(_src_text, encoding="utf-8")
+    status.write(f"✅ `estim/{stem}.funscript`")
+
+    if not _FT_AVAILABLE:
+        status.write("⚠️ funscript-tools not available — estim channels not generated")
+        return
+
+    _stim_character = forge_project.get("stim_character")
+    _slider_vals = forge_project.get("stim_sliders", {}) or {}
+
+    # Source 1: stim Accept files at the output root → move into estim/
+    import shutil as _shutil
+    _existing_top = [
+        o for o in list_outputs(str(output_root), stem)
+        if Path(o["path"]).parent == output_root
+        and not o["path"].endswith(f"{stem}.funscript")
+    ]
+    if _existing_top:
+        for _o in _existing_top:
+            _src_path = Path(_o["path"])
+            _dest = estim_dir / _src_path.name
+            _shutil.move(str(_src_path), str(_dest))
+        status.write(f"✅ Moved {len(_existing_top)} stim channel file(s) into `estim/`")
+        return
+
+    # Source 2: stim preset configured → run with preset
+    if _stim_character:
+        status.write(f"⏳ Generating estim channels ({_stim_character})…")
+        try:
+            _cfg = build_config(_stim_character, _slider_vals,
+                                output_dir=str(estim_dir))
+            _result = process(str(estim_main), _cfg,
+                              lambda pct, msg: status.update(label=f"{msg} ({pct}%)")
+                              if pct >= 0 else None)
+        except Exception as _exc:
+            status.write(f"⚠️ Channel generation error: {_exc}")
+            return
+    else:
+        # Source 3: no stim preset → use funscript-tools defaults
+        status.write("⏳ Generating estim channels (funscript-tools defaults)…")
+        try:
+            _result = process_with_default_config(
+                str(estim_main), str(estim_dir),
+                lambda pct, msg: status.update(label=f"{msg} ({pct}%)")
+                if pct >= 0 else None,
+            )
+        except Exception as _exc:
+            status.write(f"⚠️ Channel generation error: {_exc}")
+            return
+
+    if _result.get("success"):
+        for _o in _result.get("outputs", []):
+            _kb = _o["size_bytes"] / 1024
+            status.write(f"✅ `estim/{os.path.basename(_o['path'])}` ({_kb:.1f} KB)")
+    else:
+        status.write(f"⚠️ Channel generation failed: {_result.get('error')}")
 
 
 def _export_template(forge_project: dict, output_folder: str, status) -> None:

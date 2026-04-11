@@ -28,29 +28,35 @@ def render():
 
     st.info(
         "**Device Awareness** ensures your funscript works within your device's limits. "
-        "Select your output devices — Forge analyzes the funscript and applies the "
-        "minimum correction needed. Most of your original script is preserved."
+        "Choose your devices on the **Export tab**; this tab shows the limits and "
+        "applies the minimum correction needed. Most of your original script is preserved."
     )
 
-    # ── Device selection ──────────────────────────────────────────────────
-    st.subheader("Output devices")
-    st.caption("Select all devices you want to export for.")
+    # ── Device summary (read-only) ────────────────────────────────────────
+    saved_targets = (project or {}).get("output_targets", [])
 
-    saved_targets = (project or {}).get("output_targets", ["estim_foc", "estim_stereo"])
+    # Mechanical is a single Export-tab checkbox that expands to all three
+    # mechanical keys; for the limits view we use The Handy as the bottleneck
+    # (most restrictive of the three). Estim devices contribute their own limits.
+    _MECH_KEYS = {"handy", "osr2", "generic"}
+    _has_mech = any(t in _MECH_KEYS for t in saved_targets)
     selected_targets = []
-    cols = st.columns(len(_TARGETS))
-    for col, (key, label, desc) in zip(cols, _TARGETS):
-        with col:
-            if col.checkbox(label, value=key in saved_targets, help=desc,
-                            key=f"device_target_{key}"):
-                selected_targets.append(key)
+    if _has_mech:
+        selected_targets.append("handy")  # Most restrictive of the mechanical group
+    selected_targets.extend(t for t in saved_targets if t not in _MECH_KEYS)
 
-    if project and selected_targets != saved_targets:
-        project["output_targets"] = selected_targets
-
+    st.subheader("Selected devices")
     if not selected_targets:
-        st.caption("Select at least one device to continue.")
+        st.caption("No devices selected. Pick devices on the **Export tab**.")
         return
+
+    _summary = []
+    if _has_mech:
+        _summary.append("**Mechanical** (Handy limits)")
+    for t in saved_targets:
+        if t not in _MECH_KEYS:
+            _summary.append(f"`{t}`")
+    st.caption(" · ".join(_summary))
 
     st.divider()
 

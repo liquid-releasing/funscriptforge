@@ -126,6 +126,28 @@ def process(funscript_path: str, config: dict,
     return cli.process(funscript_path, config, on_progress)
 
 
+def process_with_default_config(funscript_path: str, output_dir: str,
+                                on_progress: Optional[Callable[[int, str], None]] = None
+                                ) -> dict:
+    """Run funscript-tools with edger's default config (no preset overlay).
+
+    Used by the Export tab when an estim device is selected but the user
+    skipped the Stim tab. Produces whatever the upstream defaults yield.
+
+    Args:
+        funscript_path: Path to the input .funscript file.
+        output_dir: Where to write generated files.
+        on_progress: Optional callback(percent, message).
+
+    Returns:
+        Same shape as ``process()``.
+    """
+    cli = _ensure_cli()
+    config = cli.get_default_config()
+    config.setdefault("advanced", {})["custom_output_directory"] = output_dir
+    return cli.process(funscript_path, config, on_progress)
+
+
 def preview_output(source: dict, config: dict, output_type: str = "alpha") -> dict:
     """Preview a single channel without file I/O.
 

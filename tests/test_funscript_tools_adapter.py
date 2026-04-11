@@ -96,5 +96,28 @@ class TestBuildConfig(unittest.TestCase):
         self.assertIsInstance(config, dict)
 
 
+class TestProcessWithDefaultConfig(unittest.TestCase):
+    """The Export tab's 'estim selected, no Stim preset' path."""
+
+    def setUp(self):
+        from forge.funscript_tools import AVAILABLE
+        if not AVAILABLE:
+            self.skipTest("funscript-tools not available")
+
+    def test_helper_is_callable(self):
+        from forge.funscript_tools import process_with_default_config
+        self.assertTrue(callable(process_with_default_config))
+
+    def test_default_config_signature_matches_process(self):
+        """Both helpers must accept the same on_progress callback shape."""
+        import inspect
+        from forge.funscript_tools import process, process_with_default_config
+        proc_params = list(inspect.signature(process).parameters.keys())
+        default_params = list(inspect.signature(process_with_default_config).parameters.keys())
+        # Both share the on_progress parameter
+        self.assertIn("on_progress", proc_params)
+        self.assertIn("on_progress", default_params)
+
+
 if __name__ == "__main__":
     unittest.main()

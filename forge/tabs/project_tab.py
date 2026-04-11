@@ -292,16 +292,32 @@ def render():
 
     st.divider()
 
-    # ── 2. Export location ───────────────────────────────────────────────────
-    st.subheader("Export location")
-    st.caption("All output goes here. Input files are never touched.")
+    # ── 2. Funscript source + Export location ───────────────────────────────
+    st.subheader("Locations")
+    st.caption("All output goes into the export location. Input files are never touched.")
 
     funscript_path = st.session_state.get("funscript_path", "")
     auto_output = str(_default_output_for(funscript_path)) if funscript_path else ""
 
+    # Funscript source path
+    if funscript_path:
+        st.markdown("**Funscript source**")
+        st.code(funscript_path, language=None)
+
+        # Detect temp upload — Streamlit's file uploader writes here.
+        _is_temp = "Temp" in funscript_path or "tmp" in funscript_path.lower()
+        if _is_temp:
+            st.warning(
+                "⚠️ This funscript is in a temporary folder (uploaded via the browser). "
+                "The export location below will also be temporary and may be cleaned up "
+                "by the OS. To export to a permanent location, load the funscript by "
+                "pasting its full path on disk instead of uploading."
+            )
+
     # Auto-set output folder from funscript name or project config
     output_folder = (project or {}).get("output_folder", "") or auto_output
     if output_folder:
+        st.markdown("**Export location**")
         st.code(output_folder, language=None)
         # Auto-create or resume project
         if not project or project.get("output_folder") != output_folder:

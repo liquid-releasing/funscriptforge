@@ -1,157 +1,116 @@
-# Export tab
+# Export tab — SHIPPED 2026-04-11
 
-Export tab selectors for exporting
+The export folder restructure landed. The Export tab now owns device
+selection (two groups: Mechanical + Estim) and writes a self-contained
+folder with a top-level base + `mechanical/` + `estim/` subfolders.
 
-- copy media
-- device selection
-  - tcode
-  - funnscript for Handy, OSR, Intiface
-  - list for estim (shown in a following section)
-- cli script (bash) to reproduce this workflow (for rinse and repeat)
-- sound files for estim
-- enchantment yml
+Audio synthesis is **deferred** to its own PR. See
+`memory/project_funscriptforge_audio.md` for the audio plan.
 
-## CLI Script
+## What shipped
 
-Bash (powershell) script that can be called from command line to reproduce this exact settings. 
+### Device selection moved to Export tab
 
-Or can this be a config json file we pass to a one or more commands?
+Two checkbox groups instead of the old single flat list on the Device tab:
 
-## Copy media selector
+- **Mechanical** — single checkbox covering Handy, OSR2, generic/Intiface.
+  All three load the same single 1D funscript so one checkbox enables
+  the whole group. Limits driven by The Handy (most restrictive).
+- **Estim** — five separate checkboxes:
+  - Audio 3-phase — continuous (legacy 2b/312)
+  - Audio 3-phase — pulse (Tingler/ZC) *(default)*
+  - FOC-Stim — 3-phase
+  - FOC-Stim — 4-phase
+  - NeoStim — 3-phase
 
-Add checkbox "Copy media to output directory" with info, copy one copy. If checked and if not already named we need to add the input bar. Or do we have them put it in on project tab?
+For this PR the contents of `estim/` are identical regardless of which
+estim device is checked. The per-device checkboxes become load-bearing
+in the future audio PR.
 
-## Devices for export
-
-User selects one or more devices for export.
-
-
-
-## Handy, OSR, Intiface
-
-Show the same items selected as on the devices tab.
-
-On export, we put the single funscript into its own folder.
-
-Is there a way to build out multi-axis from what we know already? From what I can tell, all of the fmulti-axis requires video. Unless we want to do random like funscript.io ?
-
-## supported estim devices
-
-User can select one or more of these
-
-1. Audio-based three phase.
-
-- 1a, Continuous (for legacy 2b and 312). Low power efficiency.
-- 1b. Pulse based for (stereo stim, such as Tingler, ZC???) <== default
-
-2. FOC-Stim (for three phase and experimental four phase)
-
-- 2a. Three phase
-- 2b. Four phase
-
-3. NeoStim
-
-- 3a. Three phase
-
-## Funscript export
-
-AFAIK, each output uses the same set of funscript files. So the funscripts should probably be the same regardless of which device you want.
-
-we are either
-
-- copying the results from the stim tab to individual folders (these were created by funscript-tools)
-- generating 2d funscripts from restim
-
-### Generate 2d scripts
-
-restim can convert 1D funscript files (typical one dimensional funscript files, e.g. found on Milovana or Eroscripts ) to 2D (2 axes of freedom) funscript files. You get funscript alpha and beta files. 
-
-This is FunscriptForge minimum output.
-
-### who gets what
-
-2d gets
-
-```
-  funscript
-  alpha
-  beta
-```
-
-3p shows the following as png:
+### Folder layout
 
 ```text
-  funscript
-  alpha
-  beta
-  frequency
-  pulse_frequency
-  pulse_rise_time
-  pulse_width
-  volume
-  alpha-prostate
-  beta-prostate
-  volume-prostate
+{output_folder}/
+  {stem}.funscript            ← top-level base (always)
+  {stem}.heatmap.png          ← velocity-colored heatmap (always)
+  {stem}.<media>              ← copied media + audio + captions
+  {stem}.forgetmpl            ← workflow template
+  mechanical/                 ← only if mechanical device selected
+    {stem}.funscript
+  estim/                      ← only if any estim device selected
+    {stem}.funscript
+    {stem}.alpha.funscript
+    … all channel files funscript-tools produces …
 ```
 
-4p gets everything
+Mechanical-only export skips funscript-tools entirely (fast).
+Estim-only export omits `mechanical/`.
 
-### Folders
+### Three sources for `estim/` channel files
 
-<original_funscript_name>.<output_name>
+The first that exists wins:
 
-| output_name | funscript | sound |
-| - | - |
-| legacy | 2d | continuous sound|
-| stereostim | 3phase | pulse sound|
-| foc3phase | 3phase | foc-stim 3 phase sound|
-| foc4phase | all | foc-stim sound|
-| neostim |3phase | neostim|
-| tcode | tcode| no sound |
-| handy | funscript only | no sound|
-| osr | funscript only | no sound|
-| Intiface | funscript only |no sound|
+1. **Stim Accept files** at the output root → moved into `estim/` as-is.
+2. **Stim character preset configured** → run `funscript_tools.process()`
+   with the preset against the base funscript.
+3. **No Stim preset** → run `funscript_tools.process_with_default_config()`
+   (edger's defaults). User skips Stim tab entirely and still gets full
+   channel set.
 
-### Heatmap generation
+### Heatmap PNG
 
-Let's save heatmap as PNG file for each funscript file.
+Velocity-colored heatmap of the main funscript written to
+`{stem}.heatmap.png` at the top level using
+`forge_ui_components.funscript_chart.static.render_static_chart`.
 
-## Sound generation
+### Device tab simplification
 
-Generate both device audio and prostate audio if the files are availab.
+Device tab no longer owns device selection — it shows a read-only
+summary of what was picked on the Export tab and computes limits +
+device-aware fixes from there.
 
-### Create audio file
+## Tests
 
-This is how you do it using the UI. The code is probably easier. 
+13 new tests in `tests/test_export_layout.py` and
+`tests/test_funscript_tools_adapter.py`. Total: 951 passed, 3 skipped.
 
-Should we use the CLI?
+Coverage:
 
-load video player with video. video not actually needed except as a name to select funscripts.
+- `_split_targets()` for empty / mechanical-only / estim-only / mixed /
+  unknown-keys / all-five-estim cases
+- `MECHANICAL_KEYS` constant lock
+- `ESTIM_DEVICES` ordering
+- `_write_heatmap_png()` produces a valid PNG (header check + size)
+- `_write_heatmap_png()` handles empty actions list
+- `process_with_default_config` is callable + signature compatible
 
-All funscripts have the same funscipt base name. if it can read the files, picks which ones it needs for the use case. Noone knows why you have to have video loaded, but you do.
+## Backlog (deferred)
 
-(offset to start audio after video. not all video or devices or something syncs well)
+### Audio generation
 
-select sampling rate. default is 44100
+Owns its own planning doc: `memory/project_funscriptforge_audio.md`.
+Three integration paths considered (shell out to restim CLI / extract
+synthesis into FunscriptForge module / defer). C chosen for now.
 
-Generate Mp3
+### Pipeline-script feature
 
-### Restim supported devices:
+PowerShell or bash script generated alongside `.forgetmpl` that
+reproduces the export with the same settings. Use case: rinse-and-repeat
+on similar funscripts. Likely extends `.forgetmpl` or generates a sibling
+file. Not started.
 
-1. Audio-based three phase. 
+### Multi-axis mechanical
 
-- 1a. Continuous (for legacy 2b and 312). Low power efficiency.
-- 1b. Pulse based for (stereo stim, such as Tingler, ZC???) <== 
+Today the mechanical folder has one funscript. When a multi-axis pipeline
+exists, additional files like `{stem}.roll.funscript`, `{stem}.pitch.funscript`,
+etc. land in `mechanical/` naturally. Layout supports it; nothing to build
+yet.
 
-2. FOC-Stim (for three phase and experimental four phase)
+### Update internal/diagrams.md
 
-- 2a. Three phase
-- 2b. Four phase
+The original spec called this out as a TODO. Still TODO.
 
-3. NeoStim
+### Per-channel heatmaps
 
-- 3a. Three phase
-
-## TODO
-
-Update .\internal\diagrams.md
+Considered. Decided against — heatmap on the main funscript only.
+Channel files are intermediate artifacts, not user-facing.
