@@ -232,6 +232,13 @@ def render(project: "Project") -> None:
             key="export_device_awareness",
             help="Apply device limits from the Device tab to the exported funscript.",
         )
+        st.checkbox(
+            "Include color heatmap PNG",
+            value=True,
+            key="export_heatmap_png",
+            help="Write a velocity-colored heatmap of the main funscript "
+                 "next to the export. Useful as a visual reference.",
+        )
 
     st.divider()
 
@@ -1024,6 +1031,12 @@ def _render_device_selection(forge_project: dict) -> None:
             )
             if checked:
                 new_estim.append(key)
+        st.caption(
+            "Today the channel funscripts are identical regardless of which "
+            "estim device you pick — restim figures out which files it needs "
+            "at playback time. The per-device choice is recorded in the export "
+            "and will drive **audio file generation** in a future release."
+        )
 
     # Rebuild flat output_targets
     new_targets: list[str] = []
@@ -1132,12 +1145,13 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
         json.dump(fs_data, f, indent=2)
     status.write(f"✅ `{stem}.funscript` (top-level base)")
 
-    # Heatmap PNG of the main funscript
-    try:
-        _write_heatmap_png(actions, os.path.join(output_folder, f"{stem}.heatmap.png"))
-        status.write(f"✅ `{stem}.heatmap.png`")
-    except Exception as _exc:
-        status.write(f"⚠️ Heatmap generation failed: {_exc}")
+    # Heatmap PNG of the main funscript (optional, default on)
+    if st.session_state.get("export_heatmap_png", True):
+        try:
+            _write_heatmap_png(actions, os.path.join(output_folder, f"{stem}.heatmap.png"))
+            status.write(f"✅ `{stem}.heatmap.png`")
+        except Exception as _exc:
+            status.write(f"⚠️ Heatmap generation failed: {_exc}")
 
     # Copy input media to top-level output folder
     from forge.project import get_input_file
@@ -1163,6 +1177,13 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
     if estim_on:
         _write_estim_subfolder(forge_project, base_path, stem,
                                Path(output_folder), status)
+
+    # ── README explaining the layout ─────────────────────────────────
+    try:
+        _write_readme(Path(output_folder), stem, mech_on, estim_on, targets)
+        status.write("✅ `README.txt`")
+    except Exception as _exc:
+        status.write(f"⚠️ README generation failed: {_exc}")
 
     # Export workflow template (.forgetmpl)
     _export_template(forge_project, output_folder, status)
@@ -1200,6 +1221,96 @@ def _write_heatmap_png(actions: list, dest_path: str) -> None:
                               show_labels=False)
     with open(dest_path, "wb") as f:
         f.write(png)
+
+
+def _write_readme(output_root: Path, stem: str, mech_on: bool,
+                  estim_on: bool, output_targets: list[str]) -> None:
+    """Write a README.txt explaining the folder layout and how restim picks files."""
+    _ESTIM_LABELS = {
+        "legacy":     "Audio 3-phase — continuous (legacy 2b/312)",
+        "stereostim": "Audio 3-phase — pulse (Tingler / ZC)",
+        "foc3phase":  "FOC-Stim — 3-phase",
+        "foc4phase":  "FOC-Stim — 4-phase",
+        "neostim":    "NeoStim — 3-phase",
+    }
+    selected_estim = [_ESTIM_LABELS[t] for t in output_targets if t in _ESTIM_LABELS]
+
+    lines: list[str] = []
+    lines.append(f"FunscriptForge export — {stem}")
+    lines.append("=" * (len(stem) + 22))
+    lines.append("")
+    lines.append("This folder is self-contained. Drop it anywhere on your")
+    lines.append("disk and your media player or restim will find what it needs.")
+    lines.append("")
+    lines.append("Layout")
+    lines.append("------")
+    lines.append("")
+    lines.append(f"  {stem}.funscript        ← main 1D funscript")
+    lines.append(f"  {stem}.heatmap.png      ← velocity-colored visual reference")
+    lines.append(f"  {stem}.<media>          ← copied source video / audio / captions")
+    lines.append(f"  {stem}.forgetmpl        ← workflow template (decisions only,")
+    lines.append("                            reusable on other projects)")
+    if mech_on:
+        lines.append("")
+        lines.append("  mechanical/")
+        lines.append(f"    {stem}.funscript    ← single 1D funscript for The Handy,")
+        lines.append("                          OSR2, and Intiface-compatible")
+        lines.append("                          Bluetooth devices (Lovense, Kiiroo, …)")
+    if estim_on:
+        lines.append("")
+        lines.append("  estim/")
+        lines.append(f"    {stem}.funscript            ← main funscript (some restim modes)")
+        lines.append(f"    {stem}.alpha.funscript      ← alpha channel (left/right)")
+        lines.append(f"    {stem}.beta.funscript       ← beta channel (up/down)")
+        lines.append(f"    {stem}.frequency.funscript  ← frequency modulation")
+        lines.append(f"    {stem}.volume.funscript     ← volume envelope")
+        lines.append(f"    {stem}.pulse_frequency.funscript")
+        lines.append(f"    {stem}.pulse_rise.funscript")
+        lines.append(f"    {stem}.alpha-prostate.funscript    ← prostate trio")
+        lines.append(f"    {stem}.beta-prostate.funscript")
+        lines.append(f"    {stem}.volume-prostate.funscript")
+
+    if estim_on:
+        lines.append("")
+        lines.append("Playing the estim/ folder with restim")
+        lines.append("--------------------------------------")
+        lines.append("")
+        lines.append("Open restim, point it at the estim/ folder (or the")
+        lines.append(f"{stem}.funscript inside it), and choose your device.")
+        lines.append("Restim will pick the channel files it needs based on")
+        lines.append("the device class. The same channel files work for every")
+        lines.append("estim device class — only the audio synthesis differs.")
+        lines.append("")
+        if selected_estim:
+            lines.append("Devices selected at export time:")
+            for label in selected_estim:
+                lines.append(f"  • {label}")
+            lines.append("")
+            lines.append("(This list is informational. The channel files are")
+            lines.append("identical regardless of which device(s) you picked —")
+            lines.append("restim figures out the right subset at playback time.)")
+        lines.append("")
+        lines.append("For media playback, restim expects the funscript filename")
+        lines.append("base to match the media filename base. If you renamed the")
+        lines.append("media (or your media has a different name than the project),")
+        lines.append("rename one to match the other before loading.")
+
+    if mech_on:
+        lines.append("")
+        lines.append("Playing the mechanical/ folder")
+        lines.append("------------------------------")
+        lines.append("")
+        lines.append(f"Load mechanical/{stem}.funscript into your player")
+        lines.append("(Handy / OSR2 / Intiface). The player ignores the")
+        lines.append("estim/ folder and the channel files inside it.")
+
+    lines.append("")
+    lines.append("---")
+    lines.append("Generated by FunscriptForge.")
+    lines.append("Channel generation uses funscript-tools by Edger.")
+    lines.append("")
+
+    (output_root / "README.txt").write_text("\n".join(lines), encoding="utf-8")
 
 
 def _write_estim_subfolder(forge_project: dict, base_funscript_path: str,

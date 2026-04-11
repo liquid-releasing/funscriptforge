@@ -164,6 +164,10 @@ def _run_process(funscript_path: str, preset_name: str, slider_overrides: dict,
     from forge.funscript_tools import build_config, process
 
     config = build_config(preset_name, slider_overrides, output_dir=output_dir)
+    # Force prostate generation ON for the full 3-phase pipeline. The 2D
+    # preview path explicitly turns this off; this branch is the "show me
+    # all 10 channels" path and must always emit the prostate trio.
+    config.setdefault("prostate_generation", {})["generate_prostate_files"] = True
 
     import time as _time
     _t0 = _time.time()
@@ -273,8 +277,8 @@ def render(project=None) -> None:
             # Flip button
             _flip_key = f"stim_flip_{name}"
             _is_flipped = st.session_state.get(_flip_key, False)
-            _flip_icon = "🖼️" if _is_flipped else "ℹ️"
-            if st.button(_flip_icon, key=f"stim_flip_btn_{name}", use_container_width=True):
+            _flip_label = "Show art" if _is_flipped else "Show description"
+            if st.button(_flip_label, key=f"stim_flip_btn_{name}", use_container_width=True):
                 st.session_state[_flip_key] = not _is_flipped
                 st.rerun()
 
@@ -344,12 +348,17 @@ def render(project=None) -> None:
     # ── Stim channel display ─────────────────────────────────────────
     # Controls how much of the pipeline runs on Preview. Accept always
     # generates the full 3-phase output regardless of this setting.
+    # Seed session state once, then let the widget be the single source
+    # of truth — passing index= alongside key= can flip the value back
+    # to the default on certain re-render paths.
+    _DISPLAY_MODE_OPTIONS = ["2D (alpha + beta)", "3-phase (10 channels)"]
+    if "stim_display_mode" not in st.session_state:
+        st.session_state["stim_display_mode"] = _DISPLAY_MODE_OPTIONS[0]
     _display_mode = st.radio(
         "Stim channel display",
-        ["2D (alpha + beta)", "3-phase (10 channels)"],
-        index=0,  # Default 2D — fast feedback for slider tweaking
+        _DISPLAY_MODE_OPTIONS,
         horizontal=True,
-        help="2D previews in ~18s; 3-phase previews everything in 2-3 minutes. "
+        help="2D previews in seconds; 3-phase previews everything in minutes. "
              "Pick 3-phase only when you're ready to fine-tune.",
         key="stim_display_mode",
     )
@@ -357,6 +366,12 @@ def render(project=None) -> None:
         "🎯 **Targeting:** stim device (3-phase). Accept always generates the "
         "full 3-phase output — this radio only changes how much you see while editing."
     )
+    if "3-phase" in _display_mode:
+        st.caption(
+            "3-phase preview includes alpha + beta + frequency + volume + "
+            "pulse_freq + pulse_rise **and** the prostate trio "
+            "(alpha-prostate, beta-prostate, volume-prostate). All 10 channels."
+        )
 
     # ── Preview button — generates to temp dir ────────────────────────
     _input_path = _get_input_funscript_path()

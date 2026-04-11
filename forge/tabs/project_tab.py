@@ -416,6 +416,42 @@ def _funscript_section(v: int):
         _reset_downstream_state()
 
     funscript_path = st.session_state.get("funscript_path", "")
+
+    # Path-based loader (preferred — exports land in the same folder as the
+    # original funscript instead of in tempfile.mkdtemp()).
+    if not funscript_path:
+        with st.expander("Load from disk path", expanded=True):
+            st.caption(
+                "Paste the full path to a `.funscript` file on disk. "
+                "Exports will be written to a `.forge/{stem}/` folder next to it. "
+                "Use this instead of the upload widget below if you want exports "
+                "in a permanent location rather than a system temp folder."
+            )
+            _path_input = st.text_input(
+                "Funscript path",
+                key=f"funscript_path_input_{v}",
+                placeholder=r"C:\Users\you\Videos\myscript.funscript",
+                label_visibility="collapsed",
+            )
+            _col_load, _col_msg = st.columns([1, 4])
+            with _col_load:
+                _load_clicked = st.button(
+                    "Load", key=f"funscript_path_load_{v}",
+                    type="primary", use_container_width=True,
+                )
+            if _load_clicked:
+                _p = Path(_path_input.strip().strip('"'))
+                if not _path_input.strip():
+                    _col_msg.warning("Enter a path first.")
+                elif not _p.exists():
+                    _col_msg.error(f"File not found: `{_p}`")
+                elif _p.suffix.lower() != ".funscript":
+                    _col_msg.error(f"Not a .funscript file: `{_p.name}`")
+                else:
+                    _reset_downstream_state()
+                    st.session_state["funscript_path"] = str(_p)
+                    st.rerun()
+
     render_upload(
         FUNSCRIPT_PICKER,
         version=v,
