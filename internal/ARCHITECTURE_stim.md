@@ -225,6 +225,14 @@ the same settings are reused on Export.
 Export uses funscript-tools to generate the [ten output files](https://github.com/edger477/funscript-tools/blob/main/docs/USER_GUIDE.md#the-ten-output-files).
 restim consumes these files at export time, not from the Stim tab.
 
+The Export tab's `_do_export_to_folders` (in `ui/streamlit/panels/export_panel.py`)
+calls `forge.funscript_tools.process()` directly when `forge_project["stim_character"]`
+is set. It first checks `list_outputs()` for files already produced by Stim
+Accept and reuses them; otherwise it runs the full pipeline against the
+just-written main funscript at the output folder. This means Export
+produces channel files even when the user skipped the Stim tab's Accept
+button, as long as a preset has been selected.
+
 ## Future work (after user testing)
 
 ### Documentation: Three creative decisions reference

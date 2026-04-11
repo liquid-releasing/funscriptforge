@@ -1040,17 +1040,47 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
         json.dump(fs_data, f, indent=2)
     status.write(f"✅ `{stem}.funscript` (main)")
 
-    # Write estim channel files if they exist (from Stim tab)
-    _channel_names = ["alpha", "beta", "pulse_frequency"]
-    for ch_name in _channel_names:
-        ch_data = st.session_state.get(f"stim_{ch_name}")
-        if ch_data:
-            ch_actions = [{"at": int(t * 1000), "pos": int(round(max(0, min(100, p))))}
-                          for t, p in zip(ch_data[0], ch_data[1])]
-            ch_path = os.path.join(output_folder, f"{stem}.{ch_name}.funscript")
-            with open(ch_path, "w", encoding="utf-8") as f:
-                json.dump({"actions": ch_actions}, f, indent=2)
-            status.write(f"✅ `{stem}.{ch_name}.funscript`")
+    # Generate estim channel files via funscript-tools if a stim preset is configured
+    _stim_character = forge_project.get("stim_character")
+    if _stim_character:
+        from forge.funscript_tools import (
+            AVAILABLE as _FT_AVAILABLE,
+            build_config,
+            list_outputs,
+            process,
+        )
+        if not _FT_AVAILABLE:
+            status.write("⚠️ funscript-tools not available — skipping estim channel generation")
+        else:
+            _slider_vals = forge_project.get("stim_sliders", {}) or {}
+            # Reuse existing channel files if stim Accept already generated them
+            _existing = [
+                o for o in list_outputs(output_folder, stem)
+                if not o["path"].endswith(f"{stem}.funscript")
+            ]
+            if _existing:
+                status.write(
+                    f"✅ Reusing {len(_existing)} estim channel file(s) from Stim tab "
+                    f"({_stim_character})"
+                )
+                for _o in _existing:
+                    status.write(f"   • {os.path.basename(_o['path'])}")
+            else:
+                status.write(f"⏳ Generating estim channels ({_stim_character})…")
+                try:
+                    _cfg = build_config(_stim_character, _slider_vals,
+                                        output_dir=output_folder)
+                    _result = process(out_path, _cfg,
+                                      lambda pct, msg: status.update(label=f"{msg} ({pct}%)")
+                                      if pct >= 0 else None)
+                    if _result.get("success"):
+                        for _o in _result.get("outputs", []):
+                            _kb = _o["size_bytes"] / 1024
+                            status.write(f"✅ `{os.path.basename(_o['path'])}` ({_kb:.1f} KB)")
+                    else:
+                        status.write(f"⚠️ Channel generation failed: {_result.get('error')}")
+                except Exception as _exc:
+                    status.write(f"⚠️ Channel generation error: {_exc}")
 
     # Copy input media to top-level output folder
     from forge.project import get_input_file

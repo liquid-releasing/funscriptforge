@@ -367,7 +367,8 @@ def render(project=None) -> None:
     # Config hash for reuse detection (Preview → Accept skip)
     _stim_config_key = f"{selected}_{hash(str(sorted(slider_vals.items())))}_{_input_path}"
 
-    _est_time = "~18s" if not is_3phase else "2-3 min"
+    is_3phase = "3-phase" in _display_mode
+    _est_time = "~seconds" if not is_3phase else "~minutes"
     if st.button(f"👁 Preview channels ({_est_time})", type="secondary", use_container_width=True,
                  help="Generate channel previews from current settings."):
         with st.status("Generating preview…", expanded=True) as status:
@@ -443,12 +444,20 @@ def render(project=None) -> None:
                 status.write(f"✅ Input: {main_output.name}")
 
                 if _can_reuse:
-                    # Copy preview files instead of regenerating
+                    # Copy preview files, renaming from input-stem to project-name
+                    _prev_stem = st.session_state.get("stim_preview_stem", "")
                     _copied = 0
                     for f in Path(_prev_dir).glob("*.funscript"):
-                        if f.name != main_output.name:
-                            _shutil.copy2(f, Path(output_folder) / f.name)
-                            _copied += 1
+                        # Skip the main funscript copy
+                        if f.stem == _prev_stem:
+                            continue
+                        # Rename: {prev_stem}.{suffix}.funscript → {project_name}.{suffix}.funscript
+                        if _prev_stem and f.name.startswith(f"{_prev_stem}."):
+                            _new_name = f"{project_name}.{f.name[len(_prev_stem) + 1:]}"
+                        else:
+                            _new_name = f.name
+                        _shutil.copy2(f, Path(output_folder) / _new_name)
+                        _copied += 1
                     status.write(f"✅ Reusing preview — {_copied} files copied (config unchanged)")
                     # Build result from copied files
                     from forge.funscript_tools import list_outputs
