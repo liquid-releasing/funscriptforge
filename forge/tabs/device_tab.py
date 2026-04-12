@@ -14,13 +14,22 @@ from forge.device_specs import load_device_specs, combined_limits, analyze_viola
 from forge_ui_components.funscript_chart.streamlit import render_monochrome_from_arrays, render_static_from_arrays, render_static, render_cv_strip
 
 # Device targets
-_TARGETS = [
-    ("handy",        "The Handy",          "Linear stroker. Industry standard."),
-    ("osr2",         "OSR2",               "Multi-axis servo stroker. Twist + stroke."),
-    ("estim_foc",    "Estim — FOC",        "Single-channel estim. Classic waveform."),
-    ("estim_stereo", "Estim — Stereo",     "Dual-channel estim. Left/right separation."),
-    ("generic",      "Generic / Intiface", "Conservative limits for Bluetooth devices (Lovense, Kiiroo, etc)."),
-]
+# All selectable devices — mechanical and estim. The user picks which
+# ones their script should target. Combined limits drive the device-aware fix.
+_DEVICE_OPTIONS = {
+    "mechanical": [
+        ("handy",   "The Handy",          "Linear stroker. 400 pos/s. Industry standard."),
+        ("osr2",    "OSR2 / SR6",         "Multi-axis servo. 500 pos/s. Depends on build."),
+        ("generic", "Intiface (generic)",  "Conservative 300 pos/s for Bluetooth devices."),
+    ],
+    "estim": [
+        ("legacy",     "Legacy (2b / 312)",      "Continuous waveform. 500 pos/s envelope rate."),
+        ("stereostim", "Stereostim (pulse)",      "Pulse-based. 600 pos/s. Tingler / ZC."),
+        ("foc3phase",  "FOC-Stim 3-phase",       "Direct current. 700 pos/s. Fastest response."),
+        ("foc4phase",  "FOC-Stim 4-phase",       "Experimental. 700 pos/s. Same hardware as 3p."),
+        ("neostim",    "NeoStim 3-phase",         "550 pos/s. Limited docs — estimate only."),
+    ],
+}
 
 
 def render():
@@ -28,35 +37,49 @@ def render():
 
     st.info(
         "**Device Awareness** ensures your funscript works within your device's limits. "
-        "Choose your devices on the **Export tab**; this tab shows the limits and "
-        "applies the minimum correction needed. Most of your original script is preserved."
+        "Select the devices you want to target — combined limits drive the "
+        "device-aware fix below. The most restrictive device wins for each parameter."
     )
 
-    # ── Device summary (read-only) ────────────────────────────────────────
+    # ── Device selection (multi-select) ──────────────────────────────────
+    st.subheader("Target devices")
+    st.caption(
+        "Pick every device your script should work on. "
+        "The combined limits show the tightest constraint across all selected devices."
+    )
+
     saved_targets = (project or {}).get("output_targets", [])
 
-    # Mechanical is a single Export-tab checkbox that expands to all three
-    # mechanical keys; for the limits view we use The Handy as the bottleneck
-    # (most restrictive of the three). Estim devices contribute their own limits.
-    _MECH_KEYS = {"handy", "osr2", "generic"}
-    _has_mech = any(t in _MECH_KEYS for t in saved_targets)
+    col_mech, col_estim = st.columns(2)
     selected_targets = []
-    if _has_mech:
-        selected_targets.append("handy")  # Most restrictive of the mechanical group
-    selected_targets.extend(t for t in saved_targets if t not in _MECH_KEYS)
 
-    st.subheader("Selected devices")
+    with col_mech:
+        st.markdown("**Mechanical**")
+        for key, label, desc in _DEVICE_OPTIONS["mechanical"]:
+            checked = st.checkbox(
+                label, value=(key in saved_targets),
+                help=desc, key=f"device_sel_{key}",
+            )
+            if checked:
+                selected_targets.append(key)
+
+    with col_estim:
+        st.markdown("**Estim**")
+        for key, label, desc in _DEVICE_OPTIONS["estim"]:
+            checked = st.checkbox(
+                label, value=(key in saved_targets),
+                help=desc, key=f"device_sel_{key}",
+            )
+            if checked:
+                selected_targets.append(key)
+
+    # Write back to project if changed
+    if project and selected_targets != saved_targets:
+        project["output_targets"] = selected_targets
+
     if not selected_targets:
-        st.caption("No devices selected. Pick devices on the **Export tab**.")
+        st.caption("⚠️ Pick at least one device to see limits and apply device awareness.")
         return
-
-    _summary = []
-    if _has_mech:
-        _summary.append("**Mechanical** (Handy limits)")
-    for t in saved_targets:
-        if t not in _MECH_KEYS:
-            _summary.append(f"`{t}`")
-    st.caption(" · ".join(_summary))
 
     st.divider()
 
@@ -75,14 +98,16 @@ def render():
 
     def _bottleneck(attr, use_max=False):
         """Find which device is the bottleneck for a given attribute."""
-        if len(_selected_specs) == 1:
+        if not _selected_specs:
             return ""
+        if len(_selected_specs) == 1:
+            return _selected_specs[0].name
         vals = [(getattr(s, attr), s.name) for s in _selected_specs]
         if use_max:
             limiting = max(vals, key=lambda x: x[0])
         else:
             limiting = min(vals, key=lambda x: x[0])
-        return f"({limiting[1]})"
+        return limiting[1]
 
     import pandas as pd
     _limits_data = [
@@ -164,7 +189,16 @@ def render():
     from forge_ui_components.funscript_chart.cache import ChartCache
     cache = ChartCache.from_session_state()
 
-    _saved_groove = (project or {}).get("groove", 0.35)
+    # Read groove from the slider's session state if it exists (the slider
+    # widget below uses key="groove_slider"). Falls back to the project's
+    # saved groove on first render before the slider has been touched.
+    # This avoids the off-by-one render bug where the chart computed
+    # against the previous groove value while the slider visually showed
+    # the new one.
+    _saved_groove = st.session_state.get(
+        "groove_slider",
+        (project or {}).get("groove", 0.35),
+    )
 
     _device_accepted = st.session_state.get("device_accepted", False)
 
@@ -275,17 +309,88 @@ def render():
     _stats_cols[3].metric("Humanized", f"{h_stats.get('windows_modified', 0)} sections")
     _stats_cols[4].metric("Speed-clamped", f"{c_stats.get('actions_clamped', 0):,}")
 
+    # ── Verification: post-fix analysis + clamping ratio warning ────────
+    _clamped = c_stats.get("actions_clamped", 0)
+    _total = len(_fixed_actions) or 1
+    _clamp_ratio = _clamped / _total
+
+    _post_analysis = analyze_violations(_fixed_actions, limits)
+    if _post_analysis["violation_count"] == 0 and _clamp_ratio < 0.25:
+        st.success(
+            f"✅ After device-awareness: all {_post_analysis['total_actions']:,} "
+            f"actions are within {limits.name} limits "
+            f"(max speed {_post_analysis['max_speed_found']:.0f} pos/s ≤ "
+            f"{limits.max_speed:.0f} pos/s). "
+            f"{_clamped:,} actions clamped ({_clamp_ratio:.0%})."
+        )
+    elif _clamp_ratio >= 0.50:
+        # "Say no" rule: when more than half the script is clamped, the
+        # result is a fundamentally different script. Warn loudly.
+        st.error(
+            f"⛔ **Heavy clamping** — {_clamped:,} of {_total:,} actions "
+            f"({_clamp_ratio:.0%}) had to be clamped to fit "
+            f"{limits.name}'s {limits.max_speed:.0f} pos/s limit. "
+            f"This changes the character of the script significantly. "
+            f"Consider removing the most restrictive device from your "
+            f"targets, or accept that this script was authored for "
+            f"faster hardware."
+        )
+    elif _clamp_ratio >= 0.25:
+        st.warning(
+            f"⚠️ Moderate clamping — {_clamped:,} of {_total:,} actions "
+            f"({_clamp_ratio:.0%}) clamped to fit {limits.name}'s "
+            f"{limits.max_speed:.0f} pos/s limit. The script will feel "
+            f"noticeably different in the clamped sections."
+        )
+    elif _post_analysis["violation_count"] > 0:
+        st.warning(
+            f"⚠️ After device-awareness: {_post_analysis['violation_count']:,} of "
+            f"{_post_analysis['total_actions']:,} actions still exceed limits "
+            f"({_post_analysis['percent_ok']:.0f}% OK). "
+            "Increase Groove or pick a more permissive device."
+        )
+    else:
+        st.success(
+            f"✅ All {_post_analysis['total_actions']:,} actions within "
+            f"{limits.name} limits ({_clamped:,} clamped, {_clamp_ratio:.0%})."
+        )
+
     st.divider()
+
+    # ── Clamping opt-out ─────────────────────────────────────────────────
+    # When the script is authored for faster hardware, the user may want to
+    # keep the original instead of accepting heavy clamping. The checkbox
+    # defaults ON (apply clamping) but the user can uncheck to skip.
+    _apply_clamping = True
+    if _clamp_ratio >= 0.25:
+        _apply_clamping = st.checkbox(
+            "Apply device-aware clamping",
+            value=True,
+            key="device_apply_clamping",
+            help="Uncheck to keep the original funscript as-is and skip clamping. "
+                 "The script will exceed the selected device limits but preserves "
+                 "the original author's intent.",
+        )
+        if not _apply_clamping:
+            st.caption(
+                "Clamping skipped — the original funscript will be used as-is. "
+                "It may exceed device limits for your selected targets."
+            )
 
     # ── Accept ────────────────────────────────────────────────────────────
     if st.button(
         "Accept",
         type="primary",
         width="stretch",
-        help="Apply device awareness and continue to Tone.",
+        help="Apply device awareness and continue to Tone." if _apply_clamping
+             else "Keep original funscript and continue to Tone.",
     ):
-        with st.spinner("Applying device awareness…"):
-            _apply_device_awareness_to_chain(project, selected_targets, actions, limits, _already_aware, _groove)
+        with st.spinner("Applying device awareness…" if _apply_clamping else "Saving original…"):
+            _apply_device_awareness_to_chain(
+                project, selected_targets, actions, limits,
+                _already_aware if _apply_clamping else True,
+                _groove if _apply_clamping else 0.0,
+            )
         st.session_state["device_accepted"] = True
         st.rerun()
 
@@ -311,13 +416,18 @@ def _apply_device_awareness_to_chain(project, targets, actions, limits, already_
     status.write(f"✅ Devices: {', '.join(targets)}")
 
     if already_aware and groove == 0:
-        status.write("✅ No corrections needed — already within limits with good variation")
+        status.write("✅ Keeping original funscript — no device-aware changes applied")
         from forge.funscript import load_funscript
         funscript_path = st.session_state.get("funscript_path", "")
         fs_data = load_funscript(funscript_path)
         if fs_data:
             chain_path = save_chain_funscript(project, "device", fs_data)
             st.session_state["chain_funscript_path"] = chain_path
+            # Update chart cache so downstream tabs show the original,
+            # not a stale clamped version from a previous Accept
+            from forge_ui_components.funscript_chart.cache import ChartCache
+            _cache = ChartCache.from_session_state()
+            _cache.set_stage("device", fs_data.get("actions", []))
     else:
         status.update(label=f"Humanizing + checking {len(actions):,} actions…")
 

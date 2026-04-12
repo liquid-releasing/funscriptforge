@@ -45,8 +45,9 @@ def _reset_downstream_state():
     chain funscript, assessment cache, tone selection, and cached charts.
     """
     _keys_to_clear = [
-        # Media
-        "video_path", "_video_processed", "_audio_processed", "_captions_processed",
+        # Media + funscript processed guard
+        "video_path", "_funscript_processed",
+        "_video_processed", "_audio_processed", "_captions_processed",
         # Output folder
         "output_folder_input",
         # Acceptance flags
@@ -304,16 +305,6 @@ def render():
         st.markdown("**Funscript source**")
         st.code(funscript_path, language=None)
 
-        # Detect temp upload — Streamlit's file uploader writes here.
-        _is_temp = "Temp" in funscript_path or "tmp" in funscript_path.lower()
-        if _is_temp:
-            st.warning(
-                "⚠️ This funscript is in a temporary folder (uploaded via the browser). "
-                "The export location below will also be temporary and may be cleaned up "
-                "by the OS. To export to a permanent location, load the funscript by "
-                "pasting its full path on disk instead of uploading."
-            )
-
     # Auto-set output folder from funscript name or project config
     output_folder = (project or {}).get("output_folder", "") or auto_output
     if output_folder:
@@ -417,41 +408,11 @@ def _funscript_section(v: int):
 
     funscript_path = st.session_state.get("funscript_path", "")
 
-    # Path-based loader (preferred — exports land in the same folder as the
-    # original funscript instead of in tempfile.mkdtemp()).
-    if not funscript_path:
-        with st.expander("Load from disk path", expanded=True):
-            st.caption(
-                "Paste the full path to a `.funscript` file on disk. "
-                "Exports will be written to a `.forge/{stem}/` folder next to it. "
-                "Use this instead of the upload widget below if you want exports "
-                "in a permanent location rather than a system temp folder."
-            )
-            _path_input = st.text_input(
-                "Funscript path",
-                key=f"funscript_path_input_{v}",
-                placeholder=r"C:\Users\you\Videos\myscript.funscript",
-                label_visibility="collapsed",
-            )
-            _col_load, _col_msg = st.columns([1, 4])
-            with _col_load:
-                _load_clicked = st.button(
-                    "Load", key=f"funscript_path_load_{v}",
-                    type="primary", use_container_width=True,
-                )
-            if _load_clicked:
-                _p = Path(_path_input.strip().strip('"'))
-                if not _path_input.strip():
-                    _col_msg.warning("Enter a path first.")
-                elif not _p.exists():
-                    _col_msg.error(f"File not found: `{_p}`")
-                elif _p.suffix.lower() != ".funscript":
-                    _col_msg.error(f"Not a .funscript file: `{_p.name}`")
-                else:
-                    _reset_downstream_state()
-                    st.session_state["funscript_path"] = str(_p)
-                    st.rerun()
-
+    # Drag-and-drop / browse — the only loader for now. The browser sandbox
+    # strips real disk paths from upload events, so exports land in temp
+    # folders. Permanent-folder exports come back when we ship as a desktop
+    # app (PyWebView/Tauri) with a real OS file picker — see
+    # `internal/design/desktop_app.md`.
     render_upload(
         FUNSCRIPT_PICKER,
         version=v,

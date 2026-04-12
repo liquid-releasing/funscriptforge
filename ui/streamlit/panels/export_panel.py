@@ -227,17 +227,15 @@ def render(project: "Project") -> None:
             key="export_final_smooth",
         )
         st.checkbox(
-            "Apply device awareness",
-            value=True,
-            key="export_device_awareness",
-            help="Apply device limits from the Device tab to the exported funscript.",
-        )
-        st.checkbox(
             "Include color heatmap PNG",
             value=True,
             key="export_heatmap_png",
             help="Write a velocity-colored heatmap of the main funscript "
                  "next to the export. Useful as a visual reference.",
+        )
+        st.caption(
+            "Device awareness is applied earlier on the **Device tab** when "
+            "you accept its fix — no need to re-apply here."
         )
 
     st.divider()
@@ -1000,54 +998,28 @@ def _split_targets(targets: list) -> tuple[bool, list[str]]:
 
 
 def _render_device_selection(forge_project: dict) -> None:
-    """Two checkbox groups: Mechanical (single) + Estim (five). Writes
-    output_targets back to the forge project."""
-    saved = forge_project.get("output_targets", [])
-    saved_mech, saved_estim = _split_targets(saved)
+    """Show which devices are selected (from Device tab) and what folders
+    will be created. The Device tab is the source of truth for output_targets."""
+    targets = forge_project.get("output_targets", [])
+    mech_on, estim_on = _split_targets(targets)
 
     st.subheader("Export devices")
-    st.caption("Pick the devices you want files for. Each group writes to its own subfolder.")
 
-    col_mech, col_estim = st.columns([1, 2])
+    if not mech_on and not estim_on:
+        st.caption("⚠️ No devices selected. Pick devices on the **Device tab** first.")
+        return
 
-    with col_mech:
-        st.markdown("**Mechanical**")
-        mech_on = st.checkbox(
-            "Mechanical (Handy / OSR / Intiface)",
-            value=saved_mech,
-            key="export_mech_checkbox",
-            help="Single 1D funscript for The Handy, OSR2, and Intiface-compatible "
-                 "Bluetooth devices. Limits driven by The Handy (most restrictive).",
-        )
-
-    with col_estim:
-        st.markdown("**Estim**")
-        new_estim = []
-        for key, label in ESTIM_DEVICES:
-            checked = st.checkbox(
-                label,
-                value=(key in saved_estim) or (not saved_estim and key == "stereostim"),
-                key=f"export_estim_{key}",
-            )
-            if checked:
-                new_estim.append(key)
-        st.caption(
-            "Today the channel funscripts are identical regardless of which "
-            "estim device you pick — restim figures out which files it needs "
-            "at playback time. The per-device choice is recorded in the export "
-            "and will drive **audio file generation** in a future release."
-        )
-
-    # Rebuild flat output_targets
-    new_targets: list[str] = []
-    if mech_on:
-        new_targets.extend(MECHANICAL_KEYS)
-    new_targets.extend(new_estim)
-    if new_targets != saved:
-        forge_project["output_targets"] = new_targets
-
-    if not mech_on and not new_estim:
-        st.caption("⚠️ Pick at least one device to enable export.")
+    # Show what's selected
+    _devices = []
+    for t in targets:
+        _devices.append(f"`{t}`")
+    st.caption("Selected on Device tab: " + " · ".join(_devices))
+    st.caption(
+        "Change your target devices on the **Device tab**. "
+        "Estim channel funscripts are identical across estim devices — "
+        "restim picks the right files at playback time. "
+        "Per-device audio comes in a future release."
+    )
 
 
 def _render_export_to_folder(project) -> None:

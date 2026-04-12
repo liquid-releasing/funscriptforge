@@ -22,6 +22,12 @@ def default_forge(name: str, output_folder: str) -> dict:
         "contributors": [],
         "website": "",
         "git_remote": "",
+        # Default device targets — seed with the MOST PERMISSIVE device so
+        # a fresh project doesn't clamp anything. The user picks their real
+        # targets on the Device tab. FOC 3-phase has the highest headroom
+        # (700 pos/s) in our specs, so scripts stay as-authored until the
+        # user explicitly adds a more restrictive device.
+        "output_targets": ["foc3phase"],
         "tone": None,
         "tone_sliders": {},
         "assessment": {},

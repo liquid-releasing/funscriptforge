@@ -1,6 +1,52 @@
 # Device Awareness
 
-FunscriptForge ensures your funscript works within your target device's physical limits. Device awareness is applied once, globally, on the **Device tab** — before any creative decisions.
+FunscriptForge ensures your funscript works within your target device's physical limits — and improves its *feel* regardless of device. Device awareness is applied once, globally, on the **Device tab** — before any creative decisions.
+
+---
+
+## Two things, not one
+
+Device awareness does two distinct operations. They're independent and serve different purposes:
+
+### 1. Groove (humanize) — improves feel for all devices
+
+Many funscripts — especially auto-generated ones — have **mechanically uniform timing**: every cycle is exactly the same speed. The body adapts to uniform stimulus and stops responding. This is the "stingy" problem.
+
+Groove adds **timing variation** to monotone sections by jittering action timestamps within each cycle. The positions don't change — only the *timing* between them. Some half-cycles become slightly faster, others slightly slower. The result is a script that feels like a live drummer instead of a drum machine.
+
+Groove benefits **every device**, including estim. It's not a safety measure — it's a quality-of-life improvement for scripts that were authored (or generated) without variation.
+
+The **Groove slider** controls how much variation: 0.0 = no change (mechanical), 0.35 = natural (like expert-crafted scripts), 0.50 = maximum variation.
+
+### 2. Speed clamp — caps velocity for mechanical devices
+
+Mechanical devices (The Handy, OSR2, etc.) have a physical speed ceiling. If the funscript asks the device to move faster than the motor can go, the device **skips** — it falls behind the commanded position and catches up later, producing jerky, unpredictable motion.
+
+The speed clamp **reduces position magnitude** on actions that exceed the device's max speed. Timing is preserved; only the size of the movement is reduced. The result is a script that stays within the motor's capability at the cost of some amplitude in the fastest sections.
+
+Estim devices generally **don't need speed clamping** because their "limit" is perceptual (how fast can sensation change before the user stops feeling it), not mechanical. The hardware can follow any rate the funscript asks for. FunscriptForge still shows the numbers so estim users can see where their script sits, but clamping is optional.
+
+### When to use which
+
+| Your devices | Groove? | Speed clamp? |
+| --- | --- | --- |
+| Estim only (FOC, Stereostim, etc.) | **Yes** — fixes stingy scripts | **Optional** — skip if you want the original feel |
+| Mechanical only (Handy, OSR2) | **Yes** — improves feel | **Yes** — prevents device skipping |
+| Both | **Yes** | **Yes for mechanical targets** — the clamping is driven by the most restrictive mechanical device |
+
+### The clamping opt-out
+
+When the script was authored for faster hardware (e.g., an estim-native script at 664 pos/s targeting a 400 pos/s Handy), clamping more than ~25% of the actions means the result is a fundamentally different script. FunscriptForge shows a warning and lets you **uncheck "Apply device-aware clamping"** to keep the original as-is. You can still accept and move forward — you're just telling FunscriptForge "I know this exceeds the device, I want the original."
+
+---
+
+## Device limits
+
+Limits are stored in `forge/device_specs.json` and are community-refinable. See [Device Limits →](device-limits.md) for the full table with sources and confidence levels.
+
+### Combined limits
+
+When multiple devices are selected, the tightest constraint wins per parameter. The limits table on the Device tab shows which device is the bottleneck for each parameter.
 
 ---
 
@@ -9,58 +55,11 @@ FunscriptForge ensures your funscript works within your target device's physical
 1. **Select your devices** on the Device tab
 2. FunscriptForge computes the **combined limits** — the most restrictive device wins
 3. A **limits table** shows the constraints and which device is the bottleneck
-4. The **minimum-fix algorithm** analyzes every action and clamps only what exceeds limits
-5. A **side-by-side preview** shows Original vs Device Aware
-6. **Accept** applies the fix globally — everything downstream is guaranteed to work
-
----
-
-## Device limits
-
-Limits are stored in `forge/device_specs.json` and are community-refinable:
-
-| Device | Max speed | Max BPM | Max delta | Notes |
-|---|---|---|---|---|
-| The Handy | 400 pos/s | 120 | 100 | Linear stroker. Firmware-limited. |
-| OSR2 | 500 pos/s | 150 | 100 | Multi-axis servo. Build-dependent. |
-| Estim — FOC | 250 pos/s | 125 | 100 | Speed clamp for comfort (~125 BPM at full range). |
-| Estim — Stereo | 250 pos/s | 125 | 100 | Same comfort limits as FOC. |
-| Generic / Intiface | 300 pos/s | 100 | 100 | Conservative defaults for Bluetooth devices. |
-
-### Two constraint types
-
-- **Speed** (all devices) — max position change per second. For strokers, exceeding this causes skipping. For estim, fast cycles at full amplitude cause stingy sensation. The comfort limit for estim is ~125 BPM at full range.
-- **Delta** — max position change between consecutive actions. Strokers have no delta limit (100 = full range). Estim delta is also 100 since the speed clamp handles the comfort constraint.
-
-### Combined limits
-
-When multiple devices are selected, the tightest constraint wins per parameter. The limits table shows which device is the bottleneck.
-
----
-
-## Minimum-fix algorithm
-
-The algorithm applies the **smallest correction needed**:
-
-- Only modifies actions that violate limits
-- Preserves timing and direction — only magnitude is reduced
-- Delta clamp applied first, then speed clamp
-- Reports percentage of original preserved
-
----
-
-## Intensity spikes (estim only)
-
-For estim users who want occasional sharp transitions, the **Intensity spikes** slider controls what percentage of cycles are allowed to keep their original full-range delta:
-
-| Setting | Effect |
-|---|---|
-| **None** | All cycles clamped to comfort delta — smooth output |
-| **Rare** (12.5%) | ~1 in 8 cycles may spike |
-| **Moderate** (25%) | ~1 in 4 cycles may spike |
-| **Frequent** (50%) | ~1 in 2 cycles may spike |
-
-Spikes are placed randomly for unpredictability. The slider doesn't add intensity — it allows existing intensity in the funscript to pass through the clamp.
+4. **Groove** adds timing variation to monotone sections (adjustable via slider)
+5. **Speed clamp** caps actions that exceed the combined max speed
+6. A **side-by-side preview** shows Original vs Device Aware
+7. A **post-fix verification** shows how many actions were clamped, with a warning if the ratio is high
+8. **Accept** applies the fix — or, if you unchecked clamping, saves the original as-is
 
 ---
 
@@ -69,10 +68,11 @@ Spikes are placed randomly for unpredictability. The slider doesn't add intensit
 Everything downstream works on the device-aware baseline:
 
 - **Tone tab** — shapes feel within device limits
-- **Phrase editor** — creative transforms, no device checkbox needed
-- **Export** — per-device output folders (planned)
+- **Phrase editor** — creative transforms
+- **Stim tab** — estim channel generation from the device-aware funscript
+- **Export tab** — writes the final files to mechanical/ and estim/ subfolders
 
-The user never has to think about device limits after the Device tab.
+The user doesn't have to think about device limits after the Device tab — the constraint is baked in at the start.
 
 ---
 

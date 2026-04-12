@@ -175,13 +175,23 @@ def _run_process(funscript_path: str, preset_name: str, slider_overrides: dict,
     def _progress(pct, msg):
         if pct >= 0:
             _elapsed = _time.time() - _t0
-            if pct < 20 and _elapsed > 5:
+            _elapsed_str = f"{_elapsed:.0f}s" if _elapsed < 60 else f"{_elapsed / 60:.1f}m"
+            if pct <= 17 and _elapsed > 5:
+                # 0-17% = alpha/beta generation (fast). If we're still here
+                # after 5s, prostate generation is about to start.
                 status.update(
-                    label=f"{msg} — generating channels, "
-                          f"this takes 2-3 min for long funscripts…"
+                    label=f"Generating prostate channels — "
+                          f"this takes 2-3 minutes for long funscripts "
+                          f"({_elapsed_str} elapsed)…"
+                )
+            elif 17 < pct < 25 and _elapsed > 10:
+                # 17-25% = prostate generation (the bottleneck)
+                status.update(
+                    label=f"Still generating prostate channels — "
+                          f"almost there ({_elapsed_str} elapsed, {pct}%)…"
                 )
             else:
-                status.update(label=f"{msg} ({pct}%)")
+                status.update(label=f"{msg} ({pct}%, {_elapsed_str})")
 
     status.update(label=f"Running funscript-tools pipeline ({preset_name})…")
     result = process(funscript_path, config, _progress)

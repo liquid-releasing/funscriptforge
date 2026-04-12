@@ -1,5 +1,6 @@
 {
-  "_comment": "Device limits. Conservative defaults — refine via community feedback.",
+  "_comment": "Device limits. See internal/design/device_limits_research.md for sources and confidence. Refine via community feedback.",
+  "_research_date": "2026-04-12",
   "_units": {
     "max_speed": "position-units per second (0-100 range, so 400 = full stroke 4x/sec)",
     "max_bpm": "beats per minute — max comfortable cycling rate",
@@ -20,7 +21,7 @@
       "position_max": 100,
       "max_acceleration": 3000,
       "max_delta": 100,
-      "notes": "Linear stroker. Firmware v3 supports up to 400mm/s. Older firmware slower. Speed is the limiting factor, not delta."
+      "notes": "Confidence: MEDIUM. 400 pos/s is community consensus. Marketing says '10 strokes/s' but practical max is ~400mm/s at typical stroke lengths. No official vendor spec published. Verify at handyfeeling.com/docs. No Handy v2 exists as of 2026-04-12."
     },
     "osr2": {
       "name": "OSR2",
@@ -32,7 +33,7 @@
       "position_max": 100,
       "max_acceleration": 4000,
       "max_delta": 100,
-      "notes": "Multi-axis servo stroker. Speed depends on build quality. Delta is not a concern for mechanical devices."
+      "notes": "Confidence: LOW. Speed depends on servo model and build quality (300-600 mm/s range). 500 is mid-range for standard 20kg.cm servos. OSR Wiki and vendor pages don't publish speed specs. Stroke: 112mm default / 150mm max."
     },
     "estim_foc": {
       "name": "Estim — FOC",
@@ -56,7 +57,7 @@
       "position_max": 100,
       "max_acceleration": 2000,
       "max_delta": 100,
-      "notes": "Conservative speed defaults for unknown Bluetooth devices. Delta is not a concern."
+      "notes": "Confidence: LOW. Conservative fallback for Lovense/Kiiroo/WeVibe Bluetooth devices. Each device has different limits; 300 is a safe floor. Intiface (Buttplug.io) is a protocol, not a device."
     },
     "estim_stereo": {
       "name": "Estim — Stereo",
@@ -69,6 +70,66 @@
       "max_acceleration": 10000,
       "max_delta": 100,
       "notes": "Dual-channel estim. Same limits as FOC. Primary protection is Groove (humanize). Volume channel differs from FOC for L/R balance."
+    },
+    "legacy": {
+      "name": "Audio 3-phase — continuous",
+      "type": "estim",
+      "max_speed": 500,
+      "max_bpm": 240,
+      "min_cycle_ms": 120,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 8000,
+      "max_delta": 100,
+      "notes": "Confidence: LOW. Audio-driven continuous waveform. 'Velocity' here is envelope-change rate, not mechanical speed. 500 pos/s is a perceptual ceiling estimate — hardware can go faster but sensation plateaus."
+    },
+    "stereostim": {
+      "name": "Audio 3-phase — pulse (Stereostim)",
+      "type": "estim",
+      "max_speed": 600,
+      "max_bpm": 300,
+      "min_cycle_ms": 100,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 10000,
+      "max_delta": 100,
+      "notes": "Confidence: LOW-MEDIUM. Pulse-based estim allows faster parameter changes than continuous. 600 pos/s perceptual ceiling. Replaces old estim_stereo key."
+    },
+    "foc3phase": {
+      "name": "FOC-Stim — 3-phase",
+      "type": "estim",
+      "max_speed": 700,
+      "max_bpm": 360,
+      "min_cycle_ms": 80,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 12000,
+      "max_delta": 100,
+      "notes": "Confidence: LOW-MEDIUM. Direct current control via ESP32+DRV8231A, no audio bottleneck. Hardware can exceed 700 pos/s; 700 is a perceptual ceiling. FOC-Stim v4 specs: 30V drive, <5uC charge, 3-5kHz operational range. Source: github.com/diglet48/FOC-Stim"
+    },
+    "foc4phase": {
+      "name": "FOC-Stim — 4-phase",
+      "type": "estim",
+      "max_speed": 700,
+      "max_bpm": 360,
+      "min_cycle_ms": 80,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 12000,
+      "max_delta": 100,
+      "notes": "Confidence: LOW. Experimental FOC 4-phase mode. Same hardware as foc3phase; limits assumed identical pending vendor data."
+    },
+    "neostim": {
+      "name": "NeoStim — 3-phase",
+      "type": "estim",
+      "max_speed": 550,
+      "max_bpm": 280,
+      "min_cycle_ms": 110,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 9000,
+      "max_delta": 100,
+      "notes": "Confidence: VERY LOW. No documentation found (web search returned medical devices). 550 is interpolated between stereostim and FOC. Update immediately when a NeoStim user reports real-world limits."
     }
   }
 }
