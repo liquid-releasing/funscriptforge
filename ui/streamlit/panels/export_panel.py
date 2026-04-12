@@ -1153,6 +1153,17 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
             json.dump(fs_data, f, indent=2)
         status.write(f"✅ `mechanical/{stem}.funscript`")
 
+        # Multi-axis generation (if any phrases have styles assigned)
+        _multiaxis_styles = forge_project.get("multiaxis_styles", {})
+        if _multiaxis_styles:
+            try:
+                _write_multiaxis_files(
+                    actions, project, forge_project, _multiaxis_styles,
+                    mech_dir, stem, status,
+                )
+            except Exception as _exc:
+                status.write(f"⚠️ Multi-axis generation failed: {_exc}")
+
     # ── Estim subfolder ──────────────────────────────────────────────
     if estim_on:
         _write_estim_subfolder(forge_project, base_path, stem,
@@ -1188,6 +1199,42 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
         _summary_bits.append("estim")
     status.update(label=f"Exported ({' + '.join(_summary_bits)})",
                   state="complete", expanded=False)
+
+
+def _write_multiaxis_files(
+    actions: list, project, forge_project: dict,
+    style_assignments_raw: dict, mech_dir: Path, stem: str, status,
+) -> None:
+    """Generate multi-axis funscript files in the mechanical/ subfolder."""
+    from forge.multiaxis import generate_multiaxis, multiaxis_to_funscript_actions
+    from forge.multiaxis_presets import MULTIAXIS_PRESETS, AXIS_SUFFIXES
+
+    # Get phrases from assessment
+    assessment_dict = project.assessment.to_dict()
+    phrases = assessment_dict.get("phrases", [])
+    if not phrases:
+        return
+
+    # Convert string-keyed dict to int-keyed
+    style_assignments = {int(k): v for k, v in style_assignments_raw.items()}
+
+    status.write("⏳ Generating multi-axis files…")
+    result = generate_multiaxis(
+        actions, phrases, style_assignments, MULTIAXIS_PRESETS,
+    )
+
+    active = result.active_axes()
+    if not active:
+        status.write("ℹ️ No multi-axis data generated (all axes neutral)")
+        return
+
+    for axis_name, signal in active.items():
+        suffix = AXIS_SUFFIXES.get(axis_name, axis_name)
+        axis_actions = multiaxis_to_funscript_actions(signal)
+        axis_path = mech_dir / f"{stem}.{suffix}.funscript"
+        with open(axis_path, "w", encoding="utf-8") as f:
+            json.dump({"actions": axis_actions}, f, indent=2)
+        status.write(f"✅ `mechanical/{stem}.{suffix}.funscript` ({len(axis_actions):,} actions)")
 
 
 def _write_heatmap_png(actions: list, dest_path: str) -> None:

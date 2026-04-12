@@ -52,7 +52,7 @@ from ui.streamlit.panels import pattern_editor as pattern_editor_panel
 from ui.streamlit.panels import transform_catalog as transform_catalog_panel
 from ui.streamlit.panels import stim_panel
 from ui.streamlit.panels import viewer as viewer_panel
-from forge.tabs import project_tab, device_tab, tone_tab, next_steps_tab
+from forge.tabs import project_tab, device_tab, tone_tab, multiaxis_tab, next_steps_tab
 
 # ------------------------------------------------------------------
 # Page config (must be the first Streamlit call)
@@ -768,8 +768,8 @@ def _render_sidebar_footer() -> None:
 def _main() -> None:
     project: Project | None = st.session_state.project
 
-    tab_project, tab_device, tab_tone, tab_phrase, tab_pattern, tab_transforms, tab_stim, tab_export, tab_next = st.tabs(
-        ["Project", "Device", "Tone", "Phrases", "Patterns", "Catalogs", "Stim", "Export", "Next Steps"]
+    tab_project, tab_device, tab_tone, tab_phrase, tab_pattern, tab_transforms, tab_stim, tab_multiaxis, tab_export, tab_next = st.tabs(
+        ["Project", "Device", "Tone", "Phrases", "Patterns", "Catalogs", "Stim", "Multi-axis", "Export", "Next Steps"]
     )
 
     with tab_project:
@@ -790,6 +790,8 @@ def _main() -> None:
             st.info("Load a project in the **Project** tab to get started.")
         with tab_stim:
             st.info("Load a project in the **Project** tab to get started.")
+        with tab_multiaxis:
+            st.info("Load a project in the **Project** tab to get started.")
         with tab_export:
             st.info("Load a project in the **Project** tab to get started.")
         with tab_next:
@@ -807,6 +809,9 @@ def _main() -> None:
 
     with tab_stim:
         stim_panel.render(project)
+
+    with tab_multiaxis:
+        multiaxis_tab.render(project)
 
     with tab_export:
         export_panel.render(project)
