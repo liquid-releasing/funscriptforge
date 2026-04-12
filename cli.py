@@ -1379,8 +1379,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_da.add_argument("input", help="Input funscript path")
     p_da.add_argument("--output", "-o", help="Output path (default: <input>.device-aware.funscript)")
     p_da.add_argument(
-        "--devices", nargs="+", default=["handy"],
-        help="Device keys (handy, osr2, estim_foc, estim_stereo, generic). Default: handy",
+        "--devices", nargs="+", default=["foc3phase"],
+        help="Device keys: handy, osr2, generic, legacy, stereostim, "
+             "foc3phase, foc4phase, neostim. Default: foc3phase",
     )
     p_da.add_argument(
         "--spikes", type=float, default=0.0,

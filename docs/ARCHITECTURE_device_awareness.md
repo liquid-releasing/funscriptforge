@@ -86,7 +86,7 @@ setting from the forge project and applies the same clamp.
 ## CLI
 
 ```bash
-python cli.py device-aware input.funscript --devices estim_foc --spikes 0.125
+python cli.py device-aware input.funscript --devices foc3phase --spikes 0.125
 ```
 
 ## Vocabulary
