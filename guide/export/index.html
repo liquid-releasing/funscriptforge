@@ -836,6 +836,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#export-devices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Export devices
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Export devices">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mechanical" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mechanical
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#estim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Estim
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#export-to-folder" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -848,10 +887,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#what-gets-written" class="md-nav__link">
+  <a href="#folder-layout" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What gets written
+        Folder layout
       
     </span>
   </a>
@@ -859,10 +898,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#estim-channel-generation" class="md-nav__link">
+  <a href="#how-estim-channels-are-produced" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Estim channel generation
+        How estim channels are produced
       
     </span>
   </a>
@@ -901,6 +940,17 @@
     <span class="md-ellipsis">
       
         Workflow templates
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#coming-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coming next
       
     </span>
   </a>
@@ -1474,6 +1524,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#export-devices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Export devices
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Export devices">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mechanical" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mechanical
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#estim" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Estim
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#export-to-folder" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1486,10 +1575,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#what-gets-written" class="md-nav__link">
+  <a href="#folder-layout" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What gets written
+        Folder layout
       
     </span>
   </a>
@@ -1497,10 +1586,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#estim-channel-generation" class="md-nav__link">
+  <a href="#how-estim-channels-are-produced" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Estim channel generation
+        How estim channels are produced
       
     </span>
   </a>
@@ -1546,6 +1635,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#coming-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coming next
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#related" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1577,10 +1677,10 @@
 
 
 <h1 id="export">Export<a class="headerlink" href="#export" title="Permanent link">&para;</a></h1>
-<p>The Export tab is where you review every transform and write the final funscript — plus any estim channel files — to your output folder. It is the last stop in the FunscriptForge workflow.</p>
+<p>The Export tab is the last stop in the FunscriptForge workflow. It writes the final funscript — and any estim channel files — into your output folder, organized into subfolders by device class.</p>
 <hr />
 <h2 id="layout">Layout<a class="headerlink" href="#layout" title="Permanent link">&para;</a></h2>
-<!-- SCREENSHOT: Export tab overview. Top: export preview chart. Middle: collapsed Export options + Completed/Recommended transform expanders. Bottom: Export to folder section with Export All + Open folder buttons. Caption: "The Export tab. Review the preview, expand any details, then Export All." -->
+<!-- SCREENSHOT: Export tab overview. Top: export preview chart. Middle: collapsed Export options + Completed/Recommended transform expanders. Then: Export devices section with two checkbox groups (Mechanical / Estim). Bottom: Export to folder section with Export All + Open folder buttons. Caption: "The Export tab. Pick devices, review the preview, then Export All." -->
 
 <p>The tab is laid out top-to-bottom in the order you read it:</p>
 <ol>
@@ -1588,6 +1688,7 @@
 <li><strong>Export options</strong> <em>(collapsed)</em> — three optional passes: blend seams, final smooth, device awareness.</li>
 <li><strong>Completed transforms</strong> <em>(collapsed)</em> — every transform you applied in the Phrase Editor or Pattern Editor.</li>
 <li><strong>Recommended transforms</strong> <em>(collapsed)</em> — auto-suggested transforms for phrases you have not edited.</li>
+<li><strong>Export devices</strong> — pick which devices you want files for. <strong>Mechanical</strong> is one checkbox; <strong>Estim</strong> is five.</li>
 <li><strong>Export to folder</strong> — the <strong>Export All</strong> button and the <strong>Open folder</strong> button.</li>
 </ol>
 <hr />
@@ -1694,123 +1795,127 @@
 </tbody>
 </table>
 <p>You can accept all recommendations at once, or review each one. Clicking <strong>✏ Edit</strong> on a recommendation opens that phrase in the Phrase Editor so you can choose something different.</p>
-<div class="admonition tip">
-<p class="admonition-title">BPM threshold</p>
-<p>The BPM threshold used for auto-suggestions (default 120) comes from the assessment. Adjust it on the Tone tab if it does not match the source material.</p>
-</div>
 <hr />
-<h2 id="export-to-folder">Export to folder<a class="headerlink" href="#export-to-folder" title="Permanent link">&para;</a></h2>
-<p>Click <strong>Export All</strong> and FunscriptForge writes everything into the output folder you set on the Project tab.</p>
-<h3 id="what-gets-written">What gets written<a class="headerlink" href="#what-gets-written" title="Permanent link">&para;</a></h3>
-<p>For a project named <code>myscript</code>:</p>
+<h2 id="export-devices">Export devices<a class="headerlink" href="#export-devices" title="Permanent link">&para;</a></h2>
+<p>Two groups of checkboxes:</p>
+<h3 id="mechanical">Mechanical<a class="headerlink" href="#mechanical" title="Permanent link">&para;</a></h3>
+<p>A single <strong>Mechanical</strong> checkbox covering The Handy, OSR2, and Intiface-compatible Bluetooth devices (Lovense, Kiiroo, etc.). All three load the same single 1D funscript, so there is one checkbox to enable the whole group. Velocity limits used by the device-aware passes come from The Handy (the most restrictive of the three).</p>
+<h3 id="estim">Estim<a class="headerlink" href="#estim" title="Permanent link">&para;</a></h3>
+<p>Five separate checkboxes, one per estim device class:</p>
 <table>
 <thead>
 <tr>
-<th>File</th>
-<th>What it is</th>
+<th>Checkbox</th>
+<th>Device class</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>myscript.funscript</code></td>
-<td>The main funscript with every accepted transform applied. Restim-compatible naming.</td>
+<td><strong>Audio 3-phase — continuous</strong></td>
+<td>Legacy 2b / 312, low power-efficiency continuous waveform</td>
 </tr>
 <tr>
-<td><code>myscript.alpha.funscript</code></td>
-<td>Alpha (left/right) channel — <em>only if a stim preset is configured</em></td>
+<td><strong>Audio 3-phase — pulse</strong> <em>(default)</em></td>
+<td>Tingler, ZC and other pulse-based stereo stim</td>
 </tr>
 <tr>
-<td><code>myscript.beta.funscript</code></td>
-<td>Beta (up/down) channel</td>
+<td><strong>FOC-Stim — 3-phase</strong></td>
+<td>FOC-Stim three-phase mode</td>
 </tr>
 <tr>
-<td><code>myscript.pulse_frequency.funscript</code></td>
-<td>Pulse frequency channel</td>
+<td><strong>FOC-Stim — 4-phase</strong></td>
+<td>FOC-Stim experimental four-phase mode</td>
 </tr>
 <tr>
-<td><code>myscript.frequency.funscript</code></td>
-<td>Frequency channel</td>
-</tr>
-<tr>
-<td><code>myscript.volume.funscript</code></td>
-<td>Volume channel</td>
-</tr>
-<tr>
-<td><code>myscript.pulse_rise.funscript</code></td>
-<td>Pulse rise (attack) channel</td>
-</tr>
-<tr>
-<td><code>myscript.alpha_prostate.funscript</code></td>
-<td>Alpha prostate channel (3-phase only)</td>
-</tr>
-<tr>
-<td><code>myscript.beta_prostate.funscript</code></td>
-<td>Beta prostate channel (3-phase only)</td>
-</tr>
-<tr>
-<td><code>myscript.volume_prostate.funscript</code></td>
-<td>Volume prostate channel (3-phase only)</td>
-</tr>
-<tr>
-<td>Source video / audio / captions</td>
-<td>Copied next to the funscript so the output folder is self-contained</td>
-</tr>
-<tr>
-<td><code>myscript.forgetmpl</code></td>
-<td>Workflow template — your decisions without project-specific data, reusable on other projects</td>
+<td><strong>NeoStim — 3-phase</strong></td>
+<td>NeoStim three-phase mode</td>
 </tr>
 </tbody>
 </table>
-<h3 id="estim-channel-generation">Estim channel generation<a class="headerlink" href="#estim-channel-generation" title="Permanent link">&para;</a></h3>
-<p>If you set a character preset on the Stim tab, Export generates the estim channel files via <a href="https://github.com/edger477/funscript-tools">funscript-tools</a> automatically. You no longer have to leave FunscriptForge to run a separate channel-generation step.</p>
-<p>There are two paths:</p>
-<ul>
-<li><strong>Reuse from Stim Accept</strong> — if you clicked <strong>Accept</strong> on the Stim tab with the same preset, those channel files are reused as-is. Fast.</li>
-<li><strong>Generate at export time</strong> — if you only previewed (or skipped the Stim tab entirely but configured a preset earlier), Export runs the funscript-tools pipeline against the just-written main funscript. Takes seconds for 2D presets, minutes for 3-phase.</li>
-</ul>
-<p>You will see a status panel showing each file as it is written:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>✅ myscript.funscript (main)
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>⏳ Generating estim channels (Unpredictable)…
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>✅ myscript.alpha.funscript (12.3 KB)
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>✅ myscript.beta.funscript (11.8 KB)
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>✅ myscript.pulse_frequency.funscript (9.4 KB)
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>…
+<p>For now the contents of <code>estim/</code> are identical regardless of which estim device you check — funscript-tools produces all channel files and your estim software picks the ones it needs at playback time. The per-device checkboxes become load-bearing in a future release that adds direct audio synthesis.</p>
+<hr />
+<h2 id="export-to-folder">Export to folder<a class="headerlink" href="#export-to-folder" title="Permanent link">&para;</a></h2>
+<p>Click <strong>Export All</strong> and FunscriptForge writes a self-contained folder you can drop into your media player.</p>
+<h3 id="folder-layout">Folder layout<a class="headerlink" href="#folder-layout" title="Permanent link">&para;</a></h3>
+<p>For a project named <code>myscript</code> with one mechanical device and at least one estim device selected:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>{output_folder}/
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  myscript.funscript            ← top-level base funscript
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  myscript.heatmap.png          ← color-coded velocity heatmap
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>  myscript.mp4                  ← copied media + audio + captions
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>  myscript.forgetmpl            ← reusable workflow template
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>  mechanical/
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    myscript.funscript          ← single 1D funscript for Handy / OSR / Intiface
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>  estim/
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    myscript.funscript          ← main funscript (some restim modes use it)
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    myscript.alpha.funscript
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    myscript.beta.funscript
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    myscript.frequency.funscript
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    myscript.volume.funscript
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    myscript.pulse_frequency.funscript
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    myscript.pulse_rise.funscript
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    myscript.alpha_prostate.funscript
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    myscript.beta_prostate.funscript
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    myscript.volume_prostate.funscript
 </code></pre></div>
-<p>If <code>funscript-tools</code> is not installed alongside FunscriptForge, the channel step is skipped with a warning and the main funscript still writes correctly.</p>
+<p>If you only check <strong>Mechanical</strong>, only <code>mechanical/</code> is created and funscript-tools is not run — fast export.</p>
+<p>If you only check <strong>Estim</strong> boxes, <code>mechanical/</code> is omitted.</p>
+<p>If you check <strong>neither</strong>, the <strong>Export All</strong> button is disabled.</p>
+<h3 id="how-estim-channels-are-produced">How estim channels are produced<a class="headerlink" href="#how-estim-channels-are-produced" title="Permanent link">&para;</a></h3>
+<p>The first source that exists wins:</p>
+<ol>
+<li><strong>Stim Accept files</strong> — if you clicked <strong>Accept</strong> on the Stim tab with a character preset, those generated channel files are moved into <code>estim/</code> as-is. Fast.</li>
+<li><strong>Stim preset configured</strong> — if a preset is set on the Stim tab but Accept was not clicked, Export runs the funscript-tools pipeline against the base funscript using your preset.</li>
+<li><strong>No Stim preset</strong> — Export calls funscript-tools with its default config (Edger's out-of-the-box settings). You skip the Stim tab entirely and still get the full set of channel files.</li>
+</ol>
+<p>You will see a status panel showing each file as it is written:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>✅ myscript.funscript (top-level base)
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>✅ myscript.heatmap.png
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>✅ Copied myscript.mp4
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>✅ mechanical/myscript.funscript
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>✅ estim/myscript.funscript
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>⏳ Generating estim channels (funscript-tools defaults)…
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>✅ estim/myscript.alpha.funscript (12.3 KB)
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>✅ estim/myscript.beta.funscript (11.8 KB)
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>…
+</code></pre></div>
+<p>If <code>funscript-tools</code> is not installed alongside FunscriptForge, the channel step is skipped with a warning and the rest of the export still completes.</p>
 <h3 id="open-folder">Open folder<a class="headerlink" href="#open-folder" title="Permanent link">&para;</a></h3>
-<p>Once Export All completes, <strong>Open folder</strong> opens the output folder in your OS file manager so you can drag the funscripts into your player.</p>
+<p>Once Export All completes, <strong>Open folder</strong> opens the output folder in your OS file manager.</p>
 <hr />
 <h2 id="the-forge-log">The forge log<a class="headerlink" href="#the-forge-log" title="Permanent link">&para;</a></h2>
 <p>The main funscript includes a <code>_forge_log</code> key in its JSON metadata recording every transform that was applied:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">&quot;_forge_log&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span><span class="p">,</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">&quot;exported_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-04-11T10:23:45&quot;</span><span class="p">,</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">&quot;source&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;myscript.funscript&quot;</span><span class="p">,</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">&quot;transforms&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="p">{</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">      </span><span class="nt">&quot;phrase_index&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">      </span><span class="nt">&quot;at_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">84300</span><span class="p">,</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">      </span><span class="nt">&quot;transform&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;amplitude_scale&quot;</span><span class="p">,</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">      </span><span class="nt">&quot;params&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;scale&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1.4</span><span class="p">},</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">      </span><span class="nt">&quot;source&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;phrase_editor&quot;</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">  </span><span class="p">],</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">  </span><span class="nt">&quot;blend_seams&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">  </span><span class="nt">&quot;final_smooth&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">  </span><span class="nt">&quot;clamp_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">&quot;_forge_log&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">&quot;exported_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-04-11T10:23:45&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">&quot;source&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;myscript.funscript&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">&quot;transforms&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">      </span><span class="nt">&quot;phrase_index&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">      </span><span class="nt">&quot;at_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">84300</span><span class="p">,</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">      </span><span class="nt">&quot;transform&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;amplitude_scale&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">      </span><span class="nt">&quot;params&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;scale&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1.4</span><span class="p">},</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">      </span><span class="nt">&quot;source&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;phrase_editor&quot;</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">  </span><span class="p">],</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">  </span><span class="nt">&quot;blend_seams&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">  </span><span class="nt">&quot;final_smooth&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">  </span><span class="nt">&quot;clamp_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="p">}</span>
 </code></pre></div>
 <p>This log travels with the file so you always know what was done to it.</p>
 <hr />
 <h2 id="workflow-templates">Workflow templates<a class="headerlink" href="#workflow-templates" title="Permanent link">&para;</a></h2>
-<p>The <code>.forgetmpl</code> file written next to your funscript is a re-usable record of the <em>decisions</em> you made — tone settings, output targets, device fix strategies, history — without any project-specific data (no paths, no timestamps). Drop it into a new project to start with the same workflow.</p>
+<p>The <code>.forgetmpl</code> file written next to your funscript is a reusable record of the <em>decisions</em> you made — tone settings, output targets, device fix strategies, history — without any project-specific data (no paths, no timestamps). Drop it into a new project to start with the same workflow.</p>
+<hr />
+<h2 id="coming-next">Coming next<a class="headerlink" href="#coming-next" title="Permanent link">&para;</a></h2>
+<p>A future release will add <strong>audio synthesis</strong> for the four estim audio device classes (legacy continuous, pulse stereostim, FOC-Stim, NeoStim). When that lands, audio files will appear inside <code>estim/</code> alongside the channel funscripts and the per-device checkboxes will start producing different audio outputs.</p>
 <hr />
 <h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Stim tab — choose a character preset; channel files are generated at Export time</li>
+<li>Stim tab — choose a character preset; channel files reuse your preset at Export time</li>
+<li>Device tab — see the device limits and device-aware corrections that the Export options apply</li>
 <li><a href="../phrase-editor/">Phrase Editor →</a> — fix individual phrases</li>
 <li><a href="../pattern-editor/">Pattern Editor →</a> — fix all phrases of a given type</li>
-<li><a href="../../reference/device-safety/">Device Safety →</a> — velocity caps, device types, estim routing</li>
 <li><a href="../transforms/">Transforms →</a> — what every transform does</li>
 </ul>
 
