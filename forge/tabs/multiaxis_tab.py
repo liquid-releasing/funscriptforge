@@ -36,6 +36,34 @@ def render(project=None):
         st.caption("No phrases detected — run through **Tone** first.")
         return
 
+    # ── Funscript reference chart (so user sees what they're styling) ──
+    from forge_ui_components.funscript_chart.cache import ChartCache
+    cache = ChartCache.from_session_state()
+    _latest_series, _stage = cache.get_latest_series()
+    if _latest_series:
+        st.caption("**Your funscript** — reference while assigning styles")
+        from forge_ui_components.funscript_chart.streamlit import render_static
+        bands = cache.get_bands()
+        png = cache.render_png(_stage, with_bands=True, height_px=180, width_px=1400)
+        if png:
+            st.image(png, use_container_width=True)
+
+    st.divider()
+
+    # ── Style descriptions (above the table for reference) ───────────
+    with st.expander("Style descriptions", expanded=False):
+        for name in STYLE_NAMES:
+            if name == "None":
+                st.caption("**None** — No secondary axes. Device stays centered.")
+                continue
+            preset = MULTIAXIS_PRESETS.get(name, {})
+            desc = preset.get("_description", "")
+            axes_used = [k for k in preset if not k.startswith("_")]
+            st.caption(
+                f"**{name}** — {desc} "
+                f"Axes: {', '.join(axes_used) if axes_used else 'none'}."
+            )
+
     # ── Apply-to-all ──────────────────────────────────────────────────
     st.subheader("Position styles")
     st.caption(
@@ -83,7 +111,11 @@ def render(project=None):
         dur_s = (end_ms - start_ms) / 1000.0
         bpm = phrase.get("bpm", 0)
         tags = phrase.get("tags", [])
-        tag_str = ", ".join(tags[:2]) if tags else "—"
+        if tags:
+            tag_str = ", ".join(tags[:2])
+        else:
+            # Derive a brief descriptor from BPM + amplitude when no tags
+            tag_str = _describe_phrase(phrase)
 
         # Get saved style for this phrase
         saved = saved_styles.get(str(i), "None")
@@ -132,25 +164,21 @@ def render(project=None):
         for style_name in style_assignments.values():
             preset = MULTIAXIS_PRESETS.get(style_name, {})
             for axis_name, cfg in preset.items():
-                if not axis_name.startswith("_") and cfg.get("algorithm", "none") != "none":
+                if not axis_name.startswith("_") and isinstance(cfg, dict) and cfg.get("algorithm", "none") != "none":
                     needed_axes.add(axis_name)
         if needed_axes:
             axis_files = [f"`{AXIS_SUFFIXES[a]}`" for a in sorted(needed_axes) if a in AXIS_SUFFIXES]
             st.caption(f"Axes to generate: {', '.join(axis_files)}")
 
-    # ── Style descriptions ───────────────────────────────────────────
-    with st.expander("Style descriptions", expanded=False):
-        for name in STYLE_NAMES:
-            if name == "None":
-                st.caption("**None** — No secondary axes. Device stays centered.")
-                continue
-            preset = MULTIAXIS_PRESETS.get(name, {})
-            desc = preset.get("_description", "")
-            axes_used = [k for k in preset if not k.startswith("_")]
-            st.caption(
-                f"**{name}** — {desc} "
-                f"Axes: {', '.join(axes_used) if axes_used else 'none'}."
-            )
+    st.divider()
+
+    # ── Preview ──────────────────────────────────────────────────────
+    if style_assignments:
+        if st.button("Preview", type="secondary", use_container_width=True,
+                     help="Generate and preview the secondary axis signals."):
+            _generate_preview(project, phrases, style_assignments)
+
+        _render_preview()
 
     st.divider()
 
@@ -180,3 +208,116 @@ def render(project=None):
             success_guidance(
                 "No multi-axis styles assigned. Export will skip secondary axis files."
             )
+
+
+# ── Phrase description helper ─────────────────────────────────────────
+
+
+def _describe_phrase(phrase: dict) -> str:
+    """Derive a brief behavioral label from BPM and amplitude when no
+    assessment tags are available. Gives the user a sense of what's
+    happening in each phrase to help them pick a style."""
+    bpm = phrase.get("bpm", 0)
+    amp = phrase.get("amplitude", phrase.get("pos_range", 0))
+    # pos_range may not exist; fall back to estimating from min/max
+    pos_min = phrase.get("pos_min", 0)
+    pos_max = phrase.get("pos_max", 100)
+    if not amp:
+        amp = pos_max - pos_min
+
+    if bpm <= 0:
+        return "quiet"
+    elif bpm < 60:
+        return "slow" if amp > 40 else "gentle"
+    elif bpm < 100:
+        return "steady" if amp > 30 else "subtle"
+    elif bpm < 140:
+        return "active" if amp > 50 else "moderate"
+    elif bpm < 180:
+        return "fast" if amp > 40 else "driven"
+    else:
+        return "intense" if amp > 50 else "rapid"
+
+
+# ── Preview helpers ──────────────────────────────────────────────────
+
+
+def _generate_preview(project, phrases, style_assignments):
+    """Generate multi-axis signals and cache for preview rendering."""
+    from forge.multiaxis import generate_multiaxis
+    from forge.funscript import load_funscript
+
+    funscript_path = st.session_state.get("funscript_path", "")
+    chain_path = st.session_state.get("chain_funscript_path", "")
+    path = chain_path or funscript_path
+    if not path:
+        return
+
+    data = load_funscript(path)
+    if not data:
+        return
+
+    actions = data.get("actions", [])
+    with st.status("Generating multi-axis preview…", expanded=True) as status:
+        result = generate_multiaxis(
+            actions, phrases, style_assignments, MULTIAXIS_PRESETS,
+        )
+        active = result.active_axes()
+        status.write(f"✅ {len(active)} axes generated")
+        for axis_name in sorted(active.keys()):
+            sig = active[axis_name]
+            status.write(f"  • {axis_name}: {len(sig.times_ms):,} points")
+        status.update(label="Preview ready", state="complete", expanded=False)
+
+    # Cache the result for rendering
+    st.session_state["_multiaxis_preview"] = result
+    st.session_state["_multiaxis_preview_actions"] = actions
+    st.rerun()
+
+
+def _render_preview():
+    """Render cached multi-axis preview as monochrome charts."""
+    result = st.session_state.get("_multiaxis_preview")
+    actions = st.session_state.get("_multiaxis_preview_actions")
+    if result is None or actions is None:
+        return
+
+    from forge_ui_components.funscript_chart.streamlit import render_monochrome_from_arrays
+
+    active = result.active_axes()
+    if not active:
+        return
+
+    st.subheader("Multi-axis preview")
+
+    # Row 1: L0 stroke (the input)
+    _times_s = [a["at"] / 1000.0 for a in actions]
+    _pos = [a["pos"] for a in actions]
+
+    _CH_H = 120
+    _CH_W = 400
+
+    # Arrange: funscript first, then axes 3-across
+    st.caption("**L0 Stroke (input)**")
+    render_monochrome_from_arrays(_times_s, _pos, height=_CH_H)
+
+    # Secondary axes in rows of 3
+    axis_names = sorted(active.keys())
+    _DISPLAY_NAMES = {
+        "roll": "R1 Roll (tilt L/R)",
+        "pitch": "R2 Pitch (tilt F/B)",
+        "twist": "R0 Twist (rotation)",
+        "surge": "L1 Surge (fwd/back)",
+        "sway": "L2 Sway (left/right)",
+    }
+
+    for row_start in range(0, len(axis_names), 3):
+        row_axes = axis_names[row_start:row_start + 3]
+        cols = st.columns(3)
+        for col, axis_name in zip(cols, row_axes):
+            sig = active[axis_name]
+            t_s = [t / 1000.0 for t in sig.times_ms]
+            with col:
+                st.caption(f"**{_DISPLAY_NAMES.get(axis_name, axis_name)}**")
+                render_monochrome_from_arrays(t_s, sig.positions,
+                                              height=_CH_H)

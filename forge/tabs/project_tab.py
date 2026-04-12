@@ -52,7 +52,7 @@ def _reset_downstream_state():
         "output_folder_input",
         # Acceptance flags
         "project_accepted", "device_accepted", "tone_accepted",
-        "phrases_accepted", "stim_accepted", "export_complete",
+        "phrases_accepted", "stim_accepted", "multiaxis_accepted", "export_complete",
         # Device tab state
         "device_apply_scope",
         # Tone tab state
@@ -75,7 +75,10 @@ def _reset_downstream_state():
                 or key.startswith("phrase_transform_chain_") \
                 or key.startswith("_phrase_chain_snapshot_") \
                 or key.startswith("_phrase_last_applied_") \
-                or key.startswith("cached_vibrant"):
+                or key.startswith("cached_vibrant") \
+                or key.startswith("multiaxis_style_") \
+                or key.startswith("multiaxis_sel_") \
+                or key.startswith("_multiaxis_preview"):
             st.session_state.pop(key, None)
     # Clear chart cache
     st.session_state.pop("_chart_cache", None)
