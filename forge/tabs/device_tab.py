@@ -73,9 +73,12 @@ def render():
             if checked:
                 selected_targets.append(key)
 
-    # Write back to project if changed
+    # Write back to project if changed — and clear the accepted state
+    # so the device-aware computation re-runs with the new limits.
     if project and selected_targets != saved_targets:
         project["output_targets"] = selected_targets
+        st.session_state.pop("device_accepted", None)
+        st.session_state.pop("_device_analysis_key", None)
 
     if not selected_targets:
         st.caption("⚠️ Pick at least one device to see limits and apply device awareness.")
@@ -201,6 +204,13 @@ def render():
     )
 
     _device_accepted = st.session_state.get("device_accepted", False)
+
+    # If groove changed since last Accept, clear accepted state so the
+    # computation re-runs with the new groove value.
+    _last_accepted_groove = st.session_state.get("_device_last_groove")
+    if _device_accepted and _last_accepted_groove is not None and _saved_groove != _last_accepted_groove:
+        _device_accepted = False
+        st.session_state.pop("device_accepted", None)
 
     if _already_aware and _saved_groove == 0:
         st.subheader("Device-aware")
@@ -392,6 +402,7 @@ def render():
                 _groove if _apply_clamping else 0.0,
             )
         st.session_state["device_accepted"] = True
+        st.session_state["_device_last_groove"] = _groove if _apply_clamping else 0.0
         st.rerun()
 
     if st.session_state.get("device_accepted"):

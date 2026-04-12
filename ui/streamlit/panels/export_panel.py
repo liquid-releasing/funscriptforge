@@ -1108,8 +1108,15 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
     actions = fs_data.get("actions", [])
     status.write(f"✅ {len(actions):,} actions to export")
 
-    # ── Top-level base files ─────────────────────────────────────────
+    # ── Clean stale device subfolders from previous exports ─────────
+    import shutil
     Path(output_folder).mkdir(parents=True, exist_ok=True)
+    for _stale in ("mechanical", "estim"):
+        _stale_dir = Path(output_folder) / _stale
+        if _stale_dir.is_dir():
+            shutil.rmtree(_stale_dir)
+
+    # ── Top-level base files ─────────────────────────────────────────
 
     stem = forge_project["name"]
     base_path = os.path.join(output_folder, f"{stem}.funscript")
@@ -1127,14 +1134,15 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
 
     # Copy input media to top-level output folder
     from forge.project import get_input_file
+    _media_files: list[str] = []
     for role in ("video", "audio", "captions"):
         src = get_input_file(forge_project, role)
         if src and os.path.isfile(src):
-            import shutil
             dest = os.path.join(output_folder, os.path.basename(src))
             if not os.path.exists(dest):
                 shutil.copy2(src, dest)
                 status.write(f"✅ Copied {os.path.basename(src)}")
+            _media_files.append(src)
 
     # ── Mechanical subfolder ─────────────────────────────────────────
     if mech_on:
@@ -1247,25 +1255,29 @@ def _write_readme(output_root: Path, stem: str, mech_on: bool,
         lines.append("Playing the estim/ folder with restim")
         lines.append("--------------------------------------")
         lines.append("")
-        lines.append("Open restim, point it at the estim/ folder (or the")
-        lines.append(f"{stem}.funscript inside it), and choose your device.")
-        lines.append("Restim will pick the channel files it needs based on")
-        lines.append("the device class. The same channel files work for every")
-        lines.append("estim device class — only the audio synthesis differs.")
+        lines.append("IMPORTANT: restim expects the media file and the funscript")
+        lines.append("files to be in the SAME folder with the SAME base name.")
+        lines.append("")
+        lines.append("To play:")
+        lines.append(f"  1. Copy your media file into estim/ and rename it to")
+        lines.append(f"     {stem}.<ext> (e.g. {stem}.mp4) if it isn't already.")
+        lines.append(f"     The media is at the top level of this export folder —")
+        lines.append(f"     we don't duplicate it into subfolders to save disk space.")
+        lines.append(f"  2. Open restim")
+        lines.append(f"  3. Load {stem}.funscript from the estim/ folder")
+        lines.append(f"  4. Restim auto-discovers the channel files")
+        lines.append(f"     ({stem}.alpha.funscript, {stem}.beta.funscript, etc.)")
+        lines.append(f"     because they share the same base name")
+        lines.append(f"  5. Choose your device class and play")
+        lines.append("")
+        lines.append("The channel files are identical regardless of which estim")
+        lines.append("device you use — restim picks the right ones at playback.")
         lines.append("")
         if selected_estim:
             lines.append("Devices selected at export time:")
             for label in selected_estim:
                 lines.append(f"  • {label}")
             lines.append("")
-            lines.append("(This list is informational. The channel files are")
-            lines.append("identical regardless of which device(s) you picked —")
-            lines.append("restim figures out the right subset at playback time.)")
-        lines.append("")
-        lines.append("For media playback, restim expects the funscript filename")
-        lines.append("base to match the media filename base. If you renamed the")
-        lines.append("media (or your media has a different name than the project),")
-        lines.append("rename one to match the other before loading.")
 
     if mech_on:
         lines.append("")

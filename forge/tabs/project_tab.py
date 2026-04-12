@@ -404,6 +404,9 @@ def _funscript_section(v: int):
         return str(tmp)
 
     def _on_funscript_clear(cfg):
+        # Clear the upload guard so re-uploading the same filename triggers
+        # a fresh load instead of being skipped by is_new_upload().
+        st.session_state.pop("_funscript_processed", None)
         _reset_downstream_state()
 
     funscript_path = st.session_state.get("funscript_path", "")
