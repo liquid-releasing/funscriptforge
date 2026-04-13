@@ -233,6 +233,18 @@ def render(project: "Project") -> None:
             help="Write a velocity-colored heatmap of the main funscript "
                  "next to the export. Useful as a visual reference.",
         )
+        # Audio checkbox — only relevant for audio-capable estim devices
+        _targets = forge_project.get("output_targets", [])
+        _audio_keys = [k for k in _targets if k in ("legacy", "stereostim")]
+        if _audio_keys:
+            st.checkbox(
+                "Include estim audio files (WAV)",
+                value=True,
+                key="export_estim_audio",
+                help="Render stereo audio from the estim channel funscripts. "
+                     "Play these WAV files on your audio estim device — "
+                     "no restim required.",
+            )
         st.caption(
             "Device awareness is applied earlier on the **Device tab** when "
             "you accept its fix — no need to re-apply here."
@@ -977,9 +989,9 @@ def _render_pipeline_section(project) -> None:
 # Limits source for mechanical = handy (most restrictive).
 MECHANICAL_KEYS = ("handy", "osr2", "generic")
 
-# Estim devices — five separate checkboxes. For this PR they are metadata only:
-# the contents of estim/ are identical regardless of which estim device is
-# checked, because audio synthesis is deferred to a later PR.
+# Estim devices — five separate checkboxes. Audio-capable devices (legacy,
+# stereostim) get WAV files rendered from the alpha/beta channels. Protocol
+# devices (foc3phase, foc4phase, neostim) get funscripts only.
 ESTIM_DEVICES = (
     ("legacy",     "Audio 3-phase — continuous (legacy 2b/312)"),
     ("stereostim", "Audio 3-phase — pulse (Tingler/ZC) — default"),
@@ -1168,6 +1180,11 @@ def _do_export_to_folders(forge_project: dict, project) -> None:
     if estim_on:
         _write_estim_subfolder(forge_project, base_path, stem,
                                Path(output_folder), status)
+
+        # ── Audio rendering (if audio-capable devices selected) ──────
+        if st.session_state.get("export_estim_audio", False):
+            _render_estim_audio(Path(output_folder) / "estim", stem,
+                                estim_on, actions, status)
 
     # ── README explaining the layout ─────────────────────────────────
     try:
@@ -1429,6 +1446,75 @@ def _write_estim_subfolder(forge_project: dict, base_funscript_path: str,
             status.write(f"✅ `estim/{os.path.basename(_o['path'])}` ({_kb:.1f} KB)")
     else:
         status.write(f"⚠️ Channel generation failed: {_result.get('error')}")
+
+
+# Which estim device keys produce audio, and which waveform mode.
+AUDIO_DEVICE_WAVEFORMS = {
+    "legacy":     "continuous",   # 2b, 312 — smooth sine carrier
+    "stereostim": "pulse",        # Tingler, ZC95 — pulse trains
+}
+
+
+def _render_estim_audio(estim_dir: Path, stem: str, estim_keys: list,
+                         actions: list, status) -> None:
+    """Render WAV audio files from alpha/beta funscripts in estim/.
+
+    Only renders for audio-capable devices (legacy, stereostim).
+    Protocol devices (foc3phase, foc4phase, neostim) are skipped.
+    """
+    from forge.audio_synthesis import render_stereo_audio
+
+    audio_keys = [k for k in estim_keys if k in AUDIO_DEVICE_WAVEFORMS]
+    if not audio_keys:
+        return
+
+    # Compute duration from funscript actions
+    if actions:
+        duration_s = actions[-1]["at"] / 1000.0
+    else:
+        return
+
+    for device_key in audio_keys:
+        waveform = AUDIO_DEVICE_WAVEFORMS[device_key]
+        waveform_label = f"{device_key} {waveform}"
+
+        # Main stim audio
+        alpha_path = estim_dir / f"{stem}.alpha.funscript"
+        beta_path = estim_dir / f"{stem}.beta.funscript"
+        if alpha_path.exists() and beta_path.exists():
+            audio_path = estim_dir / f"{stem}.{device_key}.wav"
+            status.write(f"⏳ Rendering audio — {waveform_label}, main channel…")
+            try:
+                result = render_stereo_audio(
+                    str(alpha_path), str(beta_path), str(audio_path),
+                    duration_s, waveform=waveform,
+                )
+                _kb = result.file_size_bytes / 1024
+                status.write(
+                    f"✅ `estim/{audio_path.name}` "
+                    f"({_kb:.0f} KB, peak {result.peak_amplitude:.2f})"
+                )
+            except Exception as _exc:
+                status.write(f"⚠️ Audio render failed ({waveform_label}): {_exc}")
+
+        # Prostate audio (if prostate channels exist)
+        p_alpha = estim_dir / f"{stem}.prostate-alpha.funscript"
+        p_beta = estim_dir / f"{stem}.prostate-beta.funscript"
+        if p_alpha.exists() and p_beta.exists():
+            p_audio = estim_dir / f"{stem}.prostate.{device_key}.wav"
+            status.write(f"⏳ Rendering audio — {waveform_label}, prostate channel…")
+            try:
+                result = render_stereo_audio(
+                    str(p_alpha), str(p_beta), str(p_audio),
+                    duration_s, waveform=waveform,
+                )
+                _kb = result.file_size_bytes / 1024
+                status.write(
+                    f"✅ `estim/{p_audio.name}` "
+                    f"({_kb:.0f} KB, peak {result.peak_amplitude:.2f})"
+                )
+            except Exception as _exc:
+                status.write(f"⚠️ Prostate audio render failed ({waveform_label}): {_exc}")
 
 
 def _export_template(forge_project: dict, output_folder: str, status) -> None:
