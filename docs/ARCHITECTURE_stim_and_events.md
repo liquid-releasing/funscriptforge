@@ -1,6 +1,6 @@
 # Stim Tab & Enhance Tab Architecture
 
-> FunScriptForge wraps edger's funscript-tools workflow and makes it approachable.
+> FunscriptForge wraps edger's funscript-tools workflow and makes it approachable.
 > We are the gateway into more sophisticated work that funscript-tools enables.
 
 ## How users should think about it
@@ -29,7 +29,7 @@ Everything below is implementation detail.
 
 ## Overview
 
-The Stim tab and Enhance tab are the estim-specific layers of FunScriptForge.
+The Stim tab and Enhance tab are the estim-specific layers of FunscriptForge.
 They sit after the funscript chain (Original → Device → Tone → Phrases) and
 control how the funscript translates into multi-channel electrical stimulation.
 
@@ -47,7 +47,7 @@ Export:      cli.process() → 10 channel files → process_events() enhances th
 
 We wrap edger's exposed workflow — not cherry-picked parameters:
 
-| edger's workflow step | FunScriptForge surface |
+| edger's workflow step | FunscriptForge surface |
 |---|---|
 | Load funscript | **Project tab** (already done) |
 | Configure (algorithm, freq, pulse, volume) | **Stim tab** — our UI over his config |
@@ -158,9 +158,9 @@ process_events()     → modifies those files at phrase timecodes
 Sequential, not separate. Events enhance the generated channels — they layer
 on top of the baseline, they don't replace it.
 
-### Enchantments (ship with FunScriptForge)
+### Enchantments (ship with FunscriptForge)
 
-Ten enchantments ship with FunScriptForge — the General events from
+Ten enchantments ship with FunscriptForge — the General events from
 funscript-tools v2.2.0. These are NOT funscript transforms — Tone shapes
 the funscript, Enchantments layer sensation onto the output channels.
 They operate on completely different things and never conflict.
@@ -460,7 +460,7 @@ The enchantment catalog is the content generation seed for forgegen:
 - Scene texture change at 7:00 → place `fast`
 
 Three layers, one catalog:
-1. **FunScriptForge** (manual) — user watches video, places enchantments
+1. **FunscriptForge** (manual) — user watches video, places enchantments
 2. **forgegen** (auto) — algorithm places enchantments based on analysis
 3. **funscript-tools** (engine) — executes them all via `process_events()`
 

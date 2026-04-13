@@ -27,9 +27,9 @@ Each character shows 1–2 contextual sliders most relevant to its personality, 
 
 ### Integration with funscript-tools
 
-The eTransforms tab connects directly to [funscript-tools](https://github.com/liquid-releasing/funscript-tools). The same five characters appear in both tools — pick a character in FunScriptForge, and funscript-tools applies it to generate the alpha / beta / pulse_frequency estim outputs.
+The eTransforms tab connects directly to [funscript-tools](https://github.com/liquid-releasing/funscript-tools). The same five characters appear in both tools — pick a character in FunscriptForge, and funscript-tools applies it to generate the alpha / beta / pulse_frequency estim outputs.
 
-The **character name is the API** between all three tools: Explorer analysis → FunScriptForge transforms → funscript-tools eTransform → restim playback.
+The **character name is the API** between all three tools: Explorer analysis → FunscriptForge transforms → funscript-tools eTransform → restim playback.
 
 > **Current scope:** eTransforms apply globally to the full funscript. Per-section (phrase-level) character support is the next milestone.
 
@@ -39,7 +39,7 @@ The **character name is the API** between all three tools: Explorer analysis →
 
 ### Workflow — 9 Tabs
 
-FunScriptForge guides you through a structured workflow. Each tab builds on the previous one:
+FunscriptForge guides you through a structured workflow. Each tab builds on the previous one:
 
 | Tab | Purpose |
 |-----|---------|

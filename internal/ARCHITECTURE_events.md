@@ -26,9 +26,9 @@ process_events()     → modifies those files at phrase timecodes
 
 Sequential, not separate. Events enhance the generated channels — they layer on top of the baseline, they don't replace it.
 
-### Enchantments (ship with FunScriptForge)
+### Enchantments (ship with FunscriptForge)
 
-Ten enchantments ship with FunScriptForge — the General events from funscript-tools v2.2.0. These are NOT funscript transforms — Tone shapes
+Ten enchantments ship with FunscriptForge — the General events from funscript-tools v2.2.0. These are NOT funscript transforms — Tone shapes
 the funscript, Enchantments layer sensation onto the output channels.
 
 They operate on completely different things and never conflict.
@@ -355,7 +355,7 @@ The enchantment catalog is the content generation seed for forgegen:
 - Scene texture change at 7:00 → place `fast`
 
 Three layers, one catalog:
-1. **FunScriptForge** (manual) — user watches video, places enchantments
+1. **FunscriptForge** (manual) — user watches video, places enchantments
 2. **forgegen** (auto) — algorithm places enchantments based on analysis
 3. **funscript-tools** (engine) — executes them all via `process_events()`
 

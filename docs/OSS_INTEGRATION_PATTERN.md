@@ -2,7 +2,7 @@
 
 > This document describes the standard pattern used across the liquid-releasing
 > project suite for integrating open-source tools. It lives here as a worked
-> example and should be copied into FunScriptForge as the canonical reference.
+> example and should be copied into FunscriptForge as the canonical reference.
 
 ---
 
@@ -31,8 +31,8 @@ The UIs never change.
 | Target | UI layer | How it runs |
 |--------|----------|-------------|
 | Standalone dev/test | tkinter (`forge_window.py`) | `python forge.py` |
-| Desktop (Win/Mac/Linux) | Streamlit page in FunScriptForge | PyInstaller + local Streamlit |
-| SaaS | Streamlit page in FunScriptForge | Deployed cloud Streamlit |
+| Desktop (Win/Mac/Linux) | Streamlit page in FunscriptForge | PyInstaller + local Streamlit |
+| SaaS | Streamlit page in FunscriptForge | Deployed cloud Streamlit |
 
 The tkinter standalone is a **development harness** — fast to iterate on,
 no Streamlit overhead. Once the UX is right, the Streamlit tab calls the
@@ -111,11 +111,11 @@ git merge upstream/main
 
 If it breaks: the error is in `cli.py`. Fix the translation there. UI untouched.
 
-### 5. Add to FunScriptForge as a tab
+### 5. Add to FunscriptForge as a tab
 
-Because the UI calls `cli.py` — not upstream internals — porting to FunScriptForge
+Because the UI calls `cli.py` — not upstream internals — porting to FunscriptForge
 means:
-1. Copy `cli.py` into the FunScriptForge module
+1. Copy `cli.py` into the FunscriptForge module
 2. Replace `forge_window.py` with a `ttk.Frame`-based tab
 3. The tab calls the same `cli.py` functions unchanged
 
@@ -140,10 +140,10 @@ Our fork: https://github.com/liquid-releasing/funscript-tools
 Every tool in the liquid-releasing ecosystem that wraps OSS follows this pattern:
 
 ```
-funscript-tools  →  cli.py  →  FunScriptForge tab
-[next tool]      →  cli.py  →  FunScriptForge tab
-[next tool]      →  cli.py  →  FunScriptForge tab
+funscript-tools  →  cli.py  →  FunscriptForge tab
+[next tool]      →  cli.py  →  FunscriptForge tab
+[next tool]      →  cli.py  →  FunscriptForge tab
 ```
 
-FunScriptForge becomes the unified UI. Each `cli.py` is an independently
+FunscriptForge becomes the unified UI. Each `cli.py` is an independently
 versioned, independently testable adapter. The UI is just tabs.

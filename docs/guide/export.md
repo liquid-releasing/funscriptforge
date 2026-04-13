@@ -27,13 +27,14 @@ A static visualization of your funscript with every transform applied. This is w
 
 ## Export options
 
-Three checkboxes, all on by default:
+Checkboxes, all on by default:
 
 | Option | What it does |
 | --- | --- |
 | **Blend seams** | Detects high-velocity jumps at phrase boundaries and applies targeted smoothing only at those seams. Recommended when adjacent phrases use different transform styles. |
 | **Final smooth** | A light global smoothing pass that removes residual sharp edges. |
-| **Device awareness** | Applies the velocity caps and fix strategies you set on the Device tab. Off when you want a raw waveform (e.g., for estim-only routing). |
+| **Include color heatmap PNG** | Writes a velocity-colored heatmap of the main funscript next to the export. |
+| **Include estim audio files (WAV)** | Renders stereo audio from the estim channel funscripts. Only visible when an audio-capable device is selected (legacy or stereostim). Play these WAV files directly on your estim device — no restim required. |
 
 ---
 
@@ -91,7 +92,11 @@ Five separate checkboxes, one per estim device class:
 | **FOC-Stim — 4-phase** | FOC-Stim experimental four-phase mode |
 | **NeoStim — 3-phase** | NeoStim three-phase mode |
 
-For now the contents of `estim/` are identical regardless of which estim device you check — funscript-tools produces all channel files and your estim software picks the ones it needs at playback time. The per-device checkboxes become load-bearing in a future release that adds direct audio synthesis.
+The channel funscripts in `estim/` are identical regardless of which estim device you check — funscript-tools produces all channel files and your estim software picks the ones it needs at playback time.
+
+**Audio-capable devices** (legacy 2b/312 and stereostim Tingler/EstimHero/ZC95) also get **stereo WAV files** rendered from the alpha/beta channel funscripts. These are ready-to-play audio files — connect your estim device to your audio output and hit play. No restim required.
+
+**Protocol devices** (FOC-Stim 3-phase, FOC-Stim 4-phase, NeoStim) do not use audio files. They need **restim** for real-time device control. The exported channel funscripts are what restim loads — see the Next Steps tab for setup instructions.
 
 ---
 
@@ -122,6 +127,10 @@ For a project named `myscript` with one mechanical device and at least one estim
     myscript.alpha_prostate.funscript
     myscript.beta_prostate.funscript
     myscript.volume_prostate.funscript
+    myscript.legacy.wav         ← stereo audio for 2b/312 (if legacy selected)
+    myscript.stereostim.wav     ← stereo audio for Tingler/ZC95 (if stereostim selected)
+    myscript.prostate.legacy.wav        ← prostate audio (if prostate channels exist)
+    myscript.prostate.stereostim.wav    ← prostate audio (if prostate channels exist)
 ```
 
 If you only check **Mechanical**, only `mechanical/` is created and funscript-tools is not run — fast export.
@@ -194,9 +203,20 @@ The `.forgetmpl` file written next to your funscript is a reusable record of the
 
 ---
 
-## Coming next
+## Audio synthesis
 
-A future release will add **audio synthesis** for the four estim audio device classes (legacy continuous, pulse stereostim, FOC-Stim, NeoStim). When that lands, audio files will appear inside `estim/` alongside the channel funscripts and the per-device checkboxes will start producing different audio outputs.
+FunscriptForge renders stereo WAV audio files from the alpha/beta channel funscripts using 3-phase synthesis math extracted from [restim](https://github.com/diglet48/restim) by diglet48 (MIT license).
+
+Two waveform modes match two device families:
+
+| WAV file | Waveform | Devices |
+| --- | --- | --- |
+| `{stem}.legacy.wav` | Continuous sine carrier | 2b, 312, and similar legacy audio devices |
+| `{stem}.stereostim.wav` | Pulse train with cosine envelope | Tingler, EstimHero, ZC95, and similar modern audio devices |
+
+**How to use**: Connect your audio estim device to your computer's audio output (or a dedicated audio interface). Play the WAV file in any media player — the audio IS the stimulation signal. Sync with video using MultiFunPlayer or ScriptPlayer.
+
+**Protocol devices** (FOC-Stim, NeoStim) generate stimulation signals in their own firmware and do not use audio files. Use restim for real-time device control with the exported channel funscripts.
 
 ---
 

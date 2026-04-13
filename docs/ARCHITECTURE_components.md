@@ -2,17 +2,17 @@
 
 ## Overview
 
-FunScriptForge uses [forge-ui-components](https://github.com/liquid-releasing/forge-ui-components) as a shared component library. Components follow a two-layer pattern: framework-agnostic `core.py` (pure Python, testable without Streamlit) and thin `streamlit.py` render layer.
+FunscriptForge uses [forge-ui-components](https://github.com/liquid-releasing/forge-ui-components) as a shared component library. Components follow a two-layer pattern: framework-agnostic `core.py` (pure Python, testable without Streamlit) and thin `streamlit.py` render layer.
 
 This separation enables:
-- Reuse across FunScriptForge, SyncPlayer, forgegen, and future apps
+- Reuse across FunscriptForge, SyncPlayer, forgegen, and future apps
 - Migration to React/Tauri v2 by replacing only the render layer
 - Testing core logic without UI framework dependencies
 
 ## Dependency Graph
 
 ```
-FunScriptForge (ui/streamlit/app.py)
+FunscriptForge (ui/streamlit/app.py)
 │
 ├── forge-ui-components          ← shared UI components
 │   ├── funscript_chart          ← Plotly charts (mono + vibrant)
@@ -35,7 +35,7 @@ FunScriptForge (ui/streamlit/app.py)
 
 ### funscript_chart
 
-| Before (FunScriptForge) | After (forge-ui-components) |
+| Before (FunscriptForge) | After (forge-ui-components) |
 |---|---|
 | `project_tab._funscript_chart()` | `funscript_chart.streamlit.render_monochrome()` |
 | `project_tab._funscript_stats_row()` | `funscript_chart.streamlit.render_stats_row()` |
@@ -44,7 +44,7 @@ FunScriptForge (ui/streamlit/app.py)
 | `visualizations/chart_data.py` (274 lines) | `funscript_chart.core` (PointSeries, colors, slicing) |
 | `visualizations/funscript_chart.py` (315 lines) | `funscript_chart.core.vibrant_figure()` |
 
-FunScriptForge's `visualizations/` directory is now thin backward-compat shims that re-export from the component library.
+FunscriptForge's `visualizations/` directory is now thin backward-compat shims that re-export from the component library.
 
 ### file_picker
 

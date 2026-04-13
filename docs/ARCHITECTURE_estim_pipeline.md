@@ -9,8 +9,8 @@
 Three tools. One pipeline. One vocabulary.
 
 ```
-FunScriptForge Explorer        — originate the funscript from video
-FunScriptForge                 — edit and shape the funscript
+FunscriptForge Explorer        — originate the funscript from video
+FunscriptForge                 — edit and shape the funscript
 funscript-tools                — apply estim character, generate outputs
 restim                         — play
 ```
@@ -25,7 +25,7 @@ Every piece of estim content has two independent dimensions:
 
 | Dimension | Tool | What it controls |
 |---|---|---|
-| **Funscript quality** | FunScriptForge | Position over time — strokes, pacing, phrase structure |
+| **Funscript quality** | FunscriptForge | Position over time — strokes, pacing, phrase structure |
 | **Estim character** | funscript-tools | How sensation moves and builds — the electrode path, pulse rate, attack |
 
 Before these tools existed, creators had one dimension. Now they have two. The combination produces something no other tool creates.
@@ -36,7 +36,7 @@ Before these tools existed, creators had one dimension. Now they have two. The c
 
 The five eTransform characters are the **API between all three tools**. One intent word drives behavior at every layer.
 
-| Character | Explorer analysis | FunScriptForge transforms | funscript-tools eTransform |
+| Character | Explorer analysis | FunscriptForge transforms | funscript-tools eTransform |
 |---|---|---|---|
 | Reactive | onset detection + optical flow | fast, sharp transforms | wide arc, low ramp, high peak |
 | Scene Builder | phrase detection + downbeats | gradual building transforms | circular arc, high ramp |
@@ -74,7 +74,7 @@ forge_window.py  →  cli.py  →  upstream processor.py
 This means:
 - The UI can be rebuilt without touching upstream code
 - The CLI can be tested independently
-- FunScriptForge can call the same CLI functions
+- FunscriptForge can call the same CLI functions
 - Streamlit and tkinter use identical logic
 
 ---
@@ -143,4 +143,4 @@ Agent reads `next_action` → runs step → writes `agent_notes` → evaluates o
 | Linux desktop | Planned |
 | SaaS (Streamlit cloud) | Planned |
 | funscript-tools tkinter standalone | Working today |
-| FunScriptForge Streamlit | Working today |
+| FunscriptForge Streamlit | Working today |

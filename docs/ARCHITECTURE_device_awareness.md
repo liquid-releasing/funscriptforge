@@ -25,7 +25,7 @@ comfortable. The same jump at 250 BPM burns.
 - **PythonDancer** optimizes to 250 BPM — 2x too fast for long sessions
 - **Our approach**: speed-clamp the original pattern, preserving the musical DNA
 - PythonDancer rebuilds from scratch → loses original structure
-- FunScriptForge clamps → same beat, different intensity ceiling
+- FunscriptForge clamps → same beat, different intensity ceiling
 
 ## Device Specs
 
@@ -96,7 +96,7 @@ Always "device aware" / "awareness". Never "device safe" — liability concern.
 ## Shared Library (planned)
 
 Extract `device_specs.py` + `device_specs.json` to a shared location for reuse
-across FunScriptForge, ForgePlayer, SyncPlayer, and forgegen. Any app that
+across FunscriptForge, ForgePlayer, SyncPlayer, and forgegen. Any app that
 plays or generates funscripts needs device awareness.
 
 ---

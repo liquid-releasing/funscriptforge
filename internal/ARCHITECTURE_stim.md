@@ -1,6 +1,6 @@
 # Stim Tab Architecture
 
-FunScriptForge wraps edger's funscript-tools workflow and makes it approachable.
+FunscriptForge wraps edger's funscript-tools workflow and makes it approachable.
 
 > We are the gateway into more sophisticated work that funscript-tools enables.
 
@@ -30,7 +30,7 @@ Everything below is implementation detail.
 
 ## Overview
 
-The Stim tab and Enhance tab are the estim-specific layers of FunScriptForge.
+The Stim tab and Enhance tab are the estim-specific layers of FunscriptForge.
 They sit after the funscript chain (Original → Device → Tone → Phrases) and
 control how the funscript translates into multi-channel electrical stimulation.
 
@@ -48,7 +48,7 @@ Export:      cli.process() → 10 channel files → process_events() enhances th
 
 We wrap edger's exposed workflow — not cherry-picked parameters:
 
-| edger's workflow step | FunScriptForge surface |
+| edger's workflow step | FunscriptForge surface |
 | --- | --- |
 | Load funscript | **Project tab** (already done) |
 | Configure (algorithm, freq, pulse, volume) | **Stim tab** — our UI over his config |

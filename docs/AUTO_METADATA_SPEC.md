@@ -2,7 +2,7 @@
 
 ## Core Idea
 
-FunScriptForge derives most project metadata automatically from the funscript
+FunscriptForge derives most project metadata automatically from the funscript
 analysis it already runs. Author reviews and overrides. Nothing is blank.
 
 The same phrase vocabulary that drives transforms drives the metadata.

@@ -1,4 +1,4 @@
-# FunScriptForge — Next Steps tab
+# FunscriptForge — Next Steps tab
 # Written by human and Claude AI (Claude Sonnet).
 
 """Next Steps tab — playback guidance, credits, and license."""
@@ -33,26 +33,36 @@ _PLAYBACK_GUIDES: dict[str, dict[str, str]] = {
             "4. Sync and play"
         ),
     },
-    "estim_foc": {
-        "title": "E-Stim (Restim — Focus)",
+    "estim_audio": {
+        "title": "E-Stim — Audio Devices (2b, 312, Tingler, EstimHero, ZC95)",
         "icon": "⚡",
         "steps": (
-            "1. Open **Restim** and load the exported funscript files\n"
-            "2. The alpha, beta, and pulse channels are in your device folder\n"
-            "3. Connect your e-stim device via audio output\n"
-            "4. Start playback in Restim — it handles signal generation\n\n"
-            "Download Restim → [github.com/diglet48/restim](https://github.com/diglet48/restim/releases)"
+            "FunscriptForge exports **stereo WAV audio files** ready to play "
+            "on audio-based estim devices.\n\n"
+            "1. Find the `.wav` files in your `estim/` export folder\n"
+            "2. Connect your estim device to your computer's audio output\n"
+            "3. Play the WAV file using any media player (VLC, foobar2000, etc.)\n"
+            "4. Sync with your video using **MultiFunPlayer** or **ScriptPlayer**\n\n"
+            "**Continuous WAV** (`.legacy.wav`) — for 2b, 312, and similar legacy devices\n\n"
+            "**Pulse WAV** (`.stereostim.wav`) — for Tingler, EstimHero, ZC95, and similar modern devices\n\n"
+            "The audio file IS the stimulation signal — your device amplifies it directly. "
+            "No additional software required for playback."
         ),
     },
-    "estim_stereo": {
-        "title": "E-Stim (Restim — Stereo)",
+    "estim_protocol": {
+        "title": "E-Stim — Protocol Devices (FOC-Stim, NeoStim)",
         "icon": "⚡",
         "steps": (
-            "1. Open **Restim** and load the exported funscript files\n"
-            "2. Select stereo output mode in Restim settings\n"
-            "3. Connect your e-stim device via audio output\n"
-            "4. Start playback in Restim\n\n"
-            "Download Restim → [github.com/diglet48/restim](https://github.com/diglet48/restim/releases)"
+            "FOC-Stim and NeoStim are **protocol-controlled devices** — they "
+            "generate stimulation signals internally from commands sent over "
+            "serial/USB. They do not use audio files.\n\n"
+            "1. Open **Restim** and load the channel funscripts from your `estim/` folder\n"
+            "2. Connect your FOC-Stim or NeoStim device\n"
+            "3. Configure your device type in Restim's device wizard\n"
+            "4. Start playback — Restim sends real-time commands to your device\n\n"
+            "Download Restim → [github.com/diglet48/restim](https://github.com/diglet48/restim/releases)\n\n"
+            "The exported `.alpha.funscript` and `.beta.funscript` files contain "
+            "the position data Restim needs. Restim handles the device protocol."
         ),
     },
 }
@@ -65,12 +75,12 @@ _PLAYBACK_GUIDES: dict[str, dict[str, str]] = {
 _CREDITS = """
 ### Open Source Contributors
 
-FunScriptForge builds on the significant work of the open source community:
+FunscriptForge builds on the significant work of the open source community:
 
 | Project | Author | Description |
 |---------|--------|-------------|
-| [Funscript-Tools](https://github.com/edger477/funscript-tools) | **Edger** | Tone transforms, waveform shaping, and the eTransform algorithms that power FunScriptForge's Stim channel generation |
-| [Restim](https://github.com/diglet48/restim/releases) | **Diglet48** | Real-time e-stim signal generation from funscript — the bridge between funscripts and e-stim devices |
+| [Funscript-Tools](https://github.com/edger477/funscript-tools) | **Edger** | Tone transforms, waveform shaping, and the eTransform algorithms that power FunscriptForge's Stim channel generation |
+| [Restim](https://github.com/diglet48/restim/releases) | **Diglet48** | 3-phase synthesis math for e-stim audio — FunscriptForge uses restim's signal processing to render stereo WAV files |
 
 ### Key Innovations
 
@@ -96,7 +106,7 @@ _LICENSE_SECTION = """
 
 ### License
 
-**FunScriptForge™** is a trademark of Liquid Releasing.
+**FunscriptForge™** is a trademark of Liquid Releasing.
 
 © 2026 [Liquid Releasing](https://github.com/liquid-releasing).
 Licensed under the [MIT License](https://github.com/liquid-releasing/funscriptforge/blob/main/LICENSE).
