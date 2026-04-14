@@ -1035,6 +1035,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#funnel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Funnel
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1112,17 +1123,6 @@
     <span class="md-ellipsis">
       
         Drift
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#funnel" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Funnel
       
     </span>
   </a>
@@ -1788,6 +1788,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#funnel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Funnel
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1871,17 +1882,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#funnel" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Funnel
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -1919,7 +1919,7 @@
 
 
 <h1 id="transforms">Transforms<a class="headerlink" href="#transforms" title="Permanent link">&para;</a></h1>
-<p>FunscriptForge has 25 built-in transforms. Each one is designed to fix a specific kind of problem. Some are subtle finishing tools; others make substantial changes.</p>
+<p>FunscriptForge has 23 built-in transforms plus 6 tone transforms. Each one is designed to fix a specific kind of problem. Some are subtle finishing tools; others make substantial changes.</p>
 <hr />
 <h2 id="how-to-choose">How to choose<a class="headerlink" href="#how-to-choose" title="Permanent link">&para;</a></h2>
 <p>Start with the behavioral tag. Each tag has a primary recommendation:</p>
@@ -1989,8 +1989,8 @@
 <tbody>
 <tr>
 <td>Scale</td>
-<td>1.2</td>
-<td>0.1 – 3.0</td>
+<td>2.0</td>
+<td>0.1 – 5.0</td>
 <td>Multiplier applied to distance from midpoint</td>
 </tr>
 </tbody>
@@ -2013,14 +2013,14 @@
 </thead>
 <tbody>
 <tr>
-<td>Target min</td>
-<td>5</td>
+<td>Target low</td>
+<td>0</td>
 <td>0 – 49</td>
 <td>Lowest position in the output</td>
 </tr>
 <tr>
-<td>Target max</td>
-<td>95</td>
+<td>Target high</td>
+<td>100</td>
 <td>51 – 100</td>
 <td>Highest position in the output</td>
 </tr>
@@ -2043,8 +2043,8 @@
 <tbody>
 <tr>
 <td>Strength</td>
-<td>0.3</td>
-<td>0.0 – 1.0</td>
+<td>0.15</td>
+<td>0.01 – 0.5</td>
 <td>Filter intensity — higher removes more variation</td>
 </tr>
 </tbody>
@@ -2101,8 +2101,8 @@
 <tbody>
 <tr>
 <td>Offset</td>
-<td>10</td>
-<td>-100 – 100</td>
+<td>0</td>
+<td>-50 – 50</td>
 <td>Fixed amount to add to every position</td>
 </tr>
 </tbody>
@@ -2146,15 +2146,15 @@
 </thead>
 <tbody>
 <tr>
-<td>Reduction</td>
-<td>0.5</td>
-<td>0.1 – 0.9</td>
-<td>How much to reduce amplitude (0.5 = half the original depth)</td>
+<td>Amplitude reduce</td>
+<td>0.40</td>
+<td>0.0 – 1.0</td>
+<td>How much to compress toward center (0.4 = 40% reduction)</td>
 </tr>
 <tr>
-<td>Smooth strength</td>
-<td>0.3</td>
-<td>0.0 – 1.0</td>
+<td>LPF strength</td>
+<td>0.30</td>
+<td>0.0 – 0.5</td>
 <td>LPF smoothing applied after reduction</td>
 </tr>
 </tbody>
@@ -2175,15 +2175,39 @@
 </thead>
 <tbody>
 <tr>
-<td>Velocity cap</td>
-<td>200</td>
-<td>50 – 500</td>
-<td>Maximum velocity in pos/s before softening</td>
+<td>Max velocity</td>
+<td>0.32</td>
+<td>0.05 – 1.0</td>
+<td>Maximum velocity in pos/ms before softening</td>
 </tr>
 <tr>
-<td>Smooth strength</td>
-<td>0.2</td>
+<td>Reversal soften</td>
+<td>0.62</td>
 <td>0.0 – 1.0</td>
+<td>How much to soften stroke reversals</td>
+</tr>
+<tr>
+<td>Height blend</td>
+<td>0.75</td>
+<td>0.0 – 1.0</td>
+<td>Blend factor for range compression</td>
+</tr>
+<tr>
+<td>Range low</td>
+<td>15</td>
+<td>0 – 40</td>
+<td>Minimum output position</td>
+</tr>
+<tr>
+<td>Range high</td>
+<td>92</td>
+<td>60 – 100</td>
+<td>Maximum output position</td>
+</tr>
+<tr>
+<td>LPF strength</td>
+<td>0.16</td>
+<td>0.0 – 0.5</td>
 <td>LPF applied to the result</td>
 </tr>
 </tbody>
@@ -2204,16 +2228,22 @@
 </thead>
 <tbody>
 <tr>
-<td>Hold position</td>
-<td>50</td>
-<td>0 – 100</td>
-<td>Device position during the hold beat</td>
+<td>Amplitude scale</td>
+<td>1.0</td>
+<td>0.1 – 3.0</td>
+<td>Scale factor for stroke depth</td>
 </tr>
 <tr>
-<td>Hold duration fraction</td>
-<td>0.25</td>
-<td>0.1 – 0.5</td>
-<td>What fraction of the 4-beat group becomes the hold</td>
+<td>Range low</td>
+<td>0</td>
+<td>0 – 49</td>
+<td>Minimum output position</td>
+</tr>
+<tr>
+<td>Range high</td>
+<td>100</td>
+<td>51 – 100</td>
+<td>Maximum output position</td>
 </tr>
 </tbody>
 </table>
@@ -2233,16 +2263,34 @@
 </thead>
 <tbody>
 <tr>
-<td>Every N strokes</td>
-<td>2</td>
-<td>1 – 8</td>
+<td>Every Nth beat</td>
+<td>1</td>
+<td>1 – 16</td>
 <td>How frequently to apply the accent</td>
 </tr>
 <tr>
-<td>Accent boost</td>
-<td>15</td>
-<td>0 – 50</td>
+<td>Accent amount</td>
+<td>4</td>
+<td>1 – 30</td>
 <td>How much to push the position at the accented beat</td>
+</tr>
+<tr>
+<td>Radius (ms)</td>
+<td>40</td>
+<td>5 – 200</td>
+<td>Width of the accent in milliseconds</td>
+</tr>
+<tr>
+<td>Start at (ms)</td>
+<td>0</td>
+<td>0+</td>
+<td>Offset before first accent</td>
+</tr>
+<tr>
+<td>Max accents</td>
+<td>0</td>
+<td>0+</td>
+<td>Limit total accents (0 = unlimited)</td>
 </tr>
 </tbody>
 </table>
@@ -2262,14 +2310,14 @@
 </thead>
 <tbody>
 <tr>
-<td>Velocity threshold</td>
-<td>150</td>
-<td>50 – 500</td>
+<td>Max velocity (pos/ms)</td>
+<td>0.50</td>
+<td>0.05 – 2.0</td>
 <td>Velocity above which a boundary is treated as a seam</td>
 </tr>
 <tr>
-<td>Smooth strength</td>
-<td>0.5</td>
+<td>Max blend strength</td>
+<td>0.70</td>
 <td>0.0 – 1.0</td>
 <td>LPF applied at detected seams</td>
 </tr>
@@ -2292,19 +2340,79 @@
 <tbody>
 <tr>
 <td>Strength</td>
-<td>0.1</td>
-<td>0.0 – 1.0</td>
+<td>0.10</td>
+<td>0.01 – 0.5</td>
 <td>Filter intensity — keep this low to avoid dulling the phrase</td>
 </tr>
 </tbody>
 </table>
 <p><strong>Use it when:</strong> As the last step before export to remove any residual sharp edges. Also available as a global option at export time — you rarely need to apply it per-phrase.</p>
 <hr />
+<h3 id="funnel">Funnel<a class="headerlink" href="#funnel" title="Permanent link">&para;</a></h3>
+<p><strong>What it does:</strong> Progressively shifts the center and scales the amplitude from the start of the phrase to the end. You define the starting and ending states and the transform interpolates between them.</p>
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Range</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Start center</td>
+<td>30</td>
+<td>0 – 100</td>
+<td>Center position at the start</td>
+</tr>
+<tr>
+<td>End center</td>
+<td>70</td>
+<td>0 – 100</td>
+<td>Center position at the end</td>
+</tr>
+<tr>
+<td>Start amplitude scale</td>
+<td>0.2</td>
+<td>0.0 – 2.0</td>
+<td>Amplitude scale at the start</td>
+</tr>
+<tr>
+<td>End amplitude scale</td>
+<td>1.0</td>
+<td>0.0 – 2.0</td>
+<td>Amplitude scale at the end</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Use it when:</strong> A phrase needs to build or taper — a ramp-up into an intense section, or a wind-down after a peak.</p>
+<hr />
 <h2 id="structural-transforms">Structural transforms<a class="headerlink" href="#structural-transforms" title="Permanent link">&para;</a></h2>
 <p>These transforms change the number of actions, their timestamps, or both. The phrase duration is preserved but the internal structure may change substantially.</p>
 <hr />
 <h3 id="halve-tempo">Halve Tempo<a class="headerlink" href="#halve-tempo" title="Permanent link">&para;</a></h3>
 <p><strong>What it does:</strong> Keeps every other stroke cycle and retimes the remainder evenly across the original duration. The result has half the BPM with the same start time, end time, and amplitude.</p>
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Range</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Amplitude scale</td>
+<td>1.0</td>
+<td>0.1 – 3.0</td>
+<td>Optional scale factor applied after halving</td>
+</tr>
+</tbody>
+</table>
 <p><strong>Use it when:</strong> A phrase is frantic (BPM &gt; 200) or simply too fast to feel meaningful. Halve Tempo is the primary fix for frantic phrases.</p>
 <hr />
 <h3 id="nudge">Nudge<a class="headerlink" href="#nudge" title="Permanent link">&para;</a></h3>
@@ -2321,10 +2429,16 @@
 </thead>
 <tbody>
 <tr>
-<td>Offset ms</td>
+<td>Nudge (ms)</td>
 <td>0</td>
 <td>-2000 – 2000</td>
 <td>Positive = shift forward; negative = shift backward</td>
+</tr>
+<tr>
+<td>Transition (ms)</td>
+<td>100</td>
+<td>0 – 500</td>
+<td>Duration of the fill transition at the leading edge</td>
 </tr>
 </tbody>
 </table>
@@ -2351,11 +2465,48 @@
 </tr>
 </tbody>
 </table>
-<p><strong>Use it when:</strong> The phrase's motion is so irregular that corrective transforms cannot fix it — a clean synthetic stroke is better than trying to salvage the original.</p>
+<p><strong>Use it when:</strong> The phrase's motion is so irregular that corrective transforms cannot fix it — a clean synthetic stroke is better than trying to salvage the original. BPM defaults to the phrase's current BPM.</p>
 <hr />
 <h3 id="waiting">Waiting<a class="headerlink" href="#waiting" title="Permanent link">&para;</a></h3>
-<p><strong>What it does:</strong> Replaces the phrase with a very slow oscillating stroke (approximately 1 cycle per minute). Creates a placeholder for static or near-still sections.</p>
-<p><strong>Use it when:</strong> A section of the script has essentially no motion and the device should be parked but not completely still — the slow waiting motion prevents the device from going cold.</p>
+<p><strong>What it does:</strong> Replaces the phrase with a very slow oscillating stroke. Creates a placeholder for static or near-still sections.</p>
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Range</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Start position</td>
+<td>100</td>
+<td>0 – 100</td>
+<td>Position at the start of the waiting stroke</td>
+</tr>
+<tr>
+<td>End position</td>
+<td>0</td>
+<td>0 – 100</td>
+<td>Position at the end of the waiting stroke</td>
+</tr>
+<tr>
+<td>BPM</td>
+<td>1.0</td>
+<td>0.0 – 5.0</td>
+<td>Oscillation rate (default ~1 cycle per minute)</td>
+</tr>
+<tr>
+<td>Original influence %</td>
+<td>0</td>
+<td>0 – 100</td>
+<td>How much of the original motion to blend in</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Use it when:</strong> A section of the script has essentially no motion and the device should be parked but not completely still — the slow waiting motion prevents the device from going cold. Set Original influence &gt; 0 to blend some of the original motion back in.</p>
 <hr />
 <h3 id="tide">Tide<a class="headerlink" href="#tide" title="Permanent link">&para;</a></h3>
 <p><strong>What it does:</strong> Generates fast oscillations riding on a slow sine-wave center. The center point ebbs and flows over the phrase duration while the fast oscillations continue throughout.</p>
@@ -2371,22 +2522,34 @@
 </thead>
 <tbody>
 <tr>
-<td>Fast BPM</td>
-<td>phrase BPM</td>
-<td>30 – 300</td>
-<td>Rate of the small oscillations</td>
+<td>Center high</td>
+<td>70</td>
+<td>20 – 90</td>
+<td>Highest center position during the tide cycle</td>
 </tr>
 <tr>
-<td>Tide period (s)</td>
-<td>8.0</td>
-<td>2.0 – 30.0</td>
+<td>Center low</td>
+<td>41</td>
+<td>0 – 80</td>
+<td>Lowest center position during the tide cycle</td>
+</tr>
+<tr>
+<td>Stroke span</td>
+<td>30</td>
+<td>5 – 60</td>
+<td>Amplitude of the fast oscillations</td>
+</tr>
+<tr>
+<td>BPM</td>
+<td>252</td>
+<td>10 – 300</td>
+<td>Rate of the fast oscillations</td>
+</tr>
+<tr>
+<td>Wave period (s)</td>
+<td>135</td>
+<td>10 – 600</td>
 <td>Duration of one slow center cycle</td>
-</tr>
-<tr>
-<td>Tide amplitude</td>
-<td>20</td>
-<td>5 – 40</td>
-<td>How far the center shifts during each tide cycle</td>
 </tr>
 </tbody>
 </table>
@@ -2394,10 +2557,6 @@
 <hr />
 <h3 id="drift">Drift<a class="headerlink" href="#drift" title="Permanent link">&para;</a></h3>
 <p><strong>What it does:</strong> Generates a high plateau with small oscillations and one slow dip — replicating the feeling of the drift behavioral pattern but with intentional shape.</p>
-<p><strong>Use it when:</strong> You want a phrase that reads as a deliberate drift, not accidental off-centering.</p>
-<hr />
-<h3 id="funnel">Funnel<a class="headerlink" href="#funnel" title="Permanent link">&para;</a></h3>
-<p><strong>What it does:</strong> Progressively shifts the center and scales the amplitude from the start of the phrase to the end. You define the starting and ending states and the transform interpolates between them.</p>
 <p><strong>Parameters:</strong></p>
 <table>
 <thead>
@@ -2410,35 +2569,47 @@
 </thead>
 <tbody>
 <tr>
-<td>Start center</td>
-<td>50</td>
-<td>0 – 100</td>
-<td>Center position at the start</td>
+<td>Plateau position</td>
+<td>85</td>
+<td>50 – 100</td>
+<td>Center of the high plateau</td>
 </tr>
 <tr>
-<td>End center</td>
-<td>50</td>
-<td>0 – 100</td>
-<td>Center position at the end</td>
+<td>Wobble depth</td>
+<td>10</td>
+<td>0 – 30</td>
+<td>Amplitude of small oscillations on the plateau</td>
 </tr>
 <tr>
-<td>Start scale</td>
-<td>0.5</td>
-<td>0.1 – 2.0</td>
-<td>Amplitude scale at the start</td>
+<td>Wobble BPM</td>
+<td>80</td>
+<td>20 – 150</td>
+<td>Rate of the small oscillations</td>
 </tr>
 <tr>
-<td>End scale</td>
-<td>1.0</td>
-<td>0.1 – 2.0</td>
-<td>Amplitude scale at the end</td>
+<td>Dip bottom</td>
+<td>30</td>
+<td>0 – 70</td>
+<td>Lowest position during the dip</td>
+</tr>
+<tr>
+<td>Dip timing</td>
+<td>0.2</td>
+<td>0.0 – 0.9</td>
+<td>When the dip occurs (fraction of phrase duration)</td>
+</tr>
+<tr>
+<td>Dip duration (s)</td>
+<td>4.0</td>
+<td>0.5 – 15.0</td>
+<td>How long the dip lasts</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Use it when:</strong> A phrase needs to build or taper — a ramp-up into an intense section, or a wind-down after a peak.</p>
+<p><strong>Use it when:</strong> You want a phrase that reads as a deliberate drift, not accidental off-centering.</p>
 <hr />
 <h2 id="user-defined-transforms">User-defined transforms<a class="headerlink" href="#user-defined-transforms" title="Permanent link">&para;</a></h2>
-<p>Beyond the 25 built-ins, you can add your own:</p>
+<p>Beyond the built-ins, you can add your own:</p>
 <p><strong>JSON recipes</strong> — chain existing built-in transforms in <code>user_transforms/</code>. Safe: parameters are validated; only built-in transforms can be referenced.</p>
 <p><strong>Python plugins</strong> — custom transform logic in <code>plugins/</code>. Disabled by default. Enable with <code>FUNSCRIPT_PLUGINS_ENABLED=1</code>. See <a href="../../reference/cli/">Extending Transforms →</a> for details.</p>
 

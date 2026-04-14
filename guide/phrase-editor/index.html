@@ -769,6 +769,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#transform-chaining" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transform chaining
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#device-awareness" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -780,10 +791,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#navigation-and-workflow" class="md-nav__link">
+  <a href="#buttons" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Navigation and workflow
+        Buttons
       
     </span>
   </a>
@@ -791,21 +802,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#transform-categories" class="md-nav__link">
+  <a href="#batch-editing-by-tag" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Transform categories
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#apply-to-all-phrases-of-this-type" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Apply to all phrases of this type
+        Batch editing by tag
       
     </span>
   </a>
@@ -1457,6 +1457,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#transform-chaining" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transform chaining
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#device-awareness" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1468,10 +1479,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#navigation-and-workflow" class="md-nav__link">
+  <a href="#buttons" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Navigation and workflow
+        Buttons
       
     </span>
   </a>
@@ -1479,21 +1490,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#transform-categories" class="md-nav__link">
+  <a href="#batch-editing-by-tag" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Transform categories
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#apply-to-all-phrases-of-this-type" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Apply to all phrases of this type
+        Batch editing by tag
       
     </span>
   </a>
@@ -1574,33 +1574,38 @@
 <li>Or click any row in the phrase table</li>
 </ul>
 <p>The tab switches from Phrase Selector view to Phrase Editor view.</p>
-<!-- SCREENSHOT: Phrase Selector with the cursor hovering over a phrase band on the chart. The phrase is highlighted/outlined. Caption: "Click any phrase band on the chart to open it in the Phrase Editor." -->
-
+<p><img alt="Phrase Selector with phrase bands" src="../media/screenshots/07-phrases-selector.png" />
+<em>Click any phrase band on the chart to open it in the Phrase Editor.</em></p>
 <hr />
 <h2 id="layout">Layout<a class="headerlink" href="#layout" title="Permanent link">&para;</a></h2>
-<p>The Phrase Editor has three columns:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>[ Original chart (2/4) ] [ Transform controls (1/4) ]
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>[ Preview chart  (2/4) ]
+<p>The Phrase Editor has two columns:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>[ Charts (3/4)           ] [ Transform controls (1/4) ]
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>[   Baseline chart       ] [   Transform dropdown     ]
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>[   Preview chart        ] [   Parameter sliders       ]
 </code></pre></div>
-<!-- SCREENSHOT: Full Phrase Editor layout. Left two-thirds: stacked original and preview charts showing a phrase. Right third: transform dropdown at top, parameter sliders below, Accept/Cancel/Prev/Next buttons at bottom. Caption: "The Phrase Editor. Original on top, live preview below. Controls on the right." -->
-
-<p><strong>Original chart</strong> — the phrase exactly as it exists in your funscript, with a brief window of context on either side so you can see the surrounding motion.</p>
-<p><strong>Preview chart</strong> — updates live as you move sliders. Shows what the phrase will look like after the transform is applied. The context windows on either side use the same surrounding actions, so you can see how the edited phrase will blend with its neighbors.</p>
-<p><strong>Transform controls</strong> — dropdown to select a transform, parameter sliders for that transform, and the action buttons.</p>
+<p><img alt="Phrase Editor layout" src="../media/screenshots/08-phrase-editor.png" />
+<em>The Phrase Editor. Baseline on top, live preview below. Controls on the right.</em></p>
+<p><strong>Baseline chart</strong> — the phrase after all previously accepted transforms (or the original if this is the first edit). Context on either side is dimmed so focus stays on the current phrase.</p>
+<p><strong>Preview chart</strong> — updates live as you move sliders. Shows what the phrase will look like with the current transform applied on top of the baseline. If you select Passthrough and have a chain, the preview is hidden since there's nothing new to show.</p>
+<p><strong>Transform controls</strong> — dropdown to select a transform, parameter sliders for that transform.</p>
 <hr />
 <h2 id="choosing-a-transform">Choosing a transform<a class="headerlink" href="#choosing-a-transform" title="Permanent link">&para;</a></h2>
-<p>Open the transform dropdown and select any of the 25 built-in transforms. The sliders below update to show the parameters for that transform with their default values.</p>
-<p>Start with the auto-suggestion if one is shown — FunscriptForge recommends a transform based on the phrase's behavioral tag and BPM. You can always override it.</p>
+<p>Open the transform dropdown and select any transform. The sliders below update to show the parameters for that transform with their default values. Transforms are grouped into categories: Tone, Behavior, Structural, and Plugins.</p>
 <p>See <a href="../transforms/">Transforms →</a> for a full description of every transform and what it does.</p>
 <hr />
 <h2 id="tuning-with-sliders">Tuning with sliders<a class="headerlink" href="#tuning-with-sliders" title="Permanent link">&para;</a></h2>
-<p>Move any slider and the preview chart updates in real time. There is no Apply button for sliders — changes are reflected immediately.</p>
+<p>Move any slider and the preview chart updates in real time. The preview reflects your current transform on top of the baseline.</p>
 <p>If the preview looks wrong, move the slider back or choose a different transform.</p>
+<h2 id="transform-chaining">Transform chaining<a class="headerlink" href="#transform-chaining" title="Permanent link">&para;</a></h2>
+<p>You can apply multiple transforms to the same phrase. After accepting a transform (via navigation or the Apply button), the baseline updates to include your change. Select another transform and it stacks on top.</p>
+<p>The header shows how many transforms are in the chain: <strong>"Baseline (3 accepted)"</strong>. Each accepted transform is permanent for this editing session. Use <strong>Ctrl+Z</strong> to undo the last accepted transform.</p>
 <hr />
 <h2 id="device-awareness">Device awareness<a class="headerlink" href="#device-awareness" title="Permanent link">&para;</a></h2>
 <p>Device awareness is applied globally on the <strong>Device tab</strong> before you reach the Phrase Editor. All transforms in the Phrase Editor work on the already device-aware baseline — you don't need to think about device limits here. Every creative change you make is guaranteed to work on your selected devices.</p>
 <hr />
-<h2 id="navigation-and-workflow">Navigation and workflow<a class="headerlink" href="#navigation-and-workflow" title="Permanent link">&para;</a></h2>
+<h2 id="buttons">Buttons<a class="headerlink" href="#buttons" title="Permanent link">&para;</a></h2>
+<p>Two rows of buttons control the workflow:</p>
+<p><strong>Navigation row:</strong></p>
 <table>
 <thead>
 <tr>
@@ -1611,35 +1616,41 @@
 <tbody>
 <tr>
 <td><strong>⏮ Prev</strong></td>
-<td>Auto-accepts current transform, opens the previous phrase.</td>
+<td>Auto-accepts current transform, opens the previous phrase</td>
 </tr>
 <tr>
 <td><strong>Next ⏭</strong></td>
-<td>Auto-accepts current transform, opens the next phrase.</td>
+<td>Auto-accepts current transform, opens the next phrase</td>
 </tr>
 <tr>
 <td><strong>✓ Done</strong></td>
-<td>Auto-accepts current transform, saves all phrase edits to chain, returns to Phrase Selector.</td>
-</tr>
-<tr>
-<td><strong>✕ Cancel phrase changes</strong></td>
-<td>Discards ALL changes for this phrase (reverts to entry state).</td>
+<td>Auto-accepts current transform, saves all phrase edits to chain, returns to Phrase Selector</td>
 </tr>
 </tbody>
 </table>
-<p>All navigation auto-accepts — you don't need a separate Accept button. Just pick a transform, adjust sliders, and move on. Cancel is the only way to discard changes.</p>
-<h2 id="transform-categories">Transform categories<a class="headerlink" href="#transform-categories" title="Permanent link">&para;</a></h2>
-<p>The transform picker shows four categories:</p>
-<ol>
-<li><strong>Tone</strong> — all 6 tones (Tender → Dominant) with per-tone sliders + Impact</li>
-<li><strong>Behavior</strong> — amplitude, smoothing, contrast, etc.</li>
-<li><strong>Structural</strong> — tempo, replacement patterns</li>
-<li><strong>Plugins</strong> — user-defined transforms (if any are loaded)</li>
-</ol>
+<p><strong>Save/Cancel row:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Button</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>✓ Apply</strong></td>
+<td>Accepts the current transform and stays on this phrase — use this to chain multiple transforms</td>
+</tr>
+<tr>
+<td><strong>✕ Cancel</strong></td>
+<td>Discards ALL changes for this phrase (reverts to the state when you opened it)</td>
+</tr>
+</tbody>
+</table>
+<p>Navigation buttons (Prev, Next, Done) all auto-accept. <strong>Apply</strong> is for chaining — accept one transform, pick another, apply again. Cancel undoes everything since you opened this phrase.</p>
 <hr />
-<h2 id="apply-to-all-phrases-of-this-type">Apply to all phrases of this type<a class="headerlink" href="#apply-to-all-phrases-of-this-type" title="Permanent link">&para;</a></h2>
-<p>If the current phrase has a behavioral tag, you will see an <strong>Apply to all</strong> option below the controls. This copies your current transform settings to every phrase that shares the same tag.</p>
-<p>Use this after you have found a good transform for, say, all your <code>stingy</code> phrases — apply once, propagate everywhere. You can still review individual phrases afterward using the <a href="../pattern-editor/">Pattern Editor</a>.</p>
+<h2 id="batch-editing-by-tag">Batch editing by tag<a class="headerlink" href="#batch-editing-by-tag" title="Permanent link">&para;</a></h2>
+<p>To apply the same transform to all phrases that share a behavioral tag, use the <a href="../pattern-editor/">Pattern Editor</a>. The Phrase Editor is for individual phrase work; the Pattern Editor is for batch operations.</p>
 <hr />
 <h2 id="media-player-optional">Media player (optional)<a class="headerlink" href="#media-player-optional" title="Permanent link">&para;</a></h2>
 <p>If you have loaded a media file (audio or video) in the sidebar, a player column appears to the right of the charts. It plays only the current phrase — automatically looping within the phrase boundaries so you can hear or see what you are editing in context.</p>
