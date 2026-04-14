@@ -234,7 +234,8 @@ def render(project: "Project") -> None:
                  "next to the export. Useful as a visual reference.",
         )
         # Audio checkbox — only relevant for audio-capable estim devices
-        _targets = forge_project.get("output_targets", [])
+        _forge = st.session_state.get("forge_project") or {}
+        _targets = _forge.get("output_targets", [])
         _audio_keys = [k for k in _targets if k in ("legacy", "stereostim")]
         if _audio_keys:
             st.checkbox(
@@ -994,7 +995,7 @@ MECHANICAL_KEYS = ("handy", "osr2", "generic")
 # devices (foc3phase, foc4phase, neostim) get funscripts only.
 ESTIM_DEVICES = (
     ("legacy",     "Audio 3-phase — continuous (legacy 2b/312)"),
-    ("stereostim", "Audio 3-phase — pulse (Tingler/ZC) — default"),
+    ("stereostim", "Audio 3-phase — pulse (Tingler/EstimHero/ZC95) — default"),
     ("foc3phase",  "FOC-Stim — 3-phase"),
     ("foc4phase",  "FOC-Stim — 4-phase"),
     ("neostim",    "NeoStim — 3-phase"),
@@ -1272,7 +1273,7 @@ def _write_readme(output_root: Path, stem: str, mech_on: bool,
     """Write a README.txt explaining the folder layout and how restim picks files."""
     _ESTIM_LABELS = {
         "legacy":     "Audio 3-phase — continuous (legacy 2b/312)",
-        "stereostim": "Audio 3-phase — pulse (Tingler / ZC)",
+        "stereostim": "Audio 3-phase — pulse (Tingler/EstimHero/ZC95)",
         "foc3phase":  "FOC-Stim — 3-phase",
         "foc4phase":  "FOC-Stim — 4-phase",
         "neostim":    "NeoStim — 3-phase",
@@ -1451,7 +1452,7 @@ def _write_estim_subfolder(forge_project: dict, base_funscript_path: str,
 # Which estim device keys produce audio, and which waveform mode.
 AUDIO_DEVICE_WAVEFORMS = {
     "legacy":     "continuous",   # 2b, 312 — smooth sine carrier
-    "stereostim": "pulse",        # Tingler, ZC95 — pulse trains
+    "stereostim": "pulse",        # Tingler, EstimHero, ZC95 — pulse trains
 }
 
 
@@ -1498,8 +1499,8 @@ def _render_estim_audio(estim_dir: Path, stem: str, estim_keys: list,
                 status.write(f"⚠️ Audio render failed ({waveform_label}): {_exc}")
 
         # Prostate audio (if prostate channels exist)
-        p_alpha = estim_dir / f"{stem}.prostate-alpha.funscript"
-        p_beta = estim_dir / f"{stem}.prostate-beta.funscript"
+        p_alpha = estim_dir / f"{stem}.alpha-prostate.funscript"
+        p_beta = estim_dir / f"{stem}.beta-prostate.funscript"
         if p_alpha.exists() and p_beta.exists():
             p_audio = estim_dir / f"{stem}.prostate.{device_key}.wav"
             status.write(f"⏳ Rendering audio — {waveform_label}, prostate channel…")

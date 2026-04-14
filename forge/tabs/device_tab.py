@@ -24,7 +24,7 @@ _DEVICE_OPTIONS = {
     ],
     "estim": [
         ("legacy",     "Legacy (2b / 312)",      "Continuous waveform. 500 pos/s envelope rate."),
-        ("stereostim", "Stereostim (pulse)",      "Pulse-based. 600 pos/s. Tingler / ZC."),
+        ("stereostim", "Stereostim (pulse)",      "Pulse-based. 600 pos/s. Tingler / EstimHero / ZC95."),
         ("foc3phase",  "FOC-Stim 3-phase",       "Direct current. 700 pos/s. Fastest response."),
         ("foc4phase",  "FOC-Stim 4-phase",       "Experimental. 700 pos/s. Same hardware as 3p."),
         ("neostim",    "NeoStim 3-phase",         "550 pos/s. Limited docs — estimate only."),

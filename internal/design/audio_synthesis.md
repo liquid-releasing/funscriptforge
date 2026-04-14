@@ -205,8 +205,8 @@ When FunscriptForge runs `cli.process()`, the output folder contains:
 | `{stem}.carrier_frequency.funscript` | Carrier freq over time | **Yes — if present** |
 | `{stem}.pulse_frequency.funscript` | Pulse rate over time | Yes (pulse mode only) |
 | `{stem}.volume.funscript` | Volume envelope | Optional |
-| `{stem}.prostate-alpha.funscript` | Prostate channel alpha | **Yes — second audio file** |
-| `{stem}.prostate-beta.funscript` | Prostate channel beta | **Yes — second audio file** |
+| `{stem}.alpha-prostate.funscript` | Prostate channel alpha | **Yes — second audio file** |
+| `{stem}.beta-prostate.funscript` | Prostate channel beta | **Yes — second audio file** |
 
 The alpha/beta funscripts are already in restim's coordinate space
 (0–100 → 0.0–1.0 after normalization). No conversion needed.
@@ -319,14 +319,14 @@ funscript-tools process()
     ├── {stem}.alpha.funscript  ──┐
     ├── {stem}.beta.funscript   ──┤──→  render_stereo_audio() → {stem}.wav
     │                              │     (main stimulation audio)
-    ├── {stem}.prostate-alpha.funscript ──┐
-    └── {stem}.prostate-beta.funscript  ──┤──→  render_stereo_audio() → {stem}.prostate.wav
+    ├── {stem}.alpha-prostate.funscript ──┐
+    └── {stem}.beta-prostate.funscript  ──┤──→  render_stereo_audio() → {stem}.prostate.wav
                                            │     (prostate channel audio)
 ```
 
 Two audio files per waveform mode per export:
 1. **Main stim audio** — from alpha + beta channels
-2. **Prostate audio** — from prostate-alpha + prostate-beta channels
+2. **Prostate audio** — from alpha-prostate + beta-prostate channels
 
 Both rendered with the same 3-phase math, same carrier frequency.
 
@@ -358,8 +358,8 @@ for device_key in audio_keys:
                             duration_s, waveform=waveform)
 
     # Prostate audio (if 3-phase preset with prostate)
-    p_alpha = estim_dir / f"{stem}.prostate-alpha.funscript"
-    p_beta = estim_dir / f"{stem}.prostate-beta.funscript"
+    p_alpha = estim_dir / f"{stem}.alpha-prostate.funscript"
+    p_beta = estim_dir / f"{stem}.beta-prostate.funscript"
     if p_alpha.exists() and p_beta.exists():
         p_audio = estim_dir / f"{stem}.prostate.{device_key}.wav"
         render_stereo_audio(p_alpha, p_beta, p_audio,
@@ -388,8 +388,8 @@ estim/
   {stem}.beta.funscript                     ← beta channel (always)
   {stem}.legacy.wav                         ← continuous audio (if legacy selected)
   {stem}.stereostim.wav                     ← pulse audio (if stereostim selected)
-  {stem}.prostate-alpha.funscript           ← prostate alpha (always, if 3-phase)
-  {stem}.prostate-beta.funscript            ← prostate beta (always, if 3-phase)
+  {stem}.alpha-prostate.funscript           ← prostate alpha (always, if 3-phase)
+  {stem}.beta-prostate.funscript            ← prostate beta (always, if 3-phase)
   {stem}.prostate.legacy.wav                ← prostate continuous (if legacy)
   {stem}.prostate.stereostim.wav            ← prostate pulse (if stereostim)
   ...other channel files...

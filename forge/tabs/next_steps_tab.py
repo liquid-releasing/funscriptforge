@@ -35,7 +35,7 @@ _PLAYBACK_GUIDES: dict[str, dict[str, str]] = {
     },
     "estim_audio": {
         "title": "E-Stim — Audio Devices (2b, 312, Tingler, EstimHero, ZC95)",
-        "icon": "⚡",
+        "icon": "",
         "steps": (
             "FunscriptForge exports **stereo WAV audio files** ready to play "
             "on audio-based estim devices.\n\n"
@@ -51,7 +51,7 @@ _PLAYBACK_GUIDES: dict[str, dict[str, str]] = {
     },
     "estim_protocol": {
         "title": "E-Stim — Protocol Devices (FOC-Stim, NeoStim)",
-        "icon": "⚡",
+        "icon": "",
         "steps": (
             "FOC-Stim and NeoStim are **protocol-controlled devices** — they "
             "generate stimulation signals internally from commands sent over "
@@ -151,12 +151,31 @@ def render() -> None:
     if forge_project:
         selected_devices = forge_project.get("output_targets", [])
 
+    # Map device keys to playback guide keys
+    _DEVICE_TO_GUIDE = {
+        "handy": "handy",
+        "osr2": "osr2",
+        "generic": "osr2",
+        "legacy": "estim_audio",
+        "stereostim": "estim_audio",
+        "foc3phase": "estim_protocol",
+        "foc4phase": "estim_protocol",
+        "neostim": "estim_protocol",
+    }
+
     if selected_devices:
+        _shown_guides: set[str] = set()
         for dev_key in selected_devices:
-            guide = _PLAYBACK_GUIDES.get(dev_key)
-            if guide:
-                with st.expander(f"{guide['icon']} {guide['title']}", expanded=_exported):
-                    st.markdown(guide["steps"])
+            guide_key = _DEVICE_TO_GUIDE.get(dev_key, dev_key)
+            guide = _PLAYBACK_GUIDES.get(guide_key)
+            if guide_key not in _shown_guides:
+                _shown_guides.add(guide_key)
+                if guide:
+                    _label = f"{guide['icon']} {guide['title']}" if guide['icon'] else guide['title']
+                    with st.expander(_label, expanded=_exported):
+                        st.markdown(guide["steps"])
+                else:
+                    st.caption(f"No playback guide for device: {dev_key}")
     else:
         for guide in _PLAYBACK_GUIDES.values():
             with st.expander(f"{guide['icon']} {guide['title']}", expanded=False):
