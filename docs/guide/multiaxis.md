@@ -66,6 +66,8 @@ Five presets are available. Each one maps the secondary axes to algorithms that 
 
 ## Per-phrase assignment
 
+<!-- SCREENSHOT: Multi-axis phrase table showing 6 phrases with style dropdowns. P1 = Cowgirl, P2 = Missionary, P3 = None, P4 = Riding, P5 = Random, P6 = Cowgirl. Caption: "Assign a position style per phrase. Each style generates different secondary axis motion." -->
+
 The table shows every phrase with its time, duration, BPM, and behavioral tag. The **Multi-axis style** dropdown lets you pick a different style per phrase.
 
 This is powerful because real scenes change position. A funscript that starts gentle and builds to intense benefits from different secondary axes in each phase:
@@ -85,6 +87,8 @@ This is powerful because real scenes change position. A funscript that starts ge
 ---
 
 ## Preview
+
+<!-- SCREENSHOT: Multi-axis preview — top row shows L0 stroke (full width), bottom row shows 3 secondary axis charts (twist, roll, pitch) with active motion in styled phrases and flat lines in None phrases. Caption: "Preview shows all axes. Styled phrases have motion; None phrases are flat." -->
 
 Click **Preview** after assigning styles to see monochrome charts of each generated axis:
 

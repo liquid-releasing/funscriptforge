@@ -1,6 +1,8 @@
 # Definitions
 
-A complete glossary of every term used in FunscriptForge — in the app, in the docs, and in the output files.
+> **This file is superseded by [Glossary](glossary.md)**, which consolidates all terms
+> including newer features (audio synthesis, multi-axis, stim characters, tones, groove).
+> This file is kept for backward compatibility with existing links.
 
 ---
 

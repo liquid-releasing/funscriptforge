@@ -12,7 +12,7 @@ Paste the full path to your audio or video file. Supported formats:
 
 | Type | Formats |
 | --- | --- |
-| Audio | MP3, M4A, WAV, OGG |
+| Audio | MP3, M4A, WAV, OGG, AAC |
 | Video | MP4, MKV, MOV, WEBM |
 
 FunscriptForge also attempts to auto-detect media by looking for a file with the same base name as your funscript in the same folder. If your funscript is `myvideo.funscript` and `myvideo.mp4` is next to it, it loads automatically.

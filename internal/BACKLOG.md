@@ -129,7 +129,7 @@ decisions should live in user-facing docs, not just developer notes.
 ## Done — Component Refactor (2026-03-21)
 
 Extracted shared components to [forge-ui-components](https://github.com/liquid-releasing/forge-ui-components).
-See [ARCHITECTURE_components.md](../docs/ARCHITECTURE_components.md) for details.
+See [ARCHITECTURE_components.md](../docs/architecture/ARCHITECTURE_components.md) for details.
 
 - ✅ funscript_chart — monochrome + vibrant, replaced 6 inline chart functions (~600 lines removed)
 - ✅ file_picker — 4 pickers in project_tab, upload guard + callbacks

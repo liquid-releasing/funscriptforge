@@ -86,8 +86,8 @@ Five separate checkboxes, one per estim device class:
 
 | Checkbox | Device class |
 | --- | --- |
-| **Audio 3-phase — continuous** | Legacy 2b / 312, low power-efficiency continuous waveform |
-| **Audio 3-phase — pulse** *(default)* | Tingler, ZC and other pulse-based stereo stim |
+| **Audio 3-phase — continuous (legacy 2b/312)** | Legacy 2b / 312, continuous sine carrier waveform |
+| **Audio 3-phase — pulse (Tingler/EstimHero/ZC95) — default** | Tingler, EstimHero, ZC95, and other pulse-based stereo stim |
 | **FOC-Stim — 3-phase** | FOC-Stim three-phase mode |
 | **FOC-Stim — 4-phase** | FOC-Stim experimental four-phase mode |
 | **NeoStim — 3-phase** | NeoStim three-phase mode |

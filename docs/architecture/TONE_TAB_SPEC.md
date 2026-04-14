@@ -77,7 +77,7 @@ The renaming is what makes the vocabulary extensible without modification.
 ### Entry state
 
 The tab opens with a tone **pre-selected** based on auto-metadata derived from
-the funscript (see `docs/AUTO_METADATA_SPEC.md` and `forge/metadata.py`).
+the funscript (see `docs/architecture/AUTO_METADATA_SPEC.md` and `forge/metadata.py`).
 
 A rationale line appears above the picker explaining the suggestion:
 
@@ -641,8 +641,8 @@ to its Tone word with better than chance accuracy. That is the bar.
 
 | File | Contents |
 |---|---|
-| `docs/AUTO_METADATA_SPEC.md` | How `tone_suggestion` is derived |
-| `docs/HAPTIC_COMPOSITION_SPEC.md` | Three-layer haptic composition; beat envelopes; caption emotion |
+| `docs/architecture/AUTO_METADATA_SPEC.md` | How `tone_suggestion` is derived |
+| `docs/architecture/HAPTIC_COMPOSITION_SPEC.md` | Three-layer haptic composition; beat envelopes; caption emotion |
 | `forge/metadata.py` | `derive_metadata()` — produces `tone_suggestion` + `tone_rationale` |
 | `forge/tabs/tone_tab.py` | Implementation stub |
 | `forge/tabs/project_tab.py` | Feeds metadata into Tone tab on Continue |

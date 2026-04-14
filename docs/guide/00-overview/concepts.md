@@ -69,24 +69,22 @@ to phrases, and review phrases in the chart.
 
 ### Behavioral Tag
 
-FunscriptForge classifies each phrase into one of ten behavioral types based on its
-motion characteristics:
+FunscriptForge classifies each phrase by its motion characteristics. The tag names the
+dominant behavior — and if there is a problem, it names that too.
 
 | Tag | What it means |
 |---|---|
-| **giggle** | Short, fast, light strokes |
-| **frantic** | High BPM, full range, relentless |
-| **ramp** | Tempo or intensity builds over the phrase |
-| **plateau** | Steady BPM and range throughout |
-| **stingy** | Short stroke range (device barely moves) |
-| **half-stroke** | Motion stays in only the top or bottom half |
-| **drift** | Slow, wandering, low tempo |
-| **drone** | Very regular, machine-like rhythm |
-| **lazy** | Low velocity, soft strokes |
-| **ambient** | Near-still, minimal motion |
+| **stingy** | Full-range hammering — very fast, very demanding, no nuance |
+| **giggle** | Tiny micro-motion centered around 50 — barely perceptible |
+| **plateau** | Some motion, but lacking full range (amplitude span 20-40) |
+| **drift** | Motion center displaced into the top or bottom third |
+| **half_stroke** | Real stroke depth, but confined to one half (top or bottom) |
+| **drone** | Sustained uniform motion — monotone, repetitive, fatiguing |
+| **lazy** | Slow and shallow — low BPM, narrow amplitude |
+| **frantic** | BPM above 200 — near or above device mechanical limits |
 
-Tags help you find similar phrases across a long script. The Pattern Editor lets
-you work on all phrases of a given tag at once.
+Phrases without a tag are well-formed. Tags help you find similar phrases across a
+long script. The Pattern Editor lets you work on all phrases of a given tag at once.
 
 ---
 
