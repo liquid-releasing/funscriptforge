@@ -1351,13 +1351,13 @@
 
 <h1 id="architecture-shared-component-library">Architecture: Shared Component Library<a class="headerlink" href="#architecture-shared-component-library" title="Permanent link">&para;</a></h1>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>FunScriptForge uses <a href="https://github.com/liquid-releasing/forge-ui-components">forge-ui-components</a> as a shared component library. Components follow a two-layer pattern: framework-agnostic <code>core.py</code> (pure Python, testable without Streamlit) and thin <code>streamlit.py</code> render layer.</p>
+<p>FunscriptForge uses <a href="https://github.com/liquid-releasing/forge-ui-components">forge-ui-components</a> as a shared component library. Components follow a two-layer pattern: framework-agnostic <code>core.py</code> (pure Python, testable without Streamlit) and thin <code>streamlit.py</code> render layer.</p>
 <p>This separation enables:
-- Reuse across FunScriptForge, SyncPlayer, forgegen, and future apps
+- Reuse across FunscriptForge, SyncPlayer, forgegen, and future apps
 - Migration to React/Tauri v2 by replacing only the render layer
 - Testing core logic without UI framework dependencies</p>
 <h2 id="dependency-graph">Dependency Graph<a class="headerlink" href="#dependency-graph" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>FunScriptForge (ui/streamlit/app.py)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>FunscriptForge (ui/streamlit/app.py)
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>├── forge-ui-components          ← shared UI components
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│   ├── funscript_chart          ← Plotly charts (mono + vibrant)
@@ -1380,7 +1380,7 @@
 <table>
 <thead>
 <tr>
-<th>Before (FunScriptForge)</th>
+<th>Before (FunscriptForge)</th>
 <th>After (forge-ui-components)</th>
 </tr>
 </thead>
@@ -1411,7 +1411,7 @@
 </tr>
 </tbody>
 </table>
-<p>FunScriptForge's <code>visualizations/</code> directory is now thin backward-compat shims that re-export from the component library.</p>
+<p>FunscriptForge's <code>visualizations/</code> directory is now thin backward-compat shims that re-export from the component library.</p>
 <h3 id="file_picker">file_picker<a class="headerlink" href="#file_picker" title="Permanent link">&para;</a></h3>
 <p>All 4 file uploaders in <code>project_tab.py</code> (funscript, video, audio, captions) now use <code>render_upload()</code> with <code>on_upload</code>/<code>on_clear</code> callbacks for context-specific behavior.</p>
 <h3 id="beat_bar">beat_bar<a class="headerlink" href="#beat_bar" title="Permanent link">&para;</a></h3>

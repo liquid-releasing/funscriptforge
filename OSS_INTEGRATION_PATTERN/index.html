@@ -1334,7 +1334,7 @@
   <a href="#5-add-to-funscriptforge-as-a-tab" class="md-nav__link">
     <span class="md-ellipsis">
       
-        5. Add to FunScriptForge as a tab
+        5. Add to FunscriptForge as a tab
       
     </span>
   </a>
@@ -1392,7 +1392,7 @@
 <blockquote>
 <p>This document describes the standard pattern used across the liquid-releasing
 project suite for integrating open-source tools. It lives here as a worked
-example and should be copied into FunScriptForge as the canonical reference.</p>
+example and should be copied into FunscriptForge as the canonical reference.</p>
 </blockquote>
 <hr />
 <h2 id="the-problem">The Problem<a class="headerlink" href="#the-problem" title="Permanent link">&para;</a></h2>
@@ -1426,12 +1426,12 @@ The UIs never change.</p>
 </tr>
 <tr>
 <td>Desktop (Win/Mac/Linux)</td>
-<td>Streamlit page in FunScriptForge</td>
+<td>Streamlit page in FunscriptForge</td>
 <td>PyInstaller + local Streamlit</td>
 </tr>
 <tr>
 <td>SaaS</td>
-<td>Streamlit page in FunScriptForge</td>
+<td>Streamlit page in FunscriptForge</td>
 <td>Deployed cloud Streamlit</td>
 </tr>
 </tbody>
@@ -1493,10 +1493,10 @@ are UI-framework agnostic:
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>git<span class="w"> </span>merge<span class="w"> </span>upstream/main
 </code></pre></div>
 <p>If it breaks: the error is in <code>cli.py</code>. Fix the translation there. UI untouched.</p>
-<h3 id="5-add-to-funscriptforge-as-a-tab">5. Add to FunScriptForge as a tab<a class="headerlink" href="#5-add-to-funscriptforge-as-a-tab" title="Permanent link">&para;</a></h3>
-<p>Because the UI calls <code>cli.py</code> — not upstream internals — porting to FunScriptForge
+<h3 id="5-add-to-funscriptforge-as-a-tab">5. Add to FunscriptForge as a tab<a class="headerlink" href="#5-add-to-funscriptforge-as-a-tab" title="Permanent link">&para;</a></h3>
+<p>Because the UI calls <code>cli.py</code> — not upstream internals — porting to FunscriptForge
 means:
-1. Copy <code>cli.py</code> into the FunScriptForge module
+1. Copy <code>cli.py</code> into the FunscriptForge module
 2. Replace <code>forge_window.py</code> with a <code>ttk.Frame</code>-based tab
 3. The tab calls the same <code>cli.py</code> functions unchanged</p>
 <hr />
@@ -1532,11 +1532,11 @@ Our fork: https://github.com/liquid-releasing/funscript-tools</p>
 <hr />
 <h2 id="why-this-matters-for-the-whole-suite">Why this matters for the whole suite<a class="headerlink" href="#why-this-matters-for-the-whole-suite" title="Permanent link">&para;</a></h2>
 <p>Every tool in the liquid-releasing ecosystem that wraps OSS follows this pattern:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>funscript-tools  →  cli.py  →  FunScriptForge tab
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>[next tool]      →  cli.py  →  FunScriptForge tab
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>[next tool]      →  cli.py  →  FunScriptForge tab
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>funscript-tools  →  cli.py  →  FunscriptForge tab
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>[next tool]      →  cli.py  →  FunscriptForge tab
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>[next tool]      →  cli.py  →  FunscriptForge tab
 </code></pre></div>
-<p>FunScriptForge becomes the unified UI. Each <code>cli.py</code> is an independently
+<p>FunscriptForge becomes the unified UI. Each <code>cli.py</code> is an independently
 versioned, independently testable adapter. The UI is just tabs.</p>
 
 

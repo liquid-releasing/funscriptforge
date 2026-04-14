@@ -947,10 +947,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#coming-next" class="md-nav__link">
+  <a href="#audio-synthesis" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Coming next
+        Audio synthesis
       
     </span>
   </a>
@@ -1635,10 +1635,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#coming-next" class="md-nav__link">
+  <a href="#audio-synthesis" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Coming next
+        Audio synthesis
       
     </span>
   </a>
@@ -1696,7 +1696,7 @@
 <p>A static visualization of your funscript with every transform applied. This is what will be written to disk. The chart updates automatically as you accept, reject, or edit transforms in the expanders below it.</p>
 <hr />
 <h2 id="export-options">Export options<a class="headerlink" href="#export-options" title="Permanent link">&para;</a></h2>
-<p>Three checkboxes, all on by default:</p>
+<p>Checkboxes, all on by default:</p>
 <table>
 <thead>
 <tr>
@@ -1714,8 +1714,12 @@
 <td>A light global smoothing pass that removes residual sharp edges.</td>
 </tr>
 <tr>
-<td><strong>Device awareness</strong></td>
-<td>Applies the velocity caps and fix strategies you set on the Device tab. Off when you want a raw waveform (e.g., for estim-only routing).</td>
+<td><strong>Include color heatmap PNG</strong></td>
+<td>Writes a velocity-colored heatmap of the main funscript next to the export.</td>
+</tr>
+<tr>
+<td><strong>Include estim audio files (WAV)</strong></td>
+<td>Renders stereo audio from the estim channel funscripts. Only visible when an audio-capable device is selected (legacy or stereostim). Play these WAV files directly on your estim device — no restim required.</td>
 </tr>
 </tbody>
 </table>
@@ -1832,7 +1836,9 @@
 </tr>
 </tbody>
 </table>
-<p>For now the contents of <code>estim/</code> are identical regardless of which estim device you check — funscript-tools produces all channel files and your estim software picks the ones it needs at playback time. The per-device checkboxes become load-bearing in a future release that adds direct audio synthesis.</p>
+<p>The channel funscripts in <code>estim/</code> are identical regardless of which estim device you check — funscript-tools produces all channel files and your estim software picks the ones it needs at playback time.</p>
+<p><strong>Audio-capable devices</strong> (legacy 2b/312 and stereostim Tingler/EstimHero/ZC95) also get <strong>stereo WAV files</strong> rendered from the alpha/beta channel funscripts. These are ready-to-play audio files — connect your estim device to your audio output and hit play. No restim required.</p>
+<p><strong>Protocol devices</strong> (FOC-Stim 3-phase, FOC-Stim 4-phase, NeoStim) do not use audio files. They need <strong>restim</strong> for real-time device control. The exported channel funscripts are what restim loads — see the Next Steps tab for setup instructions.</p>
 <hr />
 <h2 id="export-to-folder">Export to folder<a class="headerlink" href="#export-to-folder" title="Permanent link">&para;</a></h2>
 <p>Click <strong>Export All</strong> and FunscriptForge writes a self-contained folder you can drop into your media player.</p>
@@ -1856,6 +1862,10 @@
 <a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    myscript.alpha_prostate.funscript
 <a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    myscript.beta_prostate.funscript
 <a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    myscript.volume_prostate.funscript
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    myscript.legacy.wav         ← stereo audio for 2b/312 (if legacy selected)
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    myscript.stereostim.wav     ← stereo audio for Tingler/ZC95 (if stereostim selected)
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    myscript.prostate.legacy.wav        ← prostate audio (if prostate channels exist)
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>    myscript.prostate.stereostim.wav    ← prostate audio (if prostate channels exist)
 </code></pre></div>
 <p>If you only check <strong>Mechanical</strong>, only <code>mechanical/</code> is created and funscript-tools is not run — fast export.</p>
 <p>If you only check <strong>Estim</strong> boxes, <code>mechanical/</code> is omitted.</p>
@@ -1907,8 +1917,32 @@
 <h2 id="workflow-templates">Workflow templates<a class="headerlink" href="#workflow-templates" title="Permanent link">&para;</a></h2>
 <p>The <code>.forgetmpl</code> file written next to your funscript is a reusable record of the <em>decisions</em> you made — tone settings, output targets, device fix strategies, history — without any project-specific data (no paths, no timestamps). Drop it into a new project to start with the same workflow.</p>
 <hr />
-<h2 id="coming-next">Coming next<a class="headerlink" href="#coming-next" title="Permanent link">&para;</a></h2>
-<p>A future release will add <strong>audio synthesis</strong> for the four estim audio device classes (legacy continuous, pulse stereostim, FOC-Stim, NeoStim). When that lands, audio files will appear inside <code>estim/</code> alongside the channel funscripts and the per-device checkboxes will start producing different audio outputs.</p>
+<h2 id="audio-synthesis">Audio synthesis<a class="headerlink" href="#audio-synthesis" title="Permanent link">&para;</a></h2>
+<p>FunscriptForge renders stereo WAV audio files from the alpha/beta channel funscripts using 3-phase synthesis math extracted from <a href="https://github.com/diglet48/restim">restim</a> by diglet48 (MIT license).</p>
+<p>Two waveform modes match two device families:</p>
+<table>
+<thead>
+<tr>
+<th>WAV file</th>
+<th>Waveform</th>
+<th>Devices</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>{stem}.legacy.wav</code></td>
+<td>Continuous sine carrier</td>
+<td>2b, 312, and similar legacy audio devices</td>
+</tr>
+<tr>
+<td><code>{stem}.stereostim.wav</code></td>
+<td>Pulse train with cosine envelope</td>
+<td>Tingler, EstimHero, ZC95, and similar modern audio devices</td>
+</tr>
+</tbody>
+</table>
+<p><strong>How to use</strong>: Connect your audio estim device to your computer's audio output (or a dedicated audio interface). Play the WAV file in any media player — the audio IS the stimulation signal. Sync with video using MultiFunPlayer or ScriptPlayer.</p>
+<p><strong>Protocol devices</strong> (FOC-Stim, NeoStim) generate stimulation signals in their own firmware and do not use audio files. Use restim for real-time device control with the exported channel funscripts.</p>
 <hr />
 <h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
 <ul>

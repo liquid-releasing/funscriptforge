@@ -1367,7 +1367,7 @@
   <a href="#enchantments-ship-with-funscriptforge" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Enchantments (ship with FunScriptForge)
+        Enchantments (ship with FunscriptForge)
       
     </span>
   </a>
@@ -1677,7 +1677,7 @@
 
 <h1 id="stim-tab-enhance-tab-architecture">Stim Tab &amp; Enhance Tab Architecture<a class="headerlink" href="#stim-tab-enhance-tab-architecture" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p>FunScriptForge wraps edger's funscript-tools workflow and makes it approachable.
+<p>FunscriptForge wraps edger's funscript-tools workflow and makes it approachable.
 We are the gateway into more sophisticated work that funscript-tools enables.</p>
 </blockquote>
 <h2 id="how-users-should-think-about-it">How users should think about it<a class="headerlink" href="#how-users-should-think-about-it" title="Permanent link">&para;</a></h2>
@@ -1697,7 +1697,7 @@ a suggestion, and an Accept button.</p>
 <p>Everything below is implementation detail.</p>
 <hr />
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>The Stim tab and Enhance tab are the estim-specific layers of FunScriptForge.
+<p>The Stim tab and Enhance tab are the estim-specific layers of FunscriptForge.
 They sit after the funscript chain (Original → Device → Tone → Phrases) and
 control how the funscript translates into multi-channel electrical stimulation.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Our chain:   Original → Device → Tone → Phrases
@@ -1714,7 +1714,7 @@ control how the funscript translates into multi-channel electrical stimulation.<
 <thead>
 <tr>
 <th>edger's workflow step</th>
-<th>FunScriptForge surface</th>
+<th>FunscriptForge surface</th>
 </tr>
 </thead>
 <tbody>
@@ -1832,8 +1832,8 @@ pulse_wobble changes feel — all stackable.</p>
 </code></pre></div>
 <p>Sequential, not separate. Events enhance the generated channels — they layer
 on top of the baseline, they don't replace it.</p>
-<h3 id="enchantments-ship-with-funscriptforge">Enchantments (ship with FunScriptForge)<a class="headerlink" href="#enchantments-ship-with-funscriptforge" title="Permanent link">&para;</a></h3>
-<p>Ten enchantments ship with FunScriptForge — the General events from
+<h3 id="enchantments-ship-with-funscriptforge">Enchantments (ship with FunscriptForge)<a class="headerlink" href="#enchantments-ship-with-funscriptforge" title="Permanent link">&para;</a></h3>
+<p>Ten enchantments ship with FunscriptForge — the General events from
 funscript-tools v2.2.0. These are NOT funscript transforms — Tone shapes
 the funscript, Enchantments layer sensation onto the output channels.
 They operate on completely different things and never conflict.</p>
@@ -2210,7 +2210,7 @@ At export time, all phrase <code>.events.yml</code> files merge into one:</p>
 - Energy drops at 5:10 → place <code>tranquil</code>
 - Scene texture change at 7:00 → place <code>fast</code></p>
 <p>Three layers, one catalog:
-1. <strong>FunScriptForge</strong> (manual) — user watches video, places enchantments
+1. <strong>FunscriptForge</strong> (manual) — user watches video, places enchantments
 2. <strong>forgegen</strong> (auto) — algorithm places enchantments based on analysis
 3. <strong>funscript-tools</strong> (engine) — executes them all via <code>process_events()</code></p>
 <h2 id="processing-time-budget">Processing Time Budget<a class="headerlink" href="#processing-time-budget" title="Permanent link">&para;</a></h2>
