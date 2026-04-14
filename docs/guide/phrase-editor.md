@@ -106,16 +106,6 @@ Use the **📹 Hide/Show player** toggle above the charts to collapse the player
 
 ---
 
-## Splitting a phrase
-
-Sometimes a phrase covers two distinct sections — a buildup and a plateau, for example — and you want to apply a different transform to each half.
-
-Use the **Split** button (visible when the phrase is long enough to split) to divide it at any cycle boundary. The split creates two sub-phrases, each with its own transform controls.
-
-The split boundary is shown as a vertical line on both charts. Drag it to adjust the cut point, or click **📌** in the media player to drop the boundary at the current playback position.
-
----
-
 ## Phrase information
 
 At the top of the Phrase Editor you can see:

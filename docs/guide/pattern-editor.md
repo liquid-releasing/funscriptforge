@@ -59,16 +59,6 @@ After applying to all, scan the instance table. Each row shows the applied trans
 
 ---
 
-## Apply with a split
-
-If your phrases vary significantly in character — some need a heavier transform than others — use a split. In the instance detail, split the phrase at a cycle boundary, apply different transforms to each half, then click **Apply split structure to all**.
-
-FunscriptForge maps the split point proportionally across all matching phrases, so each instance gets a consistent structure.
-
-<!-- SCREENSHOT: Instance detail with a split applied. The original chart shows a vertical split line. Two transform dropdowns are visible — one for each half. Caption: "A split phrase gets two independent transforms. The split structure can be propagated to all matching instances." -->
-
----
-
 ## Checkboxes and partial application
 
 Each row in the instance table has a checkbox. Uncheck any row to exclude it from the next "Apply to all" operation. This lets you apply a transform to most instances while protecting the few that need different treatment.
