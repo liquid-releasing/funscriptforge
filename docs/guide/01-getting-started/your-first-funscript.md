@@ -4,10 +4,8 @@
 [Overview](../00-overview/index.md) →
 [Install](./install.md) →
 **Set up your project** →
-[Device awareness](./device-awareness.md) →
-[Choose a tone](../02-tone/choose-a-tone.md) →
-[Edit phrases](../02-understand-your-script/phrases-at-a-glance.md) →
-[Export](../04-export-and-use/export.md)
+[Tone](../tone.md) →
+[Export](../export.md)
 
 ---
 
@@ -142,8 +140,12 @@ from the sidebar and redo it with different settings.
 | **Device** | Make your funscript safe for your target device |
 | **Tone** | Choose how your output feels — the creative decision |
 | **Phrases** | Fine-tune individual sections (optional for most users) |
+| **Patterns** | Batch-fix all phrases of a given behavioral tag |
+| **Catalogs** | Reference guide for all transforms and behaviors |
 | **Stim** | Configure estim channels (estim devices only) |
+| **Multi-axis** | Generate secondary axes for OSR2/SR6 (optional) |
 | **Export** | Generate device-specific output files |
+| **Next Steps** | Playback guides, credits, community links |
 
 For most users, the path is: **Project → Device → Tone → Export**. Four clicks.
 
@@ -151,7 +153,7 @@ For most users, the path is: **Project → Device → Tone → Export**. Four cl
 
 ## Next step
 
-[Device awareness →](./device-awareness.md)
+[Tone →](../tone.md)
 
 ---
 

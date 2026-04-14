@@ -26,9 +26,9 @@ The Pattern Editor has four sections:
 
 **Selector chart** — the full funscript chart with phrases matching the selected tag highlighted. Unmatched phrases are dimmed.
 
-**Instance table** — all phrases matching the selected tag, listed with their time, duration, BPM, and any transform already applied.
+**Instance table** — all phrases matching the selected tag. Columns: checkbox (include/exclude), phrase number, time, duration, BPM, and transform name (shows the currently applied transform or "—" if none). Click any row to open its detail below.
 
-**Instance detail** — a 3-column editor for the currently selected instance: original chart, preview chart, and transform controls. This works exactly like the [Phrase Editor](phrase-editor.md).
+**Instance detail** — charts and transform controls for the selected instance. The left side shows the original and preview charts; the right side has the transform dropdown and sliders. Split controls appear between them when applicable.
 
 ---
 
@@ -70,7 +70,9 @@ FunscriptForge maps the split point proportionally across all matching phrases, 
 
 ## Checkboxes and partial application
 
-In the instance table, each row has a checkbox. Uncheck any row to exclude it from the next "Apply to all" operation. This lets you apply a transform to most instances while protecting the few that are already correct.
+Each row in the instance table has a checkbox. Uncheck any row to exclude it from the next "Apply to all" operation. This lets you apply a transform to most instances while protecting the few that need different treatment.
+
+Checkboxes only affect the current "Apply to all" action — they don't permanently exclude rows. After applying, all checkboxes reset to checked.
 
 ---
 

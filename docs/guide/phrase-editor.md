@@ -19,28 +19,27 @@ The tab switches from Phrase Selector view to Phrase Editor view.
 
 ## Layout
 
-The Phrase Editor has three columns:
+The Phrase Editor has two columns:
 
 ```
-[ Original chart (2/4) ] [ Transform controls (1/4) ]
-[ Preview chart  (2/4) ]
+[ Charts (3/4)           ] [ Transform controls (1/4) ]
+[   Baseline chart       ] [   Transform dropdown     ]
+[   Preview chart        ] [   Parameter sliders       ]
 ```
 
-<!-- SCREENSHOT: Full Phrase Editor layout. Left two-thirds: stacked original and preview charts showing a phrase. Right third: transform dropdown at top, parameter sliders below, Accept/Cancel/Prev/Next buttons at bottom. Caption: "The Phrase Editor. Original on top, live preview below. Controls on the right." -->
+<!-- SCREENSHOT: Full Phrase Editor layout. Left three-quarters: stacked Baseline and Preview charts showing a phrase with context dimmed. Right quarter: transform dropdown, parameter sliders. Navigation buttons below. Caption: "The Phrase Editor. Baseline on top, live preview below. Controls on the right." -->
 
-**Original chart** — the phrase exactly as it exists in your funscript, with a brief window of context on either side so you can see the surrounding motion.
+**Baseline chart** — the phrase after all previously accepted transforms (or the original if this is the first edit). Context on either side is dimmed so focus stays on the current phrase.
 
-**Preview chart** — updates live as you move sliders. Shows what the phrase will look like after the transform is applied. The context windows on either side use the same surrounding actions, so you can see how the edited phrase will blend with its neighbors.
+**Preview chart** — updates live as you move sliders. Shows what the phrase will look like with the current transform applied on top of the baseline. If you select Passthrough and have a chain, the preview is hidden since there's nothing new to show.
 
-**Transform controls** — dropdown to select a transform, parameter sliders for that transform, and the action buttons.
+**Transform controls** — dropdown to select a transform, parameter sliders for that transform.
 
 ---
 
 ## Choosing a transform
 
-Open the transform dropdown and select any of the 25 built-in transforms. The sliders below update to show the parameters for that transform with their default values.
-
-Start with the auto-suggestion if one is shown — FunscriptForge recommends a transform based on the phrase's behavioral tag and BPM. You can always override it.
+Open the transform dropdown and select any transform. The sliders below update to show the parameters for that transform with their default values. Transforms are grouped into categories: Tone, Behavior, Structural, and Plugins.
 
 See [Transforms →](transforms.md) for a full description of every transform and what it does.
 
@@ -48,9 +47,15 @@ See [Transforms →](transforms.md) for a full description of every transform an
 
 ## Tuning with sliders
 
-Move any slider and the preview chart updates in real time. There is no Apply button for sliders — changes are reflected immediately.
+Move any slider and the preview chart updates in real time. The preview reflects your current transform on top of the baseline.
 
 If the preview looks wrong, move the slider back or choose a different transform.
+
+## Transform chaining
+
+You can apply multiple transforms to the same phrase. After accepting a transform (via navigation or the Apply button), the baseline updates to include your change. Select another transform and it stacks on top.
+
+The header shows how many transforms are in the chain: **"Baseline (3 accepted)"**. Each accepted transform is permanent for this editing session. Use **Ctrl+Z** to undo the last accepted transform.
 
 ---
 
@@ -60,33 +65,32 @@ Device awareness is applied globally on the **Device tab** before you reach the 
 
 ---
 
-## Navigation and workflow
+## Buttons
+
+Two rows of buttons control the workflow:
+
+**Navigation row:**
 
 | Button | What it does |
-|---|---|
-| **⏮ Prev** | Auto-accepts current transform, opens the previous phrase. |
-| **Next ⏭** | Auto-accepts current transform, opens the next phrase. |
-| **✓ Done** | Auto-accepts current transform, saves all phrase edits to chain, returns to Phrase Selector. |
-| **✕ Cancel phrase changes** | Discards ALL changes for this phrase (reverts to entry state). |
+| --- | --- |
+| **⏮ Prev** | Auto-accepts current transform, opens the previous phrase |
+| **Next ⏭** | Auto-accepts current transform, opens the next phrase |
+| **✓ Done** | Auto-accepts current transform, saves all phrase edits to chain, returns to Phrase Selector |
 
-All navigation auto-accepts — you don't need a separate Accept button. Just pick a transform, adjust sliders, and move on. Cancel is the only way to discard changes.
+**Save/Cancel row:**
 
-## Transform categories
+| Button | What it does |
+| --- | --- |
+| **✓ Apply** | Accepts the current transform and stays on this phrase — use this to chain multiple transforms |
+| **✕ Cancel** | Discards ALL changes for this phrase (reverts to the state when you opened it) |
 
-The transform picker shows four categories:
-
-1. **Tone** — all 6 tones (Tender → Dominant) with per-tone sliders + Impact
-2. **Behavior** — amplitude, smoothing, contrast, etc.
-3. **Structural** — tempo, replacement patterns
-4. **Plugins** — user-defined transforms (if any are loaded)
+Navigation buttons (Prev, Next, Done) all auto-accept. **Apply** is for chaining — accept one transform, pick another, apply again. Cancel undoes everything since you opened this phrase.
 
 ---
 
-## Apply to all phrases of this type
+## Batch editing by tag
 
-If the current phrase has a behavioral tag, you will see an **Apply to all** option below the controls. This copies your current transform settings to every phrase that shares the same tag.
-
-Use this after you have found a good transform for, say, all your `stingy` phrases — apply once, propagate everywhere. You can still review individual phrases afterward using the [Pattern Editor](pattern-editor.md).
+To apply the same transform to all phrases that share a behavioral tag, use the [Pattern Editor](pattern-editor.md). The Phrase Editor is for individual phrase work; the Pattern Editor is for batch operations.
 
 ---
 

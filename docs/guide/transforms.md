@@ -1,6 +1,6 @@
 # Transforms
 
-FunscriptForge has 25 built-in transforms. Each one is designed to fix a specific kind of problem. Some are subtle finishing tools; others make substantial changes.
+FunscriptForge has 23 built-in transforms plus 6 tone transforms. Each one is designed to fix a specific kind of problem. Some are subtle finishing tools; others make substantial changes.
 
 ---
 
@@ -45,7 +45,7 @@ These transforms preserve all action timestamps — they only change position va
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Scale | 1.2 | 0.1 – 3.0 | Multiplier applied to distance from midpoint |
+| Scale | 2.0 | 0.1 – 5.0 | Multiplier applied to distance from midpoint |
 
 **Use it when:** The phrase has the right tempo and centering but the strokes are too small (scale up) or too large and demanding (scale down).
 
@@ -61,8 +61,8 @@ These transforms preserve all action timestamps — they only change position va
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Target min | 5 | 0 – 49 | Lowest position in the output |
-| Target max | 95 | 51 – 100 | Highest position in the output |
+| Target low | 0 | 0 – 49 | Lowest position in the output |
+| Target high | 100 | 51 – 100 | Highest position in the output |
 
 **Use it when:** The phrase is compressed into a narrow band anywhere in the range. Normalize expands it to fill the device's full capability regardless of where it is centered.
 
@@ -76,7 +76,7 @@ These transforms preserve all action timestamps — they only change position va
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Strength | 0.3 | 0.0 – 1.0 | Filter intensity — higher removes more variation |
+| Strength | 0.15 | 0.01 – 0.5 | Filter intensity — higher removes more variation |
 
 **Use it when:** The phrase has noisy, choppy motion. Smooth softens it without changing the tempo or amplitude.
 
@@ -128,7 +128,7 @@ These transforms preserve all action timestamps — they only change position va
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Offset | 10 | -100 – 100 | Fixed amount to add to every position |
+| Offset | 0 | -50 – 50 | Fixed amount to add to every position |
 
 **Use it when:** You want to nudge the whole phrase up or down without changing its shape — for example, shifting a phrase slightly higher so it doesn't touch 0 on the downstroke.
 
@@ -156,8 +156,8 @@ These transforms preserve all action timestamps — they only change position va
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Reduction | 0.5 | 0.1 – 0.9 | How much to reduce amplitude (0.5 = half the original depth) |
-| Smooth strength | 0.3 | 0.0 – 1.0 | LPF smoothing applied after reduction |
+| Amplitude reduce | 0.40 | 0.0 – 1.0 | How much to compress toward center (0.4 = 40% reduction) |
+| LPF strength | 0.30 | 0.0 – 0.5 | LPF smoothing applied after reduction |
 
 **Use it when:** A section of the script needs to feel quieter — a transition, a recovery, or a scene that is genuinely low-intensity.
 
@@ -171,8 +171,12 @@ These transforms preserve all action timestamps — they only change position va
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Velocity cap | 200 | 50 – 500 | Maximum velocity in pos/s before softening |
-| Smooth strength | 0.2 | 0.0 – 1.0 | LPF applied to the result |
+| Max velocity | 0.32 | 0.05 – 1.0 | Maximum velocity in pos/ms before softening |
+| Reversal soften | 0.62 | 0.0 – 1.0 | How much to soften stroke reversals |
+| Height blend | 0.75 | 0.0 – 1.0 | Blend factor for range compression |
+| Range low | 15 | 0 – 40 | Minimum output position |
+| Range high | 92 | 60 – 100 | Maximum output position |
+| LPF strength | 0.16 | 0.0 – 0.5 | LPF applied to the result |
 
 **Use it when:** A fast phrase sounds mechanical or harsh. Performance shapes it to feel driven and energetic rather than like a device failing to keep up.
 
@@ -186,8 +190,9 @@ These transforms preserve all action timestamps — they only change position va
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Hold position | 50 | 0 – 100 | Device position during the hold beat |
-| Hold duration fraction | 0.25 | 0.1 – 0.5 | What fraction of the 4-beat group becomes the hold |
+| Amplitude scale | 1.0 | 0.1 – 3.0 | Scale factor for stroke depth |
+| Range low | 0 | 0 – 49 | Minimum output position |
+| Range high | 100 | 51 – 100 | Maximum output position |
 
 **Use it when:** A fast phrase needs a breathing pattern — give it a rhythmic rest every fourth beat to make it feel musical rather than relentless.
 
@@ -201,8 +206,11 @@ These transforms preserve all action timestamps — they only change position va
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Every N strokes | 2 | 1 – 8 | How frequently to apply the accent |
-| Accent boost | 15 | 0 – 50 | How much to push the position at the accented beat |
+| Every Nth beat | 1 | 1 – 16 | How frequently to apply the accent |
+| Accent amount | 4 | 1 – 30 | How much to push the position at the accented beat |
+| Radius (ms) | 40 | 5 – 200 | Width of the accent in milliseconds |
+| Start at (ms) | 0 | 0+ | Offset before first accent |
+| Max accents | 0 | 0+ | Limit total accents (0 = unlimited) |
 
 **Use it when:** A drone phrase has good rhythm but no dynamics. Beat Accent adds pulse without changing the tempo.
 
@@ -216,8 +224,8 @@ These transforms preserve all action timestamps — they only change position va
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Velocity threshold | 150 | 50 – 500 | Velocity above which a boundary is treated as a seam |
-| Smooth strength | 0.5 | 0.0 – 1.0 | LPF applied at detected seams |
+| Max velocity (pos/ms) | 0.50 | 0.05 – 2.0 | Velocity above which a boundary is treated as a seam |
+| Max blend strength | 0.70 | 0.0 – 1.0 | LPF applied at detected seams |
 
 **Use it when:** You have applied different transforms to adjacent phrases and the boundary between them produces a spike. Blend Seams is also available as a global option at export time.
 
@@ -231,9 +239,26 @@ These transforms preserve all action timestamps — they only change position va
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Strength | 0.1 | 0.0 – 1.0 | Filter intensity — keep this low to avoid dulling the phrase |
+| Strength | 0.10 | 0.01 – 0.5 | Filter intensity — keep this low to avoid dulling the phrase |
 
 **Use it when:** As the last step before export to remove any residual sharp edges. Also available as a global option at export time — you rarely need to apply it per-phrase.
+
+---
+
+### Funnel
+
+**What it does:** Progressively shifts the center and scales the amplitude from the start of the phrase to the end. You define the starting and ending states and the transform interpolates between them.
+
+**Parameters:**
+
+| Parameter | Default | Range | Description |
+| --- | --- | --- | --- |
+| Start center | 30 | 0 – 100 | Center position at the start |
+| End center | 70 | 0 – 100 | Center position at the end |
+| Start amplitude scale | 0.2 | 0.0 – 2.0 | Amplitude scale at the start |
+| End amplitude scale | 1.0 | 0.0 – 2.0 | Amplitude scale at the end |
+
+**Use it when:** A phrase needs to build or taper — a ramp-up into an intense section, or a wind-down after a peak.
 
 ---
 
@@ -247,6 +272,12 @@ These transforms change the number of actions, their timestamps, or both. The ph
 
 **What it does:** Keeps every other stroke cycle and retimes the remainder evenly across the original duration. The result has half the BPM with the same start time, end time, and amplitude.
 
+**Parameters:**
+
+| Parameter | Default | Range | Description |
+| --- | --- | --- | --- |
+| Amplitude scale | 1.0 | 0.1 – 3.0 | Optional scale factor applied after halving |
+
 **Use it when:** A phrase is frantic (BPM > 200) or simply too fast to feel meaningful. Halve Tempo is the primary fix for frantic phrases.
 
 ---
@@ -259,7 +290,8 @@ These transforms change the number of actions, their timestamps, or both. The ph
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Offset ms | 0 | -2000 – 2000 | Positive = shift forward; negative = shift backward |
+| Nudge (ms) | 0 | -2000 – 2000 | Positive = shift forward; negative = shift backward |
+| Transition (ms) | 100 | 0 – 500 | Duration of the fill transition at the leading edge |
 
 **Use it when:** A phrase is slightly out of sync with a beat drop or audio cue. Nudge corrects the alignment without re-scripting.
 
@@ -275,15 +307,24 @@ These transforms change the number of actions, their timestamps, or both. The ph
 |---|---|---|---|
 | BPM | phrase BPM | 10 – 300 | Target BPM for the synthetic stroke |
 
-**Use it when:** The phrase's motion is so irregular that corrective transforms cannot fix it — a clean synthetic stroke is better than trying to salvage the original.
+**Use it when:** The phrase's motion is so irregular that corrective transforms cannot fix it — a clean synthetic stroke is better than trying to salvage the original. BPM defaults to the phrase's current BPM.
 
 ---
 
 ### Waiting
 
-**What it does:** Replaces the phrase with a very slow oscillating stroke (approximately 1 cycle per minute). Creates a placeholder for static or near-still sections.
+**What it does:** Replaces the phrase with a very slow oscillating stroke. Creates a placeholder for static or near-still sections.
 
-**Use it when:** A section of the script has essentially no motion and the device should be parked but not completely still — the slow waiting motion prevents the device from going cold.
+**Parameters:**
+
+| Parameter | Default | Range | Description |
+|---|---|---|---|
+| Start position | 100 | 0 – 100 | Position at the start of the waiting stroke |
+| End position | 0 | 0 – 100 | Position at the end of the waiting stroke |
+| BPM | 1.0 | 0.0 – 5.0 | Oscillation rate (default ~1 cycle per minute) |
+| Original influence % | 0 | 0 – 100 | How much of the original motion to blend in |
+
+**Use it when:** A section of the script has essentially no motion and the device should be parked but not completely still — the slow waiting motion prevents the device from going cold. Set Original influence > 0 to blend some of the original motion back in.
 
 ---
 
@@ -295,9 +336,11 @@ These transforms change the number of actions, their timestamps, or both. The ph
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Fast BPM | phrase BPM | 30 – 300 | Rate of the small oscillations |
-| Tide period (s) | 8.0 | 2.0 – 30.0 | Duration of one slow center cycle |
-| Tide amplitude | 20 | 5 – 40 | How far the center shifts during each tide cycle |
+| Center high | 70 | 20 – 90 | Highest center position during the tide cycle |
+| Center low | 41 | 0 – 80 | Lowest center position during the tide cycle |
+| Stroke span | 30 | 5 – 60 | Amplitude of the fast oscillations |
+| BPM | 252 | 10 – 300 | Rate of the fast oscillations |
+| Wave period (s) | 135 | 10 – 600 | Duration of one slow center cycle |
 
 **Use it when:** A long phrase needs a breathing quality — the sensation of ebb and flow within continuous motion.
 
@@ -307,30 +350,24 @@ These transforms change the number of actions, their timestamps, or both. The ph
 
 **What it does:** Generates a high plateau with small oscillations and one slow dip — replicating the feeling of the drift behavioral pattern but with intentional shape.
 
-**Use it when:** You want a phrase that reads as a deliberate drift, not accidental off-centering.
-
----
-
-### Funnel
-
-**What it does:** Progressively shifts the center and scales the amplitude from the start of the phrase to the end. You define the starting and ending states and the transform interpolates between them.
-
 **Parameters:**
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Start center | 50 | 0 – 100 | Center position at the start |
-| End center | 50 | 0 – 100 | Center position at the end |
-| Start scale | 0.5 | 0.1 – 2.0 | Amplitude scale at the start |
-| End scale | 1.0 | 0.1 – 2.0 | Amplitude scale at the end |
+| Plateau position | 85 | 50 – 100 | Center of the high plateau |
+| Wobble depth | 10 | 0 – 30 | Amplitude of small oscillations on the plateau |
+| Wobble BPM | 80 | 20 – 150 | Rate of the small oscillations |
+| Dip bottom | 30 | 0 – 70 | Lowest position during the dip |
+| Dip timing | 0.2 | 0.0 – 0.9 | When the dip occurs (fraction of phrase duration) |
+| Dip duration (s) | 4.0 | 0.5 – 15.0 | How long the dip lasts |
 
-**Use it when:** A phrase needs to build or taper — a ramp-up into an intense section, or a wind-down after a peak.
+**Use it when:** You want a phrase that reads as a deliberate drift, not accidental off-centering.
 
 ---
 
 ## User-defined transforms
 
-Beyond the 25 built-ins, you can add your own:
+Beyond the built-ins, you can add your own:
 
 **JSON recipes** — chain existing built-in transforms in `user_transforms/`. Safe: parameters are validated; only built-in transforms can be referenced.
 
