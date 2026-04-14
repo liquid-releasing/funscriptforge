@@ -103,9 +103,9 @@ Load the `.device.funscript` into any compatible player:
 
 ### Electrostim devices
 
-Load the `.estim.funscript` into **[funscript-tools](https://github.com/edger477/funscript-tools)** by Edger. This tool converts the funscript waveform into per-channel alpha/beta/pulse/volume files for routing through estim boxes (Mk312, 2B, ET312).
+FunscriptForge prepares your funscript for estim playback. The Stim tab generates channel funscripts (alpha, beta, frequency, volume) and the Export tab can render stereo WAV audio files for audio-based devices.
 
-The estim output from FunscriptForge is intentionally clean — no velocity cap, no safety smoothing — so funscript-tools gets the full waveform to work with.
+For playback, use **[Restim](https://github.com/diglet48/restim)** by diglet48 or **[CHPlayer](https://github.com/CHPlayer)** — open-source estim players that load the exported channel funscripts and drive your device in real time.
 
 ---
 

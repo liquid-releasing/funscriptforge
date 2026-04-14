@@ -6,15 +6,12 @@ The Phrase Editor is where you improve individual phrases. Every phrase in your 
 
 ## Opening the Phrase Editor
 
-From the **Phrases** tab:
-
-- Click any phrase band on the chart
-- Or click any row in the phrase table
+From the **Phrases** tab, click any row in the phrase table to open it in the Phrase Editor.
 
 The tab switches from Phrase Selector view to Phrase Editor view.
 
 ![Phrase Selector with phrase bands](media/screenshots/07-phrases-selector.png)
-*Click any phrase band on the chart to open it in the Phrase Editor.*
+*Click on the phrase in the table to open the Phrase Editor.*
 
 ---
 
