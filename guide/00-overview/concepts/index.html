@@ -1436,8 +1436,8 @@ a dominant character: energetic, building, quiet, frantic.</p>
 to phrases, and review phrases in the chart.</p>
 <hr />
 <h3 id="behavioral-tag">Behavioral Tag<a class="headerlink" href="#behavioral-tag" title="Permanent link">&para;</a></h3>
-<p>FunscriptForge classifies each phrase into one of ten behavioral types based on its
-motion characteristics:</p>
+<p>FunscriptForge classifies each phrase by its motion characteristics. The tag names the
+dominant behavior — and if there is a problem, it names that too.</p>
 <table>
 <thead>
 <tr>
@@ -1447,49 +1447,41 @@ motion characteristics:</p>
 </thead>
 <tbody>
 <tr>
+<td><strong>stingy</strong></td>
+<td>Full-range hammering — very fast, very demanding, no nuance</td>
+</tr>
+<tr>
 <td><strong>giggle</strong></td>
-<td>Short, fast, light strokes</td>
-</tr>
-<tr>
-<td><strong>frantic</strong></td>
-<td>High BPM, full range, relentless</td>
-</tr>
-<tr>
-<td><strong>ramp</strong></td>
-<td>Tempo or intensity builds over the phrase</td>
+<td>Tiny micro-motion centered around 50 — barely perceptible</td>
 </tr>
 <tr>
 <td><strong>plateau</strong></td>
-<td>Steady BPM and range throughout</td>
-</tr>
-<tr>
-<td><strong>stingy</strong></td>
-<td>Short stroke range (device barely moves)</td>
-</tr>
-<tr>
-<td><strong>half-stroke</strong></td>
-<td>Motion stays in only the top or bottom half</td>
+<td>Some motion, but lacking full range (amplitude span 20-40)</td>
 </tr>
 <tr>
 <td><strong>drift</strong></td>
-<td>Slow, wandering, low tempo</td>
+<td>Motion center displaced into the top or bottom third</td>
+</tr>
+<tr>
+<td><strong>half_stroke</strong></td>
+<td>Real stroke depth, but confined to one half (top or bottom)</td>
 </tr>
 <tr>
 <td><strong>drone</strong></td>
-<td>Very regular, machine-like rhythm</td>
+<td>Sustained uniform motion — monotone, repetitive, fatiguing</td>
 </tr>
 <tr>
 <td><strong>lazy</strong></td>
-<td>Low velocity, soft strokes</td>
+<td>Slow and shallow — low BPM, narrow amplitude</td>
 </tr>
 <tr>
-<td><strong>ambient</strong></td>
-<td>Near-still, minimal motion</td>
+<td><strong>frantic</strong></td>
+<td>BPM above 200 — near or above device mechanical limits</td>
 </tr>
 </tbody>
 </table>
-<p>Tags help you find similar phrases across a long script. The Pattern Editor lets
-you work on all phrases of a given tag at once.</p>
+<p>Phrases without a tag are well-formed. Tags help you find similar phrases across a
+long script. The Pattern Editor lets you work on all phrases of a given tag at once.</p>
 <hr />
 <h3 id="bpm-transition">BPM Transition<a class="headerlink" href="#bpm-transition" title="Permanent link">&para;</a></h3>
 <p>A point in the funscript where the tempo changes significantly. FunscriptForge

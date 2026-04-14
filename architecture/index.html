@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://help.funscriptforge.com/ARCHITECTURE_estim_pipeline/">
+        <link rel="canonical" href="https://help.funscriptforge.com/architecture/">
       
       
       
@@ -23,7 +23,7 @@
     
     
       
-        <title>Architecture — Estim Pipeline - FunscriptForge</title>
+        <title>Architecture & Design - FunscriptForge</title>
       
     
     
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#architecture-estim-pipeline" class="md-skip">
+        <a href="#architecture-design" class="md-skip">
           Skip to content
         </a>
       
@@ -108,7 +108,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Architecture — Estim Pipeline
+              Architecture &amp; Design
             
           </span>
         </div>
@@ -1225,10 +1225,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-big-picture" class="md-nav__link">
+  <a href="#architecture" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Big Picture
+        Architecture
       
     </span>
   </a>
@@ -1236,10 +1236,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-two-dimensions" class="md-nav__link">
+  <a href="#specifications" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Two Dimensions
+        Specifications
       
     </span>
   </a>
@@ -1247,76 +1247,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-character-vocabulary" class="md-nav__link">
+  <a href="#development" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Character Vocabulary
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-output-channels" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The Output Channels
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-adapter-boundary" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The Adapter Boundary
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-project-bundle" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The Project Bundle
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-sensitivity-matrix-planned" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The Sensitivity Matrix (Planned)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-agent-loop-future" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The Agent Loop (Future)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#deployment-targets" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Deployment Targets
+        Development
       
     </span>
   </a>
@@ -1343,198 +1277,87 @@
   
 
 
-<h1 id="architecture-estim-pipeline">Architecture — Estim Pipeline<a class="headerlink" href="#architecture-estim-pipeline" title="Permanent link">&para;</a></h1>
-<p><em>Written 2026-03-14</em></p>
-<hr />
-<h2 id="the-big-picture">The Big Picture<a class="headerlink" href="#the-big-picture" title="Permanent link">&para;</a></h2>
-<p>Three tools. One pipeline. One vocabulary.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>FunscriptForge Explorer        — originate the funscript from video
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>FunscriptForge                 — edit and shape the funscript
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>funscript-tools                — apply estim character, generate outputs
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>restim                         — play
-</code></pre></div>
-<p>Each tool does one thing. The funscript is the connector between them.</p>
-<hr />
-<h2 id="the-two-dimensions">The Two Dimensions<a class="headerlink" href="#the-two-dimensions" title="Permanent link">&para;</a></h2>
-<p>Every piece of estim content has two independent dimensions:</p>
+<h1 id="architecture-design">Architecture &amp; Design<a class="headerlink" href="#architecture-design" title="Permanent link">&para;</a></h1>
+<p>Internal documentation for developers and contributors.
+These are <strong>not</strong> user-facing — see <a href="../guide/">docs/guide/</a> for the user guide.</p>
+<h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Dimension</th>
-<th>Tool</th>
-<th>What it controls</th>
+<th>Document</th>
+<th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>Funscript quality</strong></td>
-<td>FunscriptForge</td>
-<td>Position over time — strokes, pacing, phrase structure</td>
+<td><a href="ARCHITECTURE_accept_and_chain/">Accept &amp; Chain</a></td>
+<td>Tab workflow, cascading funscript chain, Accept pattern</td>
 </tr>
 <tr>
-<td><strong>Estim character</strong></td>
-<td>funscript-tools</td>
-<td>How sensation moves and builds — the electrode path, pulse rate, attack</td>
+<td><a href="ARCHITECTURE_chart_cache/">Chart Cache</a></td>
+<td>Visualization caching strategy</td>
+</tr>
+<tr>
+<td><a href="ARCHITECTURE_components/">Components</a></td>
+<td>Shared UI component library (forge-ui-components)</td>
+</tr>
+<tr>
+<td><a href="ARCHITECTURE_device_awareness/">Device Awareness</a></td>
+<td>Groove, speed clamp, combined device limits</td>
+</tr>
+<tr>
+<td><a href="ARCHITECTURE_estim_pipeline/">Estim Pipeline</a></td>
+<td>Three-tool estim workflow, channel vocabulary</td>
+</tr>
+<tr>
+<td><a href="ARCHITECTURE_stim_and_events/">Stim &amp; Events</a></td>
+<td>Stim rendering, event handling</td>
 </tr>
 </tbody>
 </table>
-<p>Before these tools existed, creators had one dimension. Now they have two. The combination produces something no other tool creates.</p>
-<hr />
-<h2 id="the-character-vocabulary">The Character Vocabulary<a class="headerlink" href="#the-character-vocabulary" title="Permanent link">&para;</a></h2>
-<p>The five eTransform characters are the <strong>API between all three tools</strong>. One intent word drives behavior at every layer.</p>
+<h2 id="specifications">Specifications<a class="headerlink" href="#specifications" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Character</th>
-<th>Explorer analysis</th>
-<th>FunscriptForge transforms</th>
-<th>funscript-tools eTransform</th>
+<th>Document</th>
+<th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Reactive</td>
-<td>onset detection + optical flow</td>
-<td>fast, sharp transforms</td>
-<td>wide arc, low ramp, high peak</td>
+<td><a href="AUTO_METADATA_SPEC/">Auto Metadata</a></td>
+<td>Auto-derived metadata — pace, intensity, arc, mood, tone suggestion</td>
 </tr>
 <tr>
-<td>Scene Builder</td>
-<td>phrase detection + downbeats</td>
-<td>gradual building transforms</td>
-<td>circular arc, high ramp</td>
+<td><a href="HAPTIC_COMPOSITION_SPEC/">Haptic Composition</a></td>
+<td>Three-layer haptic composition — base + beats + emotion</td>
 </tr>
 <tr>
-<td>Gentle</td>
-<td>slow beat grid, low motion</td>
-<td>soften, smooth</td>
-<td>narrow arc, soft onset</td>
+<td><a href="TONE_TAB_SPEC/">Tone Tab</a></td>
+<td>6 tones, card UI, beat envelopes, caption emotion</td>
 </tr>
 <tr>
-<td>Unpredictable</td>
-<td>high-variance optical flow</td>
-<td>irregular transforms</td>
-<td>restim-original, wild movement</td>
+<td><a href="STINGY_ANALYSIS/">Stingy Analysis</a></td>
+<td>EDA on funscript corpus — velocity, delta, BPM metrics</td>
 </tr>
 <tr>
-<td>Balanced</td>
-<td>beat tracking, middle intensity</td>
-<td>balanced transforms</td>
-<td>circular, middle values</td>
+<td><a href="OSS_INTEGRATION_PATTERN/">OSS Integration</a></td>
+<td>Integration patterns with open-source tools</td>
 </tr>
 </tbody>
 </table>
-<p>The creator says "Scene Builder." Every tool responds appropriately. They never touch a parameter.</p>
-<hr />
-<h2 id="the-output-channels">The Output Channels<a class="headerlink" href="#the-output-channels" title="Permanent link">&para;</a></h2>
-<p>funscript-tools produces 10 output files from one input. Three matter for most creators:</p>
+<h2 id="development">Development<a class="headerlink" href="#development" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Channel</th>
-<th>What it is</th>
-<th>Plain label</th>
+<th>Document</th>
+<th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>alpha.funscript</code></td>
-<td>Left-right electrode position</td>
-<td>Where — left/right</td>
-</tr>
-<tr>
-<td><code>beta.funscript</code></td>
-<td>Up-down electrode position</td>
-<td>Where — up/down</td>
-</tr>
-<tr>
-<td><code>pulse_frequency.funscript</code></td>
-<td>Pulse rate / intensity tracking</td>
-<td>Intensity</td>
-</tr>
-</tbody>
-</table>
-<p>The remaining channels (pulse_width, pulse_rise, E1-E4, prostate) are texture for specialist hardware.</p>
-<hr />
-<h2 id="the-adapter-boundary">The Adapter Boundary<a class="headerlink" href="#the-adapter-boundary" title="Permanent link">&para;</a></h2>
-<p><code>forge_window.py</code> imports ONLY from <code>cli.py</code>. Zero upstream imports. This is the adapter boundary.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>forge_window.py  →  cli.py  →  upstream processor.py
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>     UI               API           implementation
-</code></pre></div>
-<p>This means:
-- The UI can be rebuilt without touching upstream code
-- The CLI can be tested independently
-- FunscriptForge can call the same CLI functions
-- Streamlit and tkinter use identical logic</p>
-<hr />
-<h2 id="the-project-bundle">The Project Bundle<a class="headerlink" href="#the-project-bundle" title="Permanent link">&para;</a></h2>
-<p>One folder = one restim session.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>my-scene/
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>  my-scene.mp4
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  my-scene.funscript
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>  my-scene.alpha.funscript
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>  my-scene.beta.funscript
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>  my-scene.pulse_frequency.funscript
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>  ... (all outputs)
-</code></pre></div>
-<p>No hunting for files. No noise in Downloads. Drop the folder into restim. Done.</p>
-<hr />
-<h2 id="the-sensitivity-matrix-planned">The Sensitivity Matrix (Planned)<a class="headerlink" href="#the-sensitivity-matrix-planned" title="Permanent link">&para;</a></h2>
-<p>Each eTransform exposes 1-2 contextual sliders chosen by educated guess. Before release, a brute-force script will validate these choices:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>for each eTransform:
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>  for each parameter across its range:
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    run process() on test fixtures
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    measure delta in alpha/beta/pulse_frequency (np.linalg.norm)
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    record (etransform, parameter, delta) to CSV
-</code></pre></div>
-<p>The parameter with the highest delta = the one worth surfacing. Near-zero delta = hide it.</p>
-<p>This becomes the integration test suite. The sensitivity matrix blocks release.</p>
-<hr />
-<h2 id="the-agent-loop-future">The Agent Loop (Future)<a class="headerlink" href="#the-agent-loop-future" title="Permanent link">&para;</a></h2>
-<p>The <code>.forge-project.json</code> schema supports agent orchestration:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">&quot;next_action&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;run_step&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;apply_etransform&quot;</span><span class="w"> </span><span class="p">},</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">&quot;agent_notes&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Chose Reactive based on BPM &gt; 120 and high optical flow variance&quot;</span><span class="p">,</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">&quot;evaluation&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="nt">&quot;checks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;delta_alpha &gt; 0.1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;no_flat_sections&quot;</span><span class="p">]</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="p">},</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">  </span><span class="nt">&quot;human_review&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="p">}</span>
-</code></pre></div>
-<p>Agent reads <code>next_action</code> → runs step → writes <code>agent_notes</code> → evaluates output → escalates or continues.</p>
-<hr />
-<h2 id="deployment-targets">Deployment Targets<a class="headerlink" href="#deployment-targets" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Target</th>
-<th>Status</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Windows desktop (PyInstaller exe)</td>
-<td>Planned</td>
-</tr>
-<tr>
-<td>macOS desktop</td>
-<td>Planned</td>
-</tr>
-<tr>
-<td>Linux desktop</td>
-<td>Planned</td>
-</tr>
-<tr>
-<td>SaaS (Streamlit cloud)</td>
-<td>Planned</td>
-</tr>
-<tr>
-<td>funscript-tools tkinter standalone</td>
-<td>Working today</td>
-</tr>
-<tr>
-<td>FunscriptForge Streamlit</td>
-<td>Working today</td>
+<td><a href="DEVELOPMENT/">Development Setup</a></td>
+<td>Test assets, environment, hot-reload, optional features</td>
 </tr>
 </tbody>
 </table>

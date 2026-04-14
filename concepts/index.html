@@ -1621,10 +1621,10 @@
 <p>FunscriptForge runs the assessment automatically when you load a file. You can also re-run it with adjusted detection settings (minimum phrase length, amplitude sensitivity) from the Phrase Selector's <strong>Detection settings</strong> expander.</p>
 <hr />
 <h2 id="export-outputs">Export outputs<a class="headerlink" href="#export-outputs" title="Permanent link">&para;</a></h2>
-<p>FunscriptForge produces two output files:</p>
-<p><strong>Device funscript</strong> (<code>.device.funscript</code>) — velocity-capped at 200 pos/s for mechanical devices.</p>
-<p><strong>Estim funscript</strong> (<code>.estim.funscript</code>) — no velocity cap, clean waveform for electrostim routing.</p>
-<p>See <a href="../reference/device-safety/">Device Safety →</a> for full details.</p>
+<p>FunscriptForge produces device-specific output organized into folders:</p>
+<p><strong>Mechanical</strong> (<code>mechanical/</code>) — a single velocity-capped funscript for Handy, OSR2, SR6, and Intiface devices. Multi-axis files (roll, pitch, twist, surge, sway) are included if you assigned position styles.</p>
+<p><strong>Estim</strong> (<code>estim/</code>) — channel funscripts (alpha, beta, frequency, volume, pulse_frequency, pulse_rise) for electrostim routing. If audio-capable devices are selected (legacy 2b/312 or stereostim Tingler/EstimHero/ZC95), stereo WAV files are also rendered.</p>
+<p>See <a href="../guide/export/">Export →</a> for the full folder layout and <a href="../reference/device-safety/">Device Safety →</a> for velocity limits.</p>
 
 
 

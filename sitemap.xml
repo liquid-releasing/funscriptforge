@@ -5,55 +5,7 @@
          <lastmod>2026-04-14</lastmod>
     </url>
     <url>
-         <loc>https://help.funscriptforge.com/ARCHITECTURE_accept_and_chain/</loc>
-         <lastmod>2026-04-14</lastmod>
-    </url>
-    <url>
-         <loc>https://help.funscriptforge.com/ARCHITECTURE_chart_cache/</loc>
-         <lastmod>2026-04-14</lastmod>
-    </url>
-    <url>
-         <loc>https://help.funscriptforge.com/ARCHITECTURE_components/</loc>
-         <lastmod>2026-04-14</lastmod>
-    </url>
-    <url>
-         <loc>https://help.funscriptforge.com/ARCHITECTURE_device_awareness/</loc>
-         <lastmod>2026-04-14</lastmod>
-    </url>
-    <url>
-         <loc>https://help.funscriptforge.com/ARCHITECTURE_estim_pipeline/</loc>
-         <lastmod>2026-04-14</lastmod>
-    </url>
-    <url>
-         <loc>https://help.funscriptforge.com/ARCHITECTURE_stim_and_events/</loc>
-         <lastmod>2026-04-14</lastmod>
-    </url>
-    <url>
-         <loc>https://help.funscriptforge.com/AUTO_METADATA_SPEC/</loc>
-         <lastmod>2026-04-14</lastmod>
-    </url>
-    <url>
-         <loc>https://help.funscriptforge.com/DEVELOPMENT/</loc>
-         <lastmod>2026-04-14</lastmod>
-    </url>
-    <url>
-         <loc>https://help.funscriptforge.com/HAPTIC_COMPOSITION_SPEC/</loc>
-         <lastmod>2026-04-14</lastmod>
-    </url>
-    <url>
          <loc>https://help.funscriptforge.com/INSTALL/</loc>
-         <lastmod>2026-04-14</lastmod>
-    </url>
-    <url>
-         <loc>https://help.funscriptforge.com/OSS_INTEGRATION_PATTERN/</loc>
-         <lastmod>2026-04-14</lastmod>
-    </url>
-    <url>
-         <loc>https://help.funscriptforge.com/STINGY_ANALYSIS/</loc>
-         <lastmod>2026-04-14</lastmod>
-    </url>
-    <url>
-         <loc>https://help.funscriptforge.com/TONE_TAB_SPEC/</loc>
          <lastmod>2026-04-14</lastmod>
     </url>
     <url>
@@ -62,6 +14,58 @@
     </url>
     <url>
          <loc>https://help.funscriptforge.com/overview/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/ARCHITECTURE_accept_and_chain/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/ARCHITECTURE_chart_cache/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/ARCHITECTURE_components/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/ARCHITECTURE_device_awareness/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/ARCHITECTURE_estim_pipeline/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/ARCHITECTURE_stim_and_events/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/AUTO_METADATA_SPEC/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/DEVELOPMENT/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/HAPTIC_COMPOSITION_SPEC/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/OSS_INTEGRATION_PATTERN/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/STINGY_ANALYSIS/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/architecture/TONE_TAB_SPEC/</loc>
          <lastmod>2026-04-14</lastmod>
     </url>
     <url>
@@ -93,11 +97,23 @@
          <lastmod>2026-04-14</lastmod>
     </url>
     <url>
+         <loc>https://help.funscriptforge.com/guide/next-steps/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
          <loc>https://help.funscriptforge.com/guide/pattern-editor/</loc>
          <lastmod>2026-04-14</lastmod>
     </url>
     <url>
          <loc>https://help.funscriptforge.com/guide/phrase-editor/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/stim/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/guide/tone/</loc>
          <lastmod>2026-04-14</lastmod>
     </url>
     <url>
@@ -170,6 +186,10 @@
     </url>
     <url>
          <loc>https://help.funscriptforge.com/reference/device-safety/</loc>
+         <lastmod>2026-04-14</lastmod>
+    </url>
+    <url>
+         <loc>https://help.funscriptforge.com/reference/glossary/</loc>
          <lastmod>2026-04-14</lastmod>
     </url>
     <url>
