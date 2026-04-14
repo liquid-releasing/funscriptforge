@@ -24,7 +24,8 @@ Each character produces a different sensation pattern. The character name is the
 | **Unpredictable** | Random direction changes | Zigzag electrode path, varied character. Keeps you guessing — the sensation changes direction without warning. |
 | **Balanced** | Middle of everything | Circular electrode path, moderate settings. A good starting point for any content. |
 
-<!-- SCREENSHOT: Five stim character cards in a row. "Reactive" selected with red border. Each card shows a colored electrode path diagram. Caption: "Five estim characters. The electrode path diagram shows how stimulation moves." -->
+![Stim character cards](media/screenshots/10-stim-characters.png)
+*Five estim characters. The electrode path diagram shows how stimulation moves.*
 
 ---
 

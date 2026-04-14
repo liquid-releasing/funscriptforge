@@ -18,7 +18,8 @@ Use the [Phrase Editor](phrase-editor.md) when you need fine-grained control ove
 
 ## Layout
 
-<!-- SCREENSHOT: Pattern Editor tab — tag buttons on the left panel, full funscript chart with highlighted phrases in the center, phrase instance table below, and the 3-column instance detail (original, preview, controls) at the bottom. Caption: "The Pattern Editor. Select a behavioral tag on the left; matching phrases highlight on the chart; edit any instance and apply it to all." -->
+![Pattern Editor with tag selector and instance table](media/screenshots/09-pattern-editor.png)
+*The Pattern Editor. Select a behavioral tag on the left; matching phrases highlight on the chart.*
 
 The Pattern Editor has four sections:
 

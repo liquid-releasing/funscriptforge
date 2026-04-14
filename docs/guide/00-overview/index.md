@@ -52,7 +52,8 @@ These aren't scripting mistakes. They're things that only become visible when yo
 - **Estim audio rendering** — generate ready-to-play stereo WAV files for audio estim devices, no restim setup required
 - **Clean export** with device-specific folders, channel files, heatmaps, and a forge log that records every change
 
-<!-- SCREENSHOT: FunscriptForge with a funscript loaded — the Phrases tab showing phrase bands, behavioral tags, and BPM labels. Caption: "Every phrase visible. Every behavior labeled. Every tempo change marked." -->
+![Phrases tab with phrase bands and behavioral tags](../media/screenshots/07-phrases-selector.png)
+*Every phrase visible. Every behavior labeled. Every tempo change marked.*
 
 ---
 

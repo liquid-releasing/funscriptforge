@@ -30,7 +30,8 @@ Two columns of checkboxes. Pick every device your script should work on.
 
 When multiple devices are selected, the **combined limits** use the most restrictive value for each parameter. The Handy at 400 pos/s is typically the bottleneck.
 
-<!-- SCREENSHOT: Device tab with The Handy and Stereostim checked. Limits table showing Max speed 400 pos/s, Limited by "The Handy". Caption: "Combined limits show which device is the bottleneck for each parameter." -->
+![Device tab with limits table](media/screenshots/02-device-limits.png)
+*Combined limits show which device is the bottleneck for each parameter.*
 
 ---
 
@@ -79,7 +80,8 @@ A before/after comparison shows the original funscript and the device-aware vers
 - **Original** — the raw funscript as loaded
 - **Device Aware** — after humanization and speed clamping, with CV improvement stats
 
-<!-- SCREENSHOT: Side-by-side Original vs Device Aware charts. Caption shows "CV 0.04 -> 0.18, 8 sections humanized". Caption: "Device awareness adds timing variation (groove) and caps unsafe velocities." -->
+![Original vs Device Aware side-by-side](media/screenshots/03-device-before-after.png)
+*Device awareness adds timing variation (groove) and caps unsafe velocities.*
 
 ---
 
@@ -102,7 +104,8 @@ Think of it as the difference between a drum machine and a live drummer. Same be
 
 Below the groove slider, two heatmap strips show the coefficient of variation across the funscript — **before** and **after** groove. Brighter segments have more timing variation; dark segments are mechanical.
 
-<!-- SCREENSHOT: CV heatmap strips before and after groove at 0.35. Before strip is mostly dark; after strip has more color variation. Caption: "CV heatmaps show timing variation. Dark = mechanical. Bright = natural." -->
+![Groove slider and CV heatmap strips](media/screenshots/04-device-groove-cv.png)
+*CV heatmaps show timing variation. Dark = mechanical. Bright = natural.*
 
 ---
 

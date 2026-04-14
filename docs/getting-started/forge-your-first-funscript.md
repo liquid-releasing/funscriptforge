@@ -20,7 +20,8 @@ You'll see:
 - A **waveform chart** showing the full motion structure
 - A **stats row**: duration, action count, average speed, position range
 
-<!-- SCREENSHOT: Project tab after dropping a funscript. Waveform chart visible, stats row showing duration and action count. Caption: "Drop your funscript and see its motion structure instantly." -->
+![Project tab with funscript loaded](../guide/media/screenshots/01-project-loaded.png)
+*Drop your funscript and see its motion structure instantly.*
 
 **Export location** is auto-filled based on your filename. Change it if you want.
 
@@ -46,7 +47,8 @@ On the **Device** tab, check the devices you own:
 - **Mechanical**: The Handy, OSR2/SR6, Intiface (generic)
 - **Estim**: Legacy 2b/312, Stereostim, FOC-Stim, NeoStim
 
-<!-- SCREENSHOT: Device tab with "The Handy" checked. Device limits table showing max speed, groove slider at 0.35. Caption: "Check your device. FunscriptForge shows its limits and applies a safety backstop." -->
+![Device tab with limits table](../guide/media/screenshots/02-device-limits.png)
+*Check your device. FunscriptForge shows its limits and applies a safety backstop.*
 
 FunscriptForge shows a **device limits table** and a **side-by-side preview** (original vs. device-aware). The **Groove** slider adds natural timing variation — 0.35 matches expert hand-scripted scripts.
 
@@ -67,7 +69,8 @@ On the **Tone** tab, pick how your output should feel. Six tones from softest to
 | **Climax** | Maximum everything |
 | **Dominant** | Fast, wide, relentless |
 
-<!-- SCREENSHOT: Tone tab with suggestion bubbles visible. "Build" selected with green border. Caption: "FunscriptForge suggests two tones. Pick one, or browse all six." -->
+![Tone tab with suggestion bubbles](../guide/media/screenshots/05-tone-cards.png)
+*FunscriptForge suggests two tones. Pick one, or browse all six.*
 
 FunscriptForge suggests a **Best match** and a **Most variety** tone based on your funscript's motion profile. Click a card to read its description, then click **Select**.
 
@@ -88,7 +91,8 @@ On the **Export** tab, you'll see:
 
 For your first export, accept the defaults. Click **Export All**.
 
-<!-- SCREENSHOT: Export tab after export completes. Status showing files written with checkmarks. Caption: "Export writes device-specific files to your output folder." -->
+![Export tab options](../guide/media/screenshots/12-export-options.png)
+*Export writes device-specific files to your output folder.*
 
 FunscriptForge writes a self-contained folder:
 

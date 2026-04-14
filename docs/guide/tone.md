@@ -19,7 +19,8 @@ Six tones, ordered from softest to most intense. Each one changes how transforms
 | **Climax** | Everything, now | Full power, full stroke range, urgent pacing. Every beat hits hard. For peak moments, finales, and scenes where restraint is wrong. |
 | **Dominant** | Driving, relentless | Fast, wide, assertive. The device leads and the user follows. Relentless rhythm, no breaks. For content where the scene is in control. |
 
-<!-- SCREENSHOT: All six tone cards in a row, with "Tease" selected (purple border, checkmark). Caption: "Six tones from Tender to Dominant. Click to see the description, then Select." -->
+![Six tone cards with suggestion bubbles](media/screenshots/05-tone-cards.png)
+*Six tones from Tender to Dominant. Suggestion bubbles highlight the best match and most variety.*
 
 ---
 
@@ -47,7 +48,7 @@ Suggestion bubbles appear above the cards with colored arrows pointing to the re
 
 You can always ignore the suggestions and pick any tone.
 
-<!-- SCREENSHOT: Tone tab with dual suggestion bubbles visible — "Best match" over Build and "Most variety" over Dominant. Caption: "FunscriptForge suggests two tones based on your funscript's motion profile." -->
+<!-- Suggestion bubbles are visible in the cards screenshot above -->
 
 ---
 
@@ -88,7 +89,8 @@ Below the sliders, a side-by-side chart shows:
 
 The preview updates live as you change the tone or adjust sliders.
 
-<!-- SCREENSHOT: Before/After preview charts — left shows flat uniform motion, right shows shaped dynamics with the Tease tone. Caption: "Tease adds push-pull dynamics. The preview updates live." -->
+![Tone before/after preview](media/screenshots/06-tone-preview.png)
+*The preview updates live as you select a tone and adjust sliders.*
 
 ---
 

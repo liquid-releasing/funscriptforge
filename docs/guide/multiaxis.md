@@ -66,7 +66,8 @@ Five presets are available. Each one maps the secondary axes to algorithms that 
 
 ## Per-phrase assignment
 
-<!-- SCREENSHOT: Multi-axis phrase table showing 6 phrases with style dropdowns. P1 = Cowgirl, P2 = Missionary, P3 = None, P4 = Riding, P5 = Random, P6 = Cowgirl. Caption: "Assign a position style per phrase. Each style generates different secondary axis motion." -->
+![Multi-axis style table](media/screenshots/11-multiaxis-styles.png)
+*Assign a position style per phrase. Each style generates different secondary axis motion.*
 
 The table shows every phrase with its time, duration, BPM, and behavioral tag. The **Multi-axis style** dropdown lets you pick a different style per phrase.
 

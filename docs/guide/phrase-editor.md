@@ -13,7 +13,8 @@ From the **Phrases** tab:
 
 The tab switches from Phrase Selector view to Phrase Editor view.
 
-<!-- SCREENSHOT: Phrase Selector with the cursor hovering over a phrase band on the chart. The phrase is highlighted/outlined. Caption: "Click any phrase band on the chart to open it in the Phrase Editor." -->
+![Phrase Selector with phrase bands](media/screenshots/07-phrases-selector.png)
+*Click any phrase band on the chart to open it in the Phrase Editor.*
 
 ---
 
@@ -27,7 +28,8 @@ The Phrase Editor has two columns:
 [   Preview chart        ] [   Parameter sliders       ]
 ```
 
-<!-- SCREENSHOT: Full Phrase Editor layout. Left three-quarters: stacked Baseline and Preview charts showing a phrase with context dimmed. Right quarter: transform dropdown, parameter sliders. Navigation buttons below. Caption: "The Phrase Editor. Baseline on top, live preview below. Controls on the right." -->
+![Phrase Editor layout](media/screenshots/08-phrase-editor.png)
+*The Phrase Editor. Baseline on top, live preview below. Controls on the right.*
 
 **Baseline chart** — the phrase after all previously accepted transforms (or the original if this is the first edit). Context on either side is dimmed so focus stays on the current phrase.
 

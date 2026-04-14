@@ -6,7 +6,8 @@ The Export tab is the last stop in the FunscriptForge workflow. It writes the fi
 
 ## Layout
 
-<!-- SCREENSHOT: Export tab overview. Top: export preview chart. Middle: collapsed Export options + Completed/Recommended transform expanders. Then: Export devices section with two checkbox groups (Mechanical / Estim). Bottom: Export to folder section with Export All + Open folder buttons. Caption: "The Export tab. Pick devices, review the preview, then Export All." -->
+![Export tab options](media/screenshots/12-export-options.png)
+*The Export tab. Pick devices, review the preview, then Export All.*
 
 The tab is laid out top-to-bottom in the order you read it:
 
