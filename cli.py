@@ -913,13 +913,21 @@ def cmd_export_plan(args):
 @_cli_command
 def cmd_test(_args):
     import unittest  # keep lazy: avoids paying unittest discovery overhead for other commands
-    root = os.path.dirname(__file__)
+    root = os.path.dirname(os.path.abspath(__file__))
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
     # Core pipeline tests
-    suite.addTests(loader.discover(start_dir=os.path.join(root, "tests"), pattern="test_*.py"))
+    suite.addTests(loader.discover(
+        start_dir=os.path.join(root, "tests"),
+        pattern="test_*.py",
+        top_level_dir=root,
+    ))
     # UI common-layer tests
-    suite.addTests(loader.discover(start_dir=os.path.join(root, "ui", "common", "tests"), pattern="test_*.py"))
+    suite.addTests(loader.discover(
+        start_dir=os.path.join(root, "ui", "common", "tests"),
+        pattern="test_*.py",
+        top_level_dir=root,
+    ))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     sys.exit(0 if result.wasSuccessful() else 1)
