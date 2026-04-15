@@ -3,10 +3,10 @@ name: Release Builds
 on:
   push:
     tags:
-      - "v*"          # Trigger on version tags like v1.0.0
+      - "v*"
 
 permissions:
-  contents: write     # Needed to create a GitHub Release and upload assets
+  contents: write
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -17,8 +17,22 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout funscript-updater
         uses: actions/checkout@v4
+        with:
+          path: funscript-updater
+
+      - name: Checkout funscript-tools (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/funscript-tools
+          path: funscript-tools
+
+      - name: Checkout forge-ui-components (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/forge-ui-components
+          path: forge-ui-components
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -26,18 +40,24 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
+        working-directory: funscript-updater
         run: |
-          python -m pip install --upgrade pip pyinstaller
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r ui/streamlit/requirements.txt
+          pip install -r requirements-desktop.txt
+          pip install -e ../forge-ui-components
 
       - name: Run tests
+        working-directory: funscript-updater
         run: python cli.py test
 
       - name: Build with PyInstaller
-        run: pyinstaller funscript_forge.spec --noconfirm
+        working-directory: funscript-updater
+        run: pyinstaller FunscriptForge.spec --noconfirm --clean
 
       - name: Verify build
+        working-directory: funscript-updater
         run: |
           if (!(Test-Path "dist\FunscriptForge\FunscriptForge.exe")) {
             Write-Error "Build artifact not found"
@@ -45,14 +65,14 @@ jobs:
           }
 
       - name: Zip artifact
-        run: |
-          Compress-Archive -Path dist\FunscriptForge -DestinationPath dist\FunscriptForge-windows.zip
+        working-directory: funscript-updater
+        run: Compress-Archive -Path dist\FunscriptForge -DestinationPath dist\FunscriptForge-windows.zip
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: FunscriptForge-windows
-          path: dist/FunscriptForge-windows.zip
+          path: funscript-updater/dist/FunscriptForge-windows.zip
 
   # ---------------------------------------------------------------------------
   # macOS build
@@ -62,8 +82,22 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout funscript-updater
         uses: actions/checkout@v4
+        with:
+          path: funscript-updater
+
+      - name: Checkout funscript-tools (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/funscript-tools
+          path: funscript-tools
+
+      - name: Checkout forge-ui-components (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/forge-ui-components
+          path: forge-ui-components
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -71,15 +105,20 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
+        working-directory: funscript-updater
         run: |
-          python -m pip install --upgrade pip pyinstaller
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r ui/streamlit/requirements.txt
+          pip install -r requirements-desktop.txt
+          pip install -e ../forge-ui-components
 
       - name: Run tests
+        working-directory: funscript-updater
         run: python cli.py test
 
       - name: Generate .icns icon
+        working-directory: funscript-updater
         run: |
           ICO_SRC="media/anvil.png"
           ICNS_OUT="media/funscriptforge.icns"
@@ -97,25 +136,32 @@ jobs:
           fi
 
       - name: Build with PyInstaller
-        run: pyinstaller funscript_forge.spec --noconfirm
+        working-directory: funscript-updater
+        run: pyinstaller FunscriptForge.spec --noconfirm --clean
 
       - name: Verify build
+        working-directory: funscript-updater
         run: |
-          if [ ! -d "dist/FunscriptForge.app" ]; then
+          if [ ! -d "dist/FunscriptForge.app" ] && [ ! -d "dist/FunscriptForge" ]; then
             echo "Build artifact not found"
             exit 1
           fi
 
       - name: Zip artifact
+        working-directory: funscript-updater
         run: |
           cd dist
-          zip -r FunscriptForge-macos.zip FunscriptForge.app
+          if [ -d "FunscriptForge.app" ]; then
+            zip -r FunscriptForge-macos.zip FunscriptForge.app
+          else
+            zip -r FunscriptForge-macos.zip FunscriptForge
+          fi
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: FunscriptForge-macos
-          path: dist/FunscriptForge-macos.zip
+          path: funscript-updater/dist/FunscriptForge-macos.zip
 
   # ---------------------------------------------------------------------------
   # Linux build
@@ -125,8 +171,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout funscript-updater
         uses: actions/checkout@v4
+        with:
+          path: funscript-updater
+
+      - name: Checkout funscript-tools (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/funscript-tools
+          path: funscript-tools
+
+      - name: Checkout forge-ui-components (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/forge-ui-components
+          path: forge-ui-components
+
+      - name: Install system dependencies (PyWebView GTK backend)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-gi \
+            gir1.2-gtk-3.0 \
+            gir1.2-webkit2-4.1 \
+            libgirepository1.0-dev \
+            libcairo2-dev
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -134,18 +204,24 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
+        working-directory: funscript-updater
         run: |
-          python -m pip install --upgrade pip pyinstaller
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r ui/streamlit/requirements.txt
+          pip install -r requirements-desktop.txt
+          pip install -e ../forge-ui-components
 
       - name: Run tests
+        working-directory: funscript-updater
         run: python cli.py test
 
       - name: Build with PyInstaller
-        run: pyinstaller funscript_forge.spec --noconfirm
+        working-directory: funscript-updater
+        run: pyinstaller FunscriptForge.spec --noconfirm --clean
 
       - name: Verify build
+        working-directory: funscript-updater
         run: |
           if [ ! -f "dist/FunscriptForge/FunscriptForge" ]; then
             echo "Build artifact not found"
@@ -153,14 +229,14 @@ jobs:
           fi
 
       - name: Create tarball
-        run: |
-          tar -czf dist/FunscriptForge-linux.tar.gz -C dist FunscriptForge
+        working-directory: funscript-updater
+        run: tar -czf dist/FunscriptForge-linux.tar.gz -C dist FunscriptForge
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: FunscriptForge-linux
-          path: dist/FunscriptForge-linux.tar.gz
+          path: funscript-updater/dist/FunscriptForge-linux.tar.gz
 
   # ---------------------------------------------------------------------------
   # Create GitHub Release with all artifacts
@@ -194,6 +270,7 @@ jobs:
         with:
           repository: liquid-releasing/funscriptforge-releases
           token: ${{ secrets.RELEASES_PAT }}
+          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
           files: |
             artifacts/FunscriptForge-windows.zip
             artifacts/FunscriptForge-macos.zip
