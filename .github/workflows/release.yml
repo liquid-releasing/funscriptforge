@@ -268,14 +268,35 @@ jobs:
           name: FunscriptForge-linux
           path: artifacts/
 
+      - name: Compute release name
+        id: relname
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # Strip leading "v" and turn "-alpha"/"-beta"/"-rc" into a spaced suffix
+          STRIPPED="${TAG#v}"
+          NAME="FunscriptForge ${STRIPPED//-/ }"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Release name: $NAME"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           repository: liquid-releasing/funscriptforge-releases
           token: ${{ secrets.RELEASES_PAT }}
-          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
+          name: ${{ steps.relname.outputs.name }}
+          prerelease: false
           files: |
             artifacts/FunscriptForge-windows.zip
             artifacts/FunscriptForge-macos.zip
             artifacts/FunscriptForge-linux.tar.gz
+          body: |
+            > ⚠️ **Alpha release.** This build is under active development. Expect rough edges, incomplete features, and occasional breakage. Feedback is welcome.
+
+            ## Downloads
+            - **Windows** — `FunscriptForge-windows.zip` — unzip and run `FunscriptForge.exe`
+            - **macOS** — `FunscriptForge-macos.zip` — unzip and open `FunscriptForge.app`
+            - **Linux** — `FunscriptForge-linux.tar.gz` — extract and run `FunscriptForge/FunscriptForge`
+
+            See [the documentation](https://liquid-releasing.github.io/funscriptforge/) and [funscriptforge.com](https://funscriptforge.com) for usage.
+          append_body: true
           generate_release_notes: true
