@@ -32,7 +32,7 @@ The process of rendering stereo WAV files from estim channel funscripts. Funscri
 ## B
 
 **Behavioral tag**
-A label assigned to a phrase by the behavioral classifier. Describes the dominant motion characteristic. Phrases without a tag are well-formed. The eight tags are: stingy, giggle, plateau, drift, half_stroke, drone, lazy, frantic.
+A label assigned to a phrase by the behavioral classifier. Describes the dominant motion characteristic. Phrases without a tag are well-formed. The ten tags are: stingy, giggle, plateau, drift, half_stroke, drone, lazy, frantic, ramp, ambient.
 
 **Beta channel**
 The second estim channel funscript produced by funscript-tools. Controls the other dimension of the 3-phase stimulation field. File: `{stem}.beta.funscript`.

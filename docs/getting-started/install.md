@@ -106,7 +106,7 @@ with 📋 — no path to paste, no file to find.
 
 | File | What it shows |
 | --- | --- |
-| 📋 `big_buck_bunny.raw.funscript` | A deliberately broken script — all 8 behavioral problems present across 16 phrases. |
+| 📋 `big_buck_bunny.raw.funscript` | A deliberately broken script — every behavioral tag category represented across 16 phrases. |
 | 📋 `big_buck_bunny.forged.funscript` | The same script after forging — each issue corrected. |
 
 Select either one from the sidebar to load it instantly and see the full app in action.

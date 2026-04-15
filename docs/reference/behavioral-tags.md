@@ -129,6 +129,30 @@ A phrase can have more than one tag. The tags are not mutually exclusive.
 
 ---
 
+### ramp
+
+**What it is:** The center of gravity shifts significantly across the phrase — motion builds from low-to-high or winds down from high-to-low intensity.
+
+**Detection:** Absolute center-of-gravity delta > 20 position units, amplitude span > 15, duration > 3 s.
+
+**The problem:** The progression is there but may be uneven — a rough escalation rather than a shaped arc.
+
+**Fix:** **Funnel** shapes the energy arc from start to end position, making the build smooth and visually ordered.
+
+---
+
+### ambient
+
+**What it is:** Very low BPM and minimal amplitude over a longer span — a transition or filler section between active phrases.
+
+**Detection:** BPM < 40, amplitude span < 25, duration > 5 s.
+
+**The problem:** The section is barely there. Not necessarily wrong — ambient sections provide breathing room — but it may feel aimless unless given intentional shape.
+
+**Fix:** **Waiting** or **Drift** transforms give the section an intentional pattern. If the quiet is deliberate, **Passthrough** is appropriate.
+
+---
+
 ## No tag
 
 Phrases without a tag are well-formed. The amplitude, centering, tempo, and dynamics are all within normal parameters.
@@ -149,6 +173,8 @@ The Export tab still suggests a transform for untagged phrases (usually **Amplit
 | drone | any | any | any | > 90 s, low variation | Beat Accent or Boost Contrast |
 | lazy | < 50 | any | < 60 | any | Amplitude Scale ↑ |
 | frantic | any | any | > 200 | any | Halve Tempo |
+| ramp | > 15 | shifts > 20 across phrase | any | > 3 s | Funnel |
+| ambient | < 25 | any | < 40 | > 5 s | Waiting or Drift |
 
 ---
 
