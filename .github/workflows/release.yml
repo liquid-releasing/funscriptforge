@@ -122,7 +122,7 @@ jobs:
       - name: Generate .icns icon
         working-directory: funscript-updater
         run: |
-          ICO_SRC="media/anvil.png"
+          ICO_SRC="media/funscriptforge_icon.png"
           ICNS_OUT="media/funscriptforge.icns"
           if [ -f "$ICO_SRC" ] && [ ! -f "$ICNS_OUT" ]; then
             ICONSET_DIR="$(mktemp -d)/FunscriptForge.iconset"

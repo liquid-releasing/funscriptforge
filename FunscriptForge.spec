@@ -160,6 +160,15 @@ binaries = list(streamlit_binaries)
 # ── PyInstaller pipeline ───────────────────────────────────────────────
 block_cipher = None
 
+# Platform-specific icon resolution
+if sys.platform == "win32":
+    _icon_path = str(APP_DIR / "media" / "funscriptforge.ico")
+elif sys.platform == "darwin":
+    _icns = APP_DIR / "media" / "funscriptforge.icns"
+    _icon_path = str(_icns) if _icns.exists() else None
+else:
+    _icon_path = None
+
 a = Analysis(
     ["desktop.py"],
     pathex=[str(APP_DIR), str(FUC_SIBLING)],
@@ -206,7 +215,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # TODO: add assets/icon.ico
+    icon=_icon_path,
 )
 
 coll = COLLECT(
@@ -225,7 +234,7 @@ if sys.platform == "darwin":
     app = BUNDLE(
         coll,
         name="FunscriptForge.app",
-        icon=None,
+        icon=_icon_path,
         bundle_identifier="com.liquidreleasing.funscriptforge",
     )
 
