@@ -5,21 +5,54 @@
 All FunscriptForge code imports funscript-tools through this module.
 Zero direct imports from the funscript-tools repo elsewhere.
 
-The sibling repo is expected at ../funscript-tools relative to the
-project root.  If missing, AVAILABLE is False and the stim tab
-should be disabled gracefully.
+Resolution order for the funscript-tools location:
+  1. ``FUNSCRIPT_TOOLS_ROOT`` env var — explicit override
+  2. PyInstaller bundle: ``sys._MEIPASS/_vendored/funscript_tools/``
+     (or same folder as executable in onefolder mode)
+  3. Sibling clone at ``../funscript-tools`` — dev default
+
+If none of those resolve, AVAILABLE is False and the stim tab should
+be disabled gracefully.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-# ── Locate the sibling repo ───────────────────────────────────────────
+# ── Locate funscript-tools (env override → bundle → sibling clone) ───
 
-_FT_ROOT = Path(__file__).resolve().parents[1].parent / "funscript-tools"
-AVAILABLE = (_FT_ROOT / "cli.py").exists()
+
+def _locate_funscript_tools() -> Path | None:
+    # 1. Explicit env var override
+    env = os.environ.get("FUNSCRIPT_TOOLS_ROOT")
+    if env:
+        p = Path(env).resolve()
+        if (p / "cli.py").exists():
+            return p
+
+    # 2. PyInstaller bundle
+    if getattr(sys, "frozen", False):
+        meipass = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        for candidate in (
+            meipass / "_vendored" / "funscript_tools",
+            Path(sys.executable).parent / "_vendored" / "funscript_tools",
+        ):
+            if (candidate / "cli.py").exists():
+                return candidate
+
+    # 3. Sibling clone (dev default)
+    sibling = Path(__file__).resolve().parents[1].parent / "funscript-tools"
+    if (sibling / "cli.py").exists():
+        return sibling
+
+    return None
+
+
+_FT_ROOT = _locate_funscript_tools()
+AVAILABLE = _FT_ROOT is not None
 
 # ── Lazy imports from funscript-tools cli.py ──────────────────────────
 
@@ -31,10 +64,11 @@ def _ensure_cli():
     global _cli
     if _cli is not None:
         return _cli
-    if not AVAILABLE:
+    if not AVAILABLE or _FT_ROOT is None:
         raise ImportError(
-            f"funscript-tools not found at {_FT_ROOT}. "
-            "Clone it as a sibling: git clone <repo> ../funscript-tools"
+            "funscript-tools not found. Set FUNSCRIPT_TOOLS_ROOT, "
+            "clone it as a sibling (git clone <repo> ../funscript-tools), "
+            "or install the bundled desktop app."
         )
     if str(_FT_ROOT) not in sys.path:
         sys.path.insert(0, str(_FT_ROOT))

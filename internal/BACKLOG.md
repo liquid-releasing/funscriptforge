@@ -6,6 +6,27 @@ Items are loosely ordered by dependency and value. Move to DONE when shipped.
 
 ## Open — v1 Ship
 
+### Desktop app — native file picker for funscript input
+
+When running as the desktop app, replace Streamlit's drag-and-drop uploader
+with PyWebView's native OS file dialog. Two benefits:
+
+1. **Real disk paths**: Streamlit's uploader writes to a temp folder, so
+   the derived export location is also in temp. Native dialog returns the
+   real path; export defaults to a sibling folder of the funscript.
+2. **Native UX**: matches OS conventions (recent files, favorites, etc.).
+
+Detection: launcher can set `FUNSCRIPTFORGE_DESKTOP=1` env var; Project tab
+reads it and switches the uploader widget to a button that triggers
+`webview.windows[0].create_file_dialog(webview.OPEN_DIALOG, ...)`.
+
+Fallback: web/dev mode keeps the existing drag-and-drop uploader.
+
+Reference: `internal/design/desktop_app.md` — "Why we want this" section
+already flags this as a motivating problem for the desktop app.
+
+---
+
 ### Code signing for desktop app
 
 Sign the Windows `.exe` and macOS `.app` to eliminate SmartScreen/Gatekeeper
