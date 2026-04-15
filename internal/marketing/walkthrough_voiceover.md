@@ -27,7 +27,7 @@ beat) — usually between scenes.
 
 ## Script 1 — Mechanical (The Handy)
 
-**Total time**: ~3:00 ‖ **Word count**: ~440
+**Total time**: ~4:00 ‖ **Word count**: ~620
 
 ---
 
@@ -61,7 +61,25 @@ I'll go with Build. ‖ Intensity grows phrase by phrase toward the end — work
 
 Before-and-after preview updates live. ‖ The output is already re-clamped to the Handy's limits — tone never breaks device safety.
 
-Accept, ‖ scroll to top. ‖ I'll skip Phrases and Patterns for the demo — those are for fine-tuning individual sections — and go straight to Export.
+Accept, ‖ scroll to top. ‖ The next two tabs are optional — they're for users who want to fine-tune individual sections — but I'll walk through them quickly so you know what they do.
+
+‖‖
+
+The Phrases tab shows your funscript broken into meaningful sections. ‖ Each band on the chart is one phrase, ‖ and each row in the table tells me its tag — ‖ stingy, ‖ plateau, ‖ lazy, ‖ drift, ‖ half-stroke, ‖ drone, ‖ frantic, ‖ or giggle. ‖ These are the eight things that make a script feel wrong.
+
+I'll click on a giggle phrase. ‖ Giggle means the device is barely moving — tiny oscillations centered around fifty. ‖ The Phrase Editor opens with a baseline chart on top and a live preview below.
+
+I pick Normalize Range. ‖ The preview instantly fills the full range — from a tremor to a real stroke. ‖ If I liked it, I'd click Done. ‖ I can chain multiple transforms on one phrase if I need to layer fixes.
+
+Done. ‖ Scroll to top, ‖ Patterns tab.
+
+‖‖
+
+Patterns is the batch version. ‖ Instead of fixing one phrase at a time, ‖ I pick a behavior tag and fix every instance at once.
+
+I'll click Plateau. ‖ Every plateau phrase highlights on the chart, ‖ and the table below lists each one. ‖ I pick a transform — Amplitude Scale at one point five — ‖ and click Apply to all instances. ‖ Every plateau phrase gets the same fix in one click. ‖ Saves a ton of time on long scripts.
+
+Apply, ‖ scroll to top, ‖ Export.
 
 ‖‖
 
@@ -75,13 +93,13 @@ Last tab: ‖ Next Steps. ‖ It tells me exactly how to play the file on my dev
 
 ‖‖
 
-Four tabs. ‖ No Python, ‖ no terminal, ‖ no configuration. ‖ Download link's below — funscriptforge dot com.
+Nine tabs total — but four for a quick run, ‖ more if you want to fine-tune. ‖ No Python, ‖ no terminal, ‖ no configuration. ‖ Download link's below — funscriptforge dot com.
 
 ---
 
 ## Script 2 — Estim (Stereostim + Audio)
 
-**Total time**: ~3:00 ‖ **Word count**: ~430
+**Total time**: ~4:00 ‖ **Word count**: ~590
 
 ---
 
@@ -105,7 +123,25 @@ Groove stays at the default. ‖ Accept, ‖ scroll to top.
 
 Pick a tone. ‖ Same six moods for estim as for mechanical — FunscriptForge handles the translation under the hood. ‖ I'll pick Tease — it adds push-pull dynamics that work really well on estim.
 
-Accept, ‖ scroll to top.
+Accept, ‖ scroll to top. ‖ Two optional tabs are next — Phrases and Patterns — for fine-tuning. ‖ I'll show you both quickly.
+
+‖‖
+
+Phrases tab. ‖ Each band on the chart is one section, ‖ labeled with a behavior tag — ‖ stingy, ‖ plateau, ‖ lazy, ‖ drift, ‖ half-stroke, ‖ drone, ‖ frantic, ‖ or giggle. ‖ The eight things that make a script feel wrong.
+
+I click on a giggle phrase — ‖ the device is barely moving. ‖ The Phrase Editor opens with a baseline chart on top and a live preview below.
+
+I pick Normalize Range and the preview fills the full range. ‖ From a tremor to a real stroke. ‖ Click Done to save.
+
+Done. ‖ Scroll to top, ‖ Patterns tab.
+
+‖‖
+
+Patterns is the batch version. ‖ Pick a tag and fix every matching phrase at once.
+
+I click Plateau, ‖ pick Amplitude Scale at one point five, ‖ and apply to all instances. ‖ Every plateau phrase gets the same fix. ‖ Saves a ton of time on long scripts.
+
+Scroll to top. ‖ Stim tab.
 
 ‖‖
 
@@ -129,7 +165,7 @@ Last tab: ‖ Next Steps tells me exactly how to play it. ‖ For FOC-Stim or Ne
 
 ‖‖
 
-Four tabs. ‖ Real audio, ‖ real estim, ‖ no Python. ‖ Download link's below.
+Real audio, ‖ real estim, ‖ no Python. ‖ Download link's below.
 
 ---
 

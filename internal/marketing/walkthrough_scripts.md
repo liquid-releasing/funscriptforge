@@ -102,13 +102,62 @@ toward the end — works well for scenes that escalate."
 already re-clamped to the Handy's limits — tone never breaks device
 safety."
 
-> *Visual: Click Accept. Scroll to top. Click Export.*
+> *Visual: Click Accept. Scroll to top. Click Phrases.*
 
-**Voiceover**: "Accept, scroll to top. I'll skip Phrases and Patterns
-for the demo — those are for fine-tuning individual sections — and go
-straight to Export."
+**Voiceover**: "Accept, scroll to top. The next two tabs are optional —
+they're for users who want to fine-tune individual sections — but I'll
+walk through them quickly so you know what they do."
 
-### Scene 6 — Export (2:10 – 2:40)
+### Scene 6 — Phrases tab (2:10 – 2:40)
+
+> *Visual: Phrases tab. Phrase Selector view: full waveform with phrase
+> bands overlaid, table below listing every phrase with its tag.*
+
+**Voiceover**: "The Phrases tab shows your funscript broken into
+meaningful sections. Each band on the chart is one phrase, and each row
+in the table tells me its tag — stingy, plateau, lazy, drift,
+half-stroke, drone, frantic, or giggle. These are the eight things that
+make a script feel wrong."
+
+> *Visual: Click on a giggle phrase row.*
+
+**Voiceover**: "I'll click on a giggle phrase. Giggle means the device
+is barely moving — tiny oscillations centered around fifty. The Phrase
+Editor opens with a baseline chart on top and a live preview below."
+
+> *Visual: Open transform dropdown. Pick Normalize Range.*
+
+**Voiceover**: "I pick Normalize Range. The preview instantly fills the
+full range — from a tremor to a real stroke. If I liked it, I'd click
+Done. I can chain multiple transforms on one phrase if I need to layer
+fixes."
+
+> *Visual: Click Done. Scroll to top. Click Patterns.*
+
+**Voiceover**: "Done. Scroll to top, Patterns tab."
+
+### Scene 7 — Patterns tab (2:40 – 3:10)
+
+> *Visual: Patterns tab. Tag buttons on the left with counts.*
+
+**Voiceover**: "Patterns is the batch version. Instead of fixing one
+phrase at a time, I pick a behavior tag and fix every instance at once."
+
+> *Visual: Click on a Plateau tag with multiple instances. Chart
+> highlights matching phrases. Instance table populates.*
+
+**Voiceover**: "I'll click Plateau. Every plateau phrase highlights on
+the chart, and the table below lists each one. I pick a transform —
+Amplitude Scale at one point five — and click Apply to all instances.
+Every plateau phrase gets the same fix in one click. Saves a ton of
+time on long scripts."
+
+> *Visual: Apply to all. Rows update with the transform name. Scroll to
+> top. Click Export.*
+
+**Voiceover**: "Apply, scroll to top, Export."
+
+### Scene 8 — Export (3:10 – 3:40)
 
 > *Visual: Export tab. Velocity-colored preview chart. Scroll to show
 > Export options and device checkboxes. The Handy is already selected.*
@@ -125,7 +174,7 @@ self-contained folder: the device-safe funscript, a heatmap, and a
 forge log that records exactly what was changed. Open folder opens
 it in Explorer."
 
-### Scene 7 — Next Steps + close (2:40 – 3:00)
+### Scene 9 — Next Steps + close (3:40 – 4:00)
 
 > *Visual: Click Next Steps tab. Playback guide for The Handy expanded.*
 
@@ -135,8 +184,9 @@ use ScriptPlayer to sync with video."
 
 > *Visual: Cut to title card: FunscriptForge + download link + docs link.*
 
-**Voiceover**: "Four tabs. No Python, no terminal, no configuration.
-Download link's below — FunscriptForge dot com."
+**Voiceover**: "Nine tabs total — but four for a quick run, more if you
+want to fine-tune. No Python, no terminal, no configuration. Download
+link's below — funscriptforge dot com."
 
 ---
 
@@ -194,9 +244,53 @@ and runs the device-aware pass."
 
 > *Visual: Before/after preview. Click Accept. Scroll to top.*
 
-**Voiceover**: "Accept, scroll to top."
+**Voiceover**: "Accept, scroll to top. Two optional tabs are next —
+Phrases and Patterns — for fine-tuning. I'll show you both quickly."
 
-### Scene 6 — Stim tab (1:45 – 2:15)
+### Scene 6 — Phrases tab (1:45 – 2:15)
+
+> *Visual: Phrases tab. Phrase Selector with phrase bands and a table
+> below listing each phrase with its tag.*
+
+**Voiceover**: "Phrases tab. Each band on the chart is one section,
+labeled with a behavior tag — stingy, plateau, lazy, drift, half-stroke,
+drone, frantic, or giggle. The eight things that make a script feel
+wrong."
+
+> *Visual: Click on a giggle phrase row.*
+
+**Voiceover**: "I click on a giggle phrase — the device is barely
+moving. The Phrase Editor opens with a baseline chart on top and a
+live preview below."
+
+> *Visual: Open transform dropdown. Pick Normalize Range.*
+
+**Voiceover**: "I pick Normalize Range and the preview fills the full
+range. From a tremor to a real stroke. Click Done to save."
+
+> *Visual: Click Done. Scroll to top. Click Patterns.*
+
+**Voiceover**: "Done. Scroll to top, Patterns tab."
+
+### Scene 7 — Patterns tab (2:15 – 2:40)
+
+> *Visual: Patterns tab. Tag buttons with counts on the left.*
+
+**Voiceover**: "Patterns is the batch version. Pick a tag and fix every
+matching phrase at once."
+
+> *Visual: Click Plateau. Chart highlights instances. Pick Amplitude
+> Scale 1.5 in the instance detail. Click Apply to all instances.*
+
+**Voiceover**: "I click Plateau, pick Amplitude Scale at one point five,
+and apply to all instances. Every plateau phrase gets the same fix.
+Saves a ton of time on long scripts."
+
+> *Visual: Scroll to top. Click Stim.*
+
+**Voiceover**: "Scroll to top. Stim tab."
+
+### Scene 8 — Stim tab (2:40 – 3:10)
 
 > *Visual: Stim tab. Five character cards visible — Gentle, Reactive,
 > Scene Builder, Unpredictable, Balanced. Click on Reactive.*
@@ -210,7 +304,7 @@ action closely, wide arc, instant response. Good for high-energy content."
 **Voiceover**: "Accept. This runs funscript-tools in the background
 to generate the channel files. Scroll to top."
 
-### Scene 7 — Export (2:15 – 2:40)
+### Scene 9 — Export (3:10 – 3:40)
 
 > *Visual: Export tab. Scroll to show the "Include estim audio files
 > (WAV)" checkbox. Show it's already on.*
@@ -235,7 +329,7 @@ stimulation signal itself. Connect your estim device to your computer's
 audio output, hit play in any media player, and sync to video with
 MultiFunPlayer or ScriptPlayer."
 
-### Scene 8 — Next Steps + close (2:40 – 3:00)
+### Scene 10 — Next Steps + close (3:40 – 4:00)
 
 > *Visual: Next Steps tab. Expand the estim audio guide section.*
 
@@ -245,8 +339,8 @@ For FOC-Stim or NeoStim users, there's a separate guide using restim
 
 > *Visual: Title card: FunscriptForge + download link + docs link.*
 
-**Voiceover**: "Four tabs. Real audio, real estim, no Python. Download
-link's below."
+**Voiceover**: "Real audio, real estim, no Python. Download link's
+below."
 
 ---
 
