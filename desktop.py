@@ -6,6 +6,13 @@ Starts the Streamlit server in a background subprocess and opens a
 PyWebView window pointed at it. Tears down the server when the window
 closes.
 
+Dual mode:
+  - Dev (not frozen): spawns `python -m streamlit run app.py`
+  - Bundled (frozen): re-invokes `sys.executable --run-streamlit ...`
+    which triggers in-process Streamlit via streamlit.web.cli.main().
+    This is the PyInstaller+Streamlit pattern: the frozen executable
+    cannot be used as a Python interpreter, so we use a sentinel arg.
+
 Usage (development):
     python desktop.py
 
@@ -31,6 +38,10 @@ APP_NAME = "FunscriptForge"
 WINDOW_WIDTH = 1400
 WINDOW_HEIGHT = 900
 STARTUP_TIMEOUT_S = 30
+
+# Sentinel arg: in bundled mode, the launcher re-invokes itself with this
+# flag to trigger in-process Streamlit. Never passed by users.
+RUN_STREAMLIT_FLAG = "--run-streamlit"
 
 
 def _app_dir() -> Path:
@@ -66,14 +77,9 @@ def _wait_for_server(url: str, timeout_s: int) -> bool:
     return False
 
 
-def _start_streamlit(app_dir: Path, port: int) -> subprocess.Popen:
-    """Launch Streamlit as a subprocess on the given port."""
-    app_script = app_dir / "ui" / "streamlit" / "app.py"
-    if not app_script.exists():
-        raise FileNotFoundError(f"Streamlit app not found: {app_script}")
-
+def _streamlit_env() -> dict:
+    """Return env vars that configure Streamlit for desktop/headless mode."""
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(app_dir) + os.pathsep + env.get("PYTHONPATH", "")
     # Disable Streamlit's file watcher — bundled apps don't need it and it
     # can crash on read-only locations inside the bundle.
     env["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
@@ -83,22 +89,49 @@ def _start_streamlit(app_dir: Path, port: int) -> subprocess.Popen:
     # Hide the "Deploy" button (Streamlit Community Cloud) — irrelevant
     # for a desktop app and confusing to users.
     env["STREAMLIT_CLIENT_TOOLBAR_MODE"] = "minimal"
+    # Signal to app code that it's running inside the desktop wrapper.
+    env["FUNSCRIPTFORGE_DESKTOP"] = "1"
+    return env
 
-    cmd = [
-        sys.executable,
-        "-m",
-        "streamlit",
-        "run",
-        str(app_script),
-        "--server.port",
-        str(port),
-        "--server.address",
-        "127.0.0.1",
-        "--server.headless",
-        "true",
-        "--browser.gatherUsageStats",
-        "false",
-    ]
+
+def _start_streamlit(app_dir: Path, port: int) -> subprocess.Popen:
+    """Launch Streamlit as a subprocess on the given port.
+
+    Dev mode: `python -m streamlit run app.py ...`
+    Bundled mode: `FunscriptForge.exe --run-streamlit app.py port`
+    """
+    app_script = app_dir / "ui" / "streamlit" / "app.py"
+    if not app_script.exists():
+        raise FileNotFoundError(f"Streamlit app not found: {app_script}")
+
+    env = _streamlit_env()
+    env["PYTHONPATH"] = str(app_dir) + os.pathsep + env.get("PYTHONPATH", "")
+
+    if getattr(sys, "frozen", False):
+        # Bundled: re-invoke self with sentinel arg
+        cmd = [
+            sys.executable,
+            RUN_STREAMLIT_FLAG,
+            str(app_script),
+            str(port),
+        ]
+    else:
+        # Dev: normal `python -m streamlit run`
+        cmd = [
+            sys.executable,
+            "-m",
+            "streamlit",
+            "run",
+            str(app_script),
+            "--server.port",
+            str(port),
+            "--server.address",
+            "127.0.0.1",
+            "--server.headless",
+            "true",
+            "--browser.gatherUsageStats",
+            "false",
+        ]
 
     # On Windows, CREATE_NO_WINDOW hides the subprocess console.
     creationflags = 0
@@ -113,6 +146,31 @@ def _start_streamlit(app_dir: Path, port: int) -> subprocess.Popen:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+
+
+def _run_streamlit_in_process(app_script: str, port: str) -> int:
+    """Second-process mode: imported only when --run-streamlit is passed.
+
+    This is how the bundled executable actually runs Streamlit — the
+    frozen exe re-invokes itself with RUN_STREAMLIT_FLAG, and that
+    invocation falls through to here and calls Streamlit's CLI directly.
+    """
+    from streamlit.web import cli as stcli
+
+    sys.argv = [
+        "streamlit",
+        "run",
+        app_script,
+        "--server.port",
+        port,
+        "--server.address",
+        "127.0.0.1",
+        "--server.headless",
+        "true",
+        "--browser.gatherUsageStats",
+        "false",
+    ]
+    return stcli.main(standalone_mode=False) or 0
 
 
 def _kill_process_tree(proc: subprocess.Popen) -> None:
@@ -148,6 +206,13 @@ def _kill_process_tree(proc: subprocess.Popen) -> None:
 
 
 def main() -> int:
+    # Bundled self-re-exec: run Streamlit in this process and exit
+    if len(sys.argv) >= 2 and sys.argv[1] == RUN_STREAMLIT_FLAG:
+        if len(sys.argv) < 4:
+            print(f"Usage: {sys.argv[0]} {RUN_STREAMLIT_FLAG} <app_script> <port>")
+            return 2
+        return _run_streamlit_in_process(sys.argv[2], sys.argv[3])
+
     import webview
 
     app_dir = _app_dir()

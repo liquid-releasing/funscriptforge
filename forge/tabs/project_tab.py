@@ -12,6 +12,7 @@ Single-column top-to-bottom flow:
 Output device selection is on the Device tab.
 """
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -399,6 +400,83 @@ def render():
 
 # ── Funscript ────────────────────────────────────────────────────────────────
 
+def _desktop_funscript_input(current_path: str) -> None:
+    """Path-based funscript loader for desktop mode.
+
+    Shows a text input for a real disk path. Unlike the browser uploader
+    (which copies to temp), this preserves the real file location so
+    exports land next to the source funscript.
+    """
+    import shutil
+
+    # Default: pre-populate with current path or first bundled demo file.
+    # Looks in several places so dev and bundled runs both find something.
+    default_value = current_path or ""
+    if not default_value:
+        import sys as _sys
+        _candidates = []
+        if getattr(_sys, "frozen", False):
+            _exe_dir = Path(_sys.executable).parent
+            # Next to the exe (preferred — user can see it)
+            _candidates.append(_exe_dir / "demo" / "examples" / "big_buck_bunny.raw.funscript")
+            # Inside _internal (where PyInstaller puts bundled datas)
+            _candidates.append(_exe_dir / "_internal" / "demo" / "examples" / "big_buck_bunny.raw.funscript")
+            # PyInstaller one-file unpack location
+            _meipass = getattr(_sys, "_MEIPASS", None)
+            if _meipass:
+                _candidates.append(Path(_meipass) / "demo" / "examples" / "big_buck_bunny.raw.funscript")
+        # Dev tree
+        _candidates.append(Path(__file__).resolve().parents[2] / "demo" / "examples" / "big_buck_bunny.raw.funscript")
+        for _c in _candidates:
+            if _c.exists():
+                default_value = str(_c)
+                break
+
+    path_input = st.text_input(
+        "Funscript file path",
+        value=default_value,
+        key="desktop_funscript_path_input",
+        placeholder=r"C:\Users\you\Videos\script.funscript",
+        help="Paste or type the full path to your .funscript file.",
+    )
+
+    col_load, col_clear = st.columns([1, 1])
+    with col_load:
+        if st.button(
+            "Load",
+            key="desktop_funscript_load",
+            type="primary",
+            width="stretch",
+            disabled=not path_input,
+        ):
+            p = Path(path_input).expanduser()
+            if not p.exists():
+                st.error(f"File not found: {p}")
+            elif not p.is_file():
+                st.error(f"Not a file: {p}")
+            else:
+                _reset_downstream_state()
+                st.session_state["funscript_path"] = str(p.resolve())
+                st.session_state["_funscript_processed"] = None
+                # Clear project_picker so derive logic re-runs
+                st.session_state.pop("forge_project", None)
+                st.rerun()
+    with col_clear:
+        if st.button(
+            "Clear",
+            key="desktop_funscript_clear",
+            width="stretch",
+            disabled=not current_path,
+        ):
+            st.session_state["funscript_path"] = ""
+            st.session_state.pop("_funscript_processed", None)
+            _reset_downstream_state()
+            st.rerun()
+
+    if current_path:
+        st.caption(f"Loaded: `{current_path}`")
+
+
 def _funscript_section(v: int):
     def _on_funscript_upload(uploaded, cfg):
         tmp = Path(tempfile.mkdtemp()) / uploaded.name
@@ -414,18 +492,22 @@ def _funscript_section(v: int):
 
     funscript_path = st.session_state.get("funscript_path", "")
 
-    # Drag-and-drop / browse — the only loader for now. The browser sandbox
-    # strips real disk paths from upload events, so exports land in temp
-    # folders. Permanent-folder exports come back when we ship as a desktop
-    # app (PyWebView/Tauri) with a real OS file picker — see
-    # `internal/design/desktop_app.md`.
-    render_upload(
-        FUNSCRIPT_PICKER,
-        version=v,
-        on_upload=_on_funscript_upload,
-        on_clear=_on_funscript_clear,
-        current_path=funscript_path,
-    )
+    # Desktop mode: path input instead of browser uploader. Keeps the real
+    # disk path so exports land in the right place.
+    if os.environ.get("FUNSCRIPTFORGE_DESKTOP") == "1":
+        _desktop_funscript_input(funscript_path)
+    else:
+        # Web/dev: drag-and-drop. The browser sandbox strips real disk
+        # paths so exports land in temp folders.
+        render_upload(
+            FUNSCRIPT_PICKER,
+            version=v,
+            on_upload=_on_funscript_upload,
+            on_clear=_on_funscript_clear,
+            current_path=funscript_path,
+        )
+        # Re-read after potential upload
+        funscript_path = st.session_state.get("funscript_path", "")
 
     if funscript_path and Path(funscript_path).exists():
         from forge_ui_components.funscript_chart.cache import ChartCache
