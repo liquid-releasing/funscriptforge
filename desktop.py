@@ -43,6 +43,12 @@ STARTUP_TIMEOUT_S = 30
 # flag to trigger in-process Streamlit. Never passed by users.
 RUN_STREAMLIT_FLAG = "--run-streamlit"
 
+# File dialog bridge: a tiny HTTP server running inside the launcher
+# process so Streamlit (in a subprocess) can request native file dialogs
+# via PyWebView. Streamlit reads FUNSCRIPTFORGE_BRIDGE_PORT from env and
+# calls http://127.0.0.1:<port>/pick-file.
+_bridge_port: int | None = None
+
 
 def _app_dir() -> Path:
     """Return the root directory containing ui/streamlit/app.py.
@@ -91,7 +97,69 @@ def _streamlit_env() -> dict:
     env["STREAMLIT_CLIENT_TOOLBAR_MODE"] = "minimal"
     # Signal to app code that it's running inside the desktop wrapper.
     env["FUNSCRIPTFORGE_DESKTOP"] = "1"
+    # File dialog bridge port (set after we reserve it — see main()).
+    if _bridge_port is not None:
+        env["FUNSCRIPTFORGE_BRIDGE_PORT"] = str(_bridge_port)
     return env
+
+
+def _start_bridge_server(port: int) -> None:
+    """Start the file-dialog HTTP bridge on 127.0.0.1:<port>.
+
+    Runs in a daemon thread so it dies with the process. One endpoint:
+
+      GET /pick-file?type=funscript
+        → {"path": "<chosen path>"} on success
+        → {"path": ""}               if user cancelled
+        → {"error": "..."}           on error
+
+    Called from PyWebView's start(func=...) callback, so the webview
+    window already exists and we can safely invoke create_file_dialog.
+    """
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import json as _json
+    import webview
+
+    class BridgeHandler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            pass  # silence default access logging
+
+        def do_GET(self):
+            if not self.path.startswith("/pick-file"):
+                self.send_response(404)
+                self.end_headers()
+                return
+            try:
+                # Ask PyWebView for a native file dialog on the GUI thread.
+                # Recent pywebview (>=4) is thread-safe here.
+                file_types = ("Funscript files (*.funscript)", "All files (*.*)")
+                result = webview.windows[0].create_file_dialog(
+                    webview.OPEN_DIALOG,
+                    allow_multiple=False,
+                    file_types=file_types,
+                )
+                path = ""
+                if result:
+                    # result is a tuple/list of paths; take the first
+                    path = result[0] if isinstance(result, (tuple, list)) else str(result)
+                body = _json.dumps({"path": path}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception as e:
+                body = _json.dumps({"error": str(e)}).encode("utf-8")
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(body)
+
+    server = HTTPServer(("127.0.0.1", port), BridgeHandler)
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    print(f"[{APP_NAME}] File dialog bridge listening on 127.0.0.1:{port}")
 
 
 def _start_streamlit(app_dir: Path, port: int) -> subprocess.Popen:
@@ -215,8 +283,11 @@ def main() -> int:
 
     import webview
 
+    global _bridge_port
+
     app_dir = _app_dir()
     port = _find_free_port()
+    _bridge_port = _find_free_port()
     url = f"http://127.0.0.1:{port}"
 
     print(f"[{APP_NAME}] Starting Streamlit on {url}")
@@ -238,7 +309,9 @@ def main() -> int:
             resizable=True,
             min_size=(1000, 700),
         )
-        webview.start()
+        # func runs after window creation but before event loop — the right
+        # spot to start the bridge since webview.windows[0] now exists.
+        webview.start(func=_start_bridge_server, args=(_bridge_port,))
         return 0
     finally:
         print(f"[{APP_NAME}] Shutting down Streamlit")

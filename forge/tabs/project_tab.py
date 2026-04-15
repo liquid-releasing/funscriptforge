@@ -410,8 +410,9 @@ def _desktop_funscript_input(current_path: str) -> None:
     import shutil
 
     # Default: pre-populate with current path or first bundled demo file.
-    # Looks in several places so dev and bundled runs both find something.
-    default_value = current_path or ""
+    # Only set on first render; afterwards the widget owns its state.
+    _key = "desktop_funscript_path_input"
+    default_value = st.session_state.get(_key, current_path or "")
     if not default_value:
         import sys as _sys
         _candidates = []
@@ -432,12 +433,38 @@ def _desktop_funscript_input(current_path: str) -> None:
                 default_value = str(_c)
                 break
 
+    # Browse via PyWebView bridge: ask the launcher to pop a native file
+    # dialog, update the path input with the result.
+    _bridge_port = os.environ.get("FUNSCRIPTFORGE_BRIDGE_PORT")
+    if _bridge_port and st.button(
+        "📂 Browse…",
+        key="desktop_funscript_browse",
+        help="Open a native file dialog to pick a funscript.",
+    ):
+        import json
+        import urllib.error
+        import urllib.request
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{_bridge_port}/pick-file?type=funscript",
+                timeout=120,  # dialog blocks until user picks or cancels
+            ) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            picked = data.get("path", "")
+            if picked:
+                st.session_state["desktop_funscript_path_input"] = picked
+                st.rerun()
+        except (urllib.error.URLError, OSError) as e:
+            st.error(f"Could not open file dialog: {e}")
+
+    # Seed session state on first render; subsequently the widget owns it
+    if _key not in st.session_state:
+        st.session_state[_key] = default_value
     path_input = st.text_input(
         "Funscript file path",
-        value=default_value,
-        key="desktop_funscript_path_input",
+        key=_key,
         placeholder=r"C:\Users\you\Videos\script.funscript",
-        help="Paste or type the full path to your .funscript file.",
+        help="Paste or type the full path to your .funscript file, or click Browse.",
     )
 
     col_load, col_clear = st.columns([1, 1])
