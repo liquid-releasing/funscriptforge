@@ -1064,6 +1064,28 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#ramp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ramp
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ambient" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ambient
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1540,6 +1562,28 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#ramp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ramp
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ambient" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ambient
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1673,6 +1717,18 @@
 <!-- CAPTION: Chart — a frantic phrase. Extremely dense, tightly packed oscillations. Caption: "Frantic: the device physically cannot follow this. Halve Tempo makes it executable without losing the energy." -->
 
 <hr />
+<h3 id="ramp">ramp<a class="headerlink" href="#ramp" title="Permanent link">&para;</a></h3>
+<p><strong>What it is:</strong> The center of gravity shifts significantly across the phrase — motion builds from low-to-high or winds down from high-to-low intensity.</p>
+<p><strong>Detection:</strong> Absolute center-of-gravity delta &gt; 20 position units, amplitude span &gt; 15, duration &gt; 3 s.</p>
+<p><strong>The problem:</strong> The progression is there but may be uneven — a rough escalation rather than a shaped arc.</p>
+<p><strong>Fix:</strong> <strong>Funnel</strong> shapes the energy arc from start to end position, making the build smooth and visually ordered.</p>
+<hr />
+<h3 id="ambient">ambient<a class="headerlink" href="#ambient" title="Permanent link">&para;</a></h3>
+<p><strong>What it is:</strong> Very low BPM and minimal amplitude over a longer span — a transition or filler section between active phrases.</p>
+<p><strong>Detection:</strong> BPM &lt; 40, amplitude span &lt; 25, duration &gt; 5 s.</p>
+<p><strong>The problem:</strong> The section is barely there. Not necessarily wrong — ambient sections provide breathing room — but it may feel aimless unless given intentional shape.</p>
+<p><strong>Fix:</strong> <strong>Waiting</strong> or <strong>Drift</strong> transforms give the section an intentional pattern. If the quiet is deliberate, <strong>Passthrough</strong> is appropriate.</p>
+<hr />
 <h2 id="no-tag">No tag<a class="headerlink" href="#no-tag" title="Permanent link">&para;</a></h2>
 <p>Phrases without a tag are well-formed. The amplitude, centering, tempo, and dynamics are all within normal parameters.</p>
 <p>The Export tab still suggests a transform for untagged phrases (usually <strong>Amplitude Scale</strong> or <strong>Passthrough</strong>). You can accept the suggestion, change it, or mark the phrase explicitly with <strong>Passthrough</strong> to leave it unchanged.</p>
@@ -1753,6 +1809,22 @@
 <td>&gt; 200</td>
 <td>any</td>
 <td>Halve Tempo</td>
+</tr>
+<tr>
+<td>ramp</td>
+<td>&gt; 15</td>
+<td>shifts &gt; 20 across phrase</td>
+<td>any</td>
+<td>&gt; 3 s</td>
+<td>Funnel</td>
+</tr>
+<tr>
+<td>ambient</td>
+<td>&lt; 25</td>
+<td>any</td>
+<td>&lt; 40</td>
+<td>&gt; 5 s</td>
+<td>Waiting or Drift</td>
 </tr>
 </tbody>
 </table>
