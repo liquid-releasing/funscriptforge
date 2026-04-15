@@ -1,9 +1,9 @@
 # FunscriptForge — Desktop App Design
 
-> **Status**: Design only. Not started.
-> **Order**: ships *after* the audio-synthesis PR.
+> **Status**: Ready to build. Audio PR shipped (extracted module — path B, as planned).
+> **Order**: docs done. Desktop app is the next alpha blocker.
 > **Owner**: `lqr`
-> **Captured**: 2026-04-11
+> **Captured**: 2026-04-11. Updated 2026-04-14.
 
 ## Why we want this
 
@@ -209,10 +209,160 @@ spending a day adding tkinter file pickers as a workaround. Capturing
 the desktop-app plan now means we don't waste effort on browser
 workarounds for problems that go away when we wrap the app properly.
 
+## Build plan — concrete steps (2026-04-14)
+
+### Phase 1: Local Windows build (~half day)
+
+Goal: a working `.exe` on the dev machine. Prove the launcher pattern,
+catch dependency issues, validate the user experience.
+
+1. **Add dev dependencies** to a new `requirements-desktop.txt`:
+   - `pywebview` — desktop wrapper
+   - `pyinstaller` — bundler
+2. **Write `desktop.py`** — the launcher. Pseudocode:
+   ```python
+   import socket, subprocess, sys, time, webview
+   from pathlib import Path
+
+   def find_free_port():
+       with socket.socket() as s:
+           s.bind(('', 0))
+           return s.getsockname()[1]
+
+   port = find_free_port()
+   app_dir = Path(__file__).parent
+   proc = subprocess.Popen(
+       [sys.executable, '-m', 'streamlit', 'run',
+        str(app_dir / 'ui' / 'streamlit' / 'app.py'),
+        '--server.port', str(port),
+        '--server.headless', 'true',
+        '--browser.gatherUsageStats', 'false'],
+   )
+   # Poll until port responds (max ~10s)
+   _wait_for_port(port, timeout=10)
+   try:
+       window = webview.create_window(
+           'FunscriptForge', f'http://localhost:{port}',
+           width=1400, height=900,
+       )
+       webview.start()
+   finally:
+       proc.terminate()
+   ```
+3. **Write `FunscriptForge.spec`** — PyInstaller config. Datas: vendored
+   `funscript-tools/`, `forge_ui_components/`, `assets/`, `demo/`. Hidden
+   imports for streamlit's runtime modules.
+4. **Vendor funscript-tools** at build time — copy `../funscript-tools/`
+   into `_vendored/funscript_tools/` and adjust `forge.funscript_tools`
+   adapter to look in either location (sibling clone in dev, vendored in
+   bundle).
+5. **First build** — `pyinstaller FunscriptForge.spec --clean`. Test
+   `dist/FunscriptForge/FunscriptForge.exe`. Iterate on missing imports.
+6. **Smoke test** — full workflow on the demo funscript: load → device →
+   tone → export. Verify output files written to the right location.
+
+### Phase 2: GitHub Actions multi-platform build
+
+Once local Windows works, add CI matrix for all three platforms.
+
+**`.github/workflows/release-desktop.yml`**:
+```yaml
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/funscript-tools
+          path: _vendored/funscript_tools
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt -r requirements-desktop.txt
+      - run: pyinstaller FunscriptForge.spec --clean
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FunscriptForge-${{ matrix.os }}
+          path: dist/FunscriptForge/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Zip per platform
+        run: |
+          for d in FunscriptForge-*; do zip -r "$d.zip" "$d"; done
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: '*.zip'
+          repository: liquid-releasing/funscriptforge-releases
+```
+
+### Phase 3: Polish (defer if time-short)
+
+- App icon (use existing FunscriptForge logo, convert to .ico/.icns/.png)
+- Splash screen during Streamlit startup (PyWebView supports HTML splash)
+- macOS notarization (~$99/yr Apple Developer + scripted notarytool)
+- Windows code signing (~$200/yr cert + signtool)
+- AppImage packaging for Linux (vs raw folder)
+
+## Linux support — yes, free
+
+PyWebView uses GTK WebKit on Linux. Same `desktop.py` launcher works
+unchanged. PyInstaller produces a Linux folder bundle on `ubuntu-latest`
+runners. Distribute as a tarball or AppImage. Linux is essentially free
+once Windows works.
+
+## Bundle size estimate
+
+| Component | Approx size |
+|---|---|
+| Python runtime | 30-40 MB |
+| streamlit + tornado + watchdog | 40-50 MB |
+| numpy + matplotlib | 80-100 MB |
+| pandas | 30-40 MB |
+| librosa + soundfile + audioread | 60-80 MB |
+| pyav (if bundled) | 40-60 MB |
+| FunscriptForge code + vendored funscript-tools | 5-10 MB |
+| **Total per platform** | **~300-400 MB** |
+
+Acceptable for alpha. Tauri (Phase 2) would cut this to ~80 MB but
+requires the JS rewrite tradeoff.
+
+## Risks / unknowns
+
+1. **Streamlit subprocess teardown on Windows.** `proc.terminate()`
+   doesn't always kill child threads cleanly. May need `psutil` to walk
+   the process tree.
+2. **PyAV native libraries.** PyAV bundles ffmpeg shared libs. PyInstaller
+   sometimes misses these. Pre-tested workaround: explicit `binaries`
+   entry in the spec file.
+3. **PyInstaller false-positive virus scans.** Common with unsigned
+   PyInstaller binaries. SmartScreen warning on first launch is the
+   user-visible symptom. Defer signing until alpha feedback.
+4. **macOS Apple Silicon vs Intel.** `macos-latest` runner is now ARM
+   (M-series). Producing an Intel build requires `macos-13` runner.
+   For alpha: ship ARM only and call out Intel as "coming soon."
+5. **Streamlit hot-reload in bundled mode.** Disable file watcher
+   (`server.fileWatcherType = "none"`) — bundled apps don't need it
+   and it crashes on read-only locations.
+
 ## References
 
-- Audio plan: `memory/project_funscriptforge_audio.md`
+- Audio plan: `memory/project_funscriptforge_audio.md` (path B chosen, shipped)
 - Project tab spec: `internal/tab_updates/project_tab_update.md`
 - Devops pipeline spec: `xolvco-web/roadmap/platform/specs/01-devops-pipeline.md`
   (needs section on desktop deploy target)
 - funscriptforge-releases repo (release artifacts host)
+- PyWebView docs: https://pywebview.flowrl.com/
+- PyInstaller docs: https://pyinstaller.org/en/stable/
