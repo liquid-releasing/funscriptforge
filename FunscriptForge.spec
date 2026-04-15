@@ -112,12 +112,22 @@ for mod in _CODE_MODULES:
 
 # Static asset folders
 datas += [
-    (str(APP_DIR / "assets"), "assets"),
-    (str(APP_DIR / "demo"), "demo"),
     (str(APP_DIR / "media"), "media"),
     # Streamlit theme config — dark theme, upload limit
     (str(APP_DIR / ".streamlit" / "config.toml"), ".streamlit"),
 ]
+# assets/ — only the tone_cards and samples subfolders. The root assets/
+# may contain test output (e.g. VictoriaOaks_stingy/) that we must not ship.
+for _sub in ("tone_cards", "samples"):
+    _p = APP_DIR / "assets" / _sub
+    if _p.exists():
+        datas += [(str(_p), f"assets/{_sub}")]
+# demo/ — only the examples subfolder (funscripts + README), never the
+# bundled video file (725 MB) or test .forge output. The post-build
+# hook copies the same files NEXT TO the exe for visibility.
+_demo_examples = APP_DIR / "demo" / "examples"
+if _demo_examples.exists():
+    datas += [(str(_demo_examples), "demo/examples")]
 
 # Device specs + other JSON config
 datas += [
@@ -222,12 +232,28 @@ if sys.platform == "darwin":
 # ── Post-build: copy demo files NEXT TO the exe (not inside _internal) ──
 # So users immediately see a `demo/examples/` folder beside FunscriptForge.exe
 # and can find the sample funscripts without digging into _internal.
+# IMPORTANT: skip large media (.mov/.mp4/.wav/.forge/) — the demo video
+# and any test-run output folders must not ship.
 import shutil as _shutil
 _dist_app = SPEC_DIR / "dist" / "FunscriptForge"
 _demo_src = SPEC_DIR / "demo"
 _demo_dst = _dist_app / "demo"
+
+
+def _skip_demo(dir_path: str, names: list) -> list:
+    skipped = []
+    for name in names:
+        if name in (".forge", "__pycache__"):
+            skipped.append(name)
+            continue
+        lower = name.lower()
+        if lower.endswith((".mov", ".mp4", ".mkv", ".webm", ".wav", ".m4a")):
+            skipped.append(name)
+    return skipped
+
+
 if _demo_src.exists() and _dist_app.exists():
     if _demo_dst.exists():
         _shutil.rmtree(_demo_dst)
-    _shutil.copytree(_demo_src, _demo_dst)
-    print(f"Copied demo files to {_demo_dst}")
+    _shutil.copytree(_demo_src, _demo_dst, ignore=_skip_demo)
+    print(f"Copied demo files to {_demo_dst} (media/test output excluded)")
