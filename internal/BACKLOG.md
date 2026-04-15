@@ -6,6 +6,39 @@ Items are loosely ordered by dependency and value. Move to DONE when shipped.
 
 ## Open — v1 Ship
 
+### Code signing for desktop app
+
+Sign the Windows `.exe` and macOS `.app` to eliminate SmartScreen/Gatekeeper
+warnings on first launch. Linux doesn't need signing.
+
+**Why v1, not alpha**: alpha users tolerate "unknown publisher" clickthroughs.
+v1 users on mainstream distribution won't — SmartScreen warnings kill conversion
+and look unprofessional.
+
+**Windows**:
+
+- OV or EV code signing certificate (~$200-400/year from DigiCert, Sectigo,
+  SSL.com). EV removes SmartScreen warning immediately; OV builds reputation
+  over time.
+- Sign with `signtool sign /fd sha256 /tr <timestamp-url> /td sha256 FunscriptForge.exe`
+- Add signing step to `.github/workflows/release-desktop.yml` with cert stored
+  as GitHub secret
+
+**macOS**:
+
+- Apple Developer Program ($99/year)
+- Developer ID Application certificate
+- `codesign --deep --sign "Developer ID Application: ..." FunscriptForge.app`
+- Notarize with `notarytool submit ... --wait` — required for Gatekeeper
+- Staple the notarization: `stapler staple FunscriptForge.app`
+- Add secrets: APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD, cert .p12
+
+**Cost**: ~$300-500/year total. Defer until alpha feedback confirms the
+warnings are hurting adoption. Reference: `internal/design/desktop_app.md`
+"Phase 3: Polish" section.
+
+---
+
 ### Accept pattern on all tabs
 
 Every tab with user actions gets an Accept button. No arrow, no auto-navigation.
