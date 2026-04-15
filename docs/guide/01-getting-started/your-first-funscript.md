@@ -31,10 +31,12 @@ and you move to the Device tab to make your funscript device-aware.
 
 ## Steps
 
-### 1. Drop your funscript
+### 1. Load your funscript
 
 Open the **Project** tab (it's the first tab, already selected when you launch).
-Drag and drop your `.funscript` file onto the uploader area.
+
+- **Desktop app**: click **Browse** next to the funscript path field and pick your `.funscript`. A demo file is preloaded the first time you launch so you can try the pipeline immediately.
+- **Browser mode**: drag and drop your `.funscript` onto the uploader area.
 
 You'll immediately see:
 - A **waveform chart** showing the full motion structure

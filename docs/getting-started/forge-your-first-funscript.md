@@ -13,7 +13,10 @@ Load a script, pick your device and tone, and export an improved funscript. Four
 
 ## Step 1 — Create a project
 
-Open the **Project** tab (it's selected by default). Drag and drop your `.funscript` file onto the upload area.
+Open the **Project** tab (it's selected by default).
+
+- **Desktop app**: click **Browse** next to the funscript path field and pick your `.funscript` from disk. A demo file is preloaded so you can try the pipeline right away.
+- **Browser mode**: drag and drop your `.funscript` onto the upload area.
 
 You'll see:
 
