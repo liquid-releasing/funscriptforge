@@ -216,6 +216,130 @@ def _start_streamlit(app_dir: Path, port: int) -> subprocess.Popen:
     )
 
 
+def _show_about_dialog() -> None:
+    """Open a small secondary window showing version + attribution."""
+    import webview
+    from forge.about import about_title, ABOUT_MARKDOWN
+
+    # Render markdown → HTML inline. No external deps — we just do a few
+    # simple substitutions good enough for the About content.
+    html = _markdown_to_html(ABOUT_MARKDOWN)
+    full = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>{about_title()}</title>
+<style>
+  body {{
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    background: #1e1e22; color: #e8e8ea;
+    margin: 0; padding: 24px 32px; line-height: 1.55; font-size: 14px;
+  }}
+  h3 {{ color: #e8e8ea; margin-top: 20px; }}
+  h4 {{ color: #a7b3c7; margin-top: 18px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }}
+  a {{ color: #74a9ff; text-decoration: none; }}
+  a:hover {{ text-decoration: underline; }}
+  hr {{ border: none; border-top: 1px solid #3a3a40; margin: 16px 0; }}
+  strong {{ color: #fff; }}
+  ul {{ padding-left: 20px; }}
+  li {{ margin: 4px 0; }}
+</style></head><body>
+{html}
+</body></html>"""
+
+    webview.create_window(
+        about_title(),
+        html=full,
+        width=680,
+        height=600,
+        resizable=True,
+    )
+
+
+def _markdown_to_html(text: str) -> str:
+    """Very small markdown subset → HTML converter for the About dialog.
+    Handles: headers (###, ####), bold (**x**), inline links [t](u),
+    lists, horizontal rules, paragraphs. No external deps.
+    """
+    import re
+    lines = text.strip().split("\n")
+    out = []
+    in_list = False
+
+    def _close_list():
+        nonlocal in_list
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+
+    def _inline(s: str) -> str:
+        # links [text](url)
+        s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2" target="_blank">\1</a>', s)
+        # bold **text**
+        s = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", s)
+        return s
+
+    for raw in lines:
+        line = raw.rstrip()
+        stripped = line.strip()
+        if not stripped:
+            _close_list()
+            continue
+        if stripped == "---":
+            _close_list()
+            out.append("<hr>")
+            continue
+        if stripped.startswith("#### "):
+            _close_list()
+            out.append(f"<h4>{_inline(stripped[5:])}</h4>")
+            continue
+        if stripped.startswith("### "):
+            _close_list()
+            out.append(f"<h3>{_inline(stripped[4:])}</h3>")
+            continue
+        if stripped.startswith("- "):
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append(f"<li>{_inline(stripped[2:])}</li>")
+            continue
+        _close_list()
+        out.append(f"<p>{_inline(stripped)}</p>")
+    _close_list()
+    return "\n".join(out)
+
+
+def _open_github() -> None:
+    """Open the FunscriptForge GitHub repo in the default browser."""
+    import webbrowser
+    webbrowser.open("https://github.com/liquid-releasing/funscriptforge")
+
+
+def _open_docs() -> None:
+    """Open the live user guide."""
+    import webbrowser
+    webbrowser.open("https://liquid-releasing.github.io/funscriptforge/")
+
+
+def _build_menu() -> list:
+    """Build the native menu bar for the desktop window.
+
+    Returns a list of pywebview Menu objects. PyWebView renders this as
+    a real OS menu bar on Windows/macOS/Linux. Items trigger Python
+    callbacks in the launcher process.
+    """
+    import webview.menu as wm
+
+    return [
+        wm.Menu(
+            "Help",
+            [
+                wm.MenuAction("User Guide", _open_docs),
+                wm.MenuAction("GitHub", _open_github),
+                wm.MenuSeparator(),
+                wm.MenuAction(f"About {APP_NAME}", _show_about_dialog),
+            ],
+        ),
+    ]
+
+
 def _run_streamlit_in_process(app_script: str, port: str) -> int:
     """Second-process mode: imported only when --run-streamlit is passed.
 
@@ -309,9 +433,17 @@ def main() -> int:
             resizable=True,
             min_size=(1000, 700),
         )
+
+        # Native menu bar: Help → About
+        menu = _build_menu()
+
         # func runs after window creation but before event loop — the right
         # spot to start the bridge since webview.windows[0] now exists.
-        webview.start(func=_start_bridge_server, args=(_bridge_port,))
+        webview.start(
+            func=_start_bridge_server,
+            args=(_bridge_port,),
+            menu=menu,
+        )
         return 0
     finally:
         print(f"[{APP_NAME}] Shutting down Streamlit")

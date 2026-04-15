@@ -741,9 +741,16 @@ def _sidebar() -> None:
 
 
 def _render_sidebar_footer() -> None:
-    """Liquid Releasing logo + copyright notice at the bottom of the sidebar."""
-    _lr_logo = os.path.join(_ROOT, "media", "liquid-releasing-Color-Logo.svg")
+    """About expander + Liquid Releasing logo + copyright at the bottom of the sidebar."""
+    from forge.about import ABOUT_MARKDOWN, about_title
+
     st.sidebar.markdown("---")
+
+    # About expander — version, credits, attribution, license
+    with st.sidebar.expander(f"About {about_title()}"):
+        st.markdown(ABOUT_MARKDOWN)
+
+    _lr_logo = os.path.join(_ROOT, "media", "liquid-releasing-Color-Logo.svg")
     if os.path.exists(_lr_logo):
         with open(_lr_logo, encoding="utf-8") as _f:
             _svg = _f.read()
