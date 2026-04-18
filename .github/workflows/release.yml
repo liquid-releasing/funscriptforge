@@ -298,5 +298,7 @@ jobs:
             - **Linux** — `FunscriptForge-linux.tar.gz` — extract and run `FunscriptForge/FunscriptForge`
 
             See [the documentation](https://liquid-releasing.github.io/funscriptforge/) and [funscriptforge.com](https://funscriptforge.com) for usage.
+
+            Questions, bug reports, and feedback welcome in [our Discord](https://discord.gg/sZWCqgxY).
           append_body: true
           generate_release_notes: true

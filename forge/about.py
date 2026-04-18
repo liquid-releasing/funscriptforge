@@ -21,7 +21,8 @@ __all__ = [
 ]
 
 # Alpha versioning: 0.0.x until first real release.
-VERSION = "0.0.11"
+# Bump before tagging a new vX.Y.Z-alpha so the About dialog matches the build.
+VERSION = "0.0.13"
 APP_NAME = "FunscriptForge"
 TAGLINE = "The professional post-processor for haptic script creators."
 
@@ -62,6 +63,13 @@ Written by human and Claude AI (Anthropic).
 
 ---
 
+#### Community
+
+Questions, bug reports, and feedback welcome in
+[our Discord](https://discord.gg/sZWCqgxY).
+
+---
+
 #### License
 
 **{APP_NAME}™** is a trademark of Liquid Releasing.
@@ -93,6 +101,8 @@ def about_text() -> str:
         "Technology: Streamlit, PyWebView, Matplotlib, pandas, Python.\n"
         "Shared components: forge-ui-components.\n\n"
         "Written by human and Claude AI (Anthropic).\n\n"
+        "Community:\n"
+        "  discord.gg/sZWCqgxY\n\n"
         f"{APP_NAME} is a trademark of Liquid Releasing.\n"
         "© 2026 Liquid Releasing. MIT License.\n"
         "github.com/liquid-releasing/funscriptforge"
