@@ -713,6 +713,7 @@ def _sidebar() -> None:
         # New Project button — prominent, at the top of status area
         if st.button("🔨 New Project", use_container_width=True,
                       help="Start a new project. Recent projects are kept."):
+            from ui.streamlit.debug import log_event
             _clear_keys = [
                 "forge_project", "funscript_path", "video_path",
                 "output_folder_input", "output_folder_pending",
@@ -724,6 +725,20 @@ def _sidebar() -> None:
             ]
             _motion_keys = [k for k in st.session_state if k.startswith("motion_")]
             _tone_keys = [k for k in st.session_state if k.startswith("tone_flip_") or k.startswith("tone_impact_")]
+            # Record what we're about to drop — helps diagnose "stale
+            # selections on new load" reports (issue 2).
+            _phrase_chain_keys = [
+                k for k in st.session_state
+                if k.startswith("phrase_transform_chain_")
+            ]
+            log_event(
+                "new_project_clicked",
+                "User clicked 🔨 New Project",
+                cleared_explicit=_clear_keys,
+                cleared_motion_count=len(_motion_keys),
+                cleared_tone_count=len(_tone_keys),
+                phrase_chains_left_intact=_phrase_chain_keys,
+            )
             for _k in _clear_keys + _motion_keys + _tone_keys:
                 st.session_state.pop(_k, None)
             st.session_state["project_ver"] = st.session_state.get("project_ver", 0) + 1
@@ -743,6 +758,11 @@ def _sidebar() -> None:
 def _render_sidebar_footer() -> None:
     """About expander + Liquid Releasing logo + copyright at the bottom of the sidebar."""
     from forge.about import ABOUT_MARKDOWN, about_title
+    from ui.streamlit.debug import render_debug_sidebar
+
+    # Debug mode toggle + optional event panel. Lives above About so
+    # the panel (when expanded) doesn't push About off-screen.
+    render_debug_sidebar()
 
     st.sidebar.markdown("---")
 

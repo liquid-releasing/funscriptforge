@@ -149,6 +149,21 @@ def render(
         with open(_fs_path) as _f:
             _orig = _json.load(_f)["actions"]
         _edited = build_edited_actions(phrases, _orig)
+        try:
+            from ui.streamlit.debug import is_debug_enabled, log_event, hash_actions
+            if is_debug_enabled():
+                log_event(
+                    "heatmap_render_from_edited",
+                    "Heatmap rendered from in-memory phrase-edited actions",
+                    path=_fs_path,
+                    orig_actions_count=len(_orig),
+                    orig_actions_hash=hash_actions(_orig),
+                    edited_actions_count=len(_edited),
+                    edited_actions_hash=hash_actions(_edited),
+                    phrase_count=len(phrases),
+                )
+        except Exception:  # noqa: BLE001
+            pass
         _render_heatmap_from_actions(_edited, phrases, duration_ms)
     else:
         _render_heatmap(_fs_path, phrases, duration_ms)
@@ -397,6 +412,20 @@ def _render_heatmap(funscript_path: str, phrases: list, duration_ms: int) -> Non
             actions = json.load(f)["actions"]
     except Exception:
         return
+    try:
+        from ui.streamlit.debug import is_debug_enabled, log_event, hash_actions
+        if is_debug_enabled():
+            log_event(
+                "heatmap_render_from_path",
+                f"Heatmap rendered from {funscript_path}",
+                path=funscript_path,
+                actions_count=len(actions),
+                actions_hash=hash_actions(actions),
+                phrase_count=len(phrases),
+                duration_ms=duration_ms,
+            )
+    except Exception:  # noqa: BLE001
+        pass
     _render_heatmap_from_actions(actions, phrases, duration_ms)
 
 

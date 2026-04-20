@@ -45,6 +45,25 @@ def _reset_downstream_state():
     Resets: media paths, output folder, device/tone/project acceptance,
     chain funscript, assessment cache, tone selection, and cached charts.
     """
+    # Debug instrumentation — record the keys that will be dropped so
+    # "stale selections on new load" reports can be diagnosed by
+    # comparing expected vs actual cleared state.
+    try:
+        from ui.streamlit.debug import is_debug_enabled, log_event
+        if is_debug_enabled():
+            _phrase_chains_before = [
+                k for k in st.session_state
+                if k.startswith("phrase_transform_chain_")
+            ]
+            _funscript_before = st.session_state.get("funscript_path")
+            log_event(
+                "reset_downstream_state",
+                "Reset on funscript load",
+                funscript_path_before=_funscript_before,
+                phrase_chains_before=_phrase_chains_before,
+            )
+    except Exception:  # noqa: BLE001
+        pass
     _keys_to_clear = [
         # Media + funscript processed guard
         "video_path", "_funscript_processed",
