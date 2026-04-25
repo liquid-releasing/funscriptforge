@@ -12,6 +12,7 @@ These are **not** user-facing — see [docs/guide/](../guide/) for the user guid
 | [Components](ARCHITECTURE_components.md) | Shared UI component library (forge-ui-components) |
 | [Device Awareness](ARCHITECTURE_device_awareness.md) | Groove, speed clamp, combined device limits |
 | [Estim Pipeline](ARCHITECTURE_estim_pipeline.md) | Three-tool estim workflow, channel vocabulary |
+| [Modulation](ARCHITECTURE_modulation.md) | Edger's `apply_modulation` primitive, channel scaling, synth-side sampling, enchantment enhancement plan |
 | [Stim & Events](ARCHITECTURE_stim_and_events.md) | Stim rendering, event handling |
 
 ## Specifications
