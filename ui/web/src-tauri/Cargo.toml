@@ -1,0 +1,26 @@
+[package]
+name = "funscriptforge"
+version = "0.0.1"
+description = "FunscriptForge — Tauri desktop shell"
+authors = ["Liquid Releasing"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "funscriptforge_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+# `devtools` feature: bundles WebView2/WebKit devtools so the inspector is
+# available in both debug and release builds during early development.
+tauri = { version = "2.1", features = ["devtools"] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["process", "io-util", "macros", "rt-multi-thread", "fs", "time", "sync"] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,0 +1,73 @@
+/* Local layout only. Design tokens come from forgemoment/styles. */
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans, system-ui, -apple-system, Segoe UI, Roboto, sans-serif);
+  background: var(--bg-app, #0e1116);
+  color: var(--fg-default, #d8dee9);
+}
+
+.ff-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.ff-topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle, #1c2230);
+  background: var(--bg-elevated, #141821);
+}
+
+.ff-title { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: 0.2px; }
+.ff-version { font-size: 12px; opacity: 0.6; }
+
+.ff-env {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid currentColor;
+}
+.ff-env[data-env='tauri']   { color: #56e0a0; }
+.ff-env[data-env='browser'] { color: #ffb547; }
+
+.ff-tabstrip {
+  display: flex;
+  gap: 2px;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid var(--border-subtle, #1c2230);
+  background: var(--bg-elevated, #141821);
+}
+.ff-tabbutton {
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted, #8b94a7);
+  padding: 8px 14px;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+}
+.ff-tabbutton:hover { color: var(--fg-default, #d8dee9); }
+.ff-tabbutton.active {
+  color: var(--fg-default, #d8dee9);
+  background: var(--bg-app, #0e1116);
+  border: 1px solid var(--border-subtle, #1c2230);
+  border-bottom: 1px solid var(--bg-app, #0e1116);
+  margin-bottom: -1px;
+}
+
+.ff-main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.ff-placeholder { padding: 24px; }
+.ff-placeholder h2 { margin: 0 0 8px; font-weight: 500; }
+.ff-placeholder p  { margin: 4px 0; opacity: 0.7; }
+.ff-meta code      { background: var(--bg-elevated, #141821); padding: 2px 6px; border-radius: 4px; font-size: 12px; }

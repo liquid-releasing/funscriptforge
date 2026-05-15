@@ -1,0 +1,550 @@
+// Project — working view for a single funscript project.
+//
+// Ported from ui_design/ui_kits/funscriptforge-app/tab-Project.jsx, rewritten
+// as a real ES module: primitives come from forgemoment, recents/devices flow
+// through the platform adapter (../api/forge.js).
+//
+// Layout:
+//   Left rail (320px)   — search + recent-project switcher; active project drives center.
+//   Center (flex)        — title block, files-in-project list, target-device picker, continue.
+//
+// State ownership:
+//   activeProjectId         — local; which project the center is displaying
+//   selectedDevices         — lifted to App.jsx so it persists across tab switches
+//
+// Project lookup precedence: the prop `openedProjectId` (passed from
+// LibraryScreen via App.jsx) seeds activeProjectId on first mount. Users can
+// then switch projects via the left rail without losing the lift to App.
+
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Button,
+  Pill,
+  Icon,
+  TextInput,
+  SectionLabel,
+} from 'forgemoment';
+import { listRecents, listDevices, pickFunscriptFile } from '../api/forge.js';
+import { generatePreviewActions, parseDurationToMs } from '../lib/funscriptPreview.js';
+import FunscriptChart from '../components/FunscriptChart.jsx';
+
+export default function ProjectTab({
+  openedProject,
+  loadedProjects = [],
+  onOpenScript,
+  isLoadingProject,
+  selectedDevices,
+  onToggleDevice,
+  onContinue,
+}) {
+  const [search, setSearch] = useState('');
+  const [recents, setRecents] = useState(null);
+  const [devices, setDevices] = useState(null);
+  const seedId =
+    typeof openedProject === 'string' ? openedProject : openedProject?.id ?? null;
+  const [activeProjectId, setActiveProjectId] = useState(seedId);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([listRecents(), listDevices()])
+      .then(([r, d]) => {
+        if (cancelled) return;
+        setRecents(r);
+        setDevices(d);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('ProjectTab: failed to load', err);
+        setRecents([]);
+        setDevices([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // If the user opens a new project from Library while we're mounted, sync.
+  useEffect(() => {
+    if (typeof openedProject === 'string') setActiveProjectId(openedProject);
+    else if (openedProject?.id) setActiveProjectId(openedProject.id);
+  }, [openedProject]);
+
+  // Merge session-loaded projects (lifted to App.jsx, survive tab unmounts)
+  // with the listRecents() result. Loaded projects always appear first,
+  // most-recently-loaded at the top.
+  const mergedRecents = useMemo(() => {
+    if (!recents) return null;
+    const loadedIds = new Set(loadedProjects.map((p) => p.id));
+    const rest = recents.filter((r) => !loadedIds.has(r.id));
+    return [...loadedProjects, ...rest];
+  }, [recents, loadedProjects]);
+
+  const filtered = useMemo(() => {
+    if (!mergedRecents) return [];
+    if (!search.trim()) return mergedRecents;
+    const q = search.toLowerCase();
+    return mergedRecents.filter((p) => p.title.toLowerCase().includes(q));
+  }, [mergedRecents, search]);
+
+  const active =
+    mergedRecents?.find((p) => p.id === activeProjectId) ??
+    mergedRecents?.[0] ??
+    null;
+
+  const handleOpen = async () => {
+    const path = await pickFunscriptFile();
+    if (!path) return;
+    // App.jsx orchestrates load_project (sees the wait state, lifts the
+    // result into loadedProjects, drives the tab pre-switch). ProjectTab
+    // just hands up the picked path.
+    onOpenScript?.(path);
+  };
+
+  return (
+    <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+      <LeftRail
+        projects={filtered}
+        active={activeProjectId}
+        onPick={setActiveProjectId}
+        search={search}
+        onSearch={setSearch}
+        onOpen={handleOpen}
+        loading={recents === null}
+      />
+      <div style={{ flex: 1, overflow: 'auto', padding: '24px 28px', background: 'var(--bg)' }}>
+        {active ? (
+          <ActiveProject
+            project={active}
+            devices={devices ?? []}
+            selectedDevices={selectedDevices}
+            onToggleDevice={onToggleDevice}
+            onOpen={handleOpen}
+            onContinue={onContinue}
+          />
+        ) : (
+          <EmptyProject onOpen={handleOpen} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LeftRail({ projects, active, onPick, search, onSearch, onOpen, loading }) {
+  return (
+    <div
+      style={{
+        width: 320,
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'var(--surface)',
+        borderRight: '1px solid var(--border)',
+      }}
+    >
+      <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)' }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: 'var(--text-dim)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            marginBottom: 8,
+          }}
+        >
+          Recent projects
+        </div>
+        <TextInput value={search} onChange={onSearch} placeholder="Search by name…" />
+      </div>
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        {loading
+          ? <div style={{ padding: 16, fontSize: 12, color: 'var(--text-dim)' }}>Loading…</div>
+          : projects.map((p) => (
+              <ProjectRow key={p.id} project={p} active={p.id === active} onClick={() => onPick(p.id)} />
+            ))}
+        <button
+          onClick={onOpen}
+          style={{
+            display: 'flex',
+            gap: 12,
+            width: '100%',
+            padding: '14px 16px',
+            border: 'none',
+            borderLeft: '3px solid transparent',
+            background: 'transparent',
+            color: '#ff7b7b',
+            cursor: 'pointer',
+            textAlign: 'left',
+            fontFamily: 'inherit',
+            fontSize: 12.5,
+            fontWeight: 600,
+          }}
+        >
+          <Icon name="plus" size={16} />
+          <span>Drop a new file…</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProjectRow({ project, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        gap: 12,
+        width: '100%',
+        padding: '12px 16px',
+        border: 'none',
+        borderLeft: `3px solid ${active ? 'var(--accent)' : 'transparent'}`,
+        borderBottom: '1px solid var(--border)',
+        background: active ? 'var(--surface-2)' : 'transparent',
+        color: 'var(--text)',
+        cursor: 'pointer',
+        textAlign: 'left',
+        fontFamily: 'inherit',
+      }}
+    >
+      <div
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 6,
+          flexShrink: 0,
+          background: 'var(--bg)',
+          border: `1px solid ${project.color ?? 'var(--border)'}`,
+          color: project.color ?? 'var(--text-dim)',
+          display: 'grid',
+          placeItems: 'center',
+        }}
+      >
+        <Icon name={project.mediaKind === 'video' ? 'film' : 'music'} size={18} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: active ? 700 : 600,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {project.title}
+        </div>
+        <div
+          style={{
+            fontSize: 10.5,
+            color: 'var(--text-dim)',
+            marginTop: 2,
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          {project.duration} · {project.chapters} ch · {project.edited}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ActiveProject({ project, devices, selectedDevices, onToggleDevice, onOpen, onContinue }) {
+  // Real funscripts loaded via the Rust bridge populate `project.actions`
+  // (downsampled to ~1200 points by load_project). Recents and mock projects
+  // get a deterministic synthesised curve from the preview generator.
+  const hasRealActions = Array.isArray(project.actions) && project.actions.length > 0;
+  const chartActions = hasRealActions ? project.actions : generatePreviewActions(project, 1200);
+  const totalMs = project.durationMs || parseDurationToMs(project.duration) || 60000;
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18, marginBottom: 22 }}>
+        <div
+          style={{
+            width: 96,
+            height: 96,
+            borderRadius: 10,
+            flexShrink: 0,
+            background: 'var(--surface)',
+            border: `1px solid ${project.color ?? 'var(--border)'}`,
+            color: project.color ?? 'var(--text-dim)',
+            display: 'grid',
+            placeItems: 'center',
+          }}
+        >
+          <Icon name={project.mediaKind === 'video' ? 'film' : 'music'} size={32} stroke={1.5} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'var(--text-dim)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              marginBottom: 6,
+            }}
+          >
+            Project
+          </div>
+          <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700, letterSpacing: '-0.01em' }}>
+            {project.title}
+          </h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <Pill tone="neutral"><Icon name="clock" size={11} style={{ marginRight: 4 }} />{project.duration}</Pill>
+            {project.actionCount > 0 && (
+              <Pill tone="neutral">
+                <Icon name="hash" size={11} style={{ marginRight: 4 }} />
+                {project.actionCount.toLocaleString()} actions
+              </Pill>
+            )}
+            {project.chapters > 0 && (
+              <Pill tone="neutral">
+                <Icon name="bookmark" size={11} style={{ marginRight: 4 }} />
+                {project.chapters} chapters
+              </Pill>
+            )}
+            {project.toneSuggestion && (
+              <Pill tone="accent" dot title={project.toneRationale}>
+                Tone: {project.toneSuggestion}
+              </Pill>
+            )}
+            <Pill tone="info" dot>last opened {project.edited}</Pill>
+          </div>
+        </div>
+        <Button kind="ghost" size="sm" icon="more-horizontal">More</Button>
+      </div>
+
+      <SectionLabel
+        right={
+          <span style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
+            Drag to pan · scroll to zoom
+          </span>
+        }
+      >
+        Funscript
+      </SectionLabel>
+      <div style={{ marginBottom: 28 }}>
+        <FunscriptChart
+          actions={chartActions}
+          totalMs={totalMs}
+          height={260}
+          // When the Rust bridge populated stats over the full action set,
+          // pass them through so the footer doesn't under-report against
+          // the downsampled preview.
+          totalActionCount={project.actionCount}
+          avgSpeed={project.avgSpeed}
+          minPos={project.minPos}
+          maxPos={project.maxPos}
+        />
+      </div>
+
+      <SectionLabel>Files in this project</SectionLabel>
+      <div
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          marginBottom: 24,
+          overflow: 'hidden',
+        }}
+      >
+        {project.mediaPath ? (
+          <FileRow
+            icon={project.mediaKind === 'video' ? 'film' : 'music'}
+            name={basename(project.mediaPath)}
+            sub={`${project.mediaKind} · same folder · auto-detected`}
+            tag="media"
+          />
+        ) : (
+          <FileRow
+            icon="alert-circle"
+            name="no media attached"
+            sub="drop a video/audio file with the same stem next to the funscript"
+            tag="media"
+            disabled
+          />
+        )}
+        <FileRow icon="file-cog" name={project.path ? basename(project.path) : `${project.title}.funscript`} sub="source funscript · imported as-is" tag="source" />
+        {project.sidecarsFound?.length > 0
+          ? project.sidecarsFound.map((p) => (
+              <FileRow
+                key={p}
+                icon="settings-2"
+                name={basename(p)}
+                sub="sidecar · auto-loaded"
+                tag="meta"
+              />
+            ))
+          : (
+            <FileRow
+              icon="settings-2"
+              name={`${project.title}.ffmeta.json`}
+              sub="our edit metadata · created on first Accept"
+              tag="meta"
+              disabled
+            />
+          )}
+        <FileRow icon="git-branch" name="_funscript_device.json" sub="device-aware reset · written when Device tab is accepted" tag="chain" disabled />
+        <FileRow icon="git-branch" name="_funscript_phrases.json" sub="phrase-level edits · written when Phrases tab is accepted" tag="chain" disabled />
+      </div>
+
+      <SectionLabel
+        right={
+          <span style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
+            Pick one or more
+          </span>
+        }
+      >
+        Target devices
+      </SectionLabel>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+          gap: 10,
+          marginBottom: 18,
+        }}
+      >
+        {devices.map((d) => (
+          <DeviceCard
+            key={d.id}
+            device={d}
+            selected={selectedDevices.includes(d.id)}
+            onToggle={() => onToggleDevice(d.id)}
+          />
+        ))}
+      </div>
+
+      {selectedDevices.length === 0 && (
+        <div
+          style={{
+            padding: 12,
+            fontSize: 12,
+            color: '#ffb547',
+            background: 'rgba(255,181,71,0.08)',
+            border: '1px solid rgba(255,181,71,0.3)',
+            borderRadius: 6,
+            marginBottom: 18,
+          }}
+        >
+          <Icon name="alert-triangle" size={12} style={{ marginRight: 6, verticalAlign: '-2px' }} />
+          Pick at least one target device to continue.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <Button kind="ghost" size="md" icon="folder-open" onClick={onOpen}>
+          Replace files…
+        </Button>
+        <Button
+          kind="primary"
+          size="md"
+          iconRight="chevron-right"
+          disabled={selectedDevices.length === 0}
+          onClick={onContinue}
+        >
+          Continue to Device reset
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function DeviceCard({ device, selected, onToggle }) {
+  return (
+    <button
+      onClick={onToggle}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 8,
+        padding: 14,
+        borderRadius: 8,
+        background: selected ? 'rgba(255,75,75,0.08)' : 'var(--surface)',
+        border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+        color: 'var(--text)',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        textAlign: 'left',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            background: selected ? 'var(--accent)' : 'var(--surface-2)',
+            color: selected ? '#fff' : 'var(--text-muted)',
+            display: 'grid',
+            placeItems: 'center',
+          }}
+        >
+          <Icon name={device.icon || 'cpu'} size={14} />
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>{device.label}</span>
+        <div style={{ flex: 1 }} />
+        {selected && <Icon name="check" size={14} style={{ color: 'var(--accent)' }} />}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.4 }}>
+        {device.summary || `${device.maxBpm || 200} BPM max · ${device.axes || 'linear'}`}
+      </div>
+    </button>
+  );
+}
+
+function basename(p) {
+  if (!p) return '';
+  const parts = String(p).split(/[/\\]/);
+  return parts[parts.length - 1] || String(p);
+}
+
+function FileRow({ icon, name, sub, tag, disabled }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '12px 16px',
+        borderBottom: '1px solid var(--border)',
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <Icon name={icon} size={16} style={{ color: 'var(--text-dim)' }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{name}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>{sub}</div>
+      </div>
+      <Pill tone={tag === 'source' ? 'info' : tag === 'chain' ? 'warn' : 'neutral'}>{tag}</Pill>
+    </div>
+  );
+}
+
+function EmptyProject({ onOpen }) {
+  return (
+    <div style={{ height: '100%', display: 'grid', placeItems: 'center' }}>
+      <button
+        onClick={onOpen}
+        style={{
+          background: 'var(--surface)',
+          border: '1.5px dashed var(--border-strong)',
+          borderRadius: 12,
+          padding: '40px 56px',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          color: 'var(--text-muted)',
+          textAlign: 'center',
+        }}
+      >
+        <Icon name="upload-cloud" size={36} stroke={1.5} />
+        <div style={{ fontSize: 14, fontWeight: 600, marginTop: 10 }}>
+          Drop a funscript
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
+          .funscript · media file attached later
+        </div>
+      </button>
+    </div>
+  );
+}

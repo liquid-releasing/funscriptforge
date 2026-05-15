@@ -1,0 +1,239 @@
+// FunscriptChart — full funscript visualization for the Project tab.
+//
+// What Streamlit's chart shows + the interactions Streamlit couldn't:
+//   - Velocity colormap (blue → cyan → green → yellow → red) via forgemoment
+//     Sparkline's colorMode='velocity'. Same algorithm as
+//     forge_ui_components/funscript_chart/core.py.
+//   - Drag-to-pan: hold left mouse button + drag horizontally to shift the
+//     visible window. Bounds clamp to [0, totalMs].
+//   - Wheel-to-zoom: scroll wheel zooms around the cursor position (1.1×
+//     per tick, viewport stays within 200ms .. totalMs).
+//   - Time axis ticks at the bottom (mm:ss).
+//   - Stats footer mirrors the Streamlit footer (duration, actions, avg
+//     speed, min/max pos).
+//
+// State ownership: viewStart/viewEnd are local. The chart never modifies
+// the actions array; pan/zoom only change which slice is rendered.
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Sparkline } from 'forgemoment';
+
+const MIN_VIEW_MS = 200;
+
+export default function FunscriptChart({
+  actions,
+  totalMs,
+  height = 240,
+  // Pre-computed stats over the *full* action set, when the caller has them
+  // (e.g., from the Rust load_project bridge). When omitted, the chart
+  // computes stats locally from `actions` — fine for the generated previews
+  // but wrong for real loaded projects, where `actions` is downsampled.
+  totalActionCount,
+  avgSpeed,
+  minPos,
+  maxPos,
+}) {
+  const containerRef = useRef(null);
+  const [view, setView] = useState({ start: 0, end: totalMs });
+  const [drag, setDrag] = useState(null);
+
+  // Reset viewport when the project (totalMs) changes.
+  useEffect(() => {
+    setView({ start: 0, end: totalMs });
+  }, [totalMs]);
+
+  const localStats = useMemo(() => computeStats(actions, totalMs), [actions, totalMs]);
+  // Prefer caller-supplied stats (computed on the full action set) over the
+  // local stats (which are computed on the downsampled `actions` and would
+  // under-report count and avg speed).
+  const stats = {
+    durationMs: totalMs ?? localStats.durationMs,
+    count: totalActionCount ?? localStats.count,
+    avgSpeed: avgSpeed != null ? Math.round(avgSpeed).toLocaleString() : localStats.avgSpeed,
+    minPos: minPos ?? localStats.minPos,
+    maxPos: maxPos ?? localStats.maxPos,
+  };
+
+  const visibleActions = useMemo(() => {
+    if (!actions || actions.length === 0) return [];
+    return actions.filter((a) => a.at >= view.start && a.at <= view.end);
+  }, [actions, view.start, view.end]);
+
+  const handleMouseDown = (e) => {
+    if (e.button !== 0) return;
+    setDrag({ startX: e.clientX, startView: view });
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e) => {
+    if (!drag) return;
+    const w = containerRef.current?.clientWidth ?? 1;
+    const dx = e.clientX - drag.startX;
+    const span = drag.startView.end - drag.startView.start;
+    const deltaMs = (dx / w) * span;
+    let start = drag.startView.start - deltaMs;
+    let end = drag.startView.end - deltaMs;
+    if (start < 0) { end += -start; start = 0; }
+    if (end > totalMs) { start -= end - totalMs; end = totalMs; }
+    if (start < 0) start = 0;
+    setView({ start, end });
+  };
+
+  const handleMouseUp = () => { if (drag) setDrag(null); };
+
+  // Wheel to zoom around the cursor X. Anchored zoom keeps the time under
+  // the pointer fixed, which feels natural in any pan/zoom timeline.
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const w = containerRef.current?.clientWidth ?? 1;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const t = view.start + (x / w) * (view.end - view.start);
+    const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+    let newSpan = (view.end - view.start) * factor;
+    if (newSpan < MIN_VIEW_MS) newSpan = MIN_VIEW_MS;
+    if (newSpan > totalMs) newSpan = totalMs;
+    const leftFrac = (t - view.start) / (view.end - view.start);
+    let start = t - leftFrac * newSpan;
+    let end = start + newSpan;
+    if (start < 0) { end += -start; start = 0; }
+    if (end > totalMs) { start -= end - totalMs; end = totalMs; }
+    if (start < 0) start = 0;
+    setView({ start, end });
+  };
+
+  return (
+    <div style={{ width: '100%' }}>
+      <div
+        ref={containerRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onWheel={handleWheel}
+        style={{
+          position: 'relative',
+          width: '100%',
+          height,
+          background: 'var(--bg)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          cursor: drag ? 'grabbing' : 'grab',
+          userSelect: 'none',
+          overflow: 'hidden',
+        }}
+      >
+        <Sparkline
+          actions={visibleActions}
+          start={view.start}
+          end={view.end}
+          colorMode="velocity"
+          filled
+          height={height - 28}
+        />
+        <TimeAxis startMs={view.start} endMs={view.end} />
+      </div>
+      <StatsRow stats={stats} />
+    </div>
+  );
+}
+
+function TimeAxis({ startMs, endMs }) {
+  const ticks = useMemo(() => makeTicks(startMs, endMs, 6), [startMs, endMs]);
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 22,
+        display: 'flex',
+        justifyContent: 'space-between',
+        padding: '0 8px',
+        fontSize: 10,
+        color: 'var(--text-dim)',
+        fontFamily: 'var(--font-mono)',
+        pointerEvents: 'none',
+        background: 'linear-gradient(to top, rgba(14,17,22,0.9), transparent)',
+        alignItems: 'flex-end',
+      }}
+    >
+      {ticks.map((t, i) => (
+        <span key={i}>{fmtTimeMs(t)}</span>
+      ))}
+    </div>
+  );
+}
+
+function StatsRow({ stats }) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(5, 1fr)',
+        gap: 12,
+        marginTop: 14,
+        padding: '10px 4px 0',
+      }}
+    >
+      <Stat label="Duration" value={fmtTimeMs(stats.durationMs)} />
+      <Stat label="Actions"  value={stats.count.toLocaleString()} />
+      <Stat label="Avg speed" value={stats.avgSpeed} />
+      <Stat label="Min pos"  value={stats.minPos} />
+      <Stat label="Max pos"  value={stats.maxPos} />
+    </div>
+  );
+}
+
+function Stat({ label, value }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{value}</div>
+    </div>
+  );
+}
+
+function computeStats(actions, totalMs) {
+  if (!actions || actions.length === 0) {
+    return { durationMs: totalMs ?? 0, count: 0, avgSpeed: '0', minPos: 0, maxPos: 0 };
+  }
+  let minPos = 100;
+  let maxPos = 0;
+  let totalVel = 0;
+  let velCount = 0;
+  for (let i = 0; i < actions.length; i++) {
+    const p = actions[i].pos;
+    if (p < minPos) minPos = p;
+    if (p > maxPos) maxPos = p;
+    if (i > 0) {
+      const dt = Math.max(1, actions[i].at - actions[i - 1].at);
+      totalVel += (Math.abs(p - actions[i - 1].pos) / dt) * 1000;
+      velCount += 1;
+    }
+  }
+  const avgVel = velCount > 0 ? totalVel / velCount : 0;
+  return {
+    durationMs: totalMs ?? actions[actions.length - 1].at,
+    count: actions.length,
+    avgSpeed: Math.round(avgVel).toLocaleString(),
+    minPos,
+    maxPos,
+  };
+}
+
+function makeTicks(startMs, endMs, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push(Math.round(startMs + ((endMs - startMs) * i) / (n - 1)));
+  }
+  return out;
+}
+
+function fmtTimeMs(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(s / 60);
+  const ss = s % 60;
+  return `${m}:${String(ss).padStart(2, '0')}`;
+}
