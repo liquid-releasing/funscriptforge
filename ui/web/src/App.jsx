@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { isTauri, ping, loadProject } from './api/forge.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
+import DeviceTab from './screens/DeviceTab.jsx';
 
 const TABS = [
   { id: 'library',  label: 'Library' },
@@ -124,13 +125,20 @@ export default function App() {
             onContinue={() => setTab('device')}
           />
         )}
-        {tab !== 'library' && tab !== 'project' && (
+        {tab === 'device' && (
+          <DeviceTab
+            project={typeof openedProject === 'object' ? openedProject : null}
+            selectedDevices={selectedDevices}
+            onContinue={() => setTab('chapters')}
+          />
+        )}
+        {tab !== 'library' && tab !== 'project' && tab !== 'device' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>
             {openedProject && (
               <p className="ff-meta">
-                Opened: <code>{String(openedProject)}</code>
+                Opened: <code>{typeof openedProject === 'string' ? openedProject : openedProject?.title}</code>
               </p>
             )}
             {selectedDevices.length > 0 && (

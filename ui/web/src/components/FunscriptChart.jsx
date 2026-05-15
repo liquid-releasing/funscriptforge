@@ -32,15 +32,29 @@ export default function FunscriptChart({
   avgSpeed,
   minPos,
   maxPos,
+  // Optional controlled-viewport mode. When the parent passes both `view`
+  // and `onViewChange`, pan/zoom updates flow through them instead of local
+  // state — letting two or more charts share one viewport (e.g. Device tab
+  // original + device-aware preview always show the same time range).
+  view: controlledView,
+  onViewChange,
+  // When the chart is purely visual (no stats footer / time axis), pass
+  // `bare` to suppress them. Lets the parent stack two compact charts
+  // without redundant time labels.
+  bare = false,
 }) {
   const containerRef = useRef(null);
-  const [view, setView] = useState({ start: 0, end: totalMs });
+  const [internalView, setInternalView] = useState({ start: 0, end: totalMs });
+  const isControlled = controlledView != null && typeof onViewChange === 'function';
+  const view = isControlled ? controlledView : internalView;
+  const setView = isControlled ? onViewChange : setInternalView;
   const [drag, setDrag] = useState(null);
 
-  // Reset viewport when the project (totalMs) changes.
+  // Reset viewport when the project (totalMs) changes — only meaningful in
+  // uncontrolled mode; controlled parents own the reset behavior.
   useEffect(() => {
-    setView({ start: 0, end: totalMs });
-  }, [totalMs]);
+    if (!isControlled) setInternalView({ start: 0, end: totalMs });
+  }, [totalMs, isControlled]);
 
   const localStats = useMemo(() => computeStats(actions, totalMs), [actions, totalMs]);
   // Prefer caller-supplied stats (computed on the full action set) over the
@@ -133,7 +147,7 @@ export default function FunscriptChart({
         />
         <TimeAxis startMs={view.start} endMs={view.end} />
       </div>
-      <StatsRow stats={stats} />
+      {!bare && <StatsRow stats={stats} />}
     </div>
   );
 }
