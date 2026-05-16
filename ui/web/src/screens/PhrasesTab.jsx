@@ -1,6 +1,12 @@
-// TransformTab — apply transforms to one or more phrases inside a chapter.
+// PhrasesTab — apply transforms to one or more phrases inside a chapter.
 //
-// Renamed from "Edit" (2026-05-16): the verb here is *transform*, not edit.
+// Renamed lineage: Edit (pre-2026-05-16) → Transform (2026-05-16) → Phrases
+// (2026-05-16 PM). The verb shift is "transform"; the noun shift is
+// "phrases" — both pattern and phrase work apply transforms, so naming the
+// tab after the *unit you're operating on* disambiguates from the Patterns
+// tab one step earlier in the chain. Pattern mode is gone from the mode
+// bar entirely (Patterns has its own tab now).
+//
 // Ports the prototype at
 // [ui_design/ui_kits/funscriptforge-app/tab-Edit.jsx]. Same overall layout:
 //
@@ -10,7 +16,7 @@
 //   │ Row 2 — Active chapter funscript view (phrase bands +    │
 //   │          action density + playhead). Phrase selector.    │
 //   ├──────────────────────────────────────────────────────────┤
-//   │ Row 3 — Mode bar (Pattern / Behavior tag / Single phrase)│
+//   │ Row 3 — Mode bar (Behavior tag / Single phrase)          │
 //   ├──────────┬──────────────────────────────────┬────────────┤
 //   │ Left     │ Center (scrollable) — per-phrase │ Right —    │
 //   │ rail     │ before/after preview, single     │ Transform  │
@@ -29,21 +35,17 @@
 // where the rich phrase data goes. Wiring up the real phrase data is the
 // next conversation ("what a phrase is and where it gets built").
 //
-// **Patterns are deferred** for the first runthrough (user 2026-05-16).
-// Mode bar shows Pattern / Behavior tag / Single phrase but the Pattern
-// option is disabled.
-//
 // **Scrolling**: the main panel (rail + center + transform) scrolls. The
 // ribbon rows above do not.
 
 import { useMemo, useState } from 'react';
 import { ChapterRibbon, Segmented, Pill, Icon } from 'forgemoment';
 
-export default function TransformTab({ project }) {
+export default function PhrasesTab({ project }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
   const [activeChapterId, setActiveChapterId] = useState(chapters[0]?.id ?? null);
-  const [mode, setMode] = useState('tag');   // 'pattern' (deferred) | 'tag' | 'single'
+  const [mode, setMode] = useState('tag');   // 'tag' | 'single'
 
   // Empty / no-project states
   if (!project?.path) {
@@ -150,11 +152,9 @@ export default function TransformTab({ project }) {
       <HeaderRow>
         <RowLabel>Edit by</RowLabel>
         <Segmented value={mode} onChange={setMode} options={[
-          // Pattern deferred for first runthrough — show it disabled so
-          // the user sees the eventual capability without being able to
-          // engage it yet. Switching to Behavior tag / Single phrase
-          // works.
-          { value: 'pattern', label: 'Pattern', disabled: true },
+          // Pattern mode removed 2026-05-16 PM — Patterns has its own tab
+          // now (chapter → patterns → phrases). What stays here is
+          // phrase-scoped: tag-bucket transforms vs single-phrase detail.
           { value: 'tag',     label: 'Behavior tag' },
           { value: 'single',  label: 'Single phrase' },
         ]} />
@@ -301,8 +301,7 @@ function RailPlaceholder({ mode }) {
         fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.5,
       }}>
         Rail items appear here when phrase data is wired. Each row is
-        clickable to focus that{' '}
-        {mode === 'tag' ? 'tag' : mode === 'single' ? 'phrase' : 'pattern'}.
+        clickable to focus that {mode === 'tag' ? 'tag' : 'phrase'}.
       </div>
     </div>
   );

@@ -18,25 +18,24 @@ import ProjectTab from './screens/ProjectTab.jsx';
 import DeviceTab from './screens/DeviceTab.jsx';
 import ChaptersTab from './screens/ChaptersTab.jsx';
 import PatternsTab from './screens/PatternsTab.jsx';
-import TransformTab from './screens/TransformTab.jsx';
+import PhrasesTab from './screens/PhrasesTab.jsx';
 
 const TABS = [
   { id: 'library',   label: 'Library' },
   { id: 'project',   label: 'Project' },
   { id: 'device',    label: 'Device' },
   { id: 'chapters',  label: 'Chapters' },
-  // 'patterns' (2026-05-16) sits between Chapters and Transform. Pattern
+  // 'patterns' (2026-05-16) sits between Chapters and Phrases. Pattern
   // recognition is FF-local for now (no second consumer yet; move to
   // videoflow when forgegen/forgeplayer need it). Detection is stubbed
   // until `cli.py classify-patterns` lands.
   { id: 'patterns',  label: 'Patterns' },
-  // 'transform' was 'edit' through 2026-05-16; renamed because the work
-  // here is applying transforms to one or more selected phrases — the
-  // verb is transform, not edit. Phrase selection happens in this tab
-  // (top row = chapter scope, second row = phrase picker).
-  { id: 'transform', label: 'Transform' },
-  { id: 'stim',      label: 'Stim' },
+  // 'phrases' lineage: edit → transform → phrases (2026-05-16 PM). Both
+  // patterns and phrases apply transforms, so the tab name follows the
+  // unit you're operating on, not the verb. Pattern mode in the mode
+  // bar is gone (Patterns has its own tab one step earlier).
   { id: 'phrases',   label: 'Phrases' },
+  { id: 'stim',      label: 'Stim' },
   { id: 'export',    label: 'Export' },
 ];
 
@@ -121,20 +120,19 @@ export default function App() {
   // the entry point; Export is the terminus). Per-tab gates validate
   // before advancing — Project requires at least one selected device.
   const TAB_CHAIN = {
-    project:   'device',
-    device:    'chapters',
-    chapters:  'patterns',
-    patterns:  'transform',
-    transform: 'stim',
-    stim:      'phrases',
-    phrases:   'export',
+    project:  'device',
+    device:   'chapters',
+    chapters: 'patterns',
+    patterns: 'phrases',
+    phrases:  'stim',
+    stim:     'export',
   };
   const tabGate = (id) => {
     if (id === 'project') {
       if (!project?.path) return 'Open a funscript before continuing.';
       if (selectedDevices.length === 0) return 'Pick at least one target device to continue.';
     }
-    if (['device', 'chapters', 'patterns', 'transform', 'stim', 'phrases'].includes(id) && !project?.path) {
+    if (['device', 'chapters', 'patterns', 'phrases', 'stim'].includes(id) && !project?.path) {
       return 'Open a funscript before continuing.';
     }
     return null;
@@ -261,12 +259,12 @@ export default function App() {
             project={typeof openedProject === 'object' ? openedProject : null}
           />
         )}
-        {tab === 'transform' && (
-          <TransformTab
+        {tab === 'phrases' && (
+          <PhrasesTab
             project={typeof openedProject === 'object' ? openedProject : null}
           />
         )}
-        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'transform' && (
+        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>

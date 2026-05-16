@@ -83,30 +83,41 @@ const TRANSFORMS = [
 ];
 
 // ─── Stub instance generator ──────────────────────────────────────────
-// Deterministic-ish fake instances per chapter so the UI has data
-// before the videoflow classifier ships. Replace with the real bridge
-// call once `analyzePatternsWithVideoflow` lands.
+// Deterministic-ish fake instances per chapter so the UI has data before
+// the videoflow classifier ships. Generates a *distribution* — 3 of one
+// pattern type, 2 of another, 1 of a third — so the rail's count column
+// is non-trivial and the table demonstrates the multi-instance layout
+// for at least one pattern type. Replace with the real bridge call once
+// `analyzePatternsWithVideoflow` lands.
 function stubInstancesForChapter(chapter, projectId) {
   if (!chapter) return [];
   const span = Math.max(1, chapter.end_ms - chapter.at_ms);
-  // Generate 4 evenly-spaced instances of ~20% chapter length each,
-  // cycling through pattern types so the rail counts vary.
   const seed = (projectId || '').length + (chapter.id || '').length;
+  // Pick 3 pattern types from the catalog; assign instance counts 3/2/1.
+  const offset = seed % PATTERN_TYPES.length;
+  const buckets = [
+    { patternId: PATTERN_TYPES[(offset) % PATTERN_TYPES.length].id, count: 3 },
+    { patternId: PATTERN_TYPES[(offset + 1) % PATTERN_TYPES.length].id, count: 2 },
+    { patternId: PATTERN_TYPES[(offset + 3) % PATTERN_TYPES.length].id, count: 1 },
+  ];
+  const total = buckets.reduce((s, b) => s + b.count, 0);          // 6
+  const dur = Math.floor(span / total * 0.85);                      // each instance ~chapter/6 wide
   const instances = [];
-  const N = 4;
-  const dur = Math.floor(span * 0.22);
-  for (let i = 0; i < N; i++) {
-    const at = chapter.at_ms + Math.floor((span - dur) * (i / Math.max(1, N - 1)) * 0.95) + 200;
-    const end = Math.min(chapter.end_ms - 100, at + dur);
-    const patternId = PATTERN_TYPES[(seed + i) % PATTERN_TYPES.length].id;
-    instances.push({
-      id: `${chapter.id}_inst_${i}`,
-      chapterId: chapter.id,
-      patternId,
-      at_ms: at,
-      end_ms: end,
-      bpm: 48 + ((seed + i * 17) % 80),
-    });
+  let i = 0;
+  for (const bucket of buckets) {
+    for (let k = 0; k < bucket.count; k++) {
+      const at = chapter.at_ms + Math.floor((span - dur) * (i / Math.max(1, total - 1)) * 0.95) + 200;
+      const end = Math.min(chapter.end_ms - 100, at + dur);
+      instances.push({
+        id: `${chapter.id}_inst_${i}`,
+        chapterId: chapter.id,
+        patternId: bucket.patternId,
+        at_ms: at,
+        end_ms: end,
+        bpm: 48 + ((seed + i * 17) % 80),
+      });
+      i++;
+    }
   }
   return instances;
 }
