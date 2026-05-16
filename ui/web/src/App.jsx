@@ -17,6 +17,7 @@ import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
 import DeviceTab from './screens/DeviceTab.jsx';
 import ChaptersTab from './screens/ChaptersTab.jsx';
+import PatternsTab from './screens/PatternsTab.jsx';
 import TransformTab from './screens/TransformTab.jsx';
 
 const TABS = [
@@ -24,6 +25,11 @@ const TABS = [
   { id: 'project',   label: 'Project' },
   { id: 'device',    label: 'Device' },
   { id: 'chapters',  label: 'Chapters' },
+  // 'patterns' (2026-05-16) sits between Chapters and Transform. Pattern
+  // recognition is FF-local for now (no second consumer yet; move to
+  // videoflow when forgegen/forgeplayer need it). Detection is stubbed
+  // until `cli.py classify-patterns` lands.
+  { id: 'patterns',  label: 'Patterns' },
   // 'transform' was 'edit' through 2026-05-16; renamed because the work
   // here is applying transforms to one or more selected phrases — the
   // verb is transform, not edit. Phrase selection happens in this tab
@@ -117,7 +123,8 @@ export default function App() {
   const TAB_CHAIN = {
     project:   'device',
     device:    'chapters',
-    chapters:  'transform',
+    chapters:  'patterns',
+    patterns:  'transform',
     transform: 'stim',
     stim:      'phrases',
     phrases:   'export',
@@ -127,7 +134,7 @@ export default function App() {
       if (!project?.path) return 'Open a funscript before continuing.';
       if (selectedDevices.length === 0) return 'Pick at least one target device to continue.';
     }
-    if (['device', 'chapters', 'transform', 'stim', 'phrases'].includes(id) && !project?.path) {
+    if (['device', 'chapters', 'patterns', 'transform', 'stim', 'phrases'].includes(id) && !project?.path) {
       return 'Open a funscript before continuing.';
     }
     return null;
@@ -249,12 +256,17 @@ export default function App() {
             onAttachMedia={() => console.log('TODO: pickMediaFile + attach to project')}
           />
         )}
+        {tab === 'patterns' && (
+          <PatternsTab
+            project={typeof openedProject === 'object' ? openedProject : null}
+          />
+        )}
         {tab === 'transform' && (
           <TransformTab
             project={typeof openedProject === 'object' ? openedProject : null}
           />
         )}
-        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'transform' && (
+        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'transform' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>

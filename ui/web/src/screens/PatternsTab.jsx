@@ -1,0 +1,563 @@
+// PatternsTab — Chapter → Patterns → Phrases is the editing chain. This
+// tab is the middle stop: pick a structural pattern type from the rail,
+// see every instance of it inside the active chapter, transform one
+// instance at a time.
+//
+// Layout:
+//   Row 1: CHAPTERS ribbon (narrow chrome — same component as the
+//          Transform tab, showAxes/zoomable off)
+//   Row 2: PATTERNS ribbon (mono bands, one color per pattern type;
+//          shows the instances inside the active chapter — clicking a
+//          band focuses that instance as the transform target)
+//   Body:  rail (pattern types w/ instance counts) | center (per-
+//          instance BEFORE/AFTER table; real FunscriptCharts with
+//          velocity colormap, viewports synced per row) | TransformPanel
+//          (categories hidden — we're already scoped to structural
+//          transforms on this tab)
+//
+// Pattern detection is a stub for now. Real classifier ships via
+// `cli.py classify-patterns` → `videoflow.patterns.classify_patterns_from_funscript`
+// (analog of the chapters bridge). Pending list item:
+// project-funscriptforge-pending → "Real backend: cli.py classify-patterns".
+//
+// Transform application is JS-side preview only. Accept will eventually
+// shell out to `python cli.py transform`/`pattern-transform` for the
+// canonical mutation — same JS-preview / CLI-canonical pattern as the
+// Device tab sliders and Chapters tab tone CLI.
+
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ChapterRibbon, PatternRibbon, TransformPanel,
+  Button, Icon, fmtTimeShort,
+} from 'forgemoment';
+import FunscriptChart from '../components/FunscriptChart.jsx';
+
+// ─── Catalogs (local stubs until backend ships) ───────────────────────
+//
+// PATTERN_TYPES — the 8 canonical structural patterns the videoflow
+// classifier will eventually surface. Source of truth will be
+// `videoflow.patterns` once the module lands; for now these IDs are
+// internal-only and match the prototype `tab-Edit.jsx` mock-ups.
+//
+// Colors: 8 distinguishable hues tuned for dark bg. Deliberately
+// disjoint from the Chapters tab tone palette so the two ribbons read
+// as different contexts (chapters vs patterns) at a glance.
+const PATTERN_TYPES = [
+  { id: 'steady', label: 'Steady', color: '#a78bfa',
+    desc: 'Regular up-down strokes, even spacing.' },
+  { id: 'pulse',  label: 'Pulse',  color: '#22d3ee',
+    desc: 'Repeating pulses with rest between.' },
+  { id: 'three_one', label: '3+1', color: '#facc15',
+    desc: 'Three full strokes followed by a hold.' },
+  { id: 'tide',   label: 'Tide',   color: '#2dd4bf',
+    desc: 'Fast strokes riding on a slow oscillation.' },
+  { id: 'drift',  label: 'Drift',  color: '#94a3b8',
+    desc: 'Sustained plateau with one slight drift.' },
+  { id: 'burst',  label: 'Burst',  color: '#fb923c',
+    desc: 'Short bursts of high-BPM motion.' },
+  { id: 'taper',  label: 'Taper',  color: '#f472b6',
+    desc: 'Amplitude shrinks across the run.' },
+  { id: 'swell',  label: 'Swell',  color: '#4ade80',
+    desc: 'Amplitude grows across the run.' },
+];
+
+const findPattern = (id) => PATTERN_TYPES.find((p) => p.id === id) ?? PATTERN_TYPES[0];
+
+// Structural transforms surfaced on the Patterns tab. Real catalog
+// lives in `forge/funscript_tools.py` + `pattern_catalog/`; surface as
+// JSON via `cli.py list-transforms --format json` when wired. Until
+// then this is a small representative sample so the UI can be built.
+const TRANSFORMS = [
+  { id: 'amplitude_scale', label: 'Amplitude Scale', category: 'structural',
+    summary: 'Stretch or compress stroke depth around the midpoint.',
+    description: 'Stretches or compresses stroke depth around position 50. Scale above 1.0 makes strokes larger; below 1.0 makes them smaller.',
+    params: [{ id: 'scale', label: 'Scale', min: 0.1, max: 5, step: 0.05, default: 2, unit: '×' }] },
+  { id: 'recenter', label: 'Recenter', category: 'structural',
+    summary: 'Shift the midpoint up or down without changing depth.',
+    description: 'Adds a constant offset to every position. The stroke shape is preserved.',
+    params: [{ id: 'offset', label: 'Offset', min: -40, max: 40, step: 1, default: 0 }] },
+  { id: 'velocity_smooth', label: 'Velocity Smooth', category: 'structural',
+    summary: 'Round off sharp velocity transitions.',
+    description: 'Smooths position changes with a moving average over the action timeline.',
+    params: [{ id: 'window', label: 'Window', min: 1, max: 9, step: 2, default: 3 }] },
+];
+
+// ─── Stub instance generator ──────────────────────────────────────────
+// Deterministic-ish fake instances per chapter so the UI has data
+// before the videoflow classifier ships. Replace with the real bridge
+// call once `analyzePatternsWithVideoflow` lands.
+function stubInstancesForChapter(chapter, projectId) {
+  if (!chapter) return [];
+  const span = Math.max(1, chapter.end_ms - chapter.at_ms);
+  // Generate 4 evenly-spaced instances of ~20% chapter length each,
+  // cycling through pattern types so the rail counts vary.
+  const seed = (projectId || '').length + (chapter.id || '').length;
+  const instances = [];
+  const N = 4;
+  const dur = Math.floor(span * 0.22);
+  for (let i = 0; i < N; i++) {
+    const at = chapter.at_ms + Math.floor((span - dur) * (i / Math.max(1, N - 1)) * 0.95) + 200;
+    const end = Math.min(chapter.end_ms - 100, at + dur);
+    const patternId = PATTERN_TYPES[(seed + i) % PATTERN_TYPES.length].id;
+    instances.push({
+      id: `${chapter.id}_inst_${i}`,
+      chapterId: chapter.id,
+      patternId,
+      at_ms: at,
+      end_ms: end,
+      bpm: 48 + ((seed + i * 17) % 80),
+    });
+  }
+  return instances;
+}
+
+// ─── Transform preview (JS-side, illustrative) ────────────────────────
+// Mirrors the Device tab's JS-preview / CLI-canonical pattern: real
+// transforms ship via `python cli.py transform`; this is just enough to
+// see a velocity-profile change while iterating on the UI.
+function previewActions(actions, transformId, params) {
+  if (!actions || actions.length === 0) return actions;
+  if (transformId === 'amplitude_scale') {
+    const s = Number(params?.scale ?? 1);
+    return actions.map((a) => ({
+      at: a.at,
+      pos: clamp01_100(50 + (a.pos - 50) * s),
+    }));
+  }
+  if (transformId === 'recenter') {
+    const off = Number(params?.offset ?? 0);
+    return actions.map((a) => ({ at: a.at, pos: clamp01_100(a.pos + off) }));
+  }
+  if (transformId === 'velocity_smooth') {
+    const w = Math.max(1, Math.floor(Number(params?.window ?? 3)));
+    if (w === 1) return actions;
+    const half = Math.floor(w / 2);
+    return actions.map((_, i) => {
+      let sum = 0; let n = 0;
+      for (let j = Math.max(0, i - half); j <= Math.min(actions.length - 1, i + half); j++) {
+        sum += actions[j].pos; n++;
+      }
+      return { at: actions[i].at, pos: clamp01_100(sum / Math.max(1, n)) };
+    });
+  }
+  return actions;
+}
+
+function clamp01_100(v) { return Math.max(0, Math.min(100, v)); }
+
+// Slice the full action set into a single pattern instance and shift
+// timestamps so the slice starts at 0 (FunscriptChart's totalMs is the
+// span of the slice, not the project — keeps each row self-contained).
+function sliceForInstance(actions, instance) {
+  if (!actions || !instance) return { acts: [], dur: 0 };
+  const s = instance.at_ms;
+  const e = instance.end_ms;
+  const acts = actions
+    .filter((a) => a.at >= s && a.at <= e)
+    .map((a) => ({ at: a.at - s, pos: a.pos }));
+  return { acts, dur: Math.max(1, e - s) };
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────
+export default function PatternsTab({ project }) {
+  // Normalize chapter shape: ChaptersTab uses camelCase atMs/endMs, but
+  // ChapterRibbon expects snake_case at_ms/end_ms. Same translation
+  // ChaptersTab does — keep them in sync.
+  const chapters = useMemo(() => {
+    // `project.chapters` is a count on the loaded project — the list is
+    // `chapterList`. Don't fall through to the count or `.map` blows up.
+    const raw = Array.isArray(project?.chapterList) ? project.chapterList : [];
+    return raw.map((c) => ({
+      id: c.id,
+      name: c.name || c.title || c.id,
+      at_ms: c.atMs ?? c.at_ms ?? c.start ?? 0,
+      end_ms: c.endMs ?? c.end_ms ?? c.end ?? 0,
+      toneColor: c.toneColor || c.color || null,
+    }));
+  }, [project]);
+
+  const [activeChapterId, setActiveChapterId] = useState(null);
+  const activeChapter = chapters.find((c) => c.id === activeChapterId) || chapters[0];
+
+  // Pattern instances inside the active chapter. Stub today; real call
+  // will be `analyzePatternsWithVideoflow(project.path, chapter.id)`.
+  const instances = useMemo(
+    () => stubInstancesForChapter(activeChapter, project?.id),
+    [activeChapter?.id, project?.id],
+  );
+
+  // Counts per pattern type — drives left-rail badges + filters the
+  // table to the rail's selected pattern.
+  const countsByPattern = useMemo(() => {
+    const acc = {};
+    for (const inst of instances) {
+      acc[inst.patternId] = (acc[inst.patternId] || 0) + 1;
+    }
+    return acc;
+  }, [instances]);
+
+  // Default the rail selection to the first pattern type that actually
+  // has instances in this chapter. If none, fall back to 'steady'.
+  const firstPresent = PATTERN_TYPES.find((p) => countsByPattern[p.id] > 0)?.id ?? 'steady';
+  const [activePatternId, setActivePatternId] = useState(firstPresent);
+  useEffect(() => { setActivePatternId(firstPresent); }, [firstPresent]);
+
+  const activeInstances = useMemo(
+    () => instances.filter((i) => i.patternId === activePatternId),
+    [instances, activePatternId],
+  );
+
+  // Which instance is the transform target. Reset to the first matching
+  // instance when the chapter or pattern filter changes.
+  const [activeInstanceId, setActiveInstanceId] = useState(null);
+  useEffect(() => {
+    setActiveInstanceId(activeInstances[0]?.id ?? null);
+  }, [activeChapter?.id, activePatternId]);
+
+  // TransformPanel state. Pre-filter the catalog to structural-only
+  // since we're on the Patterns tab (hideCategories drops the radio
+  // row; the dropdown shows every transform in the filtered list).
+  const [transformId, setTransformId] = useState('amplitude_scale');
+  const initialParams = () => {
+    const t = TRANSFORMS.find((x) => x.id === 'amplitude_scale');
+    const out = {}; for (const p of t.params) out[p.id] = p.default; return out;
+  };
+  const [params, setParams] = useState(initialParams);
+
+  const handleTransformChange = (id) => {
+    setTransformId(id);
+    const t = TRANSFORMS.find((x) => x.id === id);
+    if (!t) return;
+    const out = {}; for (const p of t.params) out[p.id] = p.default;
+    setParams(out);
+  };
+
+  const handleCancel = () => {
+    // Reset params to the current transform's defaults. Keeps the
+    // dropdown selection so the user doesn't lose context.
+    const t = TRANSFORMS.find((x) => x.id === transformId);
+    if (!t) return;
+    const out = {}; for (const p of t.params) out[p.id] = p.default;
+    setParams(out);
+  };
+
+  const handleApply = () => {
+    // TODO: shell out to `cli.py transform --instance ${activeInstanceId} ...`
+    // For now this logs — the JS preview already shows the effect.
+    console.log('Patterns/apply', {
+      instanceId: activeInstanceId,
+      transformId,
+      params,
+    });
+  };
+
+  // ─── Empty states ──────────────────────────────────────────────────
+  if (!project) {
+    return (
+      <section style={{ flex: 1, display: 'grid', placeItems: 'center',
+                        padding: 40, color: 'var(--text-dim)' }}>
+        Open a funscript from the Library tab to begin.
+      </section>
+    );
+  }
+  if (chapters.length === 0) {
+    return (
+      <section style={{ flex: 1, display: 'grid', placeItems: 'center',
+                        padding: 40, color: 'var(--text-dim)' }}>
+        This project has no chapters yet. Visit the Chapters tab to add some.
+      </section>
+    );
+  }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+
+      {/* Row 1 — CHAPTERS ribbon (narrow chrome, no axes, no zoom) */}
+      <div style={{ padding: '8px 16px', background: 'var(--surface)',
+                    borderBottom: '1px solid var(--border)',
+                    display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
+                       textTransform: 'uppercase', letterSpacing: '0.08em',
+                       width: 64, flexShrink: 0 }}>Chapters</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <ChapterRibbon
+            bands={chapters}
+            actions={project?.actions || []}
+            selectedId={activeChapter?.id}
+            onSelect={(b) => setActiveChapterId(b.id)}
+            showAxes={false}
+            zoomable={false}
+            height={56}
+          />
+        </div>
+      </div>
+
+      {/* Row 2 — PATTERNS ribbon (mono, color-per-type, click-to-focus) */}
+      <div style={{ padding: '8px 16px', background: 'var(--surface)',
+                    borderBottom: '1px solid var(--border)',
+                    display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
+                       textTransform: 'uppercase', letterSpacing: '0.08em',
+                       width: 64, flexShrink: 0 }}>Patterns</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <PatternRibbon
+            bands={instances.map((i) => ({
+              id: i.id,
+              at_ms: i.at_ms,
+              end_ms: i.end_ms,
+              color: findPattern(i.patternId).color,
+              name: findPattern(i.patternId).label,
+            }))}
+            viewStart={activeChapter.at_ms}
+            viewEnd={activeChapter.end_ms}
+            selectedId={activeInstanceId}
+            onSelect={(b) => {
+              setActiveInstanceId(b.id);
+              const inst = instances.find((i) => i.id === b.id);
+              if (inst) setActivePatternId(inst.patternId);
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Body — rail | center table | TransformPanel */}
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+
+        {/* Left rail — pattern type list with counts */}
+        <PatternRail
+          patternTypes={PATTERN_TYPES}
+          countsByPattern={countsByPattern}
+          activePatternId={activePatternId}
+          onSelect={setActivePatternId}
+        />
+
+        {/* Center — per-instance BEFORE/AFTER table */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '16px 18px',
+                      background: 'var(--bg)' }}>
+          <InstanceTable
+            instances={activeInstances}
+            actions={project?.actions || []}
+            activeInstanceId={activeInstanceId}
+            patternType={findPattern(activePatternId)}
+            transformId={transformId}
+            params={params}
+            onFocusInstance={setActiveInstanceId}
+          />
+        </div>
+
+        {/* Right — TransformPanel (Structural-only; no category radios) */}
+        <TransformPanel
+          transforms={TRANSFORMS}
+          tags={[]}
+          category="structural"
+          transformId={transformId}
+          onTransformChange={handleTransformChange}
+          params={params}
+          onParamsChange={setParams}
+          applyLabel="Accept"
+          cancelLabel="Cancel"
+          onApply={handleApply}
+          onCancel={handleCancel}
+          hideCategories
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Left rail ───────────────────────────────────────────────────────
+function PatternRail({ patternTypes, countsByPattern, activePatternId, onSelect }) {
+  return (
+    <div style={{
+      width: 240, flexShrink: 0, overflow: 'auto',
+      background: 'var(--surface)', borderRight: '1px solid var(--border)',
+    }}>
+      <div style={{
+        padding: '12px 14px', fontSize: 10, fontWeight: 700,
+        color: 'var(--text-dim)', textTransform: 'uppercase',
+        letterSpacing: '0.08em', borderBottom: '1px solid var(--border)',
+      }}>
+        Structural patterns
+      </div>
+      {patternTypes.map((p) => {
+        const sel = p.id === activePatternId;
+        const count = countsByPattern[p.id] || 0;
+        return (
+          <button
+            key={p.id}
+            onClick={() => onSelect(p.id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+              padding: '10px 14px', border: 'none',
+              borderLeft: `3px solid ${sel ? 'var(--accent)' : 'transparent'}`,
+              background: sel ? 'var(--surface-2)' : 'transparent',
+              color: 'var(--text)', cursor: 'pointer', textAlign: 'left',
+              fontFamily: 'inherit',
+            }}
+          >
+            <span style={{
+              width: 12, height: 12, borderRadius: 3,
+              background: p.color, flexShrink: 0,
+            }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 12.5, fontWeight: sel ? 700 : 600,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {p.label}
+              </div>
+              <div style={{
+                fontSize: 10.5, color: 'var(--text-dim)', marginTop: 1,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {p.desc}
+              </div>
+            </div>
+            <span className="mono" style={{
+              fontSize: 11, fontWeight: 600,
+              color: count > 0 ? 'var(--text)' : 'var(--text-dim)',
+              background: count > 0 ? 'var(--surface-2)' : 'transparent',
+              padding: '2px 7px', borderRadius: 4, minWidth: 24, textAlign: 'center',
+            }}>{count}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Center table ────────────────────────────────────────────────────
+function InstanceTable({
+  instances, actions, activeInstanceId, patternType,
+  transformId, params, onFocusInstance,
+}) {
+  if (instances.length === 0) {
+    return (
+      <div style={{
+        padding: 32, textAlign: 'center', background: 'var(--surface)',
+        border: '1px dashed var(--border)', borderRadius: 8,
+        color: 'var(--text-dim)', fontSize: 13,
+      }}>
+        No instances of {patternType.label} in this chapter.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        marginBottom: 10,
+      }}>
+        <div style={{
+          fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
+          textTransform: 'uppercase', letterSpacing: '0.08em',
+        }}>
+          Per-instance preview · before / after
+        </div>
+        <div className="mono" style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+          {instances.length} instance{instances.length === 1 ? '' : 's'}
+        </div>
+      </div>
+
+      <div style={{
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 8, overflow: 'hidden',
+      }}>
+        {/* Header row */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '120px 60px 1fr 1fr 36px',
+          gap: 12, padding: '10px 14px',
+          background: 'var(--surface-2)', borderBottom: '1px solid var(--border)',
+          fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
+          textTransform: 'uppercase', letterSpacing: '0.06em',
+        }}>
+          <span>Time</span>
+          <span style={{ textAlign: 'right' }}>BPM</span>
+          <span>Original</span>
+          <span>Preview</span>
+          <span></span>
+        </div>
+
+        {/* Body rows */}
+        {instances.map((inst) => (
+          <InstanceRow
+            key={inst.id}
+            instance={inst}
+            actions={actions}
+            transformId={transformId}
+            params={params}
+            focused={inst.id === activeInstanceId}
+            onFocus={() => onFocusInstance(inst.id)}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function InstanceRow({ instance, actions, transformId, params, focused, onFocus }) {
+  const { acts: originalActs, dur } = useMemo(
+    () => sliceForInstance(actions, instance),
+    [actions, instance],
+  );
+  const previewActs = useMemo(
+    () => previewActions(originalActs, transformId, params),
+    [originalActs, transformId, params],
+  );
+
+  // Per-row viewport — original and preview share it so drag/zoom in
+  // one mirrors the other (the controlled-viewport mode FunscriptChart
+  // already supports via `view` + `onViewChange`).
+  const [view, setView] = useState({ start: 0, end: dur });
+  useEffect(() => { setView({ start: 0, end: dur }); }, [dur]);
+
+  return (
+    <div
+      onClick={onFocus}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '120px 60px 1fr 1fr 36px',
+        gap: 12, padding: '12px 14px', alignItems: 'center',
+        borderBottom: '1px solid var(--border)',
+        background: focused ? 'rgba(255,75,75,0.05)' : 'transparent',
+        cursor: 'pointer',
+      }}
+    >
+      <span className="mono" style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+        {fmtTimeShort(instance.at_ms)}–{fmtTimeShort(instance.end_ms)}
+      </span>
+      <span className="mono" style={{ fontSize: 11.5, textAlign: 'right' }}>
+        {instance.bpm}
+      </span>
+      <div style={{ height: 64 }}>
+        <FunscriptChart
+          actions={originalActs}
+          totalMs={dur}
+          height={64}
+          view={view}
+          onViewChange={setView}
+          bare
+        />
+      </div>
+      <div style={{ height: 64 }}>
+        <FunscriptChart
+          actions={previewActs}
+          totalMs={dur}
+          height={64}
+          view={view}
+          onViewChange={setView}
+          bare
+        />
+      </div>
+      <Button
+        kind="ghost"
+        size="sm"
+        icon="external-link"
+        onClick={(e) => { e.stopPropagation(); onFocus(); }}
+        aria-label="Focus instance"
+      />
+    </div>
+  );
+}
