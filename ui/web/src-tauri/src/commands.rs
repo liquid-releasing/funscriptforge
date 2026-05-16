@@ -137,6 +137,28 @@ pub struct FunscriptAction {
     pos: u8,
 }
 
+// Chapter sidecar schema lives in videoflow now — see
+// [videoflow.chapters](videoflow/src/videoflow/chapters.py). We consume it via
+// `cli.py chapters` (resolver) and `cli.py auto-chapter` (analyzer); see
+// CliChapter / CliChaptersResolved / CliChaptersAuto below.
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChapterRecord {
+    id: String,
+    at_ms: u64,
+    end_ms: u64,
+    name: String,
+    intent: String,
+    content_type: String,
+    confidence: f32,
+    evidence: Vec<String>,
+    // Per-chapter UI tint. Deterministic from index so two loads of the same
+    // file color chapters the same way. Tone-set assignments override on the
+    // Chapters tab.
+    color: String,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoadedProject {
@@ -149,7 +171,10 @@ pub struct LoadedProject {
     media_path: Option<String>,
     color: String,
     phrases: u32,
+    // Count of parsed chapters (denormalized for the rail row / pill). The
+    // full chapter list lives in `chapter_list` and drives the Chapters tab.
     chapters: u32,
+    chapter_list: Vec<ChapterRecord>,
     edited: String,
     actions: Vec<FunscriptAction>,
     action_count: usize,
@@ -224,8 +249,19 @@ pub async fn load_project(path: String) -> Result<LoadedProject, String> {
     // ── Adjacent media file probe ────────────────────────────────────
     // Look for a video/audio file with the same stem next to the funscript.
     // Video extensions take priority over audio (since most funscripts are
-    // authored against video). Returns the first hit.
+    // authored against video). Returns the first hit. Done before chapter
+    // resolution so we can pass the media path through to videoflow when
+    // it exists (enables mp4-embedded chapter markers via ffprobe).
     let (media_path, media_kind) = find_adjacent_media(&stem);
+
+    // ── Chapters via videoflow resolver ──────────────────────────────
+    // Shells out to `cli.py chapters` which calls videoflow.chapters.load_chapters
+    // with the priority chain: sidecar > mp4 markers > analysis.json. When media
+    // is adjacent we pass that path so mp4 markers fire; otherwise we pass the
+    // funscript and only the sidecar / analysis.json paths are exercised.
+    let resolution_path = media_path.as_deref().unwrap_or(&path);
+    let chapter_list = resolve_chapters_via_cli(resolution_path, duration_ms).await;
+    let chapter_count = chapter_list.len() as u32;
 
     // ── Title from filename ──────────────────────────────────────────
     let title = Path::new(&path)
@@ -247,7 +283,8 @@ pub async fn load_project(path: String) -> Result<LoadedProject, String> {
         media_path,
         color: tone_color(meta.tone_suggestion.as_deref()),
         phrases: 0,  // populated when we parse phrase sidecars
-        chapters: 0,
+        chapters: chapter_count,
+        chapter_list,
         edited: "just now".to_string(),
         actions,
         action_count,
@@ -283,7 +320,11 @@ struct CliMeta {
     auto_tags: Vec<String>,
 }
 
-async fn run_cli_meta(funscript_path: &str) -> Result<CliMeta, String> {
+// Generic cli.py runner. Resolves the venv python + script path from env
+// (FUNSCRIPTFORGE_ROOT / FUNSCRIPTFORGE_PYTHON), runs `cli.py <args...>` with
+// the project root as cwd, and returns stdout as a String. Non-zero exits
+// surface stderr in the error.
+async fn run_cli(args: &[&str]) -> Result<String, String> {
     let root = std::env::var("FUNSCRIPTFORGE_ROOT")
         .unwrap_or_else(|_| DEV_FUNSCRIPTFORGE_ROOT.to_string());
     let python = std::env::var("FUNSCRIPTFORGE_PYTHON").unwrap_or_else(|_| {
@@ -291,12 +332,12 @@ async fn run_cli_meta(funscript_path: &str) -> Result<CliMeta, String> {
     });
     let cli_py = format!(r"{}\cli.py", root);
 
-    let output = Command::new(&python)
-        .arg(&cli_py)
-        .arg("meta")
-        .arg(funscript_path)
-        .arg("--format")
-        .arg("json")
+    let mut cmd = Command::new(&python);
+    cmd.arg(&cli_py);
+    for a in args {
+        cmd.arg(a);
+    }
+    let output = cmd
         .current_dir(&root)
         .output()
         .await
@@ -304,12 +345,96 @@ async fn run_cli_meta(funscript_path: &str) -> Result<CliMeta, String> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("cli.py meta exited non-zero: {}", stderr));
+        return Err(format!("cli.py {} exited non-zero: {}", args.first().unwrap_or(&""), stderr));
     }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+async fn run_cli_meta(funscript_path: &str) -> Result<CliMeta, String> {
+    let stdout = run_cli(&["meta", funscript_path, "--format", "json"]).await?;
     serde_json::from_str::<CliMeta>(&stdout)
         .map_err(|e| format!("could not parse cli.py meta output: {}", e))
+}
+
+// Wire shape returned by `cli.py chapters` / `cli.py auto-chapter`.
+// Normalized: every chapter has at_ms + end_ms; analytical fields have
+// safe defaults so this slots into ChapterRecord without further parsing.
+#[derive(Deserialize)]
+struct CliChapter {
+    at_ms: u64,
+    end_ms: u64,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    intent: String,
+    #[serde(default)]
+    content_type: String,
+    #[serde(default)]
+    confidence: f32,
+    #[serde(default)]
+    evidence: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct CliChaptersResolved {
+    #[serde(default)]
+    found: bool,
+    #[serde(default)]
+    chapters: Vec<CliChapter>,
+}
+
+#[derive(Deserialize)]
+struct CliChaptersAuto {
+    #[serde(default)]
+    chapters: Vec<CliChapter>,
+}
+
+fn cli_chapters_to_records(chapters: Vec<CliChapter>) -> Vec<ChapterRecord> {
+    chapters
+        .into_iter()
+        .enumerate()
+        .map(|(i, c)| ChapterRecord {
+            id: format!("ch{}", i + 1),
+            at_ms: c.at_ms,
+            end_ms: c.end_ms,
+            name: c.name,
+            intent: c.intent,
+            content_type: c.content_type,
+            confidence: c.confidence,
+            evidence: c.evidence,
+            color: CHAPTER_PALETTE[i % CHAPTER_PALETTE.len()].to_string(),
+        })
+        .collect()
+}
+
+// Resolve chapters via videoflow's priority chain (sidecar > mp4 markers >
+// analysis.json). Pass *media_path* when available so embedded mp4 markers
+// are honoured; otherwise pass the funscript path and only the sidecar /
+// analysis.json paths fire. *duration_ms* lets the CLI fill end_ms on the
+// last chapter when the source carries only start times.
+async fn resolve_chapters_via_cli(path_for_resolution: &str, duration_ms: u64) -> Vec<ChapterRecord> {
+    let duration_arg = duration_ms.to_string();
+    let stdout = match run_cli(&[
+        "chapters",
+        path_for_resolution,
+        "--duration-ms",
+        &duration_arg,
+        "--format",
+        "json",
+    ])
+    .await
+    {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let parsed: CliChaptersResolved = match serde_json::from_str(&stdout) {
+        Ok(p) => p,
+        Err(_) => return Vec::new(),
+    };
+    if !parsed.found {
+        return Vec::new();
+    }
+    cli_chapters_to_records(parsed.chapters)
 }
 
 // Pick from min(N, max_count) evenly-spaced indices. Crude but cheap and gives
@@ -324,6 +449,112 @@ fn downsample_actions(actions: &[FunscriptAction], max_count: usize) -> Vec<Funs
         .map(|i| actions[((i as f64) * step) as usize].clone())
         .collect()
 }
+
+// Build an equal-split chapter list and write the .chapters.json sidecar
+// next to the funscript. Used from the Chapters tab when the user kicks
+// off chapter creation on a project that has no existing sidecar. Logs
+// videoflow-style provenance under generated_by so a future analyzer pass
+// can distinguish hand-split vs analyzer-derived chapters.
+#[tauri::command]
+pub async fn create_chapters_sidecar(
+    funscript_path: String,
+    n: u32,
+) -> Result<Vec<ChapterRecord>, String> {
+    let raw = tokio::fs::read_to_string(&funscript_path)
+        .await
+        .map_err(|e| format!("could not read funscript: {}", e))?;
+    let funscript: FunscriptFile = serde_json::from_str(&raw)
+        .map_err(|e| format!("could not parse funscript: {}", e))?;
+    let duration_ms = funscript.actions.last().map(|a| a.at).unwrap_or(0);
+    if n == 0 || duration_ms == 0 {
+        return Ok(Vec::new());
+    }
+
+    let n64 = n as u64;
+    let mut chapters: Vec<ChapterRecord> = Vec::with_capacity(n as usize);
+    for i in 0..n {
+        let at_ms = (duration_ms * i as u64) / n64;
+        let end_ms = (duration_ms * (i as u64 + 1)) / n64;
+        chapters.push(ChapterRecord {
+            id: format!("ch{}", i + 1),
+            at_ms,
+            end_ms,
+            name: format!("Chapter {}", i + 1),
+            intent: String::new(),
+            content_type: String::new(),
+            confidence: 0.0,
+            evidence: vec!["manual_split".to_string()],
+            color: CHAPTER_PALETTE[(i as usize) % CHAPTER_PALETTE.len()].to_string(),
+        });
+    }
+
+    let stem = strip_funscript_ext(&funscript_path);
+    let sidecar_path = format!("{}.chapters.json", stem);
+    let payload = serde_json::json!({
+        "version": "1.0",
+        "auto_generated": true,
+        "generated_by": {
+            "tool": "funscriptforge.ui",
+            "method": "manual_split",
+            "n_chapters": n,
+        },
+        "chapters": chapters.iter().map(|c| serde_json::json!({
+            "at_ms": c.at_ms,
+            "end_ms": c.end_ms,
+            "name": c.name,
+            "intent": c.intent,
+            "content_type": c.content_type,
+            "confidence": c.confidence,
+            "evidence": c.evidence,
+        })).collect::<Vec<_>>(),
+    });
+    let json = serde_json::to_string_pretty(&payload)
+        .map_err(|e| format!("could not serialize sidecar: {}", e))?;
+    tokio::fs::write(&sidecar_path, json)
+        .await
+        .map_err(|e| format!("could not write sidecar: {}", e))?;
+
+    Ok(chapters)
+}
+
+// Run videoflow.structural.auto_chapter on the funscript's adjacent media,
+// write the sidecar, and return the resulting chapters. The audio analyzer
+// needs real media — return an error if no media is adjacent to the funscript.
+// This is the "Analyze with videoflow" path from the Chapters tab empty state,
+// the canonical alternative to manual equal-split.
+#[tauri::command]
+pub async fn analyze_chapters_with_videoflow(
+    funscript_path: String,
+    target_minutes: Option<f64>,
+) -> Result<Vec<ChapterRecord>, String> {
+    let stem = strip_funscript_ext(&funscript_path);
+    let (media_path, _) = find_adjacent_media(&stem);
+    let media = media_path.ok_or_else(|| {
+        "No adjacent media file found. Attach a video or audio file with the same name \
+         to run videoflow's content-aware chapter detection.".to_string()
+    })?;
+
+    let target = target_minutes.unwrap_or(5.5).to_string();
+    let stdout = run_cli(&[
+        "auto-chapter",
+        &media,
+        "--target-minutes",
+        &target,
+        "--format",
+        "json",
+    ])
+    .await?;
+
+    let parsed: CliChaptersAuto = serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse cli.py auto-chapter output: {}", e))?;
+    Ok(cli_chapters_to_records(parsed.chapters))
+}
+
+// Deterministic chapter color cycle. Matches the prototype's ChapterBands
+// where each chapter has a stable swatch independent of tone selection.
+const CHAPTER_PALETTE: &[&str] = &[
+    "#4a90d9", "#56e0a0", "#f39c12", "#9b59b6", "#e74c3c", "#2ecc71", "#5a8eff", "#ff8c47",
+];
 
 fn strip_funscript_ext(path: &str) -> String {
     if path.to_lowercase().ends_with(".funscript") {

@@ -8,20 +8,30 @@
 //   - Bridge ping: confirms the platform adapter is wired
 
 import { useEffect, useState } from 'react';
+import {
+  TopBar, ScopePicker, AcceptBar, StatusBar,
+  Button, Pill,
+} from 'forgemoment';
 import { isTauri, ping, loadProject } from './api/forge.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
 import DeviceTab from './screens/DeviceTab.jsx';
+import ChaptersTab from './screens/ChaptersTab.jsx';
+import TransformTab from './screens/TransformTab.jsx';
 
 const TABS = [
-  { id: 'library',  label: 'Library' },
-  { id: 'project',  label: 'Project' },
-  { id: 'device',   label: 'Device' },
-  { id: 'chapters', label: 'Chapters' },
-  { id: 'edit',     label: 'Edit' },
-  { id: 'stim',     label: 'Stim' },
-  { id: 'phrases',  label: 'Phrases' },
-  { id: 'export',   label: 'Export' },
+  { id: 'library',   label: 'Library' },
+  { id: 'project',   label: 'Project' },
+  { id: 'device',    label: 'Device' },
+  { id: 'chapters',  label: 'Chapters' },
+  // 'transform' was 'edit' through 2026-05-16; renamed because the work
+  // here is applying transforms to one or more selected phrases — the
+  // verb is transform, not edit. Phrase selection happens in this tab
+  // (top row = chapter scope, second row = phrase picker).
+  { id: 'transform', label: 'Transform' },
+  { id: 'stim',      label: 'Stim' },
+  { id: 'phrases',   label: 'Phrases' },
+  { id: 'export',    label: 'Export' },
 ];
 
 export default function App() {
@@ -81,24 +91,77 @@ export default function App() {
   };
 
   const inTauri = isTauri();
+  const project = typeof openedProject === 'object' ? openedProject : null;
+
+  // Scope picker shown in the TopBar — "All chapters" + each chapter the
+  // active project has. Lifted from the per-tab state because the scope
+  // filter is global (cross-tab) chrome. For now it's only display; the
+  // tabs don't yet read this scope. When they do, this state becomes the
+  // single source of truth for "what subset of the work is in focus".
+  const [scopeId, setScopeId] = useState('all');
+  const scopes = [
+    { id: 'all', title: 'All chapters' },
+    ...(project?.chapterList ?? []).map((c, i) => ({
+      id: c.id,
+      title: c.name || `Chapter ${i + 1}`,
+      color: c.color,
+      start: c.atMs,
+      end: c.endMs,
+    })),
+  ];
+
+  // Footer state — placeholder driven from project/tab context for now.
+  // Real summary + accepted state come from the per-tab working-state
+  // when we wire accept-and-chain.
+  const footerSummary = !project?.path
+    ? 'No project loaded'
+    : (tab === 'chapters'
+        ? `Tones set on ${(project?.chapterList ?? []).length} chapters · pending real accept-and-chain`
+        : `${TABS.find((t) => t.id === tab)?.label ?? 'Tab'} · pending accept-and-chain`);
+  const chainFile = project?.path
+    ? `${(project.title ?? 'project')}.${tab}.json`
+    : null;
 
   return (
-    <div className="ff-app">
-      <header className="ff-topbar">
-        <h1 className="ff-title">FunscriptForge</h1>
-        <span className="ff-version">scaffold v0.0.1</span>
-        <span
-          className="ff-env"
-          data-env={inTauri ? 'tauri' : 'browser'}
-          title={
-            inTauri
-              ? 'Tauri runtime — bridge calls reach the Rust backend'
-              : 'Browser mode — bridge calls return mock data'
-          }
-        >
-          {inTauri ? 'Tauri' : 'browser'}
-        </span>
-      </header>
+    <div className="ff-app" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <TopBar
+        logo={(
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <strong style={{ fontSize: 14, letterSpacing: '-0.01em' }}>FunscriptForge</strong>
+            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>scaffold v0.0.1</span>
+          </div>
+        )}
+        file={project ? {
+          title: project.title,
+          durationMs: project.durationMs,
+          actionCount: project.actionCount,
+        } : null}
+        badge={(
+          <Pill tone="neutral" dot>
+            {inTauri ? 'Tauri' : 'browser'}
+          </Pill>
+        )}
+        scope={project ? (
+          <ScopePicker
+            scopes={scopes}
+            value={scopeId}
+            onChange={setScopeId}
+            label="Filter"
+          />
+        ) : null}
+        rightActions={(
+          <>
+            <Button kind="ghost" size="sm" icon="folder-open"
+                    onClick={() => setTab('library')}>
+              Open
+            </Button>
+            <Button kind="primary" size="sm" icon="download"
+                    onClick={() => { setTab('export'); }}>
+              Export
+            </Button>
+          </>
+        )}
+      />
 
       <nav className="ff-tabstrip">
         {TABS.map((t) => (
@@ -132,7 +195,18 @@ export default function App() {
             onContinue={() => setTab('chapters')}
           />
         )}
-        {tab !== 'library' && tab !== 'project' && tab !== 'device' && (
+        {tab === 'chapters' && (
+          <ChaptersTab
+            project={typeof openedProject === 'object' ? openedProject : null}
+            onAttachMedia={() => console.log('TODO: pickMediaFile + attach to project')}
+          />
+        )}
+        {tab === 'transform' && (
+          <TransformTab
+            project={typeof openedProject === 'object' ? openedProject : null}
+          />
+        )}
+        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'transform' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>
@@ -152,6 +226,25 @@ export default function App() {
           </section>
         )}
       </main>
+
+      {/* Footer chrome — global Accept and chain + status row. The
+          AcceptBar is the canonical commit action for whichever tab is
+          active; downstream tabs read the chain file the active tab
+          writes. Handlers stubbed until each tab wires its
+          working-state + accept semantics. */}
+      <AcceptBar
+        summary={footerSummary}
+        chainFile={chainFile}
+        accepted={false}
+        onAccept={() => console.log(`TODO: accept-and-chain for ${tab}`)}
+        onReset={() => console.log(`TODO: reset working state for ${tab}`)}
+      />
+      <StatusBar
+        synced
+        scope={scopeId === 'all' ? 'all chapters' : (scopes.find((s) => s.id === scopeId)?.title ?? scopeId)}
+        chainFile={chainFile ?? undefined}
+        version="alpha 0.0.1"
+      />
     </div>
   );
 }

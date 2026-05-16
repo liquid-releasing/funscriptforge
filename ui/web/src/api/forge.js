@@ -126,6 +126,34 @@ export function loadProject(path) {
   return call('load_project', { path }, () => mockLoadProject(path));
 }
 
+/** Equal-split the funscript into `n` chapters and write the
+ *  `<stem>.chapters.json` sidecar. Used from the Chapters tab when the user
+ *  kicks off chapter creation on a project that has no existing sidecar.
+ *  Returns the new chapter records. Browser-mode: just synthesises chapters
+ *  in memory (no disk write). */
+export function createChaptersSidecar(funscriptPath, n) {
+  return call(
+    'create_chapters_sidecar',
+    { funscriptPath, n },
+    () => Promise.resolve(synthMockChapters(754000, Math.max(1, n))),
+  );
+}
+
+/** Run videoflow's content-aware chapter detector against the funscript's
+ *  adjacent media file, write the `<stem>.chapters.json` sidecar, and return
+ *  the resulting chapter records. The Rust side errors out if no media is
+ *  adjacent — surface that to the user so they know to attach a file.
+ *
+ *  Cost: this is slow (librosa loads the whole audio, runs RMS / spectral-flux
+ *  analysis, then clusters). Caller should show a progress indicator. */
+export function analyzeChaptersWithVideoflow(funscriptPath, targetMinutes) {
+  return call(
+    'analyze_chapters_with_videoflow',
+    { funscriptPath, targetMinutes },
+    () => Promise.resolve(synthMockChapters(754000, 6)),
+  );
+}
+
 function mockLoadProject(path) {
   const file = String(path).split(/[/\\]/).pop() ?? 'Unknown';
   const title = file.replace(/\.funscript$/i, '');
@@ -138,6 +166,10 @@ function mockLoadProject(path) {
     color: '#56e0a0',
     phrases: 27,
     chapters: 5,
+    // Synthetic chapter list — 5 evenly-spaced chapters across the 12:34
+    // duration. Lets the Chapters tab render in browser-mode without a real
+    // sidecar. The Rust bridge replaces this with the parsed chapters.json.
+    chapterList: synthMockChapters(754000, 5),
     edited: 'just now',
     // Actions not pre-populated; the Project tab will synthesise a preview
     // from this stub via lib/funscriptPreview.js until the real backend
@@ -145,6 +177,27 @@ function mockLoadProject(path) {
     actions: null,
     sidecarsFound: [],
   });
+}
+
+function synthMockChapters(totalMs, n) {
+  const palette = ['#4a90d9', '#56e0a0', '#f39c12', '#9b59b6', '#e74c3c', '#2ecc71', '#5a8eff', '#ff8c47'];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const at = Math.round((i / n) * totalMs);
+    const end = Math.round(((i + 1) / n) * totalMs);
+    out.push({
+      id: `ch${i + 1}`,
+      atMs: at,
+      endMs: end,
+      name: `Chapter ${i + 1}`,
+      intent: '',
+      contentType: 'music',
+      confidence: 0.8,
+      evidence: [],
+      color: palette[i % palette.length],
+    });
+  }
+  return out;
 }
 
 /** Open a funscript picker — FunscriptForge's primary input. A project

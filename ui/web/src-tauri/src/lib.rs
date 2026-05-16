@@ -20,6 +20,8 @@ pub fn run() {
             commands::list_tone_templates,
             commands::list_devices,
             commands::load_project,
+            commands::create_chapters_sidecar,
+            commands::analyze_chapters_with_videoflow,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

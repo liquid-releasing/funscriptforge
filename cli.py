@@ -1062,6 +1062,117 @@ def cmd_parse_captions(args):
 
 
 # ------------------------------------------------------------------
+# Chapter resolution / auto-detection (videoflow bridge)
+# ------------------------------------------------------------------
+#
+# These two commands delegate to videoflow so that FunscriptForge,
+# forgegen, and forgeplayer all see the same chapters from the same
+# resolver and the same auto-detector. They normalize the JSON shape
+# so end_ms is always present (videoflow.Chapter omits end_ms when
+# None — for mp4-embedded chapters that only carry start times).
+
+def _normalize_chapter_list(chapters, duration_ms=None):
+    """Normalize videoflow Chapter list to FF's wire shape.
+
+    Guarantees every record has an integer end_ms (fills from next chapter,
+    then falls back to *duration_ms* if provided, then to at_ms as a last
+    resort). All analytical fields are present with safe defaults.
+    """
+    records = []
+    n = len(chapters)
+    for i, ch in enumerate(chapters):
+        end_ms = ch.end_ms
+        if end_ms is None and i + 1 < n:
+            end_ms = chapters[i + 1].at_ms
+        if end_ms is None and duration_ms is not None:
+            end_ms = duration_ms
+        if end_ms is None:
+            end_ms = ch.at_ms
+        records.append({
+            "at_ms": int(ch.at_ms),
+            "end_ms": int(end_ms),
+            "name": ch.name or "",
+            "intent": ch.intent or "",
+            "content_type": ch.content_type or "",
+            "confidence": float(ch.confidence) if ch.confidence is not None else 0.0,
+            "evidence": list(ch.evidence or []),
+        })
+    return records
+
+
+@_cli_command
+def cmd_chapters(args):
+    """Resolve chapters for a media or funscript path (videoflow.chapters.load_chapters).
+
+    Priority chain inside videoflow: <stem>.chapters.json sidecar -> embedded mp4
+    markers (ffprobe) -> <stem>.analysis.json. When passed a funscript path,
+    only the sidecar + analysis.json are honoured (mp4 probe is a no-op on
+    non-video suffixes).
+    """
+    from videoflow.chapters import load_chapters, ChapterError
+
+    try:
+        chapters = load_chapters(args.path)
+    except ChapterError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if chapters is None:
+        result = {"found": False, "chapters": []}
+    else:
+        result = {
+            "found": True,
+            "chapters": _normalize_chapter_list(chapters, duration_ms=args.duration_ms),
+        }
+
+    if args.format == "json":
+        print(json.dumps(result))
+    else:
+        if not result["found"]:
+            print("No chapters found.")
+        else:
+            print(f"Resolved {len(result['chapters'])} chapter(s):")
+            for c in result["chapters"]:
+                print(f"  {c['at_ms']:>10}ms - {c['end_ms']:>10}ms  "
+                      f"{c['name'] or '(unnamed)'}  intent={c['intent'] or '-'}  "
+                      f"type={c['content_type'] or '-'}")
+
+
+@_cli_command
+def cmd_auto_chapter(args):
+    """Run videoflow.structural.auto_chapter on a media file.
+
+    Writes <stem>.chapters.json next to the media (unless --no-write).
+    Returns the resulting chapter list as JSON so the caller can hydrate
+    its UI immediately without re-reading the sidecar.
+    """
+    from videoflow.structural import auto_chapter, AutoChapterError
+
+    try:
+        chapters = auto_chapter(
+            args.media,
+            target_minutes=args.target_minutes,
+            write_sidecar=not args.no_write,
+        )
+    except AutoChapterError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    records = _normalize_chapter_list(chapters)
+    payload = {"chapters": records, "written": not args.no_write}
+
+    if args.format == "json":
+        print(json.dumps(payload))
+    else:
+        print(f"Detected {len(records)} chapter(s) via videoflow.structural:")
+        for c in records:
+            print(f"  {c['at_ms']:>10}ms - {c['end_ms']:>10}ms  "
+                  f"{c['content_type'] or '-':<7}  conf={c['confidence']:.2f}")
+        if not args.no_write:
+            print(f"\nSidecar written next to: {args.media}")
+
+
+# ------------------------------------------------------------------
 # Argument parser
 # ------------------------------------------------------------------
 
@@ -1368,6 +1479,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_beats.add_argument("--output-dir", metavar="DIR",
                          help="Directory for _beats.json and _beats.csv (default: same as video)")
 
+    # --- chapters (videoflow resolver bridge) ---
+    p_ch = sub.add_parser(
+        "chapters",
+        help="Resolve chapters via videoflow (sidecar > mp4 markers > analysis.json)",
+    )
+    p_ch.add_argument("path",
+                      help="Funscript or media file path (stem must match the sidecar)")
+    p_ch.add_argument("--duration-ms", type=int, default=None,
+                      help="Track duration in ms — used to fill end_ms on the last chapter "
+                           "when the source (e.g. mp4 markers) only carries start times")
+    p_ch.add_argument("--format", choices=["table", "json"], default="table",
+                      help="Output format (default: table)")
+
+    # --- auto-chapter (videoflow.structural analyzer bridge) ---
+    p_ac = sub.add_parser(
+        "auto-chapter",
+        help="Auto-detect chapters from media via videoflow.structural (writes sidecar)",
+    )
+    p_ac.add_argument("media", help="Path to video or audio file")
+    p_ac.add_argument("--target-minutes", type=float, default=5.5,
+                      help="Average target chapter length in minutes (default: 5.5)")
+    p_ac.add_argument("--no-write", action="store_true",
+                      help="Skip writing <stem>.chapters.json (default: write it)")
+    p_ac.add_argument("--format", choices=["table", "json"], default="table",
+                      help="Output format (default: table)")
+
     # --- parse-captions ---
     p_caps = sub.add_parser(
         "parse-captions",
@@ -1549,6 +1686,8 @@ def main():
         "meta":             cmd_meta,
         "suggest-tone":     cmd_suggest_tone,
         "beats":            cmd_beats,
+        "chapters":         cmd_chapters,
+        "auto-chapter":     cmd_auto_chapter,
         "parse-captions":   cmd_parse_captions,
         "device-aware":     cmd_device_aware,
         "stim-config":      cmd_stim_config,
