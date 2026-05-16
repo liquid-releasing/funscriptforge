@@ -176,7 +176,7 @@ function fmtTimeShort(ms) {
 // number of hooks" guard.
 const EMPTY_CHAPTER = { id: '__empty__', atMs: 0, endMs: 0, name: '', color: '#888' };
 
-export default function ChaptersTab({ project, onAttachMedia }) {
+export default function ChaptersTab({ project, onAttachMedia, onChaptersChange }) {
   const totalMs = project?.durationMs ?? 0;
   const actions = Array.isArray(project?.actions) ? project.actions : [];
 
@@ -227,6 +227,11 @@ export default function ChaptersTab({ project, onAttachMedia }) {
     setActiveId(created[0]?.id ?? null);
     setTonesByChapter(seedTones(created, project?.toneSuggestion));
     setParamsByChapter(seedParams(created));
+    // Lift the new chapter list back to App.jsx so downstream tabs
+    // (Patterns, Phrases) see the same chapters. Without this push, they
+    // would still see the original (often empty) chapterList from
+    // load_project.
+    onChaptersChange?.(created);
   };
   const handleCreateChapters = async () => {
     if (!project?.path || creating) return;

@@ -31,6 +31,7 @@ import {
   Button, Icon, fmtTimeShort,
 } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
+import { TRANSFORMS, BEHAVIOR_TAGS } from '../data/transforms.js';
 
 // ─── Catalogs (local stubs until backend ships) ───────────────────────
 //
@@ -63,24 +64,15 @@ const PATTERN_TYPES = [
 
 const findPattern = (id) => PATTERN_TYPES.find((p) => p.id === id) ?? PATTERN_TYPES[0];
 
-// Structural transforms surfaced on the Patterns tab. Real catalog
-// lives in `forge/funscript_tools.py` + `pattern_catalog/`; surface as
-// JSON via `cli.py list-transforms --format json` when wired. Until
-// then this is a small representative sample so the UI can be built.
-const TRANSFORMS = [
-  { id: 'amplitude_scale', label: 'Amplitude Scale', category: 'structural',
-    summary: 'Stretch or compress stroke depth around the midpoint.',
-    description: 'Stretches or compresses stroke depth around position 50. Scale above 1.0 makes strokes larger; below 1.0 makes them smaller.',
-    params: [{ id: 'scale', label: 'Scale', min: 0.1, max: 5, step: 0.05, default: 2, unit: '×' }] },
-  { id: 'recenter', label: 'Recenter', category: 'structural',
-    summary: 'Shift the midpoint up or down without changing depth.',
-    description: 'Adds a constant offset to every position. The stroke shape is preserved.',
-    params: [{ id: 'offset', label: 'Offset', min: -40, max: 40, step: 1, default: 0 }] },
-  { id: 'velocity_smooth', label: 'Velocity Smooth', category: 'structural',
-    summary: 'Round off sharp velocity transitions.',
-    description: 'Smooths position changes with a moving average over the action timeline.',
-    params: [{ id: 'window', label: 'Window', min: 1, max: 9, step: 2, default: 3 }] },
-];
+// Transforms + tags catalogs come from the shared data module so the
+// Phrases tab can use the same source. See [data/transforms.js].
+//
+// Patterns we *see* (left rail PATTERN_TYPES above) vs patterns we
+// *change to* (right panel structural transforms — stroke/drift/tide/
+// waiting/halve_tempo/nudge) are two different namespaces with some
+// overlapping names. The classifier *detects* a Drift pattern; the
+// Drift *transform* synthesises a Drift-shaped replacement. Same word,
+// different direction.
 
 // ─── Stub instance generator ──────────────────────────────────────────
 // Deterministic-ish fake instances per chapter so the UI has data before
@@ -225,12 +217,15 @@ export default function PatternsTab({ project }) {
     setActiveInstanceId(activeInstances[0]?.id ?? null);
   }, [activeChapter?.id, activePatternId]);
 
-  // TransformPanel state. Pre-filter the catalog to structural-only
-  // since we're on the Patterns tab (hideCategories drops the radio
-  // row; the dropdown shows every transform in the filtered list).
-  const [transformId, setTransformId] = useState('amplitude_scale');
+  // TransformPanel state. Categories are now visible (Tone / Behavior /
+  // Structural) — the user can pick any transform across the catalog,
+  // not just structural ones. Pattern instances most commonly want
+  // structural replacements (stroke/drift/tide/etc.) so we default to
+  // that category and the canonical 'stroke' transform.
+  const [category, setCategory] = useState('structural');
+  const [transformId, setTransformId] = useState('stroke');
   const initialParams = () => {
-    const t = TRANSFORMS.find((x) => x.id === 'amplitude_scale');
+    const t = TRANSFORMS.find((x) => x.id === 'stroke');
     const out = {}; for (const p of t.params) out[p.id] = p.default; return out;
   };
   const [params, setParams] = useState(initialParams);
@@ -239,6 +234,7 @@ export default function PatternsTab({ project }) {
     setTransformId(id);
     const t = TRANSFORMS.find((x) => x.id === id);
     if (!t) return;
+    setCategory(t.category);
     const out = {}; for (const p of t.params) out[p.id] = p.default;
     setParams(out);
   };
@@ -356,11 +352,16 @@ export default function PatternsTab({ project }) {
           />
         </div>
 
-        {/* Right — TransformPanel (Structural-only; no category radios) */}
+        {/* Right — TransformPanel with full Tone / Behavior / Structural
+            radios. Default category is Structural since pattern-instance
+            work most commonly wants pattern replacements (stroke/drift/
+            tide/etc.), but the user can switch to Tone or Behavior to
+            apply phrase-style transforms to the instance. */}
         <TransformPanel
           transforms={TRANSFORMS}
-          tags={[]}
-          category="structural"
+          tags={BEHAVIOR_TAGS}
+          category={category}
+          onCategoryChange={setCategory}
           transformId={transformId}
           onTransformChange={handleTransformChange}
           params={params}
@@ -369,7 +370,6 @@ export default function PatternsTab({ project }) {
           cancelLabel="Cancel"
           onApply={handleApply}
           onCancel={handleCancel}
-          hideCategories
         />
       </div>
     </div>

@@ -71,6 +71,17 @@ export default function App() {
     }
   };
 
+  // ChaptersTab can mutate the chapter list (auto-split sidecar, videoflow
+  // analyze). Lift that back to openedProject so downstream tabs (Patterns,
+  // Phrases) see the same chapters. Without this, ChaptersTab held the new
+  // chapters in *local state only* and Patterns saw an empty chapterList.
+  const handleChaptersChange = (newChapterList) => {
+    setOpenedProject((prev) => {
+      if (!prev || typeof prev !== 'object') return prev;
+      return { ...prev, chapterList: newChapterList, chapters: newChapterList.length };
+    });
+  };
+
   // Single orchestrator for "user picked a funscript path". Pre-switches to
   // the Project tab, sets the wait cursor, awaits load_project, then commits
   // the result. Pulled up here so both Library and Project tab callbacks
@@ -252,6 +263,7 @@ export default function App() {
           <ChaptersTab
             project={typeof openedProject === 'object' ? openedProject : null}
             onAttachMedia={() => console.log('TODO: pickMediaFile + attach to project')}
+            onChaptersChange={handleChaptersChange}
           />
         )}
         {tab === 'patterns' && (
