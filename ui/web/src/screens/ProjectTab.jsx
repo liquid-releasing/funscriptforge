@@ -35,7 +35,6 @@ export default function ProjectTab({
   isLoadingProject,
   selectedDevices,
   onToggleDevice,
-  onContinue,
 }) {
   const [search, setSearch] = useState('');
   const [recents, setRecents] = useState(null);
@@ -117,7 +116,6 @@ export default function ProjectTab({
             selectedDevices={selectedDevices}
             onToggleDevice={onToggleDevice}
             onOpen={handleOpen}
-            onContinue={onContinue}
           />
         ) : (
           <EmptyProject onOpen={handleOpen} />
@@ -247,7 +245,7 @@ function ProjectRow({ project, active, onClick }) {
   );
 }
 
-function ActiveProject({ project, devices, selectedDevices, onToggleDevice, onOpen, onContinue }) {
+function ActiveProject({ project, devices, selectedDevices, onToggleDevice, onOpen }) {
   // Real funscripts loaded via the Rust bridge populate `project.actions`
   // (downsampled to ~1200 points by load_project). Recents and mock projects
   // get a deterministic synthesised curve from the preview generator.
@@ -431,18 +429,14 @@ function ActiveProject({ project, devices, selectedDevices, onToggleDevice, onOp
         </div>
       )}
 
+      {/* "Continue to Device reset" used to live here as a per-tab CTA.
+          The global AcceptBar in the footer is the canonical advance now —
+          it validates the device selection and advances when satisfied.
+          Only "Replace files…" remains here since that's a project-local
+          action, not a workflow advance. */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <Button kind="ghost" size="md" icon="folder-open" onClick={onOpen}>
           Replace files…
-        </Button>
-        <Button
-          kind="primary"
-          size="md"
-          iconRight="chevron-right"
-          disabled={selectedDevices.length === 0}
-          onClick={onContinue}
-        >
-          Continue to Device reset
         </Button>
       </div>
     </>

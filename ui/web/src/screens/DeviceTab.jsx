@@ -28,7 +28,7 @@ import FunscriptChart from '../components/FunscriptChart.jsx';
 import { generatePreviewActions, parseDurationToMs } from '../lib/funscriptPreview.js';
 import { listDevices } from '../api/forge.js';
 
-export default function DeviceTab({ project, selectedDevices, onContinue }) {
+export default function DeviceTab({ project, selectedDevices }) {
   // Settings — TODO: hydrate from project.ffmeta when sidecar loading lands.
   const [bpmCap, setBpmCap] = useState(180);
   const [latency, setLatency] = useState(60);

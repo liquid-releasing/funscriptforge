@@ -10,9 +10,7 @@
 //   │ Row 2 — Active chapter funscript view (phrase bands +    │
 //   │          action density + playhead). Phrase selector.    │
 //   ├──────────────────────────────────────────────────────────┤
-//   │ Row 3 — Phrase ribbon (compact chip strip)               │
-//   ├──────────────────────────────────────────────────────────┤
-//   │ Row 4 — Mode bar (Pattern / Behavior tag / Single phrase)│
+//   │ Row 3 — Mode bar (Pattern / Behavior tag / Single phrase)│
 //   ├──────────┬──────────────────────────────────┬────────────┤
 //   │ Left     │ Center (scrollable) — per-phrase │ Right —    │
 //   │ rail     │ before/after preview, single     │ Transform  │
@@ -114,12 +112,10 @@ export default function TransformTab({ project }) {
                 {fmt(activeChapter.atMs)}–{fmt(activeChapter.endMs)} · {phrasesInScope.length} phrases
               </span>
             </div>
-            {/* Chapter-level actions parallel to the prototype's play
-                button + readout. Hooked up minimally for now. */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <SmallButton onClick={() => console.log('TODO: insert chapter')}>+ Insert chapter</SmallButton>
-              <SmallButton onClick={() => console.log('TODO: join chapter')}>⛓ Join chapter</SmallButton>
-            </div>
+            {/* Insert / Join chapter buttons used to live here; removed
+                2026-05-16 — chapter mutations belong on the Chapters tab
+                (via the per-band 3-dot menu), not duplicated in the
+                Transform context. */}
           </div>
 
           {/* Phrase view placeholder. In the prototype, this is the
@@ -147,20 +143,10 @@ export default function TransformTab({ project }) {
         </div>
       </HeaderRow>
 
-      {/* ── Row 3 — Phrase ribbon (compact chip strip) ── */}
-      <HeaderRow>
-        <RowLabel>Phrases</RowLabel>
-        <div style={{
-          flex: 1, height: 16, borderRadius: 3,
-          background: 'var(--surface-2)', border: '1px dashed var(--border)',
-          display: 'grid', placeItems: 'center',
-          fontSize: 10, color: 'var(--text-dim)',
-        }}>
-          phrase chips · coming with phrase data
-        </div>
-      </HeaderRow>
+      {/* Row 3 (compact phrase chip strip) removed 2026-05-16 — redundant
+          with the predominant phrase view above. Mode bar moves up. */}
 
-      {/* ── Row 4 — Mode bar ── */}
+      {/* ── Row 3 — Mode bar (was Row 4) ── */}
       <HeaderRow>
         <RowLabel>Edit by</RowLabel>
         <Segmented value={mode} onChange={setMode} options={[

@@ -110,17 +110,67 @@ export default function App() {
     })),
   ];
 
-  // Footer state — placeholder driven from project/tab context for now.
-  // Real summary + accepted state come from the per-tab working-state
-  // when we wire accept-and-chain.
-  const footerSummary = !project?.path
-    ? 'No project loaded'
-    : (tab === 'chapters'
-        ? `Tones set on ${(project?.chapterList ?? []).length} chapters · pending real accept-and-chain`
-        : `${TABS.find((t) => t.id === tab)?.label ?? 'Tab'} · pending accept-and-chain`);
-  const chainFile = project?.path
+  // Workflow chain: each tab knows the next tab to advance to on "Accept
+  // and chain." Tabs without an entry have no advance action (Library is
+  // the entry point; Export is the terminus). Per-tab gates validate
+  // before advancing — Project requires at least one selected device.
+  const TAB_CHAIN = {
+    project:   'device',
+    device:    'chapters',
+    chapters:  'transform',
+    transform: 'stim',
+    stim:      'phrases',
+    phrases:   'export',
+  };
+  const tabGate = (id) => {
+    if (id === 'project') {
+      if (!project?.path) return 'Open a funscript before continuing.';
+      if (selectedDevices.length === 0) return 'Pick at least one target device to continue.';
+    }
+    if (['device', 'chapters', 'transform', 'stim', 'phrases'].includes(id) && !project?.path) {
+      return 'Open a funscript before continuing.';
+    }
+    return null;
+  };
+  const gateMsg = tabGate(tab);
+  const nextTab = TAB_CHAIN[tab];
+
+  // Footer summary reflects the current tab's gate state. When a gate is
+  // blocking, the summary tells the user what's needed — same affordance
+  // as the old per-tab CTA, now centralized.
+  let footerSummary;
+  if (!project?.path) {
+    footerSummary = 'Open a funscript from the Library tab to begin.';
+  } else if (gateMsg) {
+    footerSummary = gateMsg;
+  } else if (nextTab) {
+    const nextLabel = TABS.find((t) => t.id === nextTab)?.label ?? nextTab;
+    footerSummary = `${TABS.find((t) => t.id === tab)?.label ?? 'Tab'} · ready to chain to ${nextLabel}`;
+  } else {
+    footerSummary = `${TABS.find((t) => t.id === tab)?.label ?? 'Tab'} · no downstream tab`;
+  }
+  const chainFile = project?.path && nextTab
     ? `${(project.title ?? 'project')}.${tab}.json`
     : null;
+
+  const handleAccept = () => {
+    if (gateMsg) {
+      // Gate blocks; nothing to advance. The summary already shows why.
+      // Could escalate to a toast if visibility becomes an issue.
+      return;
+    }
+    if (!nextTab) return;
+    // TODO: write chain file with the active tab's working state.
+    // For now we just advance; each tab's state persists in its own
+    // state (no chain file produced yet — accept-and-chain workingActions
+    // is the next big wiring task).
+    console.log(`accept-and-chain: ${tab} → ${nextTab}`);
+    setTab(nextTab);
+  };
+  const handleReset = () => {
+    // TODO: each tab will register its own reset; for now log.
+    console.log(`reset working state for ${tab}`);
+  };
 
   return (
     <div className="ff-app" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
@@ -185,14 +235,12 @@ export default function App() {
             isLoadingProject={isLoadingProject}
             selectedDevices={selectedDevices}
             onToggleDevice={toggleDevice}
-            onContinue={() => setTab('device')}
           />
         )}
         {tab === 'device' && (
           <DeviceTab
             project={typeof openedProject === 'object' ? openedProject : null}
             selectedDevices={selectedDevices}
-            onContinue={() => setTab('chapters')}
           />
         )}
         {tab === 'chapters' && (
@@ -236,8 +284,11 @@ export default function App() {
         summary={footerSummary}
         chainFile={chainFile}
         accepted={false}
-        onAccept={() => console.log(`TODO: accept-and-chain for ${tab}`)}
-        onReset={() => console.log(`TODO: reset working state for ${tab}`)}
+        primaryLabel={nextTab
+          ? `Accept and chain to ${TABS.find((t) => t.id === nextTab)?.label ?? nextTab}`
+          : 'Accept and chain'}
+        onAccept={handleAccept}
+        onReset={handleReset}
       />
       <StatusBar
         synced
