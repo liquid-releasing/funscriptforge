@@ -21,7 +21,7 @@
 // from `chapter.intent` when it matches a known tone, else falls back to
 // `project.toneSuggestion`, else 'build'.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Icon, MediaViewer, Slider, ChapterRibbon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { createChaptersSidecar, analyzeChaptersWithVideoflow } from '../api/forge.js';
@@ -185,7 +185,7 @@ function fmtTimeShort(ms) {
 // number of hooks" guard.
 const EMPTY_CHAPTER = { id: '__empty__', atMs: 0, endMs: 0, name: '', color: '#888' };
 
-export default function ChaptersTab({ project, onAttachMedia, onChaptersChange }) {
+export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, setBusy, setAppError }) {
   const totalMs = project?.durationMs ?? 0;
   const actions = Array.isArray(project?.actions) ? project.actions : [];
 
@@ -257,19 +257,38 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange }
 
   // Content-aware detection via videoflow.structural — requires adjacent
   // media. The Rust command errors out cleanly when no media is attached;
-  // surface that to the user so they know to attach a file.
+  // surface that to the user so they know to attach a file. Drives the
+  // global footer busy state so the live ProgressReporter events from
+  // videoflow appear in the AcceptBar; the consumer can Cancel mid-run
+  // and we discard the in-flight result.
+  const analyzeCancelledRef = useRef(false);
   const handleAnalyzeWithVideoflow = async () => {
     if (!project?.path || analyzing) return;
     setAnalyzeError(null);
     setAnalyzing(true);
+    analyzeCancelledRef.current = false;
+    setBusy?.({
+      message: 'Analyzing chapters…',
+      onCancel: () => {
+        analyzeCancelledRef.current = true;
+        setAnalyzing(false);
+        setBusy?.(null);
+      },
+    });
     try {
-      const detected = await analyzeChaptersWithVideoflow(project.path, null);
+      const detected = await analyzeChaptersWithVideoflow(project.path, null, project.mediaPath || null);
+      if (analyzeCancelledRef.current) return;
       hydrateFromChapterList(detected);
     } catch (err) {
+      if (analyzeCancelledRef.current) return;
       console.error('ChaptersTab: analyze_chapters_with_videoflow failed', err);
       setAnalyzeError(String(err?.message ?? err));
+      setAppError?.(`Auto-chapter failed: ${err?.message ?? err}`);
     } finally {
-      setAnalyzing(false);
+      if (!analyzeCancelledRef.current) {
+        setAnalyzing(false);
+        setBusy?.(null);
+      }
     }
   };
 
@@ -357,6 +376,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange }
         onCreate={handleCreateChapters}
         creating={creating}
         hasMedia={!!project?.mediaPath}
+        onAttachMedia={onAttachMedia}
         onAnalyze={handleAnalyzeWithVideoflow}
         analyzing={analyzing}
         analyzeError={analyzeError}
@@ -764,7 +784,7 @@ function TonePicker({ tones, value, onChange }) {
 //      same sidecar shape, tagged so we can tell hand-split from analyzer.
 function ChaptersEmptyState({
   canCreate, n, onChangeN, onCreate, creating,
-  hasMedia, onAnalyze, analyzing, analyzeError,
+  hasMedia, onAttachMedia, onAnalyze, analyzing, analyzeError,
 }) {
   const busy = creating || analyzing;
   return (
@@ -824,9 +844,27 @@ function ChaptersEmptyState({
             {analyzing ? 'Analyzing…' : 'Analyze with videoflow'}
           </button>
           {!hasMedia && canCreate && (
-            <div style={{ fontSize: 11.5, color: 'var(--text-dim)' }}>
-              No adjacent media — attach a video/audio file with the same name
-              to enable.
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                onClick={onAttachMedia}
+                disabled={busy}
+                style={{
+                  padding: '7px 12px', fontSize: 12, fontWeight: 600,
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit',
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                <Icon name="upload-cloud" size={12} />
+                Attach media…
+              </button>
+              <span style={{ fontSize: 11.5, color: 'var(--text-dim)' }}>
+                Videoflow needs a video or audio file to inspect.
+              </span>
             </div>
           )}
         </div>

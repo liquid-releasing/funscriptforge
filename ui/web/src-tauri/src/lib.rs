@@ -22,6 +22,8 @@ pub fn run() {
             commands::load_project,
             commands::create_chapters_sidecar,
             commands::analyze_chapters_with_videoflow,
+            commands::analyze_phrases,
+            commands::attach_media,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

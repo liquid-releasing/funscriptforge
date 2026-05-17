@@ -236,14 +236,51 @@ def cmd_pipeline(args):
 
 @_cli_command
 def cmd_assess(args):
+    json_mode = getattr(args, "format", "table") == "json"
+
     analyzer = FunscriptAnalyzer(config=_build_analyzer_config(args))
     analyzer.load(args.funscript)
     t0 = time.time()
+    # JSON mode: stdout is the structured payload — keep progress prints
+    # off it. Send progress to stderr so the user (and Tauri bridge) can
+    # still see them but the parser stays clean.
     def _progress(stage: str) -> None:
-        print(f"  {stage}")
+        if json_mode:
+            print(f"  {stage}", file=sys.stderr)
+        else:
+            print(f"  {stage}")
 
     result = analyzer.analyze(progress_callback=_progress)
     elapsed = time.time() - t0
+
+    if json_mode:
+        # Structured stdout payload for the Tauri bridge (PhrasesTab consumer).
+        # Phrase shape: at_ms / end_ms / number (1-based global) / bpm / tag
+        # (primary tag for color) / all_tags (forward-compat) / pattern_label.
+        # Sidecar file is written too unless --no-save is passed; gives both
+        # the JS consumer and the existing pipeline what they need.
+        payload = {
+            "duration_ms": result.duration_ms,
+            "bpm": result.bpm,
+            "action_count": result.action_count,
+            "phrases": [
+                {
+                    "at_ms":         p.start_ms,
+                    "end_ms":        p.end_ms,
+                    "number":        i + 1,
+                    "bpm":           p.bpm,
+                    "tag":           (p.tags[0] if p.tags else None),
+                    "all_tags":      list(p.tags),
+                    "pattern_label": p.pattern_label,
+                }
+                for i, p in enumerate(result.phrases)
+            ],
+        }
+        if not getattr(args, "no_save", False):
+            output = args.output or _default_path(args.funscript, "_assessment.json")
+            result.save(output)
+        print(json.dumps(payload))
+        return
 
     output = args.output or _default_path(args.funscript, "_assessment.json")
     result.save(output)
@@ -1139,6 +1176,60 @@ def cmd_chapters(args):
 
 
 @_cli_command
+def _emit_progress(label: str) -> None:
+    """Mirror of `videoflow.cli._emit_progress`. Writes a `progress: <label>`
+    line to stderr AND (when VIDEOFLOW_PROGRESS_FILE is set) appends the
+    same line to that file. The temp-file side-channel exists because
+    Tokio's stderr piping on Windows is unreliable — Tauri bridges poll
+    the file for live UI updates."""
+    try:
+        print(f"progress: {label}", file=sys.stderr, flush=True)
+    except OSError:
+        pass
+    path = os.environ.get("VIDEOFLOW_PROGRESS_FILE")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"progress: {label}\n")
+    except OSError:
+        pass
+
+
+def _make_stage_event_emitter():
+    """Return an OnProgress callback that turns StageEvents into the
+    structured `progress: <kind>::<depth>::<leaf>[::<msg>]` lines our
+    Tauri bridge polls. Three kinds:
+      start::<depth>::<leaf>             stage opened
+      done::<depth>::<leaf>              stage closed
+      msg::<depth>::<leaf>::<message>    in-stage status update (counts
+                                          like "Classifying chapter 3/4…"
+                                          that videoflow emits via
+                                          reporter.message())
+    The UI mirrors top-level (depth 2) stages as a checklist and bubbles
+    the latest msg payload into the headline."""
+    def _cb(event):
+        depth = len(event.stage_path)
+        leaf = (event.stage_path[-1] if event.stage_path else "").replace("::", "_")
+        if not leaf:
+            return
+        if event.kind == "start":
+            _emit_progress(f"start::{depth}::{leaf}")
+        elif event.kind == "complete":
+            # Carry the stage summary through ("13 chapters detected",
+            # "1234 beats @ 124.3 BPM", etc.) so the UI can display the
+            # per-step result alongside the green check.
+            summary = (event.summary or "").replace("::", " ")
+            if summary:
+                _emit_progress(f"done::{depth}::{leaf}::{summary}")
+            else:
+                _emit_progress(f"done::{depth}::{leaf}")
+        elif event.kind == "progress" and event.message:
+            safe = event.message.replace("::", " ")
+            _emit_progress(f"msg::{depth}::{leaf}::{safe}")
+    return _cb
+
+
 def cmd_auto_chapter(args):
     """Run videoflow.structural.auto_chapter on a media file.
 
@@ -1153,6 +1244,7 @@ def cmd_auto_chapter(args):
             args.media,
             target_minutes=args.target_minutes,
             write_sidecar=not args.no_write,
+            on_progress=_make_stage_event_emitter(),
         )
     except AutoChapterError as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -1222,6 +1314,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--amplitude-tolerance", type=float, metavar="FRACTION",
         help="Phrase break sensitivity: fraction of amplitude deviation to trigger a new phrase "
              "(lower = more sensitive, e.g. 0.25; default: 0.30)",
+    )
+    p_assess.add_argument(
+        "--format", choices=["table", "json"], default="table",
+        help="Output format: 'table' (default, human-readable summary) or 'json' "
+             "(structured payload to stdout for programmatic consumers like the Tauri UI).",
+    )
+    p_assess.add_argument(
+        "--no-save", action="store_true",
+        help="Skip writing the *_assessment.json sidecar file. Only meaningful with --format json.",
     )
 
     # --- transform ---

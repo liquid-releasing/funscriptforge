@@ -1,16 +1,19 @@
 // Project — working view for a single funscript project.
 //
 // Ported from ui_design/ui_kits/funscriptforge-app/tab-Project.jsx, rewritten
-// as a real ES module: primitives come from forgemoment, recents/devices flow
-// through the platform adapter (../api/forge.js).
+// as a real ES module: primitives come from forgemoment, recents flow through
+// the platform adapter (../api/forge.js).
 //
 // Layout:
 //   Left rail (320px)   — search + recent-project switcher; active project drives center.
-//   Center (flex)        — title block, files-in-project list, target-device picker, continue.
+//   Center (flex)        — title block, funscript chart, files-in-project list,
+//                          "Replace files…" affordance. Device picker moved to
+//                          the Device tab 2026-05-17 (where it belongs — gives
+//                          a clearer home, makes the tab detachable for other
+//                          LQR apps, and supports a SFW build via vocab swap).
 //
 // State ownership:
-//   activeProjectId         — local; which project the center is displaying
-//   selectedDevices         — lifted to App.jsx so it persists across tab switches
+//   activeProjectId   — local; which project the center is displaying
 //
 // Project lookup precedence: the prop `openedProjectId` (passed from
 // LibraryScreen via App.jsx) seeds activeProjectId on first mount. Users can
@@ -24,7 +27,7 @@ import {
   TextInput,
   SectionLabel,
 } from 'forgemoment';
-import { listRecents, listDevices, pickFunscriptFile } from '../api/forge.js';
+import { listRecents, pickFunscriptFile, pickProjectFile, classifyProjectFile } from '../api/forge.js';
 import { generatePreviewActions, parseDurationToMs } from '../lib/funscriptPreview.js';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 
@@ -32,30 +35,24 @@ export default function ProjectTab({
   openedProject,
   loadedProjects = [],
   onOpenScript,
+  onAttachMedia,
+  onAppError,
   isLoadingProject,
-  selectedDevices,
-  onToggleDevice,
 }) {
   const [search, setSearch] = useState('');
   const [recents, setRecents] = useState(null);
-  const [devices, setDevices] = useState(null);
   const seedId =
     typeof openedProject === 'string' ? openedProject : openedProject?.id ?? null;
   const [activeProjectId, setActiveProjectId] = useState(seedId);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([listRecents(), listDevices()])
-      .then(([r, d]) => {
-        if (cancelled) return;
-        setRecents(r);
-        setDevices(d);
-      })
+    listRecents()
+      .then((r) => { if (!cancelled) setRecents(r); })
       .catch((err) => {
         if (cancelled) return;
-        console.error('ProjectTab: failed to load', err);
+        console.error('ProjectTab: failed to load recents', err);
         setRecents([]);
-        setDevices([]);
       });
     return () => { cancelled = true; };
   }, []);
@@ -88,13 +85,34 @@ export default function ProjectTab({
     mergedRecents?.[0] ??
     null;
 
+  // Left-rail "Open" button: only ever opens a new funscript. Single-type
+  // picker keeps this affordance unambiguous.
   const handleOpen = async () => {
     const path = await pickFunscriptFile();
     if (!path) return;
-    // App.jsx orchestrates load_project (sees the wait state, lifts the
-    // result into loadedProjects, drives the tab pre-switch). ProjectTab
-    // just hands up the picked path.
     onOpenScript?.(path);
+  };
+
+  // Active-project "Add or replace…" button: opens the multi-type picker
+  // and routes by extension. Funscript → reopens the project; audio/video
+  // → attaches as media; .ffmeta / .chapters.json → noted but not yet
+  // wired through to import. Anything else: surface a footer error.
+  const handleAddOrReplace = async () => {
+    const path = await pickProjectFile();
+    if (!path) return;
+    const kind = classifyProjectFile(path);
+    if (kind === 'funscript') {
+      onOpenScript?.(path);
+    } else if (kind === 'media') {
+      onAttachMedia?.(path);
+    } else if (kind === 'meta') {
+      // TODO: route .chapters.json → loadChaptersSidecar, .ffmeta → loadFFMeta.
+      // The bundle-aware load path is queued as part of the .ffmeta scaffolding.
+      console.log('ProjectTab: meta-file import not wired yet', path);
+      onAppError?.(`Importing sidecar files isn't wired yet: ${basename(path)}`);
+    } else {
+      onAppError?.(`Unrecognized file type: ${basename(path)}`);
+    }
   };
 
   return (
@@ -112,10 +130,7 @@ export default function ProjectTab({
         {active ? (
           <ActiveProject
             project={active}
-            devices={devices ?? []}
-            selectedDevices={selectedDevices}
-            onToggleDevice={onToggleDevice}
-            onOpen={handleOpen}
+            onAddOrReplace={handleAddOrReplace}
           />
         ) : (
           <EmptyProject onOpen={handleOpen} />
@@ -245,7 +260,7 @@ function ProjectRow({ project, active, onClick }) {
   );
 }
 
-function ActiveProject({ project, devices, selectedDevices, onToggleDevice, onOpen }) {
+function ActiveProject({ project, onAddOrReplace }) {
   // Real funscripts loaded via the Rust bridge populate `project.actions`
   // (downsampled to ~1200 points by load_project). Recents and mock projects
   // get a deterministic synthesised curve from the preview generator.
@@ -385,107 +400,21 @@ function ActiveProject({ project, devices, selectedDevices, onToggleDevice, onOp
         <FileRow icon="git-branch" name="_funscript_phrases.json" sub="phrase-level edits · written when Phrases tab is accepted" tag="chain" disabled />
       </div>
 
-      <SectionLabel
-        right={
-          <span style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
-            Pick one or more
-          </span>
-        }
-      >
-        Target devices
-      </SectionLabel>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-          gap: 10,
-          marginBottom: 18,
-        }}
-      >
-        {devices.map((d) => (
-          <DeviceCard
-            key={d.id}
-            device={d}
-            selected={selectedDevices.includes(d.id)}
-            onToggle={() => onToggleDevice(d.id)}
-          />
-        ))}
-      </div>
-
-      {selectedDevices.length === 0 && (
-        <div
-          style={{
-            padding: 12,
-            fontSize: 12,
-            color: '#ffb547',
-            background: 'rgba(255,181,71,0.08)',
-            border: '1px solid rgba(255,181,71,0.3)',
-            borderRadius: 6,
-            marginBottom: 18,
-          }}
-        >
-          <Icon name="alert-triangle" size={12} style={{ marginRight: 6, verticalAlign: '-2px' }} />
-          Pick at least one target device to continue.
-        </div>
-      )}
-
-      {/* "Continue to Device reset" used to live here as a per-tab CTA.
-          The global AcceptBar in the footer is the canonical advance now —
-          it validates the device selection and advances when satisfied.
-          Only "Replace files…" remains here since that's a project-local
-          action, not a workflow advance. */}
+      {/* Device picker lives on the Device tab (2026-05-17). Project tab's
+          job here ends with the file list + the "Add or replace…" button.
+          The button opens a multi-type picker (funscript / audio / video /
+          sidecar) and routes the pick by extension. */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <Button kind="ghost" size="md" icon="folder-open" onClick={onOpen}>
-          Replace files…
+        <Button kind="ghost" size="md" icon="folder-open" onClick={onAddOrReplace}>
+          Add or replace…
         </Button>
       </div>
     </>
   );
 }
 
-function DeviceCard({ device, selected, onToggle }) {
-  return (
-    <button
-      onClick={onToggle}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        gap: 8,
-        padding: 14,
-        borderRadius: 8,
-        background: selected ? 'rgba(255,75,75,0.08)' : 'var(--surface)',
-        border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
-        color: 'var(--text)',
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-        textAlign: 'left',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 6,
-            background: selected ? 'var(--accent)' : 'var(--surface-2)',
-            color: selected ? '#fff' : 'var(--text-muted)',
-            display: 'grid',
-            placeItems: 'center',
-          }}
-        >
-          <Icon name={device.icon || 'cpu'} size={14} />
-        </div>
-        <span style={{ fontSize: 13, fontWeight: 700 }}>{device.label}</span>
-        <div style={{ flex: 1 }} />
-        {selected && <Icon name="check" size={14} style={{ color: 'var(--accent)' }} />}
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.4 }}>
-        {device.summary || `${device.maxBpm || 200} BPM max · ${device.axes || 'linear'}`}
-      </div>
-    </button>
-  );
-}
+// DeviceCard moved to DeviceTab.jsx (2026-05-17) — the device picker now
+// lives where it belongs.
 
 function basename(p) {
   if (!p) return '';

@@ -146,11 +146,26 @@ export function createChaptersSidecar(funscriptPath, n) {
  *
  *  Cost: this is slow (librosa loads the whole audio, runs RMS / spectral-flux
  *  analysis, then clusters). Caller should show a progress indicator. */
-export function analyzeChaptersWithVideoflow(funscriptPath, targetMinutes) {
+export function analyzeChaptersWithVideoflow(funscriptPath, targetMinutes, mediaPath) {
   return call(
     'analyze_chapters_with_videoflow',
-    { funscriptPath, targetMinutes },
+    { funscriptPath, targetMinutes, mediaPath },
     () => Promise.resolve(synthMockChapters(754000, 6)),
+  );
+}
+
+/** Run `cli.py assess` against the funscript and return the parsed phrase
+ *  records. Used by the Phrases tab to hydrate its per-phrase edit table.
+ *  Each record: { id, at_ms, end_ms, number, bpm, tag, all_tags,
+ *  pattern_label }. Cost: full FunscriptAnalyzer pipeline (a few seconds
+ *  on real-length funscripts) — caller should drive the footer busy
+ *  indicator while it's in flight. Browser-mode mock returns empty so
+ *  the empty state renders. */
+export function analyzePhrases(funscriptPath) {
+  return call(
+    'analyze_phrases',
+    { funscriptPath },
+    () => Promise.resolve([]),
   );
 }
 
@@ -198,6 +213,62 @@ function synthMockChapters(totalMs, n) {
     });
   }
   return out;
+}
+
+/** Open a multi-type picker for the "Add or replace…" flow on the Project
+ *  tab. The OS dialog exposes several type-group rows so the user can pick:
+ *
+ *  - .funscript   → load/replace the project's funscript (re-runs load_project)
+ *  - audio/video  → attach as the project's media file
+ *  - .chapters.json → import a chapter sidecar (future)
+ *  - .ffmeta / .ffmeta.json → import the combined manifest (future)
+ *
+ *  Returns absolute path on desktop, null if cancelled, browser-mode null.
+ *  Caller is responsible for routing by extension. */
+export async function pickProjectFile() {
+  if (isTauri()) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      filters: [
+        { name: 'Funscript',     extensions: ['funscript'] },
+        { name: 'Audio',         extensions: ['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac'] },
+        { name: 'Video',         extensions: ['mp4', 'mkv', 'mov', 'avi', 'webm', 'm4v'] },
+        { name: 'Project meta',  extensions: ['ffmeta', 'json'] },
+        { name: 'All files',     extensions: ['*'] },
+      ],
+    });
+    return selected ?? null;
+  }
+  return null;
+}
+
+/** Attach a media file (video/audio) to an existing project. Real Tauri
+ *  command stores the path on the project's metadata (and eventually
+ *  the .ffmeta sidecar). Browser mock: echoes the path so the UI can
+ *  exercise the flow. */
+export function attachMedia(funscriptPath, mediaPath) {
+  return call(
+    'attach_media',
+    { funscriptPath, mediaPath },
+    () => Promise.resolve({ funscriptPath, mediaPath }),
+  );
+}
+
+/** Classify a file by extension into the bucket the Project-tab picker
+ *  cares about. Returns 'funscript' | 'media' | 'meta' | 'unknown'. */
+export function classifyProjectFile(path) {
+  if (!path) return 'unknown';
+  const lower = String(path).toLowerCase();
+  if (lower.endsWith('.funscript')) return 'funscript';
+  for (const ext of ['.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac',
+                     '.mp4', '.mkv', '.mov', '.avi', '.webm', '.m4v']) {
+    if (lower.endsWith(ext)) return 'media';
+  }
+  if (lower.endsWith('.ffmeta') || lower.endsWith('.ffmeta.json') ||
+      lower.endsWith('.chapters.json')) return 'meta';
+  return 'unknown';
 }
 
 /** Open a funscript picker — FunscriptForge's primary input. A project

@@ -12,7 +12,7 @@ import {
   TopBar, ScopePicker, AcceptBar, StatusBar,
   Button, Pill,
 } from 'forgemoment';
-import { isTauri, ping, loadProject } from './api/forge.js';
+import { isTauri, ping, loadProject, attachMedia, pickMediaFile } from './api/forge.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
 import DeviceTab from './screens/DeviceTab.jsx';
@@ -72,6 +72,96 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
+  // Auto-clear "open a funscript" style errors once a project actually
+  // loads. Other errors (load failure, attach failure, etc.) keep their
+  // dismissible behavior — the user explicitly closes them. Only the
+  // gate-style "you need a precondition" message clears on satisfaction.
+  useEffect(() => {
+    if (openedProject && typeof openedProject === 'object' && openedProject.path) {
+      setAppError((prev) => {
+        if (typeof prev === 'string' && /open a funscript/i.test(prev)) return null;
+        return prev;
+      });
+    }
+  }, [openedProject]);
+
+  // Subscribe to "ff:progress" events emitted by long-running Tauri
+  // commands (analyze_chapters_with_videoflow today, more later). Each
+  // event payload is one of:
+  //   `progress: start::<depth>::<leaf>` — stage opened
+  //   `progress: done::<depth>::<leaf>`  — stage closed
+  // We maintain `busy.steps` as an ordered list with done/running
+  // status; the busy banner renders it as a step checklist.
+  // Listener stays armed for the life of the app; the busy state is
+  // owned by whoever triggered the operation (they clear on completion).
+  useEffect(() => {
+    if (!isTauri()) return undefined;
+    let unlistenFn = null;
+    let cancelled = false;
+    (async () => {
+      const { listen } = await import('@tauri-apps/api/event');
+      const unlisten = await listen('ff:progress', (event) => {
+        const raw = String(event?.payload ?? '');
+        const stripped = raw.startsWith('progress: ') ? raw.slice('progress: '.length) : raw;
+        if (!stripped) return;
+        const parts = stripped.split('::');
+        const kind = parts[0];
+        const depth = parseInt(parts[1] || '0', 10);
+        const leaf = parts[2] || (parts.length === 1 ? parts[0] : '');
+        // For `msg::<depth>::<leaf>::<message>` everything after parts[2]
+        // is the message body (it may contain `::` that the Python side
+        // already sanitised — re-join just in case).
+        const message = kind === 'msg' ? parts.slice(3).join('::') : null;
+        if (!leaf) return;
+        // Depth 1 = the outer command wrapper (e.g. `structural.auto_chapter`)
+        //          — duplicates what the consumer already shows; skip.
+        // Depth 2 = top-level pipeline stages — persistent steps list.
+        // Depth 3+ = sub-stages — bubble to the message line so the user
+        //            sees "what's happening *now*" inside the running step.
+        if (depth <= 1) return;
+        setBusy((prev) => {
+          if (!prev) return prev;
+          const steps = Array.isArray(prev.steps) ? prev.steps.slice() : [];
+          // In-stage message: bubble to the headline + attach as the
+          // running step's detail line. Don't touch step status.
+          if (kind === 'msg' && message) {
+            return { ...prev, message };
+          }
+          // Sub-stage start/done events: only update message, don't
+          // disturb the depth-2 step list.
+          if (depth >= 3) {
+            return kind === 'start' ? { ...prev, message: leaf } : prev;
+          }
+          // Top-level (depth 2) start/done events drive the step list.
+          const idx = steps.findIndex((s) => s.label === leaf);
+          if (kind === 'start') {
+            for (let i = 0; i < steps.length; i += 1) {
+              if (steps[i].status === 'running') steps[i] = { ...steps[i], status: 'done' };
+            }
+            if (idx === -1) steps.push({ label: leaf, status: 'running' });
+            else steps[idx] = { ...steps[idx], status: 'running' };
+            return { ...prev, steps, message: leaf };
+          }
+          if (kind === 'done' && idx >= 0) {
+            // `done::<depth>::<leaf>[::<summary>]` — summary is the
+            // "what was done" line (e.g. "13 chapters detected") that
+            // we want to surface next to the green check.
+            const summary = parts.slice(3).join('::') || undefined;
+            steps[idx] = { ...steps[idx], status: 'done', summary };
+            return { ...prev, steps };
+          }
+          return prev;
+        });
+      });
+      if (cancelled) unlisten();
+      else unlistenFn = unlisten;
+    })();
+    return () => {
+      cancelled = true;
+      if (unlistenFn) unlistenFn();
+    };
+  }, []);
+
   const handleProjectOpened = (project) => {
     setOpenedProject(project);
     if (project && typeof project === 'object' && project.id) {
@@ -115,6 +205,39 @@ export default function App() {
     }
   };
 
+  // Attach a media file to the currently-open project. Used by the Project
+  // tab's "Add or replace…" picker when the user picks audio/video; the
+  // picker routes by extension. Updates BOTH openedProject and the
+  // matching entry in loadedProjects — ProjectTab reads the displayed
+  // project from the loadedProjects/recents merge, so missing the second
+  // update lets the UI keep showing the stale (no-media) shape.
+  const handleAttachMedia = async (mediaPath) => {
+    if (!mediaPath) return;
+    const current = typeof openedProject === 'object' ? openedProject : null;
+    if (!current?.path) {
+      setAppError('Open a funscript before attaching media.');
+      return;
+    }
+    setAppError(null);
+    setBusy({ message: `Attaching ${mediaPath.split(/[\\/]/).pop() || 'media'}…` });
+    try {
+      const res = await attachMedia(current.path, mediaPath);
+      const patch = (prev) => {
+        if (!prev || typeof prev !== 'object') return prev;
+        return { ...prev, mediaPath: res.mediaPath, mediaKind: res.mediaKind };
+      };
+      setOpenedProject(patch);
+      setLoadedProjects((prev) =>
+        prev.map((p) => (p.id === current.id ? patch(p) : p))
+      );
+    } catch (err) {
+      console.error('App: attach_media failed', err);
+      setAppError(err?.message ? `Attach failed: ${err.message}` : 'Attach failed.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const toggleDevice = (id) => {
     setSelectedDevices((prev) =>
       prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id],
@@ -144,7 +267,9 @@ export default function App() {
   // Workflow chain: each tab knows the next tab to advance to on "Accept
   // and chain." Tabs without an entry have no advance action (Library is
   // the entry point; Export is the terminus). Per-tab gates validate
-  // before advancing — Project requires at least one selected device.
+  // before advancing — Project just needs a funscript; Device gates on
+  // ≥1 selected target (moved here from Project 2026-05-17 along with
+  // the device picker itself).
   const TAB_CHAIN = {
     project:  'device',
     device:   'chapters',
@@ -154,12 +279,18 @@ export default function App() {
     stim:     'export',
   };
   const tabGate = (id) => {
+    // Suppress "open a funscript" while a load is in flight — the busy
+    // banner is already saying "Loading <file>…", so a parallel gate
+    // saying "Open a funscript before continuing" is contradictory.
     if (id === 'project') {
-      if (!project?.path) return 'Open a funscript before continuing.';
-      if (selectedDevices.length === 0) return 'Pick at least one target device to continue.';
+      if (!project?.path && !isLoadingProject) return 'Open a funscript before continuing.';
     }
-    if (['device', 'chapters', 'patterns', 'phrases', 'stim'].includes(id) && !project?.path) {
+    if (['device', 'chapters', 'patterns', 'phrases', 'stim'].includes(id)
+        && !project?.path && !isLoadingProject) {
       return 'Open a funscript before continuing.';
+    }
+    if (id === 'device' && project?.path && selectedDevices.length === 0) {
+      return 'Pick at least one target device to continue.';
     }
     return null;
   };
@@ -263,22 +394,28 @@ export default function App() {
             openedProject={openedProject}
             loadedProjects={loadedProjects}
             onOpenScript={handleOpenScript}
+            onAttachMedia={handleAttachMedia}
+            onAppError={setAppError}
             isLoadingProject={isLoadingProject}
-            selectedDevices={selectedDevices}
-            onToggleDevice={toggleDevice}
           />
         )}
         {tab === 'device' && (
           <DeviceTab
             project={typeof openedProject === 'object' ? openedProject : null}
             selectedDevices={selectedDevices}
+            onToggleDevice={toggleDevice}
           />
         )}
         {tab === 'chapters' && (
           <ChaptersTab
             project={typeof openedProject === 'object' ? openedProject : null}
-            onAttachMedia={() => console.log('TODO: pickMediaFile + attach to project')}
+            onAttachMedia={async () => {
+              const p = await pickMediaFile();
+              if (p) await handleAttachMedia(p);
+            }}
             onChaptersChange={handleChaptersChange}
+            setBusy={setBusy}
+            setAppError={setAppError}
           />
         )}
         {tab === 'patterns' && (
@@ -289,6 +426,8 @@ export default function App() {
         {tab === 'phrases' && (
           <PhrasesTab
             project={typeof openedProject === 'object' ? openedProject : null}
+            setBusy={setBusy}
+            setAppError={setAppError}
           />
         )}
         {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && (

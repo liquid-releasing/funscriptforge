@@ -38,10 +38,11 @@
 // **Scrolling**: the main panel (rail + center + transform) scrolls. The
 // ribbon rows above do not.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChapterRibbon, Segmented, TransformPanel, Icon, fmtTimeShort } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { TRANSFORMS, BEHAVIOR_TAGS } from '../data/transforms.js';
+import { analyzePhrases } from '../api/forge.js';
 
 // Phrase helpers — duplicated from PatternsTab today. When a third
 // consumer appears, lift these into `src/lib/phrase_slice.js` or
@@ -76,7 +77,7 @@ function findTag(id) {
   return BEHAVIOR_TAGS.find((t) => t.id === id) || null;
 }
 
-export default function PhrasesTab({ project }) {
+export default function PhrasesTab({ project, setBusy, setAppError }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
   const [activeChapterId, setActiveChapterId] = useState(chapters[0]?.id ?? null);
@@ -123,17 +124,67 @@ export default function PhrasesTab({ project }) {
 
   const activeChapter = chapters.find((c) => c.id === activeChapterId) ?? chapters[0];
 
-  // Phrases-in-scope — stubbed until `cli.py assess --format json` is
-  // wired in. Per-phrase shape (target): { id, at_ms, end_ms, number,
-  // bpm?, tag? } where tag is a BEHAVIOR_TAGS id. When data lands, this
-  // becomes the assess output filtered to the active chapter's range.
-  const phrasesInScope = useMemo(() => [], [activeChapter.id]);
+  // All phrases for the loaded funscript. Hydrated lazily from
+  // `cli.py assess` (via the analyze_phrases Tauri command) the first
+  // time this tab mounts with a project that has a path. The full list
+  // is held here; phrasesInScope below filters to the active chapter.
+  const [allPhrases, setAllPhrases] = useState([]);
+  const [phrasesLoaded, setPhrasesLoaded] = useState(false);
+
+  const assessCancelledRef = useRef(false);
+  useEffect(() => {
+    if (!project?.path) {
+      setAllPhrases([]);
+      setPhrasesLoaded(false);
+      return undefined;
+    }
+    let cancelled = false;
+    assessCancelledRef.current = false;
+    setPhrasesLoaded(false);
+    setAllPhrases([]);
+    setBusy?.({
+      message: 'Assessing phrases…',
+      onCancel: () => {
+        assessCancelledRef.current = true;
+        cancelled = true;
+        setPhrasesLoaded(true); // Stop showing the spinner; row table renders empty state.
+        setBusy?.(null);
+      },
+    });
+    setAppError?.(null);
+    analyzePhrases(project.path)
+      .then((rows) => {
+        if (cancelled) return;
+        setAllPhrases(Array.isArray(rows) ? rows : []);
+        setPhrasesLoaded(true);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('analyzePhrases failed', err);
+        setAppError?.(`Phrase assess failed: ${err?.message ?? err}`);
+        setPhrasesLoaded(true); // Avoid hammering on a broken project.
+      })
+      .finally(() => {
+        if (!cancelled) setBusy?.(null);
+      });
+    return () => { cancelled = true; };
+  }, [project?.path]);
+
+  // Phrases filtered to the active chapter's time range. Picks phrases
+  // whose start lands inside the chapter; phrases that straddle a
+  // boundary belong to whichever chapter contains their start.
+  const phrasesInScope = useMemo(() => {
+    if (!activeChapter) return [];
+    return allPhrases.filter(
+      (p) => p.at_ms >= activeChapter.atMs && p.at_ms < activeChapter.endMs,
+    );
+  }, [allPhrases, activeChapter?.id, activeChapter?.atMs, activeChapter?.endMs]);
 
   // Reset edit-set when scope changes: every phrase starts "in edit",
   // user opts rows out via the per-row toggle. Same rule as Patterns.
   useEffect(() => {
     setEditedPhraseIds(phrasesInScope.map((p) => p.id));
-  }, [activeChapter?.id]);
+  }, [phrasesInScope]);
 
   return (
     // The outermost layout: column with a fixed-height header stack on
@@ -287,6 +338,7 @@ export default function PhrasesTab({ project }) {
               transformId={transformId}
               params={params}
               onTogglePhrase={toggleEditedPhrase}
+              loaded={phrasesLoaded}
             />
           ) : (
             <CenterPlaceholder mode={mode} />
@@ -415,6 +467,7 @@ function RailPlaceholder({ mode }) {
 // yet (`cli.py assess` pending).
 function PhraseTable({
   phrases, actions, editedPhraseIds, transformId, params, onTogglePhrase,
+  loaded = true,
 }) {
   if (!phrases || phrases.length === 0) {
     return (
@@ -426,12 +479,11 @@ function PhraseTable({
           color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.6,
         }}>
           <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
-            Phrase data not wired yet
+            {loaded ? 'No phrases in this chapter' : 'Assessing phrases…'}
           </div>
-          Will populate from <code>cli.py assess --format json</code>.
-          Each row: phrase #, time range, BPM, behavior tag, original
-          shape, preview after the chosen transform, and a per-row
-          Edit/Skip toggle (same workflow as Patterns).
+          {loaded
+            ? 'The assessment ran but found no phrases starting inside this chapter. Try a different chapter, or re-cut the chapter boundaries on the Chapters tab.'
+            : 'Running cli.py assess against the funscript. Progress is shown in the footer.'}
         </div>
       </>
     );

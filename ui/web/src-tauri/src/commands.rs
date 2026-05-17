@@ -10,7 +10,8 @@
 // Python pipeline stages land.
 
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Emitter};
 use tokio::process::Command;
 
 #[derive(Serialize)]
@@ -197,6 +198,12 @@ pub struct LoadedProject {
     tone_suggestion: Option<String>,
     tone_rationale: Option<String>,
     auto_tags: Vec<String>,
+    // Parsed `.ffmeta.json` sidecar (scaffolding 2026-05-17). Raw JSON
+    // passthrough for now — the schema isn't stable yet. Frontend consumes
+    // as-is; when fields stabilize we'll lift them into LoadedProject
+    // proper. None when no sidecar is adjacent. The `.forge` zip-bundle
+    // load path (unzip → read manifest.ffmeta) is a separate future task.
+    ffmeta: Option<serde_json::Value>,
 }
 
 fn compute_funscript_stats(actions: &[FunscriptAction]) -> (i32, i32, f64) {
@@ -239,10 +246,21 @@ pub async fn load_project(path: String) -> Result<LoadedProject, String> {
     // ── Sidecar probe ────────────────────────────────────────────────
     let stem = strip_funscript_ext(&path);
     let mut sidecars_found = Vec::new();
+    let mut ffmeta: Option<serde_json::Value> = None;
     for suffix in ["ffmeta.json", "chapters.json"] {
         let p = format!("{}.{}", stem, suffix);
         if tokio::fs::metadata(&p).await.is_ok() {
-            sidecars_found.push(p);
+            sidecars_found.push(p.clone());
+            // ffmeta.json: parse it through. Other sidecars (chapters.json)
+            // are consumed by their dedicated paths; we just record presence.
+            if suffix == "ffmeta.json" {
+                if let Ok(raw) = tokio::fs::read_to_string(&p).await {
+                    match serde_json::from_str::<serde_json::Value>(&raw) {
+                        Ok(v)  => ffmeta = Some(v),
+                        Err(e) => eprintln!("ffmeta.json parse error at {}: {}", p, e),
+                    }
+                }
+            }
         }
     }
 
@@ -302,6 +320,7 @@ pub async fn load_project(path: String) -> Result<LoadedProject, String> {
         tone_suggestion: meta.tone_suggestion,
         tone_rationale: meta.tone_rationale,
         auto_tags: meta.auto_tags,
+        ffmeta,
     })
 }
 
@@ -342,6 +361,91 @@ async fn run_cli(args: &[&str]) -> Result<String, String> {
         .output()
         .await
         .map_err(|e| format!("spawn python failed: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("cli.py {} exited non-zero: {}", args.first().unwrap_or(&""), stderr));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+// Streaming variant of run_cli. Spawns the CLI with VIDEOFLOW_PROGRESS_FILE
+// set to a unique temp path, and runs a parallel polling task that tails
+// the file, emitting each new `progress: <label>` line as a Tauri event
+// for the React side to consume. Long-running commands (auto-chapter,
+// assess) wire through this so the AcceptBar footer can show live stage
+// updates. Returns stdout exactly like run_cli once the process exits.
+async fn run_cli_with_progress(
+    app: &AppHandle,
+    event_name: &str,
+    args: &[&str],
+) -> Result<String, String> {
+    let root = std::env::var("FUNSCRIPTFORGE_ROOT")
+        .unwrap_or_else(|_| DEV_FUNSCRIPTFORGE_ROOT.to_string());
+    let python = std::env::var("FUNSCRIPTFORGE_PYTHON").unwrap_or_else(|_| {
+        format!(r"{}\.venv\Scripts\python.exe", root)
+    });
+    let cli_py = format!(r"{}\cli.py", root);
+
+    // Unique temp file for this run. PID + microseconds = unique enough
+    // for concurrent commands; isolated from other apps' progress files.
+    let pid = std::process::id();
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_micros())
+        .unwrap_or(0);
+    let temp_path: PathBuf = std::env::temp_dir()
+        .join(format!("ff-progress-{}-{}.log", pid, ts));
+    // Create empty so the poller can open it without racing the child.
+    let _ = std::fs::write(&temp_path, "");
+
+    let mut cmd = Command::new(&python);
+    cmd.arg(&cli_py);
+    for a in args { cmd.arg(a); }
+    cmd.env("VIDEOFLOW_PROGRESS_FILE", &temp_path)
+       .current_dir(&root);
+
+    // Poller: tail the temp file, emit each new line as a Tauri event.
+    // Cancelled via oneshot when the child exits. One final flush after
+    // cancel catches lines that landed between the last tick and exit.
+    let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
+    let app_for_task = app.clone();
+    let event_name_owned = event_name.to_string();
+    let temp_path_for_task = temp_path.clone();
+    let polling = tokio::spawn(async move {
+        let mut offset: usize = 0;
+        let drain = |offset: &mut usize| -> () {
+            if let Ok(data) = std::fs::read(&temp_path_for_task) {
+                if data.len() > *offset {
+                    let new_text = String::from_utf8_lossy(&data[*offset..]);
+                    for line in new_text.lines() {
+                        let line = line.trim();
+                        if !line.is_empty() {
+                            let _ = app_for_task.emit(&event_name_owned, line.to_string());
+                        }
+                    }
+                    *offset = data.len();
+                }
+            }
+        };
+        loop {
+            drain(&mut offset);
+            tokio::select! {
+                _ = &mut cancel_rx => break,
+                _ = tokio::time::sleep(std::time::Duration::from_millis(150)) => {},
+            }
+        }
+        drain(&mut offset);
+    });
+
+    let output = cmd
+        .output()
+        .await
+        .map_err(|e| format!("spawn python failed: {}", e))?;
+
+    let _ = cancel_tx.send(());
+    let _ = polling.await;
+    let _ = tokio::fs::remove_file(&temp_path).await;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -524,30 +628,166 @@ pub async fn create_chapters_sidecar(
 // the canonical alternative to manual equal-split.
 #[tauri::command]
 pub async fn analyze_chapters_with_videoflow(
+    app: AppHandle,
     funscript_path: String,
     target_minutes: Option<f64>,
+    // Optional explicit media path — the frontend's "Add or replace…"
+    // picker (2026-05-17) lets users attach media that doesn't share the
+    // funscript's stem or live in the same folder. When provided, skip
+    // the adjacent-stem scan and use this path directly.
+    media_path: Option<String>,
 ) -> Result<Vec<ChapterRecord>, String> {
-    let stem = strip_funscript_ext(&funscript_path);
-    let (media_path, _) = find_adjacent_media(&stem);
-    let media = media_path.ok_or_else(|| {
-        "No adjacent media file found. Attach a video or audio file with the same name \
-         to run videoflow's content-aware chapter detection.".to_string()
-    })?;
+    let media = match media_path.filter(|p| !p.is_empty()) {
+        Some(p) => p,
+        None => {
+            let stem = strip_funscript_ext(&funscript_path);
+            let (found, _) = find_adjacent_media(&stem);
+            found.ok_or_else(|| {
+                "No adjacent media file found. Attach a video or audio file via \
+                 the Project tab \"Add or replace…\" picker, or place one with \
+                 the same name next to the funscript.".to_string()
+            })?
+        }
+    };
 
     let target = target_minutes.unwrap_or(5.5).to_string();
-    let stdout = run_cli(&[
-        "auto-chapter",
-        &media,
-        "--target-minutes",
-        &target,
-        "--format",
-        "json",
-    ])
+    let stdout = run_cli_with_progress(
+        &app,
+        "ff:progress",
+        &[
+            "auto-chapter",
+            &media,
+            "--target-minutes",
+            &target,
+            "--format",
+            "json",
+        ],
+    )
     .await?;
 
     let parsed: CliChaptersAuto = serde_json::from_str(&stdout)
         .map_err(|e| format!("could not parse cli.py auto-chapter output: {}", e))?;
     Ok(cli_chapters_to_records(parsed.chapters))
+}
+
+// ---------------------------------------------------------------------------
+// Attach media — wire a video/audio file to an existing project. Scaffolding
+// only today: validates the file exists and echoes the paths back to the
+// frontend so it can update its project state. Later: write into the
+// project's .ffmeta sidecar so the attachment survives restarts.
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct AttachMediaResult {
+    #[serde(rename = "funscriptPath")]
+    funscript_path: String,
+    #[serde(rename = "mediaPath")]
+    media_path: String,
+    #[serde(rename = "mediaKind")]
+    media_kind: String, // "video" | "audio"
+}
+
+#[tauri::command]
+pub async fn attach_media(
+    funscript_path: String,
+    media_path: String,
+) -> Result<AttachMediaResult, String> {
+    if !std::path::Path::new(&media_path).exists() {
+        return Err(format!("media file not found: {}", media_path));
+    }
+    let lower = media_path.to_lowercase();
+    let media_kind = if ["mp4", "mkv", "mov", "avi", "webm", "m4v"]
+        .iter().any(|e| lower.ends_with(&format!(".{}", e)))
+    {
+        "video"
+    } else if ["mp3", "wav", "flac", "ogg", "m4a", "aac"]
+        .iter().any(|e| lower.ends_with(&format!(".{}", e)))
+    {
+        "audio"
+    } else {
+        return Err(format!(
+            "unrecognized media extension: {}. Expected one of mp3/wav/flac/ogg/m4a/aac or mp4/mkv/mov/avi/webm/m4v.",
+            media_path
+        ));
+    };
+    Ok(AttachMediaResult {
+        funscript_path,
+        media_path,
+        media_kind: media_kind.to_string(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Phrases — wire shape returned by `cli.py assess --format json`. The Python
+// command runs the FunscriptAnalyzer end-to-end and emits one record per
+// detected phrase. PhraseRecord is what we hand to the React side.
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct CliPhrase {
+    at_ms: u64,
+    end_ms: u64,
+    #[serde(default)]
+    number: u32,
+    #[serde(default)]
+    bpm: f32,
+    #[serde(default)]
+    tag: Option<String>,
+    #[serde(default)]
+    all_tags: Vec<String>,
+    #[serde(default)]
+    pattern_label: String,
+}
+
+#[derive(Deserialize)]
+struct CliPhrasesResult {
+    #[serde(default)]
+    phrases: Vec<CliPhrase>,
+}
+
+#[derive(Serialize)]
+pub struct PhraseRecord {
+    id: String,
+    at_ms: u64,
+    end_ms: u64,
+    number: u32,
+    bpm: f32,
+    tag: Option<String>,
+    all_tags: Vec<String>,
+    pattern_label: String,
+}
+
+// Run `cli.py assess <funscript> --format json --no-save` and return the
+// parsed phrase records. Used by the Phrases tab to hydrate the action
+// table; called lazily when the tab first mounts (rather than on every
+// project load) so the assess cost only lands when the user opts in.
+#[tauri::command]
+pub async fn analyze_phrases(funscript_path: String) -> Result<Vec<PhraseRecord>, String> {
+    let stdout = run_cli(&[
+        "assess",
+        &funscript_path,
+        "--format",
+        "json",
+        "--no-save",
+    ])
+    .await?;
+
+    let parsed: CliPhrasesResult = serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse cli.py assess output: {}", e))?;
+    Ok(parsed
+        .phrases
+        .into_iter()
+        .map(|p| PhraseRecord {
+            id: format!("ph{}", p.number),
+            at_ms: p.at_ms,
+            end_ms: p.end_ms,
+            number: p.number,
+            bpm: p.bpm,
+            tag: p.tag,
+            all_tags: p.all_tags,
+            pattern_label: p.pattern_label,
+        })
+        .collect())
 }
 
 // Deterministic chapter color cycle. Matches the prototype's ChapterBands

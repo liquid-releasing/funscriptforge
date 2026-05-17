@@ -28,7 +28,7 @@ import FunscriptChart from '../components/FunscriptChart.jsx';
 import { generatePreviewActions, parseDurationToMs } from '../lib/funscriptPreview.js';
 import { listDevices } from '../api/forge.js';
 
-export default function DeviceTab({ project, selectedDevices }) {
+export default function DeviceTab({ project, selectedDevices, onToggleDevice }) {
   // Settings — TODO: hydrate from project.ffmeta when sidecar loading lands.
   const [bpmCap, setBpmCap] = useState(180);
   const [latency, setLatency] = useState(60);
@@ -108,6 +108,53 @@ export default function DeviceTab({ project, selectedDevices }) {
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '22px 28px', background: 'var(--bg)' }}>
+      {/* 0 — Target devices. Moved here from the Project tab 2026-05-17 so
+              the picker lives where it acts. The whole tab is "configure
+              for which device(s)"; pick comes first. */}
+      <SectionLabel
+        right={
+          <span style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
+            Pick one or more
+          </span>
+        }
+      >
+        Target devices
+      </SectionLabel>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+          gap: 10,
+          marginBottom: 14,
+        }}
+      >
+        {devices.map((d) => (
+          <DeviceCard
+            key={d.id}
+            device={d}
+            selected={selectedDevices.includes(d.id)}
+            onToggle={() => onToggleDevice?.(d.id)}
+          />
+        ))}
+      </div>
+      {selectedDevices.length === 0 && (
+        <div
+          style={{
+            padding: 12,
+            fontSize: 12,
+            color: '#ffb547',
+            background: 'rgba(255,181,71,0.08)',
+            border: '1px solid rgba(255,181,71,0.3)',
+            borderRadius: 6,
+            marginBottom: 22,
+          }}
+        >
+          <Icon name="alert-triangle" size={12} style={{ marginRight: 6, verticalAlign: '-2px' }} />
+          Pick at least one target device. Downstream settings adapt to the limiting device.
+        </div>
+      )}
+      {selectedDevices.length > 0 && <div style={{ marginBottom: 22 }} />}
+
       {/* 1 — Original funscript */}
       <SectionLabel
         right={
@@ -570,6 +617,54 @@ function ForgeScoreCard({ score }) {
         once it ships.
       </div>
     </div>
+  );
+}
+
+// DeviceCard — selectable target-device tile. Moved here from ProjectTab
+// 2026-05-17 alongside the picker section above. Click toggles selection;
+// the selected style mirrors the AcceptBar / chapter-selection accent so
+// the visual vocabulary stays consistent across tabs.
+function DeviceCard({ device, selected, onToggle }) {
+  return (
+    <button
+      onClick={onToggle}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 8,
+        padding: 14,
+        borderRadius: 8,
+        background: selected ? 'rgba(255,75,75,0.08)' : 'var(--surface)',
+        border: `1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+        color: 'var(--text)',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        textAlign: 'left',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            background: selected ? 'var(--accent)' : 'var(--surface-2)',
+            color: selected ? '#fff' : 'var(--text-muted)',
+            display: 'grid',
+            placeItems: 'center',
+          }}
+        >
+          <Icon name={device.icon || 'cpu'} size={14} />
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>{device.label}</span>
+        <div style={{ flex: 1 }} />
+        {selected && <Icon name="check" size={14} style={{ color: 'var(--accent)' }} />}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.4 }}>
+        {device.summary || `${device.maxBpm || 200} BPM max · ${device.axes || 'linear'}`}
+      </div>
+    </button>
   );
 }
 
