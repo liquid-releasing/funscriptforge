@@ -31,7 +31,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChapterRibbon, TransformPanel,
-  Button, Icon, Sparkline, fmtTimeShort,
+  Icon, Sparkline, fmtTimeShort,
 } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { TRANSFORMS, BEHAVIOR_TAGS } from '../data/transforms.js';
@@ -221,12 +221,20 @@ export default function PatternsTab({ project }) {
     [instances, activePatternId],
   );
 
-  // Which instance is the transform target. Reset to the first matching
-  // instance when the chapter or pattern filter changes.
-  const [activeInstanceId, setActiveInstanceId] = useState(null);
+  // Which instances are being edited. Multi-select — default is "edit
+  // all instances of the active pattern." User toggles individual rows
+  // off via the per-row Edit button when they want to exclude an
+  // instance. Reset to the full set whenever the chapter or active
+  // pattern changes (new context → fresh selection).
+  const [editedInstanceIds, setEditedInstanceIds] = useState([]);
   useEffect(() => {
-    setActiveInstanceId(activeInstances[0]?.id ?? null);
+    setEditedInstanceIds(activeInstances.map((i) => i.id));
   }, [activeChapter?.id, activePatternId]);
+  const toggleEditedInstance = (id) => {
+    setEditedInstanceIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
 
   // TransformPanel state. Categories are now visible (Tone / Behavior /
   // Structural) — the user can pick any transform across the catalog,
@@ -260,10 +268,10 @@ export default function PatternsTab({ project }) {
   };
 
   const handleApply = () => {
-    // TODO: shell out to `cli.py transform --instance ${activeInstanceId} ...`
+    // TODO: shell out to `cli.py transform --instances <ids> ...`
     // For now this logs — the JS preview already shows the effect.
     console.log('Patterns/apply', {
-      instanceId: activeInstanceId,
+      instanceIds: editedInstanceIds,
       transformId,
       params,
     });
@@ -335,9 +343,8 @@ export default function PatternsTab({ project }) {
             selectedPatternId={activePatternId}
             onSelectPattern={(pid) => {
               setActivePatternId(pid);
-              // Reset instance focus to the first matching instance.
-              const first = instances.find((i) => i.patternId === pid);
-              if (first) setActiveInstanceId(first.id);
+              // Switching pattern resets edit selection to all matching
+              // instances (the useEffect on activePatternId does this).
             }}
             onCollapse={() => setIsContextExpanded(false)}
           />
@@ -371,11 +378,11 @@ export default function PatternsTab({ project }) {
           <InstanceTable
             instances={activeInstances}
             actions={project?.actions || []}
-            activeInstanceId={activeInstanceId}
+            editedInstanceIds={editedInstanceIds}
             patternType={findPattern(activePatternId)}
             transformId={transformId}
             params={params}
-            onFocusInstance={setActiveInstanceId}
+            onToggleInstance={toggleEditedInstance}
           />
         </div>
 
@@ -393,7 +400,7 @@ export default function PatternsTab({ project }) {
           onTransformChange={handleTransformChange}
           params={params}
           onParamsChange={setParams}
-          applyLabel="Accept"
+          applyLabel={`Apply to ${editedInstanceIds.length} instance${editedInstanceIds.length === 1 ? '' : 's'}`}
           cancelLabel="Cancel"
           onApply={handleApply}
           onCancel={handleCancel}
@@ -522,11 +529,27 @@ function PatternContextStrip({
           overflow: 'hidden',
         }}
       >
-        {/* Layer 2 — pattern-color wash behind every instance. Selected
-            gets a stronger wash so it pops; other patterns get a faint
-            wash so they're visible as context without competing. User
-            flagged 2026-05-17 that they liked the tint on non-selected
-            items — keeping it in, just at low alpha. */}
+        {/* Layer 2 — velocity waveform at full contrast. Painted FIRST
+            so the pattern-color wash above tints it (the wash used to
+            sit below this and was being covered by the filled sparkline,
+            making the shading invisible). */}
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+          <Sparkline
+            actions={chapterActions}
+            start={0}
+            end={span}
+            colorMode="velocity"
+            height="100%"
+            filled
+          />
+        </div>
+
+        {/* Layer 3 — pattern-color wash ON TOP of the waveform, tinting
+            it. Matches ChapterRibbon contrast (0.95 selected / 0.55
+            non-selected). Selected pattern color dominates; non-selected
+            is still visibly tinted as context. Velocity contrast under
+            the wash becomes a faint texture, which is the right
+            priority — pattern identity reads first. */}
         {instances.map((inst) => {
           const left = xFor(inst.at_ms);
           const right = xFor(inst.end_ms);
@@ -540,24 +563,19 @@ function PatternContextStrip({
                 position: 'absolute',
                 left, top: 0, width, height: '100%',
                 background: pattern.color,
-                opacity: isSelected ? 0.22 : 0.07,
+                // Selected: transparent. The thick border carries the
+                // pattern identity and the waveform shows at full
+                // velocity contrast — mirrors how Chapter 1 shows full
+                // waveform with only a white border for selection.
+                // Non-selected: 0.35 wash so pattern identity is still
+                // legible at rest, matching Chapter 2's dim state.
+                opacity: isSelected ? 0 : 0.35,
                 pointerEvents: 'none',
+                borderRadius: 3,
               }}
             />
           );
         })}
-
-        {/* Layer 3 — velocity waveform at full contrast */}
-        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-          <Sparkline
-            actions={chapterActions}
-            start={0}
-            end={span}
-            colorMode="velocity"
-            height="100%"
-            filled
-          />
-        </div>
 
         {/* Layer 4 — outline boxes for every instance. Click selects the
             pattern. Selected: bold pattern-color border. Others: thin
@@ -711,9 +729,18 @@ function PatternRail({ patternTypes, countsByPattern, activePatternId, onSelect 
 }
 
 // ─── Center table ────────────────────────────────────────────────────
+//
+// Multi-row edit selection. Every row defaults to "being edited" — the
+// transform applies to all of them at Accept time. The user toggles
+// individual rows out of the edit set via the per-row Edit button. Rows
+// in the edit set get a low-opacity pattern-color background tint
+// (subtle but discriminable, redundantly conveyed by the toggle icon so
+// it stays accessible for colorblind users); non-edited rows keep the
+// default surface background and their Preview column shows the
+// original (no transform applied visually).
 function InstanceTable({
-  instances, actions, activeInstanceId, patternType,
-  transformId, params, onFocusInstance,
+  instances, actions, editedInstanceIds, patternType,
+  transformId, params, onToggleInstance,
 }) {
   if (instances.length === 0) {
     return (
@@ -751,7 +778,7 @@ function InstanceTable({
         {/* Header row */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '120px 60px 1fr 1fr 36px',
+          gridTemplateColumns: '120px 60px 1fr 1fr 80px',
           gap: 12, padding: '10px 14px',
           background: 'var(--surface-2)', borderBottom: '1px solid var(--border)',
           fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
@@ -761,7 +788,7 @@ function InstanceTable({
           <span style={{ textAlign: 'right' }}>BPM</span>
           <span>Original</span>
           <span>Preview</span>
-          <span></span>
+          <span style={{ textAlign: 'center' }}>Edit</span>
         </div>
 
         {/* Body rows */}
@@ -772,8 +799,9 @@ function InstanceTable({
             actions={actions}
             transformId={transformId}
             params={params}
-            focused={inst.id === activeInstanceId}
-            onFocus={() => onFocusInstance(inst.id)}
+            patternColor={patternType.color}
+            isEdited={editedInstanceIds.includes(inst.id)}
+            onToggle={() => onToggleInstance(inst.id)}
           />
         ))}
       </div>
@@ -781,14 +809,19 @@ function InstanceTable({
   );
 }
 
-function InstanceRow({ instance, actions, transformId, params, focused, onFocus }) {
+function InstanceRow({
+  instance, actions, transformId, params,
+  patternColor, isEdited, onToggle,
+}) {
   const { acts: originalActs, dur } = useMemo(
     () => sliceForInstance(actions, instance),
     [actions, instance],
   );
+  // Non-edited rows: preview = original (no transform applied visually).
+  // Reinforces "which rows get the change" without needing extra chrome.
   const previewActs = useMemo(
-    () => previewActions(originalActs, transformId, params),
-    [originalActs, transformId, params],
+    () => (isEdited ? previewActions(originalActs, transformId, params) : originalActs),
+    [originalActs, transformId, params, isEdited],
   );
 
   // Per-row viewport — original and preview share it so drag/zoom in
@@ -797,16 +830,23 @@ function InstanceRow({ instance, actions, transformId, params, focused, onFocus 
   const [view, setView] = useState({ start: 0, end: dur });
   useEffect(() => { setView({ start: 0, end: dur }); }, [dur]);
 
+  // Selection by inset border (matches ChapterRibbon's 2px-white and
+  // PatternRibbon's 1.5px-white style — same visual language across the
+  // ribbon and the table). Edited rows get a 2px pattern-color inset
+  // ring; skipped rows get nothing (just the shared row divider). Using
+  // boxShadow inset instead of `border` so the row's grid layout doesn't
+  // jump when the state flips, and so it overlays the divider cleanly.
+  const rowRing = isEdited ? `inset 0 0 0 2px ${patternColor}` : 'none';
+
   return (
     <div
-      onClick={onFocus}
       style={{
         display: 'grid',
-        gridTemplateColumns: '120px 60px 1fr 1fr 36px',
+        gridTemplateColumns: '120px 60px 1fr 1fr 80px',
         gap: 12, padding: '12px 14px', alignItems: 'center',
         borderBottom: '1px solid var(--border)',
-        background: focused ? 'rgba(255,75,75,0.05)' : 'transparent',
-        cursor: 'pointer',
+        boxShadow: rowRing,
+        opacity: isEdited ? 1 : 0.55,
       }}
     >
       <span className="mono" style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
@@ -835,13 +875,25 @@ function InstanceRow({ instance, actions, transformId, params, focused, onFocus 
           bare
         />
       </div>
-      <Button
-        kind="ghost"
-        size="sm"
-        icon="external-link"
-        onClick={(e) => { e.stopPropagation(); onFocus(); }}
-        aria-label="Focus instance"
-      />
+      {/* Toggle: include / exclude this row from the edit set. Check
+          icon when included, empty circle when not. Click toggles. */}
+      <button
+        onClick={onToggle}
+        title={isEdited ? 'Exclude from edit' : 'Include in edit'}
+        aria-label={isEdited ? 'Exclude this instance from the edit' : 'Include this instance in the edit'}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '5px 9px', borderRadius: 5,
+          background: 'transparent',
+          border: `1px solid ${isEdited ? patternColor : 'var(--border)'}`,
+          color: isEdited ? patternColor : 'var(--text-dim)',
+          cursor: 'pointer', fontFamily: 'inherit',
+          fontSize: 10.5, fontWeight: 600,
+        }}
+      >
+        <Icon name={isEdited ? 'check' : 'circle'} size={11} />
+        {isEdited ? 'Edit' : 'Skip'}
+      </button>
     </div>
   );
 }

@@ -50,6 +50,17 @@ export default function App() {
   // True while load_project is in flight. Drives the wait-cursor on the
   // whole UI plus the spinner overlay on the Project tab.
   const [isLoadingProject, setIsLoadingProject] = useState(false);
+  // App-level error surfaced in the footer (AcceptBar.error). Anything
+  // the user needs to see but didn't trigger directly — a failed load,
+  // a CLI shellout, a sidecar write — lands here. Footer is the one
+  // surface that's always visible, so we don't have to hunt for the
+  // right tab to attach an inline error to.
+  const [appError, setAppError] = useState(null);
+  // App-level busy indicator surfaced in the footer (AcceptBar.busy).
+  // Shape: { message, fraction? } — fraction omitted = indeterminate.
+  // Long-running ops (load_project, classify-patterns, transform apply,
+  // export) drive this; a single surface beats N per-tab spinners.
+  const [busy, setBusy] = useState(null);
   // selectedDevices is lifted here so it survives tab switches — once the
   // user picks devices in Project, downstream tabs (Device, Stim, Multi-axis)
   // see the same selection without re-prompting.
@@ -89,14 +100,18 @@ export default function App() {
   const handleOpenScript = async (path) => {
     if (!path) return;
     setIsLoadingProject(true);
+    setAppError(null);
+    setBusy({ message: `Loading ${path.split(/[\\/]/).pop() || 'project'}…` });
     setTab('project');
     try {
       const project = await loadProject(path);
       handleProjectOpened(project);
     } catch (err) {
       console.error('App: load_project failed', err);
+      setAppError(err?.message ? `Failed to open script: ${err.message}` : 'Failed to open script.');
     } finally {
       setIsLoadingProject(false);
+      setBusy(null);
     }
   };
 
@@ -151,14 +166,14 @@ export default function App() {
   const gateMsg = tabGate(tab);
   const nextTab = TAB_CHAIN[tab];
 
-  // Footer summary reflects the current tab's gate state. When a gate is
-  // blocking, the summary tells the user what's needed — same affordance
-  // as the old per-tab CTA, now centralized.
+  // Footer summary describes the current tab's chain status. Gate
+  // messages no longer live here — they're surfaced via the AcceptBar
+  // `gate` prop (amber warning banner) so the chain-status line below
+  // can keep all of its informational chrome (`writes …`, downstream
+  // hint) visible at all times.
   let footerSummary;
   if (!project?.path) {
     footerSummary = 'Open a funscript from the Library tab to begin.';
-  } else if (gateMsg) {
-    footerSummary = gateMsg;
   } else if (nextTab) {
     const nextLabel = TABS.find((t) => t.id === nextTab)?.label ?? nextTab;
     footerSummary = `${TABS.find((t) => t.id === tab)?.label ?? 'Tab'} · ready to chain to ${nextLabel}`;
@@ -311,6 +326,11 @@ export default function App() {
           : 'Accept and chain'}
         onAccept={handleAccept}
         onReset={handleReset}
+        error={appError}
+        onClearError={() => setAppError(null)}
+        busy={busy}
+        gate={gateMsg}
+        ready={!gateMsg && !appError && !busy && Boolean(nextTab)}
       />
       <StatusBar
         synced
