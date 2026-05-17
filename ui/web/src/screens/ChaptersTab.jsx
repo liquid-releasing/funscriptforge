@@ -66,6 +66,12 @@ const TONES = [
       { id: 'recenter', label: 'Recenter', min: 0, max: 1, step: 0.05, def: 0.6,  fmt: (v) => v.toFixed(2) },
       { id: 'rhythm',   label: 'Rhythm',   min: 0, max: 1, step: 0.05, def: 0.55, fmt: (v) => v.toFixed(2) },
     ] },
+  // 'none' (2026-05-17) — explicit "no tone" so the user isn't forced to
+  // pick one before Accept. Selecting it returns the funscript unchanged
+  // through `applyTone`. Sits at the end of the picker grid.
+  { id: 'none',     label: 'Untoned',  color: '#64748b',
+    desc: 'No tone applied — chapter passes through unchanged.',
+    params: [] },
 ];
 
 function findTone(id) { return TONES.find((t) => t.id === id) ?? TONES[1]; }
@@ -119,6 +125,9 @@ function applyTone(actions, chapterStart, chapterEnd, tone, params) {
   if (!actions || actions.length === 0) return [];
   const slice = actions.filter((a) => a.at >= chapterStart && a.at <= chapterEnd);
   if (slice.length === 0) return [];
+  // 'none' / Untoned — passthrough, no transform. Lets the user Accept
+  // a chapter without committing to a tone.
+  if (tone.id === 'none') return slice.map((a) => ({ at: a.at, pos: a.pos }));
   const dur = Math.max(1, chapterEnd - chapterStart);
   const impact = params.impact ?? 1;
   const clamp = (v) => Math.max(0, Math.min(100, v));
@@ -718,7 +727,7 @@ function ChapterActionButton({ children, disabled, ...rest }) {
 
 function TonePicker({ tones, value, onChange }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tones.length}, 1fr)`, gap: 6 }}>
       {tones.map((t) => {
         const sel = t.id === value;
         return (

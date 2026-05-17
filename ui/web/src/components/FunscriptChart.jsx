@@ -95,19 +95,38 @@ export default function FunscriptChart({
 
   const handleMouseUp = () => { if (drag) setDrag(null); };
 
-  // Wheel to zoom around the cursor X. Anchored zoom keeps the time under
-  // the pointer fixed, which feels natural in any pan/zoom timeline.
+  // Wheel handler: vertical scroll zooms (anchored on cursor); horizontal
+  // scroll pans (trackpad two-finger swipe). Treats the dominant axis as
+  // the user's intent so a mouse wheel never accidentally pans and a
+  // trackpad swipe never accidentally zooms. Mouse-drag pan still works
+  // via the mousedown/move handlers below — this just adds the trackpad
+  // gesture for users who don't think to drag.
   const handleWheel = (e) => {
     e.preventDefault();
     const w = containerRef.current?.clientWidth ?? 1;
+    const span = view.end - view.start;
+
+    // Horizontal scroll → pan
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      const deltaMs = (e.deltaX / w) * span;
+      let start = view.start + deltaMs;
+      let end = view.end + deltaMs;
+      if (start < 0) { end += -start; start = 0; }
+      if (end > totalMs) { start -= end - totalMs; end = totalMs; }
+      if (start < 0) start = 0;
+      setView({ start, end });
+      return;
+    }
+
+    // Vertical scroll → zoom (anchored on cursor x)
     const rect = containerRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const t = view.start + (x / w) * (view.end - view.start);
+    const t = view.start + (x / w) * span;
     const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
-    let newSpan = (view.end - view.start) * factor;
+    let newSpan = span * factor;
     if (newSpan < MIN_VIEW_MS) newSpan = MIN_VIEW_MS;
     if (newSpan > totalMs) newSpan = totalMs;
-    const leftFrac = (t - view.start) / (view.end - view.start);
+    const leftFrac = (t - view.start) / span;
     let start = t - leftFrac * newSpan;
     let end = start + newSpan;
     if (start < 0) { end += -start; start = 0; }
