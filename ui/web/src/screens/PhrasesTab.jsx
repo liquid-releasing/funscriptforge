@@ -38,14 +38,78 @@
 // **Scrolling**: the main panel (rail + center + transform) scrolls. The
 // ribbon rows above do not.
 
-import { useMemo, useState } from 'react';
-import { ChapterRibbon, Segmented, Pill, Icon } from 'forgemoment';
+import { useEffect, useMemo, useState } from 'react';
+import { ChapterRibbon, Segmented, TransformPanel, Icon, fmtTimeShort } from 'forgemoment';
+import FunscriptChart from '../components/FunscriptChart.jsx';
+import { TRANSFORMS, BEHAVIOR_TAGS } from '../data/transforms.js';
+
+// Phrase helpers — duplicated from PatternsTab today. When a third
+// consumer appears, lift these into `src/lib/phrase_slice.js` or
+// similar. For now duplication beats premature abstraction.
+function clamp01_100(v) { return Math.max(0, Math.min(100, v)); }
+
+function sliceForPhrase(actions, phrase) {
+  if (!actions || !phrase) return { acts: [], dur: 0 };
+  const s = phrase.at_ms;
+  const e = phrase.end_ms;
+  const acts = actions
+    .filter((a) => a.at >= s && a.at <= e)
+    .map((a) => ({ at: a.at - s, pos: a.pos }));
+  return { acts, dur: Math.max(1, e - s) };
+}
+
+function previewActions(actions, transformId, params) {
+  if (!actions || actions.length === 0) return actions;
+  if (transformId === 'amplitude_scale') {
+    const s = Number(params?.scale ?? 1);
+    return actions.map((a) => ({ at: a.at, pos: clamp01_100(50 + (a.pos - 50) * s) }));
+  }
+  if (transformId === 'recenter') {
+    const off = Number(params?.offset ?? 0);
+    return actions.map((a) => ({ at: a.at, pos: clamp01_100(a.pos + off) }));
+  }
+  // Other transforms: pass-through preview until CLI integration lands.
+  return actions;
+}
+
+function findTag(id) {
+  return BEHAVIOR_TAGS.find((t) => t.id === id) || null;
+}
 
 export default function PhrasesTab({ project }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
   const [activeChapterId, setActiveChapterId] = useState(chapters[0]?.id ?? null);
   const [mode, setMode] = useState('tag');   // 'tag' | 'single'
+
+  // Mirrors PatternsTab's edit-set model. Lands at 0 today (no phrase
+  // data wired yet); the TransformPanel's "affected" chip and the
+  // per-row Edit/Skip toggle key off this list. Default whenever the
+  // scope changes: every phrase is in the edit set ("edit all unless
+  // you opt one out") — same rule Patterns uses.
+  const [editedPhraseIds, setEditedPhraseIds] = useState([]);
+  const toggleEditedPhrase = (id) => {
+    setEditedPhraseIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  // Collapse toggle for the phrase selection bar (Row 2 — active chapter
+  // funscript view). Matches the Patterns context-strip collapse: gives
+  // the user more vertical space for the rail/center/transform panel
+  // when they don't need the chapter-level overview.
+  const [isPhraseViewExpanded, setIsPhraseViewExpanded] = useState(true);
+  // Re-expand when the user moves to a different chapter — same rule as
+  // PatternsTab: a chapter change is a "starting fresh" moment, so the
+  // phrase context should be visible by default for the new chapter.
+  useEffect(() => { setIsPhraseViewExpanded(true); }, [activeChapterId]);
+
+  // TransformPanel state — same shape as PatternsTab so muscle memory
+  // carries between tabs. Default category is Behavior since phrases
+  // are tag-driven; Patterns defaults to Structural.
+  const [category, setCategory] = useState('behavior');
+  const [transformId, setTransformId] = useState(null);
+  const [params, setParams] = useState({});
 
   // Empty / no-project states
   if (!project?.path) {
@@ -59,10 +123,17 @@ export default function PhrasesTab({ project }) {
 
   const activeChapter = chapters.find((c) => c.id === activeChapterId) ?? chapters[0];
 
-  // Phrases-in-scope — stubbed until phrase data source is decided.
-  // When real data lands, this is `cli.py assess` output filtered to the
-  // active chapter's time range.
+  // Phrases-in-scope — stubbed until `cli.py assess --format json` is
+  // wired in. Per-phrase shape (target): { id, at_ms, end_ms, number,
+  // bpm?, tag? } where tag is a BEHAVIOR_TAGS id. When data lands, this
+  // becomes the assess output filtered to the active chapter's range.
   const phrasesInScope = useMemo(() => [], [activeChapter.id]);
+
+  // Reset edit-set when scope changes: every phrase starts "in edit",
+  // user opts rows out via the per-row toggle. Same rule as Patterns.
+  useEffect(() => {
+    setEditedPhraseIds(phrasesInScope.map((p) => p.id));
+  }, [activeChapter?.id]);
 
   return (
     // The outermost layout: column with a fixed-height header stack on
@@ -98,12 +169,15 @@ export default function PhrasesTab({ project }) {
         </div>
       </HeaderRow>
 
-      {/* ── Row 2 — Active chapter funscript view (phrase bands) ── */}
+      {/* ── Row 2 — Active chapter funscript view (phrase bands).
+            Collapsible (matches Patterns context-strip behavior): the
+            user can fold this row down to its header strip when they
+            want more vertical space for the body. */}
       <HeaderRow style={{ padding: '12px 22px 14px' }}>
         <div style={{ width: '100%' }}>
           <div style={{
             display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', marginBottom: 8,
+            justifyContent: 'space-between', marginBottom: isPhraseViewExpanded ? 8 : 0,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 10, height: 10, borderRadius: 2, background: activeChapter.color }} />
@@ -111,111 +185,136 @@ export default function PhrasesTab({ project }) {
                 {activeChapter.name || activeChapter.id}
               </span>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-dim)' }}>
-                {fmt(activeChapter.atMs)}–{fmt(activeChapter.endMs)} · {phrasesInScope.length} phrases
+                {isPhraseViewExpanded
+                  ? `${fmt(activeChapter.atMs)}–${fmt(activeChapter.endMs)} · ${phrasesInScope.length} phrases`
+                  : `· ${phrasesInScope.length} phrases`}
               </span>
             </div>
-            {/* Insert / Join chapter buttons used to live here; removed
-                2026-05-16 — chapter mutations belong on the Chapters tab
-                (via the per-band 3-dot menu), not duplicated in the
-                Transform context. */}
+            <button
+              onClick={() => setIsPhraseViewExpanded((v) => !v)}
+              title={isPhraseViewExpanded ? 'Collapse phrase view' : 'Expand phrase view'}
+              aria-label={isPhraseViewExpanded ? 'Collapse phrase view' : 'Expand phrase view'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '4px 8px', background: 'transparent',
+                border: '1px solid var(--border)', borderRadius: 5,
+                color: 'var(--text-dim)',
+                cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+              }}
+            >
+              <Icon name={isPhraseViewExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
+              {isPhraseViewExpanded ? 'Collapse' : 'Expand'}
+            </button>
           </div>
 
-          {/* Phrase view placeholder. In the prototype, this is the
-              `ChapterFunscriptView` SVG with phrase bands + action density
-              + playhead. Will port that next — it's substantial code that
-              depends on phrase data we don't have yet. */}
-          <div style={{
-            height: 108,
-            background: 'var(--bg)', border: '1px dashed var(--border)',
-            borderRadius: 6, display: 'grid', placeItems: 'center',
-            textAlign: 'center', padding: 16,
-          }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
-                Phrase view — coming next
-              </div>
-              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', maxWidth: 540, lineHeight: 1.5 }}>
-                Will render this chapter's phrases as colored bands with action density,
-                clickable to focus. Ported from
-                ChapterFunscriptView in <code>tab-Edit.jsx</code>.
-                Pending: phrase data source.
+          {/* Phrase view placeholder — only rendered when expanded. In
+              the prototype, this is the `ChapterFunscriptView` SVG with
+              phrase bands + action density + playhead. Will port that
+              next — it's substantial code that depends on phrase data
+              we don't have yet. */}
+          {isPhraseViewExpanded && (
+            <div style={{
+              height: 108,
+              background: 'var(--bg)', border: '1px dashed var(--border)',
+              borderRadius: 6, display: 'grid', placeItems: 'center',
+              textAlign: 'center', padding: 16,
+            }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
+                  Phrase view — coming next
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', maxWidth: 540, lineHeight: 1.5 }}>
+                  Will render this chapter's phrases as colored bands with action density,
+                  clickable to focus. Ported from
+                  ChapterFunscriptView in <code>tab-Edit.jsx</code>.
+                  Pending: phrase data source.
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </HeaderRow>
 
       {/* Row 3 (compact phrase chip strip) removed 2026-05-16 — redundant
           with the predominant phrase view above. Mode bar moves up. */}
 
-      {/* ── Row 3 — Mode bar (was Row 4) ── */}
-      <HeaderRow>
-        <RowLabel>Edit by</RowLabel>
-        <Segmented value={mode} onChange={setMode} options={[
-          // Pattern mode removed 2026-05-16 PM — Patterns has its own tab
-          // now (chapter → patterns → phrases). What stays here is
-          // phrase-scoped: tag-bucket transforms vs single-phrase detail.
-          { value: 'tag',     label: 'Behavior tag' },
-          { value: 'single',  label: 'Single phrase' },
-        ]} />
-        <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          Pick a {mode === 'tag' ? 'tag' : 'phrase'} on the left rail, see
-          the effect on the right.
-        </span>
-        <div style={{ flex: 1 }} />
-        <Pill tone="accent">
-          <Icon name="target" size={11} style={{ marginRight: 4 }} />
-          0 affected · transform TBD
-        </Pill>
-      </HeaderRow>
+      {/* "Edit by" row removed 2026-05-17 — once the mode picker moved
+          into the rail header (where it actually governs) and the
+          "N affected" chip moved into the TransformPanel header (where
+          the action originates), the row carried only a hint that the
+          rail's own segmented control already implies. */}
 
       {/* ── Body — rail + center + transform panel. Only this row scrolls. ── */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
-        {/* Left rail */}
+        {/* Left rail — header now carries the mode picker (Behavior tag /
+            Single phrase). Picker governs rail organization, so it lives
+            where it acts. */}
         <div style={{
-          width: 240, flexShrink: 0, overflow: 'auto',
+          width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column',
           background: 'var(--surface)', borderRight: '1px solid var(--border)',
-          padding: '12px 0',
         }}>
-          <RailPlaceholder mode={mode} />
+          <div style={{
+            padding: '10px 12px', borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
+          }}>
+            <Segmented value={mode} onChange={setMode} options={[
+              // Pattern mode removed 2026-05-16 PM — Patterns has its own
+              // tab now. What stays here is phrase-scoped: tag-bucket
+              // transforms vs single-phrase detail.
+              { value: 'tag',     label: 'Behavior tag' },
+              { value: 'single',  label: 'Single phrase' },
+            ]} />
+          </div>
+          <div style={{ flex: 1, overflow: 'auto', padding: '12px 0' }}>
+            <RailPlaceholder mode={mode} />
+          </div>
         </div>
 
-        {/* Center — per-phrase preview or single-phrase detail. This is the
-            main scrollable workspace ("the ones in the main panel"). */}
+        {/* Center — per-phrase preview (tag mode) or single-phrase
+            detail (single mode). The editing area: where the transform
+            actually lands. Width is whatever's left after rail (240) +
+            transform panel (320); the table columns shrink-stretch to
+            fit. */}
         <div style={{
           flex: 1, overflow: 'auto', padding: '20px 24px',
           background: 'var(--bg)',
         }}>
-          <CenterPlaceholder mode={mode} />
+          {mode === 'tag' ? (
+            <PhraseTable
+              phrases={phrasesInScope}
+              actions={actions}
+              editedPhraseIds={editedPhraseIds}
+              transformId={transformId}
+              params={params}
+              onTogglePhrase={toggleEditedPhrase}
+            />
+          ) : (
+            <CenterPlaceholder mode={mode} />
+          )}
         </div>
 
-        {/* Right — TransformPanel. Catalog + parameter editor. Stubbed
-            until we wire forge transforms into a JSON catalog the
-            TransformPanel can consume. */}
-        <div style={{
-          width: 320, flexShrink: 0, overflow: 'auto',
-          background: 'var(--surface)', borderLeft: '1px solid var(--border)',
-          padding: '14px 16px',
-        }}>
-          <div style={{
-            fontSize: 11, fontWeight: 700, color: 'var(--text-dim)',
-            textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10,
-          }}>
-            Transform
-          </div>
-          <div style={{
-            padding: 14, background: 'var(--bg)',
-            border: '1px dashed var(--border)', borderRadius: 6,
-            fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5,
-          }}>
-            TransformPanel from forgemoment will mount here. It needs a
-            transform catalog (FF has one in <code>pattern_catalog/</code>
-            and <code>forge/funscript_tools.py</code> — surface it as JSON
-            via <code>cli.py list-transforms --format json</code> or wire
-            into Rust at project-load time).
-          </div>
-        </div>
+        {/* Right — TransformPanel. Real mount (was a placeholder). The
+            transform catalog comes from the same TRANSFORMS source as
+            the Patterns tab; param editor surfaces accordingly. The
+            "N affected" chip in the panel's header reads from
+            editedPhraseIds — empty today, will populate when phrase
+            data is wired. */}
+        <TransformPanel
+          transforms={TRANSFORMS}
+          tags={BEHAVIOR_TAGS}
+          category={category}
+          onCategoryChange={setCategory}
+          transformId={transformId}
+          onTransformChange={setTransformId}
+          params={params}
+          onParamsChange={setParams}
+          affected={editedPhraseIds.length}
+          applyLabel="Apply"
+          cancelLabel="Cancel"
+          onApply={() => console.log('Phrases/apply', { phraseIds: editedPhraseIds, transformId, params })}
+          onCancel={() => { setTransformId(null); setParams({}); }}
+          width={320}
+        />
       </div>
     </div>
   );
@@ -304,6 +403,181 @@ function RailPlaceholder({ mode }) {
         clickable to focus that {mode === 'tag' ? 'tag' : 'phrase'}.
       </div>
     </div>
+  );
+}
+
+// ─── Phrase table — center editing area ──────────────────────────────
+//
+// Mirrors PatternsTab's InstanceTable: per-row preview (original / after
+// transform), tag-color inset border when in edit set, per-row Edit/Skip
+// toggle. Columns: stacked #/time, BPM, tag pill, original chart,
+// preview chart, edit toggle. Empty state when phrase data isn't wired
+// yet (`cli.py assess` pending).
+function PhraseTable({
+  phrases, actions, editedPhraseIds, transformId, params, onTogglePhrase,
+}) {
+  if (!phrases || phrases.length === 0) {
+    return (
+      <>
+        <SectionEyebrow>Per-phrase preview · before / after</SectionEyebrow>
+        <div style={{
+          padding: 32, textAlign: 'center', background: 'var(--surface)',
+          border: '1px dashed var(--border)', borderRadius: 8,
+          color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.6,
+        }}>
+          <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
+            Phrase data not wired yet
+          </div>
+          Will populate from <code>cli.py assess --format json</code>.
+          Each row: phrase #, time range, BPM, behavior tag, original
+          shape, preview after the chosen transform, and a per-row
+          Edit/Skip toggle (same workflow as Patterns).
+        </div>
+      </>
+    );
+  }
+  return (
+    <>
+      <div style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        marginBottom: 10,
+      }}>
+        <SectionEyebrow>Per-phrase preview · before / after</SectionEyebrow>
+        <div className="mono" style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+          {phrases.length} phrase{phrases.length === 1 ? '' : 's'}
+        </div>
+      </div>
+      <div style={{
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 8, overflow: 'hidden',
+      }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '90px 50px 90px 1fr 1fr 80px',
+          gap: 10, padding: '10px 14px',
+          background: 'var(--surface-2)', borderBottom: '1px solid var(--border)',
+          fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
+          textTransform: 'uppercase', letterSpacing: '0.06em',
+        }}>
+          <span>#&nbsp;/&nbsp;Time</span>
+          <span style={{ textAlign: 'right' }}>BPM</span>
+          <span>Tag</span>
+          <span>Original</span>
+          <span>Preview</span>
+          <span style={{ textAlign: 'center' }}>Edit</span>
+        </div>
+        {phrases.map((p) => (
+          <PhraseRow
+            key={p.id}
+            phrase={p}
+            actions={actions}
+            transformId={transformId}
+            params={params}
+            isEdited={editedPhraseIds.includes(p.id)}
+            onToggle={() => onTogglePhrase(p.id)}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function PhraseRow({ phrase, actions, transformId, params, isEdited, onToggle }) {
+  const { acts: originalActs, dur } = useMemo(
+    () => sliceForPhrase(actions, phrase),
+    [actions, phrase],
+  );
+  const previewActs = useMemo(
+    () => (isEdited ? previewActions(originalActs, transformId, params) : originalActs),
+    [originalActs, transformId, params, isEdited],
+  );
+
+  const [view, setView] = useState({ start: 0, end: dur });
+  useEffect(() => { setView({ start: 0, end: dur }); }, [dur]);
+
+  const tag = findTag(phrase.tag);
+  const tagColor = tag?.color || 'var(--text-dim)';
+  // Inset-border selection in the tag color — same model as Patterns
+  // (matches ChapterRibbon's 2px-white ring). Skipped rows dimmed.
+  const rowRing = isEdited ? `inset 0 0 0 2px ${tagColor}` : 'none';
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '90px 50px 90px 1fr 1fr 80px',
+        gap: 10, padding: '12px 14px', alignItems: 'center',
+        borderBottom: '1px solid var(--border)',
+        boxShadow: rowRing,
+        opacity: isEdited ? 1 : 0.55,
+      }}
+    >
+      {/* Col 1 — stacked phrase number + time range */}
+      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
+          #{phrase.number ?? '—'}
+        </span>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+          {fmtTimeShort(phrase.at_ms)}–{fmtTimeShort(phrase.end_ms)}
+        </span>
+      </div>
+      <span className="mono" style={{ fontSize: 11.5, textAlign: 'right' }}>
+        {phrase.bpm ?? '—'}
+      </span>
+      {tag ? (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center',
+          padding: '3px 8px', borderRadius: 99,
+          background: `${tag.color}22`,
+          color: tag.color,
+          fontSize: 10.5, fontWeight: 700,
+          textTransform: 'uppercase', letterSpacing: '0.04em',
+          width: 'fit-content',
+        }}>
+          {tag.label}
+        </span>
+      ) : (
+        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>—</span>
+      )}
+      <div style={{ height: 56 }}>
+        <FunscriptChart
+          actions={originalActs} totalMs={dur} height={56}
+          view={view} onViewChange={setView} bare
+        />
+      </div>
+      <div style={{ height: 56 }}>
+        <FunscriptChart
+          actions={previewActs} totalMs={dur} height={56}
+          view={view} onViewChange={setView} bare
+        />
+      </div>
+      <button
+        onClick={onToggle}
+        title={isEdited ? 'Exclude from edit' : 'Include in edit'}
+        aria-label={isEdited ? 'Exclude this phrase from the edit' : 'Include this phrase in the edit'}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '5px 9px', borderRadius: 5,
+          background: 'transparent',
+          border: `1px solid ${isEdited ? tagColor : 'var(--border)'}`,
+          color: isEdited ? tagColor : 'var(--text-dim)',
+          cursor: 'pointer', fontFamily: 'inherit',
+          fontSize: 10.5, fontWeight: 600,
+        }}
+      >
+        <Icon name={isEdited ? 'check' : 'circle'} size={11} />
+        {isEdited ? 'Edit' : 'Skip'}
+      </button>
+    </div>
+  );
+}
+
+function SectionEyebrow({ children }) {
+  return (
+    <div style={{
+      fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
+      textTransform: 'uppercase', letterSpacing: '0.06em',
+    }}>{children}</div>
   );
 }
 

@@ -282,6 +282,10 @@ export default function PatternsTab({ project }) {
   // when the user is deep in transform editing. Collapsed state renders a
   // single thin pill carrying "what's selected" + an expand chevron.
   const [isContextExpanded, setIsContextExpanded] = useState(true);
+  // Re-expand whenever the user moves to a different chapter — changing
+  // chapter is a "starting fresh" moment, so the user wants to see the
+  // pattern context for the new chapter without manually re-expanding.
+  useEffect(() => { setIsContextExpanded(true); }, [activeChapterId]);
 
   // ─── Empty states ──────────────────────────────────────────────────
   if (!project) {
@@ -301,65 +305,49 @@ export default function PatternsTab({ project }) {
     );
   }
 
-  const activePatternType = findPattern(activePatternId);
-  const activeInstanceCount = instances.filter((i) => i.patternId === activePatternId).length;
-
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
-      {isContextExpanded ? (
-        <>
-          {/* Row 1 — CHAPTERS ribbon (narrow chrome, no axes, no zoom) */}
-          <div style={{ padding: '8px 16px', background: 'var(--surface)',
-                        borderBottom: '1px solid var(--border)',
-                        display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
-                           textTransform: 'uppercase', letterSpacing: '0.08em',
-                           width: 64, flexShrink: 0 }}>Chapters</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <ChapterRibbon
-                bands={chapters}
-                actions={project?.actions || []}
-                selectedId={activeChapter?.id}
-                onSelect={(b) => setActiveChapterId(b.id)}
-                showAxes={false}
-                zoomable={false}
-                height={56}
-              />
-            </div>
-          </div>
-
-          {/* Row 2 — Pattern context strip. Header carries the active pattern's
-              identity (label + count + description + suggested transform); the
-              waveform below shows the active chapter's full motion with all
-              pattern instances overlaid as tinted bands. Selected pattern's
-              bands at high opacity; other patterns dimmed so the user sees
-              context without losing focus. Click anywhere on the strip to
-              select whichever pattern lives at that time. */}
-          <PatternContextStrip
-            chapter={activeChapter}
+      {/* Row 1 — CHAPTERS ribbon. Always visible (mirrors Phrases): keeping
+          the chapter context exposed reminds the user there are other
+          chapters to do, even when they've collapsed the per-pattern view.
+          User 2026-05-17. */}
+      <div style={{ padding: '8px 16px', background: 'var(--surface)',
+                    borderBottom: '1px solid var(--border)',
+                    display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
+                       textTransform: 'uppercase', letterSpacing: '0.08em',
+                       width: 64, flexShrink: 0 }}>Chapters</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <ChapterRibbon
+            bands={chapters}
             actions={project?.actions || []}
-            instances={instances}
-            selectedPatternId={activePatternId}
-            onSelectPattern={(pid) => {
-              setActivePatternId(pid);
-              // Switching pattern resets edit selection to all matching
-              // instances (the useEffect on activePatternId does this).
-            }}
-            onCollapse={() => setIsContextExpanded(false)}
+            selectedId={activeChapter?.id}
+            onSelect={(b) => setActiveChapterId(b.id)}
+            showAxes={false}
+            zoomable={false}
+            height={56}
           />
-        </>
-      ) : (
-        // Collapsed pill — replaces both Row 1 and Row 2 with a single
-        // thin bar so the body has the full vertical area. Click the pill
-        // anywhere to expand back. ~36px tall vs ~260px expanded.
-        <CollapsedSelectionPill
-          chapter={activeChapter}
-          patternType={activePatternType}
-          instanceCount={activeInstanceCount}
-          onExpand={() => setIsContextExpanded(true)}
-        />
-      )}
+        </div>
+      </div>
+
+      {/* Row 2 — Pattern context strip. Header carries the active
+          pattern's identity (label + count + description + suggested
+          transform). Waveform below is collapsible — header stays visible
+          either way so the user sees which pattern they're working on. */}
+      <PatternContextStrip
+        chapter={activeChapter}
+        actions={project?.actions || []}
+        instances={instances}
+        selectedPatternId={activePatternId}
+        onSelectPattern={(pid) => {
+          setActivePatternId(pid);
+          // Switching pattern resets edit selection to all matching
+          // instances (the useEffect on activePatternId does this).
+        }}
+        isExpanded={isContextExpanded}
+        onToggle={() => setIsContextExpanded((v) => !v)}
+      />
 
       {/* Body — rail | center table | TransformPanel */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
@@ -400,7 +388,8 @@ export default function PatternsTab({ project }) {
           onTransformChange={handleTransformChange}
           params={params}
           onParamsChange={setParams}
-          applyLabel={`Apply to ${editedInstanceIds.length} instance${editedInstanceIds.length === 1 ? '' : 's'}`}
+          affected={editedInstanceIds.length}
+          applyLabel="Apply"
           cancelLabel="Cancel"
           onApply={handleApply}
           onCancel={handleCancel}
@@ -430,7 +419,7 @@ export default function PatternsTab({ project }) {
 // bands selects nothing — only band clicks change the pattern.
 function PatternContextStrip({
   chapter, actions, instances, selectedPatternId, onSelectPattern,
-  onCollapse,
+  isExpanded = true, onToggle,
 }) {
   const wrapRef = useRef(null);
   const [pxWidth, setPxWidth] = useState(800);
@@ -462,26 +451,30 @@ function PatternContextStrip({
       padding: '12px 22px 14px', background: 'var(--surface)',
       borderBottom: '1px solid var(--border)',
     }}>
-      {/* Header — pattern identity. Collapse chevron in top-right when
-          the parent wires `onCollapse` (Patterns tab does). */}
-      <div style={{ marginBottom: 10 }}>
+      {/* Header — pattern identity when expanded, chapter-only when
+          collapsed. Collapsed header shows just "Chapter N · M phrases"
+          per user 2026-05-17: the pattern description / suggested
+          transform / pattern label are noise when the user has chosen
+          to hide the waveform. */}
+      <div style={{ marginBottom: isExpanded ? 10 : 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <span style={{
             width: 12, height: 12, borderRadius: 3,
-            background: selectedPattern.color, alignSelf: 'center',
+            background: isExpanded ? selectedPattern.color : (chapter.toneColor || 'var(--text-dim)'),
+            alignSelf: 'center',
           }} />
-          <strong style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
-            {selectedPattern.label}
+          <strong style={{ fontSize: isExpanded ? 18 : 13, fontWeight: 700, color: 'var(--text)' }}>
+            {isExpanded ? selectedPattern.label : (chapter.name || chapter.id)}
           </strong>
           <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             · {selectedInstances.length} phrase{selectedInstances.length === 1 ? '' : 's'}
           </span>
           <div style={{ flex: 1 }} />
-          {onCollapse && (
+          {onToggle && (
             <button
-              onClick={onCollapse}
-              title="Collapse selection area"
-              aria-label="Collapse selection area"
+              onClick={onToggle}
+              title={isExpanded ? 'Collapse pattern view' : 'Expand pattern view'}
+              aria-label={isExpanded ? 'Collapse pattern view' : 'Expand pattern view'}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
                 padding: '4px 8px', borderRadius: 5,
@@ -491,35 +484,34 @@ function PatternContextStrip({
                 cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
               }}
             >
-              <Icon name="chevron-up" size={12} />
-              Collapse
+              <Icon name={isExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
+              {isExpanded ? 'Collapse' : 'Expand'}
             </button>
           )}
         </div>
-        <div style={{ marginTop: 4, fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.45 }}>
-          {selectedPattern.desc}
-        </div>
-        {selectedTransform && (
-          <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-dim)' }}>
-            Suggested transform:{' '}
-            <strong style={{ color: 'var(--text-muted)' }}>{selectedTransform.label}</strong>
-            {' '}— {selectedTransform.summary}
-          </div>
+        {isExpanded && (
+          <>
+            <div style={{ marginTop: 4, fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+              {selectedPattern.desc}
+            </div>
+            {selectedTransform && (
+              <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-dim)' }}>
+                Suggested transform:{' '}
+                <strong style={{ color: 'var(--text-muted)' }}>{selectedTransform.label}</strong>
+                {' '}— {selectedTransform.summary}
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Waveform + overlaid pattern bands. Layering matters:
-            1. dark base (the wrap div itself)
-            2. pattern-color wash *behind* selected pattern's instances
-               only — sits behind the waveform so the funscript bars
-               appear to live on a colored field
-            3. velocity-colored waveform at full contrast (no global dim)
-            4. outline boxes on top for every instance — selected pattern
-               gets a bold pattern-color border (similar weight to the
-               chapter selection ring); other patterns get a thin low-
-               alpha border so the user sees they exist as context.
-          User asked to preserve the velocity contrast outside the
-          selection — dimming the whole waveform washed it out. */}
+      {/* Waveform + overlaid pattern bands. Hidden when the strip is
+          collapsed — header above stays visible so the user always knows
+          which pattern they're acting on, mirroring how Phrases keeps
+          Row 2's chapter header strip visible when collapsed.
+          Layering inside (top-down): velocity sparkline → pattern-color
+          wash → outline boxes. */}
+      {isExpanded && (
       <div
         ref={wrapRef}
         style={{
@@ -605,65 +597,8 @@ function PatternContextStrip({
           );
         })}
       </div>
+      )}
     </div>
-  );
-}
-
-// ─── Collapsed selection pill ────────────────────────────────────────
-//
-// Single thin bar that replaces both the CHAPTERS ribbon and the pattern
-// context strip when the user wants more vertical space for the body
-// (rail / center table / transform panel). Click anywhere on the pill to
-// expand back to the full selection UI.
-//
-// Carries enough information to keep the user oriented without the rich
-// display: active chapter (id + time range), active pattern type (color
-// chip + label + instance count).
-function CollapsedSelectionPill({ chapter, patternType, instanceCount, onExpand }) {
-  return (
-    <button
-      onClick={onExpand}
-      title="Expand selection area"
-      aria-label="Expand selection area"
-      style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '8px 16px', background: 'var(--surface)',
-        borderBottom: '1px solid var(--border)',
-        cursor: 'pointer', fontFamily: 'inherit',
-        textAlign: 'left', width: '100%', border: 'none',
-        color: 'var(--text)',
-      }}
-    >
-      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
-                     textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-        Selection
-      </span>
-      <span style={{ fontSize: 12.5, color: 'var(--text)' }}>
-        {chapter.name || chapter.id}
-      </span>
-      <span className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-        {fmtTimeShort(chapter.at_ms)}–{fmtTimeShort(chapter.end_ms)}
-      </span>
-      <span style={{ color: 'var(--text-dim)' }}>·</span>
-      <span style={{
-        width: 10, height: 10, borderRadius: 2,
-        background: patternType.color, flexShrink: 0,
-      }} />
-      <strong style={{ fontSize: 12.5, fontWeight: 700 }}>
-        {patternType.label}
-      </strong>
-      <span className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-        · {instanceCount} phrase{instanceCount === 1 ? '' : 's'}
-      </span>
-      <div style={{ flex: 1 }} />
-      <span style={{
-        display: 'inline-flex', alignItems: 'center', gap: 4,
-        fontSize: 11, color: 'var(--text-dim)',
-      }}>
-        Expand
-        <Icon name="chevron-down" size={12} />
-      </span>
-    </button>
   );
 }
 
