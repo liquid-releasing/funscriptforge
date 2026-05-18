@@ -31,6 +31,19 @@ import { listRecents, pickFunscriptFile, pickProjectFile, classifyProjectFile } 
 import { generatePreviewActions, parseDurationToMs } from '../lib/funscriptPreview.js';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 
+// Cold-start substitute when no project is opened and no real recent
+// matches the active id. ActiveProject reads `_placeholder` to suppress
+// metadata pills and the "loading…" copy that's reserved for actual
+// in-flight loads. Renders the same layout shell so the page feels
+// consistent across cold-start / loading / loaded.
+const COLD_START_PLACEHOLDER = {
+  id: 'placeholder',
+  title: 'Project',
+  duration: '—',
+  mediaKind: 'video',
+  _placeholder: true,
+};
+
 export default function ProjectTab({
   openedProject,
   loadedProjects = [],
@@ -80,10 +93,20 @@ export default function ProjectTab({
     return mergedRecents.filter((p) => p.title.toLowerCase().includes(q));
   }, [mergedRecents, search]);
 
+  // Pending placeholder takes precedence — its id (`pending:<path>`) is not
+  // in the recents list, so the regular find would miss it and the
+  // fallback would silently show the first mock recent.
+  const pendingPlaceholder =
+    typeof openedProject === 'object' && openedProject?._pending ? openedProject : null;
+  // Cold-start placeholder: when nothing is user-opened and the active id
+  // doesn't match a real recent, render the ActiveProject layout with
+  // "Project" as the title + a skeleton chart, instead of silently showing
+  // the first mock or the dashed EmptyProject. Keeps layout consistent
+  // across cold-start / loading / loaded.
   const active =
+    pendingPlaceholder ??
     mergedRecents?.find((p) => p.id === activeProjectId) ??
-    mergedRecents?.[0] ??
-    null;
+    COLD_START_PLACEHOLDER;
 
   // Left-rail "Open" button: only ever opens a new funscript. Single-type
   // picker keeps this affordance unambiguous.
@@ -264,6 +287,13 @@ function ActiveProject({ project, onAddOrReplace }) {
   // Real funscripts loaded via the Rust bridge populate `project.actions`
   // (downsampled to ~1200 points by load_project). Recents and mock projects
   // get a deterministic synthesised curve from the preview generator.
+  // `_pending` is the placeholder seeded by App.handleOpenScript at click
+  // time — path + title known, chart not yet loaded.
+  // `_placeholder` is the cold-start substitute — no project opened at all.
+  // Both render the skeleton chart and dim the pills; copy differs.
+  const isPending = !!project._pending;
+  const isPlaceholder = !!project._placeholder;
+  const isQuiet = isPending || isPlaceholder;
   const hasRealActions = Array.isArray(project.actions) && project.actions.length > 0;
   const chartActions = hasRealActions ? project.actions : generatePreviewActions(project, 1200);
   const totalMs = project.durationMs || parseDurationToMs(project.duration) || 60000;
@@ -301,26 +331,36 @@ function ActiveProject({ project, onAddOrReplace }) {
           <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700, letterSpacing: '-0.01em' }}>
             {project.title}
           </h2>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            <Pill tone="neutral"><Icon name="clock" size={11} style={{ marginRight: 4 }} />{project.duration}</Pill>
-            {project.actionCount > 0 && (
-              <Pill tone="neutral">
-                <Icon name="hash" size={11} style={{ marginRight: 4 }} />
-                {project.actionCount.toLocaleString()} actions
-              </Pill>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, opacity: isQuiet ? 0.55 : 1 }}>
+            {isPlaceholder ? (
+              <Pill tone="neutral">Open a project to begin</Pill>
+            ) : (
+              <>
+                <Pill tone="neutral"><Icon name="clock" size={11} style={{ marginRight: 4 }} />{project.duration}</Pill>
+                {project.actionCount > 0 && (
+                  <Pill tone="neutral">
+                    <Icon name="hash" size={11} style={{ marginRight: 4 }} />
+                    {project.actionCount.toLocaleString()} actions
+                  </Pill>
+                )}
+                {project.chapters > 0 && (
+                  <Pill tone="neutral">
+                    <Icon name="bookmark" size={11} style={{ marginRight: 4 }} />
+                    {project.chapters} chapters
+                  </Pill>
+                )}
+                {project.toneSuggestion && (
+                  <Pill tone="accent" dot title={project.toneRationale}>
+                    Tone: {project.toneSuggestion}
+                  </Pill>
+                )}
+                {isPending ? (
+                  <Pill tone="info" dot>loading…</Pill>
+                ) : (
+                  <Pill tone="info" dot>last opened {project.edited}</Pill>
+                )}
+              </>
             )}
-            {project.chapters > 0 && (
-              <Pill tone="neutral">
-                <Icon name="bookmark" size={11} style={{ marginRight: 4 }} />
-                {project.chapters} chapters
-              </Pill>
-            )}
-            {project.toneSuggestion && (
-              <Pill tone="accent" dot title={project.toneRationale}>
-                Tone: {project.toneSuggestion}
-              </Pill>
-            )}
-            <Pill tone="info" dot>last opened {project.edited}</Pill>
           </div>
         </div>
         <Button kind="ghost" size="sm" icon="more-horizontal">More</Button>
@@ -336,18 +376,22 @@ function ActiveProject({ project, onAddOrReplace }) {
         Funscript
       </SectionLabel>
       <div style={{ marginBottom: 28 }}>
-        <FunscriptChart
-          actions={chartActions}
-          totalMs={totalMs}
-          height={260}
-          // When the Rust bridge populated stats over the full action set,
-          // pass them through so the footer doesn't under-report against
-          // the downsampled preview.
-          totalActionCount={project.actionCount}
-          avgSpeed={project.avgSpeed}
-          minPos={project.minPos}
-          maxPos={project.maxPos}
-        />
+        {isQuiet ? (
+          <FunscriptChartSkeleton label={isPlaceholder ? 'No project loaded' : 'Loading funscript…'} />
+        ) : (
+          <FunscriptChart
+            actions={chartActions}
+            totalMs={totalMs}
+            height={260}
+            // When the Rust bridge populated stats over the full action set,
+            // pass them through so the footer doesn't under-report against
+            // the downsampled preview.
+            totalActionCount={project.actionCount}
+            avgSpeed={project.avgSpeed}
+            minPos={project.minPos}
+            maxPos={project.maxPos}
+          />
+        )}
       </div>
 
       <SectionLabel>Files in this project</SectionLabel>
@@ -468,6 +512,33 @@ function EmptyProject({ onOpen }) {
           .funscript · media file attached later
         </div>
       </button>
+    </div>
+  );
+}
+
+// Blank shaded placeholder shown in place of FunscriptChart while a
+// project is loading. Same vertical footprint (height 260) so the page
+// doesn't reflow when the real chart lands. No animation — just a quiet
+// shaded panel; the global busy banner already says "Loading <file>…".
+function FunscriptChartSkeleton({ label = 'Loading funscript…' }) {
+  return (
+    <div
+      role="presentation"
+      aria-busy="true"
+      style={{
+        height: 260,
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        display: 'grid', placeItems: 'center',
+        color: 'var(--text-dim)',
+        fontSize: 12,
+      }}
+    >
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <Icon name="loader" size={14} stroke={1.5} />
+        {label}
+      </span>
     </div>
   );
 }

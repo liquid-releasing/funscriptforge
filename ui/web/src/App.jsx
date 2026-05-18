@@ -239,9 +239,24 @@ export default function App() {
   // route through the same loading-state pipeline.
   const handleOpenScript = async (path) => {
     if (!path) return;
+    // Seed a pending placeholder *before* the async load so the Project
+    // tab arrives with the new project's name already in the title block —
+    // no stale-previous-project flash, no empty header. The chart area
+    // checks `_pending` to render the shaded skeleton instead of the
+    // (yet-unloaded) funscript. handleProjectOpened replaces the
+    // placeholder with the full record when load_project resolves.
+    const filename = path.split(/[\\/]/).pop() || 'project';
+    const placeholderTitle = filename.replace(/\.funscript$/i, '');
+    setOpenedProject({
+      id: `pending:${path}`,
+      path,
+      title: placeholderTitle,
+      duration: '—',
+      _pending: true,
+    });
     setIsLoadingProject(true);
     setAppError(null);
-    setBusy({ message: `Loading ${path.split(/[\\/]/).pop() || 'project'}…` });
+    setBusy({ message: `Loading ${filename}…` });
     setTab('project');
     try {
       const project = await loadProject(path);
@@ -249,6 +264,9 @@ export default function App() {
     } catch (err) {
       console.error('App: load_project failed', err);
       setAppError(err?.message ? `Failed to open script: ${err.message}` : 'Failed to open script.');
+      // Clear the placeholder so the tab doesn't strand the user on a
+      // skeleton of a project that didn't actually load.
+      setOpenedProject(null);
     } finally {
       setIsLoadingProject(false);
       setBusy(null);
