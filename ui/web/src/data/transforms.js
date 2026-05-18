@@ -307,6 +307,28 @@ export const TRANSFORMS = [
 // Canonical behavioral tags — the 10 the FF classifier surfaces. Used by
 // PhrasesTab for tag-bucket selection and by TransformPanel for the
 // "suggested for this tag" hint (`primary` → transform id).
+// FORGEGEN_MODES — intent vocabulary forgegen / videoflow uses to
+// classify audio-derived phrases (a.k.a. *stanzas* in the FF UI).
+// Source of truth: `videoflow.phrases.Phrase.mode` field; emitted by
+// `_classify_phrases` inside `videoflow.structural.auto_chapter` and
+// surfaced through `cli.py read-stanzas`.
+//
+// Vocabulary is "what should this section feel like" (intent), not
+// "what's wrong with the motion" (diagnostic — that's BEHAVIOR_TAGS
+// below, used by the Phrases tab). The two vocabularies are
+// complementary lenses; see project_stanzas_tab memory for context.
+//
+// Color palette intentionally distinct from BEHAVIOR_TAGS so the
+// Stanzas tab reads as a different context than Phrases at a glance.
+export const FORGEGEN_MODES = [
+  { id: 'tease',  label: 'Tease',  color: '#f78fb3', desc: 'Hint, withdraw, hint again. Pulls back before payoff.' },
+  { id: 'steady', label: 'Steady', color: '#56cfe1', desc: 'Consistent rhythm. Holds the groove without escalation.' },
+  { id: 'edging', label: 'Edging', color: '#ffd166', desc: 'Approach the threshold and back off. Repeated near-peaks.' },
+  { id: 'break',  label: 'Break',  color: '#94a3b8', desc: 'Pause, lull, breath. Negative space between motions.' },
+  { id: 'fast',   label: 'Fast',   color: '#ff6b6b', desc: 'High-energy push. Tempo and intensity peak.' },
+  { id: 'slow',   label: 'Slow',   color: '#8b9bff', desc: 'Deliberate, drawn-out, low-tempo motion.' },
+];
+
 export const BEHAVIOR_TAGS = [
   { id: 'stingy',      label: 'Stingy',      color: '#ff5470', desc: 'High-BPM, full-range hammering. No dynamics.',                        primary: 'amplitude_scale' },
   { id: 'giggle',      label: 'Giggle',      color: '#ffb547', desc: 'Tiny oscillations near midpoint. Trembling, not stroking.',           primary: 'normalize_range' },

@@ -19,6 +19,7 @@ import DeviceTab from './screens/DeviceTab.jsx';
 import ChaptersTab from './screens/ChaptersTab.jsx';
 import PatternsTab from './screens/PatternsTab.jsx';
 import PhrasesTab from './screens/PhrasesTab.jsx';
+import StanzasTab from './screens/StanzasTab.jsx';
 
 const TABS = [
   { id: 'library',   label: 'Library' },
@@ -35,6 +36,16 @@ const TABS = [
   // unit you're operating on, not the verb. Pattern mode in the mode
   // bar is gone (Patterns has its own tab one step earlier).
   { id: 'phrases',   label: 'Phrases' },
+  // 'stanzas' (2026-05-18) sits between Phrases and Stim. Sibling lens
+  // to Phrases — same chassis, but the unit is videoflow's audio-derived
+  // phrases (forgegen intent vocabulary: tease/steady/edging/...). See
+  // project_stanzas_tab memory for rationale.
+  { id: 'stanzas',   label: 'Stanzas' },
+  // 'events' (2026-05-18) sits between Stanzas and Stim. Point-in-time
+  // effects (edge/zap/tease) layered on top of the funscript — saved
+  // to <stem>.events.yml on Accept. Screen not built yet; placeholder
+  // route lands the user on the "not ported" page.
+  { id: 'events',    label: 'Events' },
   { id: 'stim',      label: 'Stim' },
   { id: 'export',    label: 'Export' },
 ];
@@ -72,6 +83,10 @@ export default function App() {
   // the session only; cross-restart persistence comes later via the
   // .ffmeta sidecar (see project-funscriptforge-pending).
   const [phrasesByPath, setPhrasesByPath] = useState({});
+  // Stanzas cache — parallel structure to phrasesByPath. Survives tab
+  // switches so `readStanzas` (sidecar read) only fires once per project
+  // per session. Shape per entry: { stanzas: StanzaRecord[], loaded: boolean }.
+  const [stanzasByPath, setStanzasByPath] = useState({});
 
   useEffect(() => {
     let cancelled = false;
@@ -282,7 +297,9 @@ export default function App() {
     device:   'chapters',
     chapters: 'patterns',
     patterns: 'phrases',
-    phrases:  'stim',
+    phrases:  'stanzas',
+    stanzas:  'events',
+    events:   'stim',
     stim:     'export',
   };
   const tabGate = (id) => {
@@ -292,7 +309,7 @@ export default function App() {
     if (id === 'project') {
       if (!project?.path && !isLoadingProject) return 'Open a funscript before continuing.';
     }
-    if (['device', 'chapters', 'patterns', 'phrases', 'stim'].includes(id)
+    if (['device', 'chapters', 'patterns', 'phrases', 'stanzas', 'events', 'stim'].includes(id)
         && !project?.path && !isLoadingProject) {
       return 'Open a funscript before continuing.';
     }
@@ -439,7 +456,16 @@ export default function App() {
             setPhrasesByPath={setPhrasesByPath}
           />
         )}
-        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && (
+        {tab === 'stanzas' && (
+          <StanzasTab
+            project={typeof openedProject === 'object' ? openedProject : null}
+            setBusy={setBusy}
+            setAppError={setAppError}
+            stanzasByPath={stanzasByPath}
+            setStanzasByPath={setStanzasByPath}
+          />
+        )}
+        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && tab !== 'stanzas' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>

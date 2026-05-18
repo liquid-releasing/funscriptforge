@@ -23,6 +23,7 @@ pub fn run() {
             commands::create_chapters_sidecar,
             commands::analyze_chapters_with_videoflow,
             commands::analyze_phrases,
+            commands::read_stanzas,
             commands::attach_media,
         ])
         .run(tauri::generate_context!())

@@ -801,6 +801,117 @@ pub async fn analyze_phrases(
         .collect())
 }
 
+// ---------------------------------------------------------------------------
+// Stanzas — wire shape returned by `cli.py read-stanzas`. These are
+// videoflow-classified phrases pulled directly out of the existing
+// <stem>.chapters.json sidecar. No analysis is run; the sidecar must
+// already exist (written by `auto-chapter` or manual editing).
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct CliStanza {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    number: u32,
+    chapter_idx: u32,
+    at_ms: u64,
+    end_ms: u64,
+    #[serde(default)]
+    mode: String,
+    #[serde(default)]
+    source: String,
+}
+
+#[derive(Deserialize)]
+struct CliStanzaCluster {
+    id: String,
+    label: String,
+    #[serde(default)]
+    stanza_ids: Vec<String>,
+    #[serde(default)]
+    mode: String,
+    #[serde(default)]
+    length_bucket: f32,
+    #[serde(default)]
+    density_bucket: String,
+}
+
+#[derive(Deserialize)]
+struct CliStanzasResult {
+    #[serde(default)]
+    phrases: Vec<CliStanza>,
+    #[serde(default)]
+    clusters: Vec<CliStanzaCluster>,
+}
+
+#[derive(Serialize)]
+pub struct StanzaRecord {
+    id: String,
+    number: u32,
+    chapter_idx: u32,
+    at_ms: u64,
+    end_ms: u64,
+    mode: String,
+    source: String,
+}
+
+#[derive(Serialize)]
+pub struct StanzaCluster {
+    id: String,
+    label: String,
+    stanza_ids: Vec<String>,
+    mode: String,
+    length_bucket: f32,
+    density_bucket: String,
+}
+
+#[derive(Serialize)]
+pub struct StanzasResponse {
+    stanzas: Vec<StanzaRecord>,
+    clusters: Vec<StanzaCluster>,
+}
+
+// Run `cli.py read-stanzas <path>` and return the parsed stanza records
+// plus the computed clusters (mode × length × density buckets). Cheap
+// operation (just reads the sidecar JSON + funscript actions for density),
+// so no progress streaming. Returns an empty response when the sidecar
+// is missing — the frontend renders an empty state nudging the user to
+// run auto-chapter.
+#[tauri::command]
+pub async fn read_stanzas(funscript_path: String) -> Result<StanzasResponse, String> {
+    let stdout = run_cli(&["read-stanzas", &funscript_path]).await?;
+    let parsed: CliStanzasResult = serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse cli.py read-stanzas output: {}", e))?;
+    Ok(StanzasResponse {
+        stanzas: parsed
+            .phrases
+            .into_iter()
+            .map(|p| StanzaRecord {
+                id: if p.id.is_empty() { format!("st{}", p.number) } else { p.id },
+                number: p.number,
+                chapter_idx: p.chapter_idx,
+                at_ms: p.at_ms,
+                end_ms: p.end_ms,
+                mode: p.mode,
+                source: p.source,
+            })
+            .collect(),
+        clusters: parsed
+            .clusters
+            .into_iter()
+            .map(|c| StanzaCluster {
+                id: c.id,
+                label: c.label,
+                stanza_ids: c.stanza_ids,
+                mode: c.mode,
+                length_bucket: c.length_bucket,
+                density_bucket: c.density_bucket,
+            })
+            .collect(),
+    })
+}
+
 // Deterministic chapter color cycle. Matches the prototype's ChapterBands
 // where each chapter has a stable swatch independent of tone selection.
 const CHAPTER_PALETTE: &[&str] = &[

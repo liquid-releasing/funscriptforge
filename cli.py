@@ -122,6 +122,7 @@ import os
 import sys
 import tempfile
 import time
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -1246,6 +1247,168 @@ def _make_stage_event_emitter():
     return _cb
 
 
+def _compute_stanza_clusters(stanzas, actions):
+    """Bucket stanzas by (mode, length, density) and emit clusters of
+    ≥2 members. Singletons stay un-clustered (the rail surfaces only
+    groups worth editing as one).
+
+    Length bucketing is log-scale (4 buckets per octave via rounding
+    log2(seconds) to the nearest 0.25 — gives natural human-readable
+    bucket centers like ~3s, ~4s, ~5.7s, ~8s, ~11s). Density bucketing
+    is three coarse bands (sparse/medium/busy at <3, <8, ≥8 actions/sec).
+
+    Returns a list of cluster dicts sorted by member count desc:
+        { id, label, stanza_ids, mode, length_bucket, density_bucket }
+    """
+    import math
+    from collections import defaultdict
+
+    # Per-stanza action density. Linear scan over actions guarded by
+    # the time window — fast enough for typical funscript sizes
+    # (10k actions × hundreds of stanzas = millions of compares; still
+    # sub-second). For huge funscripts (>50k actions) we could binary-
+    # search instead, but not needed today.
+    densities = {}
+    for s in stanzas:
+        dur_s = max(0.1, (s["end_ms"] - s["at_ms"]) / 1000.0)
+        count = 0
+        for a in actions:
+            at = a.get("at", 0)
+            if s["at_ms"] <= at <= s["end_ms"]:
+                count += 1
+        densities[s["id"]] = count / dur_s
+
+    def density_bucket(d):
+        if d < 3:
+            return "sparse"
+        if d < 8:
+            return "medium"
+        return "busy"
+
+    def length_bucket_center(ms):
+        if ms <= 0:
+            return 0.1
+        sec = ms / 1000.0
+        rounded = round(math.log2(sec) * 4) / 4
+        return round(2 ** rounded, 1)
+
+    bucketed: dict = defaultdict(list)
+    for s in stanzas:
+        mode = s.get("mode") or "unknown"
+        lb = length_bucket_center(s["end_ms"] - s["at_ms"])
+        db = density_bucket(densities.get(s["id"], 0))
+        bucketed[(mode, lb, db)].append(s["id"])
+
+    clusters: list = []
+    for (mode, lb, db), ids in bucketed.items():
+        if len(ids) < 2:
+            continue
+        clusters.append({
+            "id": f"cl_{mode}_{lb}_{db}",
+            "label": f"{mode.capitalize()} · ~{lb}s · {db}",
+            "stanza_ids": ids,
+            "mode": mode,
+            "length_bucket": lb,
+            "density_bucket": db,
+        })
+    clusters.sort(key=lambda c: -len(c["stanza_ids"]))
+    return clusters
+
+
+def cmd_read_stanzas(args):
+    """Read videoflow phrases (= "stanzas" in the FF UI) from the
+    <stem>.chapters.json sidecar next to a funscript or media file.
+
+    The phrases field is written by `videoflow.structural.auto_chapter`
+    on every analysis run. This command just exposes that pre-computed
+    payload to the FF UI without re-running analysis — the Stanzas tab
+    consumes it.
+
+    Output shape:
+        {
+          "phrases": [
+            { id, number, chapter_idx, at_ms, end_ms, mode, source }, …
+          ],
+          "clusters": [
+            { id, label, stanza_ids, mode, length_bucket, density_bucket }, …
+          ],
+        }
+
+    `number` is the 1-based ordinal within the chapter (so the user
+    sees "#1, #2, #3" per chapter, matching the Phrases tab convention).
+    `clusters` is computed here from the phrases + adjacent funscript
+    actions (density signal). Empty list when there's nothing to cluster.
+
+    Returns `{"phrases": [], "clusters": []}` when the sidecar is missing
+    or has no phrases — the UI handles that as "no stanzas yet, run
+    auto-chapter from the Chapters tab first."
+    """
+    target = Path(args.path)
+    if not target.exists():
+        print(f"Error: file not found: {target}", file=sys.stderr)
+        sys.exit(1)
+
+    sidecar = target.with_suffix("").with_suffix(".chapters.json")
+    if not sidecar.exists():
+        # Try <stem>.chapters.json — the with_suffix dance above strips
+        # only the final suffix. For "foo.funscript" we want
+        # "foo.chapters.json"; for "foo.mp4" we want "foo.chapters.json".
+        # Path.with_suffix replaces the suffix, so apply once.
+        sidecar = target.with_suffix(".chapters.json")
+    if not sidecar.exists():
+        print(json.dumps({"phrases": [], "clusters": []}))
+        return
+
+    try:
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Error reading sidecar {sidecar}: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    raw_phrases = data.get("phrases") or []
+
+    # Number stanzas 1..N within each chapter so the UI gets stable
+    # "#3 in chapter 2" labels without re-deriving them on every render.
+    by_chapter: dict = {}
+    out: list[dict] = []
+    for i, p in enumerate(raw_phrases):
+        ch_idx = int(p.get("chapter_idx", 0))
+        by_chapter[ch_idx] = by_chapter.get(ch_idx, 0) + 1
+        out.append({
+            "id": f"st{i}",
+            "number": by_chapter[ch_idx],
+            "chapter_idx": ch_idx,
+            "at_ms": int(p["at_ms"]),
+            "end_ms": int(p["end_ms"]),
+            "mode": p.get("mode", "") or "",
+            "source": p.get("source", "") or "",
+        })
+
+    # Cluster the stanzas. Needs funscript actions for the density
+    # signal — read them from the funscript file if the input is one,
+    # otherwise we look for an adjacent .funscript next to the media.
+    # If neither is available, clusters are computed with density=0
+    # (which collapses to mode+length groupings — still useful).
+    actions: list = []
+    funscript_path: Path | None = None
+    if str(target).lower().endswith(".funscript"):
+        funscript_path = target
+    else:
+        cand = target.with_suffix(".funscript")
+        if cand.exists():
+            funscript_path = cand
+    if funscript_path is not None:
+        try:
+            fs_data = json.loads(funscript_path.read_text(encoding="utf-8"))
+            actions = fs_data.get("actions") or []
+        except (OSError, json.JSONDecodeError):
+            actions = []
+
+    clusters = _compute_stanza_clusters(out, actions) if out else []
+
+    print(json.dumps({"phrases": out, "clusters": clusters}))
+
+
 def cmd_auto_chapter(args):
     """Run videoflow.structural.auto_chapter on a media file.
 
@@ -1622,6 +1785,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_ac.add_argument("--format", choices=["table", "json"], default="table",
                       help="Output format (default: table)")
 
+    # --- read-stanzas (FF Stanzas tab data source) ---
+    # Reads videoflow-classified phrases from <stem>.chapters.json next to
+    # the given funscript or media. Returns them as JSON for the Tauri
+    # bridge. Empty list when no sidecar exists.
+    p_rs = sub.add_parser(
+        "read-stanzas",
+        help="Read videoflow phrases (= stanzas) from the <stem>.chapters.json sidecar",
+    )
+    p_rs.add_argument("path", help="Path to funscript or media file (sidecar lives next to it)")
+
     # --- parse-captions ---
     p_caps = sub.add_parser(
         "parse-captions",
@@ -1805,6 +1978,7 @@ def main():
         "beats":            cmd_beats,
         "chapters":         cmd_chapters,
         "auto-chapter":     cmd_auto_chapter,
+        "read-stanzas":     cmd_read_stanzas,
         "parse-captions":   cmd_parse_captions,
         "device-aware":     cmd_device_aware,
         "stim-config":      cmd_stim_config,

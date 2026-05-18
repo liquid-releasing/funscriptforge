@@ -169,6 +169,29 @@ export function analyzePhrases(funscriptPath) {
   );
 }
 
+/** Read videoflow-classified stanzas (audio phrases) plus computed
+ *  clusters from the `<stem>.chapters.json` sidecar next to a funscript
+ *  or media file.
+ *
+ *  Returns:
+ *    {
+ *      stanzas:  [{ id, number, chapter_idx, at_ms, end_ms, mode, source }],
+ *      clusters: [{ id, label, stanza_ids, mode, length_bucket, density_bucket }]
+ *    }
+ *
+ *  Clusters bucket stanzas by (mode × length × density) and only surface
+ *  groups of ≥2 members — singletons stay unclustered. Cheap (just reads
+ *  JSON + computes density), no analyzer pipeline. Returns empty stanzas
+ *  + empty clusters when no sidecar exists — caller renders an empty
+ *  state nudging the user to run auto-chapter first. */
+export function readStanzas(funscriptPath) {
+  return call(
+    'read_stanzas',
+    { funscriptPath },
+    () => Promise.resolve({ stanzas: [], clusters: [] }),
+  );
+}
+
 function mockLoadProject(path) {
   const file = String(path).split(/[/\\]/).pop() ?? 'Unknown';
   const title = file.replace(/\.funscript$/i, '');
