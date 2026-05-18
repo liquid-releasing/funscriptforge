@@ -20,6 +20,7 @@ import ChaptersTab from './screens/ChaptersTab.jsx';
 import PatternsTab from './screens/PatternsTab.jsx';
 import PhrasesTab from './screens/PhrasesTab.jsx';
 import StanzasTab from './screens/StanzasTab.jsx';
+import EventsTab from './screens/EventsTab.jsx';
 
 const TABS = [
   { id: 'library',   label: 'Library' },
@@ -43,8 +44,9 @@ const TABS = [
   { id: 'stanzas',   label: 'Stanzas' },
   // 'events' (2026-05-18) sits between Stanzas and Stim. Point-in-time
   // effects (edge/zap/tease) layered on top of the funscript — saved
-  // to <stem>.events.yml on Accept. Screen not built yet; placeholder
-  // route lands the user on the "not ported" page.
+  // to <stem>.events.yml on Accept. Skeleton landed 2026-05-18; the
+  // wiring pass (Begin/End capture, parameter forms, YAML persistence)
+  // is queued for before FF beta.
   { id: 'events',    label: 'Events' },
   { id: 'stim',      label: 'Stim' },
   { id: 'export',    label: 'Export' },
@@ -465,7 +467,13 @@ export default function App() {
             setStanzasByPath={setStanzasByPath}
           />
         )}
-        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && tab !== 'stanzas' && (
+        {tab === 'events' && (
+          <EventsTab
+            project={typeof openedProject === 'object' ? openedProject : null}
+            selectedDevices={selectedDevices}
+          />
+        )}
+        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>
