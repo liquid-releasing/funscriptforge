@@ -39,6 +39,7 @@
 // ribbon rows above do not.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { toMediaUrl } from '../lib/mediaUrl.js';
 import {
   ChapterRibbon, ChapterContextStrip, Segmented, TransformPanel,
   Icon, fmtTimeShort, fmtDurationMs,
@@ -122,6 +123,21 @@ export default function PhrasesTab({
   // PatternsTab: a chapter change is a "starting fresh" moment, so the
   // phrase context should be visible by default for the new chapter.
   useEffect(() => { setIsPhraseViewExpanded(true); }, [activeChapterId]);
+
+  // ── Media viewer clock (per-tab) ─────────────────────────────────
+  // Tab owns its own currentMs / isPlaying. Switching chapters seeks
+  // to the new chapter's start. Switching tabs unmounts → state resets,
+  // which is the per-tab clock model agreed in
+  // project_accept_chain_wiring.md (per-tab clock, not app-shared).
+  const [currentMs, setCurrentMs] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  useEffect(() => {
+    if (activeChapterId == null) return;
+    const ch = chapters.find((c) => c.id === activeChapterId);
+    if (ch) setCurrentMs(ch.atMs);
+  }, [activeChapterId]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const mediaSrc = toMediaUrl(project?.mediaPath);
+  const mediaKind = project?.mediaKind || 'video';
 
   // TransformPanel state — same shape as PatternsTab so muscle memory
   // carries between tabs. Default category is Behavior since phrases
@@ -325,7 +341,14 @@ export default function PhrasesTab({
         chapter={{ at_ms: activeChapter.atMs, end_ms: activeChapter.endMs }}
         actions={actions}
         bands={phraseBands}
-        onSelectBand={(pid) => { setMode('single'); setFocusPhraseId(pid); }}
+        onSelectBand={(pid) => {
+          setMode('single');
+          setFocusPhraseId(pid);
+          // Click-to-seek: jump the playhead to the phrase start so the
+          // viewer (when media is attached) lines up with the band.
+          const p = phrasesInScope.find((x) => x.id === pid);
+          if (p) setCurrentMs(p.at_ms);
+        }}
         expanded={isPhraseViewExpanded}
         onToggleExpanded={() => setIsPhraseViewExpanded((v) => !v)}
         header={
@@ -341,7 +364,13 @@ export default function PhrasesTab({
             </span>
           </div>
         }
-        height={108}
+        height={mediaSrc ? 160 : 108}
+        media={mediaSrc ? { src: mediaSrc, kind: mediaKind, title: project?.title } : null}
+        currentMs={currentMs}
+        onSeek={setCurrentMs}
+        onTimeChange={setCurrentMs}
+        isPlaying={isPlaying}
+        onPlayPause={() => setIsPlaying((p) => !p)}
       />
 
       {/* Row 3 (compact phrase chip strip) removed 2026-05-16 — redundant
