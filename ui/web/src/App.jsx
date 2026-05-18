@@ -382,7 +382,12 @@ export default function App() {
     setTab(nextTab);
   };
   const handleReset = () => {
-    // TODO: each tab will register its own reset; for now log.
+    // Reset semantics are still undecided — see project_funscriptforge_pending
+    // → "AcceptBar reset behavior." Candidates: (a) restore working state
+    // from last-accepted chain file; (b) clear per-tab edits since last
+    // Accept; (c) two-level: reset this tab vs reset chain-from-here-down.
+    // For now this is a no-op log so the button doesn't pretend to work.
+    // eslint-disable-next-line no-console
     console.log(`reset working state for ${tab}`);
   };
 
@@ -557,22 +562,28 @@ export default function App() {
           AcceptBar is the canonical commit action for whichever tab is
           active; downstream tabs read the chain file the active tab
           writes. Handlers stubbed until each tab wires its
-          working-state + accept semantics. */}
-      <AcceptBar
-        summary={footerSummary}
-        chainFile={chainFile}
-        accepted={false}
-        primaryLabel={nextTab
-          ? `Accept and chain to ${TABS.find((t) => t.id === nextTab)?.label ?? nextTab}`
-          : 'Accept and chain'}
-        onAccept={handleAccept}
-        onReset={handleReset}
-        error={appError}
-        onClearError={() => setAppError(null)}
-        busy={busy}
-        gate={gateMsg}
-        ready={!gateMsg && !appError && !busy && Boolean(nextTab)}
-      />
+          working-state + accept semantics.
+          Hidden on entry/utility tabs (Library, Catalog) — those don't
+          participate in the chain. Export is the terminus, so its
+          primary action reads "Accept" rather than "Accept and chain."
+       */}
+      {tab !== 'library' && tab !== 'catalog' && (
+        <AcceptBar
+          summary={footerSummary}
+          chainFile={chainFile}
+          accepted={false}
+          primaryLabel={nextTab
+            ? `Accept and chain to ${TABS.find((t) => t.id === nextTab)?.label ?? nextTab}`
+            : (tab === 'export' ? 'Write outputs' : 'Accept')}
+          onAccept={handleAccept}
+          onReset={handleReset}
+          error={appError}
+          onClearError={() => setAppError(null)}
+          busy={busy}
+          gate={gateMsg}
+          ready={!gateMsg && !appError && !busy && (Boolean(nextTab) || tab === 'export')}
+        />
+      )}
       <StatusBar
         synced
         scope={scopeId === 'all' ? 'all chapters' : (scopes.find((s) => s.id === scopeId)?.title ?? scopeId)}
