@@ -22,6 +22,7 @@ import PhrasesTab from './screens/PhrasesTab.jsx';
 import StanzasTab from './screens/StanzasTab.jsx';
 import EventsTab from './screens/EventsTab.jsx';
 import CharactersTab from './screens/CharactersTab.jsx';
+import ExportTab from './screens/ExportTab.jsx';
 
 const TABS = [
   { id: 'library',   label: 'Library' },
@@ -325,7 +326,7 @@ export default function App() {
     if (id === 'project') {
       if (!project?.path && !isLoadingProject) return 'Open a funscript before continuing.';
     }
-    if (['device', 'chapters', 'patterns', 'phrases', 'stanzas', 'events', 'stim'].includes(id)
+    if (['device', 'chapters', 'patterns', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
         && !project?.path && !isLoadingProject) {
       return 'Open a funscript before continuing.';
     }
@@ -495,7 +496,13 @@ export default function App() {
             setCharactersByPath={setCharactersByPath}
           />
         )}
-        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && (
+        {tab === 'export' && (
+          <ExportTab
+            project={typeof openedProject === 'object' ? openedProject : null}
+            selectedDevices={selectedDevices}
+          />
+        )}
+        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>
