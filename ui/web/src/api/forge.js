@@ -192,6 +192,23 @@ export function readStanzas(funscriptPath) {
   );
 }
 
+/** List stim characters — built-in presets merged with the user's
+ *  stim_presets.json overrides. Surfaces the canonical Python source for
+ *  the Characters tab (matches the Streamlit panel's catalog). Returns:
+ *
+ *    { characters: [{ id, label, description, sliders: [...] }], warning?: string }
+ *
+ *  Slider records pass through as raw JSON — schema lives in
+ *  funscript-tools' BUILTIN_PRESETS. Browser-mock falls back to the
+ *  built-in seed catalog so dev still works without the desktop runtime. */
+export function listCharacters() {
+  return call(
+    'list_characters',
+    undefined,
+    () => Promise.resolve({ characters: [], warning: null }),
+  );
+}
+
 function mockLoadProject(path) {
   const file = String(path).split(/[/\\]/).pop() ?? 'Unknown';
   const title = file.replace(/\.funscript$/i, '');

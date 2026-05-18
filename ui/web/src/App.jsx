@@ -21,6 +21,7 @@ import PatternsTab from './screens/PatternsTab.jsx';
 import PhrasesTab from './screens/PhrasesTab.jsx';
 import StanzasTab from './screens/StanzasTab.jsx';
 import EventsTab from './screens/EventsTab.jsx';
+import CharactersTab from './screens/CharactersTab.jsx';
 
 const TABS = [
   { id: 'library',   label: 'Library' },
@@ -48,7 +49,12 @@ const TABS = [
   // wiring pass (Begin/End capture, parameter forms, YAML persistence)
   // is queued for before FF beta.
   { id: 'events',    label: 'Events' },
-  { id: 'stim',      label: 'Stim' },
+  // 'stim' (label: 'Characters', 2026-05-18) — first tab that *generates*
+  // multiple output funscripts (one per e-stim channel, 9 today). Label
+  // catches up to the design's internal vocabulary (character cards).
+  // Tab id stays 'stim' so TAB_CHAIN / chain filenames / tabGate keep
+  // working without churn. See memory `project_characters_tab.md`.
+  { id: 'stim',      label: 'Characters' },
   { id: 'export',    label: 'Export' },
 ];
 
@@ -89,6 +95,14 @@ export default function App() {
   // switches so `readStanzas` (sidecar read) only fires once per project
   // per session. Shape per entry: { stanzas: StanzaRecord[], loaded: boolean }.
   const [stanzasByPath, setStanzasByPath] = useState({});
+  // Characters tab state — per-chapter character assignments, keyed by
+  // funscript path. Unlike phrases/stanzas (which are cached fetch
+  // results), this is *editing* state: which character the user picked
+  // for each chapter. Lifted here so tab switches preserve assignments
+  // before they're committed to a chain file. Shape per entry:
+  // { [chapterId]: characterId }. Real persistence via .characters.json
+  // chain file lands with the wiring pass.
+  const [charactersByPath, setCharactersByPath] = useState({});
 
   useEffect(() => {
     let cancelled = false;
@@ -473,7 +487,15 @@ export default function App() {
             selectedDevices={selectedDevices}
           />
         )}
-        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && (
+        {tab === 'stim' && (
+          <CharactersTab
+            project={typeof openedProject === 'object' ? openedProject : null}
+            selectedDevices={selectedDevices}
+            charactersByPath={charactersByPath}
+            setCharactersByPath={setCharactersByPath}
+          />
+        )}
+        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>

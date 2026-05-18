@@ -912,6 +912,51 @@ pub async fn read_stanzas(funscript_path: String) -> Result<StanzasResponse, Str
     })
 }
 
+// ─── list_characters ────────────────────────────────────────────────
+//
+// Surfaces the canonical Python character catalog (built-in stim presets
+// merged with the user's stim_presets.json overrides) to the React UI.
+// Slider records pass through as raw JSON — the schema lives in
+// funscript-tools' BUILTIN_PRESETS, and pinning Rust types here would
+// force a sync every time the slider shape changes. The frontend
+// destructures `cv` / `label` / `hint` / `from_` / `to_` / `min_label` /
+// `max_label` directly.
+
+#[derive(Deserialize, Serialize)]
+pub struct CharacterRecord {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub sliders: Vec<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct CliCharactersResult {
+    #[serde(default)]
+    characters: Vec<CharacterRecord>,
+    #[serde(default)]
+    warning: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct CharactersResponse {
+    pub characters: Vec<CharacterRecord>,
+    pub warning: Option<String>,
+}
+
+#[tauri::command]
+pub async fn list_characters() -> Result<CharactersResponse, String> {
+    let stdout = run_cli(&["list-characters", "--format", "json"]).await?;
+    let parsed: CliCharactersResult = serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse cli.py list-characters output: {}", e))?;
+    Ok(CharactersResponse {
+        characters: parsed.characters,
+        warning: parsed.warning,
+    })
+}
+
 // Deterministic chapter color cycle. Matches the prototype's ChapterBands
 // where each chapter has a stable swatch independent of tone selection.
 const CHAPTER_PALETTE: &[&str] = &[

@@ -24,6 +24,7 @@ pub fn run() {
             commands::analyze_chapters_with_videoflow,
             commands::analyze_phrases,
             commands::read_stanzas,
+            commands::list_characters,
             commands::attach_media,
         ])
         .run(tauri::generate_context!())

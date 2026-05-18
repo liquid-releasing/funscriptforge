@@ -1842,6 +1842,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Overwrite the config file with built-in defaults (destructive).",
     )
 
+    # --- list-characters ---
+    p_lc = sub.add_parser(
+        "list-characters",
+        help="List stim characters (merged built-in presets + user overrides)",
+    )
+    p_lc.add_argument(
+        "--format", choices=["table", "json"], default="table",
+        help="Output format: human-readable table (default) or JSON.",
+    )
+    p_lc.add_argument(
+        "--verbose", "-v", action="store_true",
+        help="Show per-character slider details.",
+    )
+
     # --- test ---
     sub.add_parser("test", help="Run unit tests")
 
@@ -1905,6 +1919,62 @@ def cmd_stim_config(args):
             sys.exit(1)
         print(f"Reset to built-in defaults: {path}")
         return
+
+
+def cmd_list_characters(args):
+    """List stim characters (built-in presets + user overrides).
+
+    Output is the canonical Python source for the UI's Characters tab —
+    same data as the Streamlit panel reads. Each record:
+      { id, label, description, sliders: [{cv, label, hint, ...}], config }
+
+    `id` is a slugified version of the label (`Scene Builder` → `scene_builder`)
+    so the JS catalog (in `data/characters.js`) can match UI-only fields
+    (color / tagline / devices) by id without spaces / case issues.
+    """
+    from forge.stim_config import merged_presets
+
+    presets, err = merged_presets()
+    if err and args.format != "json":
+        print(f"Warning: {err}", file=sys.stderr)
+
+    def _slug(s: str) -> str:
+        return s.lower().replace(" ", "_").replace("-", "_")
+
+    records = []
+    for label, preset in presets.items():
+        records.append({
+            "id": _slug(label),
+            "label": label,
+            "description": preset.get("description", ""),
+            "sliders": preset.get("sliders", []),
+            "config": preset.get("config", {}),
+        })
+
+    if args.format == "json":
+        out = {"characters": records}
+        if err:
+            out["warning"] = err
+        print(json.dumps(out, indent=2))
+        return
+
+    # --- table output ---
+    if not records:
+        print("No characters available (funscript-tools missing?).")
+        return
+    for r in records:
+        print(f"{r['id']}  ·  {r['label']}")
+        if r["description"]:
+            print(f"    {r['description']}")
+        if args.verbose and r["sliders"]:
+            for s in r["sliders"]:
+                cv = s.get("cv", "?")
+                lbl = s.get("label", "")
+                hint = s.get("hint", "")
+                print(f"      {cv}  ·  {lbl}")
+                if hint:
+                    print(f"        {hint}")
+        print()
 
 
 def cmd_device_aware(args):
@@ -1982,6 +2052,7 @@ def main():
         "parse-captions":   cmd_parse_captions,
         "device-aware":     cmd_device_aware,
         "stim-config":      cmd_stim_config,
+        "list-characters":  cmd_list_characters,
     }
     dispatch[args.command](args)
 
