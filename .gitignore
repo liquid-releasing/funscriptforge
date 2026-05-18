@@ -259,11 +259,19 @@ user_transforms/*.json
 plugins/*.py
 !plugins/example_*.py
 
-# Confidential internal documents — stored in funscript-updater-internal-docs (outside repo)
+# Confidential internal documents — kept in working tree at internal/ but
+# never tracked. Repo is public; these contain strategy, costs, patent
+# briefing, marketing plan, business backlog. Back up via thumbdrive.
 docs/marketing-plan-internal.md
 docs/cost-estimates.md
 docs/vision-agentic.md
 docs/deployment-architecture.md
+internal/backlog-internal.md
+internal/cost-estimates.md
+internal/deployment-architecture.md
+internal/marketing-plan-internal.md
+internal/patent-briefing.md
+internal/vision-agentic.md
 
 # Test media — matched funscript + video + audio sets for testing
 test_media/
