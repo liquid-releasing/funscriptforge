@@ -23,6 +23,8 @@ import StanzasTab from './screens/StanzasTab.jsx';
 import EventsTab from './screens/EventsTab.jsx';
 import CharactersTab from './screens/CharactersTab.jsx';
 import ExportTab from './screens/ExportTab.jsx';
+import CatalogTab from './screens/CatalogTab.jsx';
+import AboutDialog from './components/AboutDialog.jsx';
 
 const TABS = [
   { id: 'library',   label: 'Library' },
@@ -57,6 +59,11 @@ const TABS = [
   // working without churn. See memory `project_characters_tab.md`.
   { id: 'stim',      label: 'Characters' },
   { id: 'export',    label: 'Export' },
+  // 'catalog' (2026-05-18) sits past Export with a visual separator —
+  // utility tab, not part of the Project → Export pipeline. Source-of-
+  // truth reference for every transform (tones / behaviors / structurals).
+  // No funscript-required gate; safe to open without a project loaded.
+  { id: 'catalog',   label: 'Catalog', utility: true },
 ];
 
 export default function App() {
@@ -104,6 +111,10 @@ export default function App() {
   // { [chapterId]: characterId }. Real persistence via .characters.json
   // chain file lands with the wiring pass.
   const [charactersByPath, setCharactersByPath] = useState({});
+  // Help / About modal — opens from the TopBar help button. App-level
+  // state (not TopBar-internal) so future keyboard shortcuts (F1, ?)
+  // can also open it without prop-drilling.
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -412,20 +423,38 @@ export default function App() {
                     onClick={() => { setTab('export'); }}>
               Export
             </Button>
+            <Button kind="ghost" size="icon" icon="help-circle"
+                    title="About FunscriptForge"
+                    onClick={() => setAboutOpen(true)} />
           </>
         )}
       />
 
       <nav className="ff-tabstrip">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`ff-tabbutton ${t.id === tab ? 'active' : ''}`}
-          >
-            {t.label}
-          </button>
-        ))}
+        {TABS.map((t, i) => {
+          // Utility tabs (Catalog, future Plugins / Settings) sit past
+          // a visual separator so they read as "reference" rather than
+          // "next pipeline step." Insert the divider before the first
+          // utility tab encountered.
+          const prev = TABS[i - 1];
+          const showSeparator = t.utility && (!prev || !prev.utility);
+          return (
+            <span key={t.id} style={{ display: 'inline-flex', alignItems: 'center' }}>
+              {showSeparator && (
+                <span style={{
+                  width: 1, height: 22, background: 'var(--border)',
+                  margin: '0 10px', flexShrink: 0,
+                }} />
+              )}
+              <button
+                onClick={() => setTab(t.id)}
+                className={`ff-tabbutton ${t.id === tab ? 'active' : ''}`}
+              >
+                {t.label}
+              </button>
+            </span>
+          );
+        })}
       </nav>
 
       <main className="ff-main">
@@ -502,7 +531,8 @@ export default function App() {
             selectedDevices={selectedDevices}
           />
         )}
-        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && (
+        {tab === 'catalog' && <CatalogTab />}
+        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && tab !== 'catalog' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>
@@ -548,6 +578,11 @@ export default function App() {
         scope={scopeId === 'all' ? 'all chapters' : (scopes.find((s) => s.id === scopeId)?.title ?? scopeId)}
         chainFile={chainFile ?? undefined}
         version="alpha 0.0.1"
+      />
+      <AboutDialog
+        open={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+        inTauri={inTauri}
       />
     </div>
   );
