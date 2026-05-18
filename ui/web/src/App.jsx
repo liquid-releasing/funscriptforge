@@ -65,6 +65,13 @@ export default function App() {
   // user picks devices in Project, downstream tabs (Device, Stim, Multi-axis)
   // see the same selection without re-prompting.
   const [selectedDevices, setSelectedDevices] = useState([]);
+  // Phrases cache, keyed by funscript path. Lifted here (rather than
+  // owned by PhrasesTab) so that leaving + returning to the tab doesn't
+  // re-fire cli.py assess — the tab unmounts on switch. Shape per entry:
+  // { phrases: PhraseRecord[], loaded: boolean }. Entries persist for
+  // the session only; cross-restart persistence comes later via the
+  // .ffmeta sidecar (see project-funscriptforge-pending).
+  const [phrasesByPath, setPhrasesByPath] = useState({});
 
   useEffect(() => {
     let cancelled = false;
@@ -428,6 +435,8 @@ export default function App() {
             project={typeof openedProject === 'object' ? openedProject : null}
             setBusy={setBusy}
             setAppError={setAppError}
+            phrasesByPath={phrasesByPath}
+            setPhrasesByPath={setPhrasesByPath}
           />
         )}
         {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && (

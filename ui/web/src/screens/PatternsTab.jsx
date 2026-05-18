@@ -28,10 +28,10 @@
 // canonical mutation — same JS-preview / CLI-canonical pattern as the
 // Device tab sliders and Chapters tab tone CLI.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  ChapterRibbon, TransformPanel,
-  Icon, Sparkline, fmtTimeShort,
+  ChapterRibbon, ChapterContextStrip, TransformPanel,
+  Icon, fmtTimeShort, fmtDurationMs,
 } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { TRANSFORMS, BEHAVIOR_TAGS } from '../data/transforms.js';
@@ -221,6 +221,26 @@ export default function PatternsTab({ project }) {
     [instances, activePatternId],
   );
 
+  // Project instances onto ChapterContextStrip's band visual vocabulary.
+  // Selected pattern's instances: no wash + thick color border so the
+  // velocity waveform shows full contrast (matches the ChapterRibbon
+  // selected-band treatment). Non-selected: 0.35 wash + thin 2px border
+  // with alpha so pattern identity reads as faint context.
+  const patternBands = useMemo(() => instances.map((inst) => {
+    const pattern = findPattern(inst.patternId);
+    const isSelected = inst.patternId === activePatternId;
+    return {
+      id: inst.id,
+      at_ms: inst.at_ms,
+      end_ms: inst.end_ms,
+      fill: pattern.color,
+      fillOpacity: isSelected ? 0 : 0.35,
+      stroke: isSelected ? pattern.color : `${pattern.color}55`,
+      strokeWidth: isSelected ? 4 : 2,
+      title: `${pattern.label} · click to focus`,
+    };
+  }), [instances, activePatternId]);
+
   // Which instances are being edited. Multi-select — default is "edit
   // all instances of the active pattern." User toggles individual rows
   // off via the per-row Edit button when they want to exclude an
@@ -335,18 +355,27 @@ export default function PatternsTab({ project }) {
           pattern's identity (label + count + description + suggested
           transform). Waveform below is collapsible — header stays visible
           either way so the user sees which pattern they're working on. */}
-      <PatternContextStrip
+      <ChapterContextStrip
         chapter={activeChapter}
         actions={project?.actions || []}
-        instances={instances}
-        selectedPatternId={activePatternId}
-        onSelectPattern={(pid) => {
-          setActivePatternId(pid);
-          // Switching pattern resets edit selection to all matching
-          // instances (the useEffect on activePatternId does this).
+        bands={patternBands}
+        onSelectBand={(bandId) => {
+          const inst = instances.find((i) => i.id === bandId);
+          if (inst) setActivePatternId(inst.patternId);
         }}
-        isExpanded={isContextExpanded}
-        onToggle={() => setIsContextExpanded((v) => !v)}
+        expanded={isContextExpanded}
+        onToggleExpanded={() => setIsContextExpanded((v) => !v)}
+        header={isContextExpanded
+          ? <PatternStripHeader
+              pattern={findPattern(activePatternId)}
+              count={activeInstances.length}
+            />
+          : <ChapterStripHeader chapter={activeChapter} />
+        }
+        headerExtra={isContextExpanded
+          ? <PatternStripHeaderExtra pattern={findPattern(activePatternId)} />
+          : null
+        }
       />
 
       {/* Body — rail | center table | TransformPanel */}
@@ -399,208 +428,64 @@ export default function PatternsTab({ project }) {
   );
 }
 
-// ─── Pattern context strip ───────────────────────────────────────────
+// ─── Strip header content ────────────────────────────────────────────
 //
-// Replaces the older flat PATTERN_RIBBON. Two visual jobs in one row:
-//
-//   1. **Header text** — tells the user what they're looking at: pattern
-//      label, instance count, description, suggested transform. This is
-//      the "what + why" for the active pattern selection.
-//
-//   2. **Chapter context** — the full active chapter's funscript rendered
-//      with velocity colormap, with every pattern instance overlaid as a
-//      tinted band. Selected pattern's instances are at *full opacity*;
-//      other patterns at reduced opacity so they fade into context. This
-//      is the "where" — which slices of the chapter are this pattern.
-//
-// Selection is bidirectional: the left rail drives it (current behavior),
-// but the user can also click anywhere on the strip to select whichever
-// pattern lives at that time. Click on the waveform background between
-// bands selects nothing — only band clicks change the pattern.
-function PatternContextStrip({
-  chapter, actions, instances, selectedPatternId, onSelectPattern,
-  isExpanded = true, onToggle,
-}) {
-  const wrapRef = useRef(null);
-  const [pxWidth, setPxWidth] = useState(800);
-  useEffect(() => {
-    if (!wrapRef.current) return undefined;
-    const ro = new ResizeObserver(([entry]) => setPxWidth(entry.contentRect.width));
-    ro.observe(wrapRef.current);
-    return () => ro.disconnect();
-  }, []);
+// Three small components that feed `ChapterContextStrip`'s `header` and
+// `headerExtra` slots. Split by state (expanded → pattern info, collapsed
+// → chapter info) and by row position so the parent JSX reads cleanly.
 
-  const selectedPattern = findPattern(selectedPatternId);
-  const selectedTransform = TRANSFORMS.find((t) => t.id === selectedPattern.suggestedTransformId);
-  const selectedInstances = instances.filter((i) => i.patternId === selectedPatternId);
-
-  const span = Math.max(1, chapter.end_ms - chapter.at_ms);
-  const xFor = (ms) => ((ms - chapter.at_ms) / span) * pxWidth;
-
-  // Slice the funscript to the chapter range and shift to 0-relative for
-  // Sparkline, which expects start/end in the same scale as the actions.
-  const chapterActions = useMemo(
-    () => (actions || [])
-      .filter((a) => a.at >= chapter.at_ms && a.at <= chapter.end_ms)
-      .map((a) => ({ at: a.at - chapter.at_ms, pos: a.pos })),
-    [actions, chapter.at_ms, chapter.end_ms],
-  );
-
+function PatternStripHeader({ pattern, count }) {
   return (
-    <div style={{
-      padding: '12px 22px 14px', background: 'var(--surface)',
-      borderBottom: '1px solid var(--border)',
-    }}>
-      {/* Header — pattern identity when expanded, chapter-only when
-          collapsed. Collapsed header shows just "Chapter N · M phrases"
-          per user 2026-05-17: the pattern description / suggested
-          transform / pattern label are noise when the user has chosen
-          to hide the waveform. */}
-      <div style={{ marginBottom: isExpanded ? 10 : 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          <span style={{
-            width: 12, height: 12, borderRadius: 3,
-            background: isExpanded ? selectedPattern.color : (chapter.toneColor || 'var(--text-dim)'),
-            alignSelf: 'center',
-          }} />
-          <strong style={{ fontSize: isExpanded ? 18 : 13, fontWeight: 700, color: 'var(--text)' }}>
-            {isExpanded ? selectedPattern.label : (chapter.name || chapter.id)}
-          </strong>
-          <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            · {selectedInstances.length} phrase{selectedInstances.length === 1 ? '' : 's'}
-          </span>
-          <div style={{ flex: 1 }} />
-          {onToggle && (
-            <button
-              onClick={onToggle}
-              title={isExpanded ? 'Collapse pattern view' : 'Expand pattern view'}
-              aria-label={isExpanded ? 'Collapse pattern view' : 'Expand pattern view'}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '4px 8px', borderRadius: 5,
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                color: 'var(--text-dim)',
-                cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
-              }}
-            >
-              <Icon name={isExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
-              {isExpanded ? 'Collapse' : 'Expand'}
-            </button>
-          )}
-        </div>
-        {isExpanded && (
-          <>
-            <div style={{ marginTop: 4, fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.45 }}>
-              {selectedPattern.desc}
-            </div>
-            {selectedTransform && (
-              <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-dim)' }}>
-                Suggested transform:{' '}
-                <strong style={{ color: 'var(--text-muted)' }}>{selectedTransform.label}</strong>
-                {' '}— {selectedTransform.summary}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Waveform + overlaid pattern bands. Hidden when the strip is
-          collapsed — header above stays visible so the user always knows
-          which pattern they're acting on, mirroring how Phrases keeps
-          Row 2's chapter header strip visible when collapsed.
-          Layering inside (top-down): velocity sparkline → pattern-color
-          wash → outline boxes. */}
-      {isExpanded && (
-      <div
-        ref={wrapRef}
-        style={{
-          position: 'relative', height: 96,
-          background: 'var(--bg)',
-          border: '1px solid var(--border)', borderRadius: 6,
-          overflow: 'hidden',
-        }}
-      >
-        {/* Layer 2 — velocity waveform at full contrast. Painted FIRST
-            so the pattern-color wash above tints it (the wash used to
-            sit below this and was being covered by the filled sparkline,
-            making the shading invisible). */}
-        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-          <Sparkline
-            actions={chapterActions}
-            start={0}
-            end={span}
-            colorMode="velocity"
-            height="100%"
-            filled
-          />
-        </div>
-
-        {/* Layer 3 — pattern-color wash ON TOP of the waveform, tinting
-            it. Matches ChapterRibbon contrast (0.95 selected / 0.55
-            non-selected). Selected pattern color dominates; non-selected
-            is still visibly tinted as context. Velocity contrast under
-            the wash becomes a faint texture, which is the right
-            priority — pattern identity reads first. */}
-        {instances.map((inst) => {
-          const left = xFor(inst.at_ms);
-          const right = xFor(inst.end_ms);
-          const width = Math.max(2, right - left);
-          const pattern = findPattern(inst.patternId);
-          const isSelected = inst.patternId === selectedPatternId;
-          return (
-            <div
-              key={`wash-${inst.id}`}
-              style={{
-                position: 'absolute',
-                left, top: 0, width, height: '100%',
-                background: pattern.color,
-                // Selected: transparent. The thick border carries the
-                // pattern identity and the waveform shows at full
-                // velocity contrast — mirrors how Chapter 1 shows full
-                // waveform with only a white border for selection.
-                // Non-selected: 0.35 wash so pattern identity is still
-                // legible at rest, matching Chapter 2's dim state.
-                opacity: isSelected ? 0 : 0.35,
-                pointerEvents: 'none',
-                borderRadius: 3,
-              }}
-            />
-          );
-        })}
-
-        {/* Layer 4 — outline boxes for every instance. Click selects the
-            pattern. Selected: bold pattern-color border. Others: thin
-            low-alpha border (visible as context, not loud). */}
-        {instances.map((inst) => {
-          const left = xFor(inst.at_ms);
-          const right = xFor(inst.end_ms);
-          const width = Math.max(2, right - left);
-          const pattern = findPattern(inst.patternId);
-          const isSelected = inst.patternId === selectedPatternId;
-          return (
-            <button
-              key={inst.id}
-              onClick={(e) => { e.stopPropagation(); onSelectPattern?.(inst.patternId); }}
-              title={`${pattern.label} · click to focus`}
-              style={{
-                position: 'absolute',
-                left, top: 0, width, height: '100%',
-                background: 'transparent',
-                border: isSelected
-                  ? `4px solid ${pattern.color}`
-                  : `2px solid ${pattern.color}55`,
-                borderRadius: 3,
-                padding: 0, cursor: 'pointer', boxSizing: 'border-box',
-              }}
-            />
-          );
-        })}
-      </div>
-      )}
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+      <span style={{
+        width: 12, height: 12, borderRadius: 3,
+        background: pattern.color,
+        alignSelf: 'center',
+      }} />
+      <strong style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
+        {pattern.label}
+      </strong>
+      <span className="mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+        · {count} phrase{count === 1 ? '' : 's'}
+      </span>
     </div>
   );
 }
+
+function ChapterStripHeader({ chapter }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span style={{
+        width: 12, height: 12, borderRadius: 3,
+        background: chapter.toneColor || 'var(--text-dim)',
+      }} />
+      <strong style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+        {chapter.name || chapter.id}
+      </strong>
+    </div>
+  );
+}
+
+function PatternStripHeaderExtra({ pattern }) {
+  const suggested = TRANSFORMS.find((t) => t.id === pattern.suggestedTransformId);
+  return (
+    <>
+      <div style={{ marginTop: 4, fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+        {pattern.desc}
+      </div>
+      {suggested && (
+        <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-dim)' }}>
+          Suggested transform:{' '}
+          <strong style={{ color: 'var(--text-muted)' }}>{suggested.label}</strong>
+          {' '}— {suggested.summary}
+        </div>
+      )}
+    </>
+  );
+}
+
+// Old PatternContextStrip body lived here — replaced by
+// `ChapterContextStrip` from forgemoment (2026-05-18).
 
 // ─── Left rail ───────────────────────────────────────────────────────
 function PatternRail({ patternTypes, countsByPattern, activePatternId, onSelect }) {
@@ -719,7 +604,7 @@ function InstanceTable({
           fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
           textTransform: 'uppercase', letterSpacing: '0.06em',
         }}>
-          <span>Time</span>
+          <span>#&nbsp;·&nbsp;Time&nbsp;·&nbsp;Length</span>
           <span style={{ textAlign: 'right' }}>BPM</span>
           <span>Original</span>
           <span>Preview</span>
@@ -727,14 +612,15 @@ function InstanceTable({
         </div>
 
         {/* Body rows */}
-        {instances.map((inst) => (
+        {instances.map((inst, idx) => (
           <InstanceRow
             key={inst.id}
             instance={inst}
+            number={idx + 1}
             actions={actions}
             transformId={transformId}
             params={params}
-            patternColor={patternType.color}
+            patternType={patternType}
             isEdited={editedInstanceIds.includes(inst.id)}
             onToggle={() => onToggleInstance(inst.id)}
           />
@@ -745,9 +631,10 @@ function InstanceTable({
 }
 
 function InstanceRow({
-  instance, actions, transformId, params,
-  patternColor, isEdited, onToggle,
+  instance, number, actions, transformId, params,
+  patternType, isEdited, onToggle,
 }) {
+  const patternColor = patternType.color;
   const { acts: originalActs, dur } = useMemo(
     () => sliceForInstance(actions, instance),
     [actions, instance],
@@ -784,9 +671,33 @@ function InstanceRow({
         opacity: isEdited ? 1 : 0.55,
       }}
     >
-      <span className="mono" style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-        {fmtTimeShort(instance.at_ms)}–{fmtTimeShort(instance.end_ms)}
-      </span>
+      {/* Col 1 — stacked #/pattern · time range · length. All visible
+          rows share the active pattern (rail-filtered) so the chip is
+          identical per row; carrying it on every row keeps the column
+          self-describing and parallel to Phrases. */}
+      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25, gap: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>
+            #{number}
+          </span>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center',
+            padding: '1px 6px', borderRadius: 99,
+            background: `${patternColor}22`,
+            color: patternColor,
+            fontSize: 9.5, fontWeight: 700,
+            textTransform: 'uppercase', letterSpacing: '0.04em',
+          }}>
+            {patternType.label}
+          </span>
+        </div>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+          {fmtTimeShort(instance.at_ms)}–{fmtTimeShort(instance.end_ms)}
+        </span>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>
+          {fmtDurationMs(instance.end_ms - instance.at_ms)}
+        </span>
+      </div>
       <span className="mono" style={{ fontSize: 11.5, textAlign: 'right' }}>
         {instance.bpm}
       </span>

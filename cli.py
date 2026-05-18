@@ -243,14 +243,30 @@ def cmd_assess(args):
     t0 = time.time()
     # JSON mode: stdout is the structured payload — keep progress prints
     # off it. Send progress to stderr so the user (and Tauri bridge) can
-    # still see them but the parser stays clean.
+    # still see them but the parser stays clean. The same stage label is
+    # also pushed onto the structured progress pipe at depth 2 so the
+    # AcceptBar footer renders a 6-step checklist (matches the
+    # auto-chapter UX — depth 1 is reserved for the outer command
+    # wrapper, depth 2+ is what the listener actually surfaces).
+    _stages_seen: list[str] = []
     def _progress(stage: str) -> None:
         if json_mode:
             print(f"  {stage}", file=sys.stderr)
         else:
             print(f"  {stage}")
+        # Close the previous stage with `done::` before opening the new
+        # one with `start::`. The analyzer only emits one event per stage
+        # (no explicit completion), so the next start implicitly marks
+        # the prior stage done.
+        if _stages_seen:
+            _emit_progress(f"done::2::{_stages_seen[-1]}")
+        _emit_progress(f"start::2::{stage}")
+        _stages_seen.append(stage)
 
     result = analyzer.analyze(progress_callback=_progress)
+    # Close the final stage once analyze() returns.
+    if _stages_seen:
+        _emit_progress(f"done::2::{_stages_seen[-1]}")
     elapsed = time.time() - t0
 
     if json_mode:

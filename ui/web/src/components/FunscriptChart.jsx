@@ -164,15 +164,22 @@ export default function FunscriptChart({
           filled
           height={height - 28}
         />
-        <TimeAxis startMs={view.start} endMs={view.end} />
+        <TimeAxis startMs={view.start} endMs={view.end} compact={bare} />
       </div>
       {!bare && <StatsRow stats={stats} />}
     </div>
   );
 }
 
-function TimeAxis({ startMs, endMs }) {
-  const ticks = useMemo(() => makeTicks(startMs, endMs, 6), [startMs, endMs]);
+// `compact` mode (used by per-row edit-table charts) renders 3 ticks:
+// left / center / right. Six ticks at row-chart widths overlap and read
+// as noise; three give the user enough "where am I" without crowding.
+function TimeAxis({ startMs, endMs, compact = false }) {
+  const tickCount = compact ? 3 : 6;
+  const ticks = useMemo(
+    () => makeTicks(startMs, endMs, tickCount),
+    [startMs, endMs, tickCount],
+  );
   return (
     <div
       style={{
@@ -180,11 +187,11 @@ function TimeAxis({ startMs, endMs }) {
         left: 0,
         right: 0,
         bottom: 0,
-        height: 22,
+        height: compact ? 14 : 22,
         display: 'flex',
         justifyContent: 'space-between',
-        padding: '0 8px',
-        fontSize: 10,
+        padding: compact ? '0 4px' : '0 8px',
+        fontSize: compact ? 9 : 10,
         color: 'var(--text-dim)',
         fontFamily: 'var(--font-mono)',
         pointerEvents: 'none',

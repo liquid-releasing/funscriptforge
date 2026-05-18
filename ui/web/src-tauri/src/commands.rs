@@ -761,15 +761,26 @@ pub struct PhraseRecord {
 // parsed phrase records. Used by the Phrases tab to hydrate the action
 // table; called lazily when the tab first mounts (rather than on every
 // project load) so the assess cost only lands when the user opts in.
+// Routes through run_cli_with_progress so the analyzer's six pipeline
+// stages (Detecting phases / cycles / patterns / phrases / BPM
+// transitions / Classifying behaviors) stream into the AcceptBar footer
+// checklist the same way auto-chapter does.
 #[tauri::command]
-pub async fn analyze_phrases(funscript_path: String) -> Result<Vec<PhraseRecord>, String> {
-    let stdout = run_cli(&[
-        "assess",
-        &funscript_path,
-        "--format",
-        "json",
-        "--no-save",
-    ])
+pub async fn analyze_phrases(
+    app: AppHandle,
+    funscript_path: String,
+) -> Result<Vec<PhraseRecord>, String> {
+    let stdout = run_cli_with_progress(
+        &app,
+        "ff:progress",
+        &[
+            "assess",
+            &funscript_path,
+            "--format",
+            "json",
+            "--no-save",
+        ],
+    )
     .await?;
 
     let parsed: CliPhrasesResult = serde_json::from_str(&stdout)
