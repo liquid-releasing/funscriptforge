@@ -129,7 +129,15 @@ export default function PhrasesTab({
   // to the new chapter's start. Switching tabs unmounts → state resets,
   // which is the per-tab clock model agreed in
   // project_accept_chain_wiring.md (per-tab clock, not app-shared).
-  const [currentMs, setCurrentMs] = useState(0);
+  // Seed currentMs from the active chapter's start synchronously on first
+  // render so the playhead baton is correctly placed before any effect
+  // runs. (Earlier shape used useState(0) + useEffect, which left the
+  // baton at x=0 for one frame and looked like it was missing.)
+  const [currentMs, setCurrentMs] = useState(() => {
+    const id = chapters[0]?.id ?? null;
+    const ch = chapters.find((c) => c.id === id);
+    return ch?.atMs ?? 0;
+  });
   const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
     if (activeChapterId == null) return;
