@@ -255,6 +255,20 @@ export default function App() {
     });
   };
 
+  // Per-chapter "Accept tone" (ChaptersTab) bakes that chapter's toned
+  // slice into the project's working actions so downstream tabs see the
+  // toned shape *immediately* — no waiting on the tab-level chain step.
+  // Caller passes the full replacement actions array; we splice it into
+  // openedProject. The chain step still owns sidecar persistence; this
+  // is purely an in-memory roll-forward of the working funscript.
+  const handleActionsPatch = (nextActions) => {
+    if (!Array.isArray(nextActions)) return;
+    setOpenedProject((prev) => {
+      if (!prev || typeof prev !== 'object') return prev;
+      return { ...prev, actions: nextActions };
+    });
+  };
+
   // Single orchestrator for "user picked a funscript path". Pre-switches to
   // the Project tab, sets the wait cursor, awaits load_project, then commits
   // the result. Pulled up here so both Library and Project tab callbacks
@@ -530,6 +544,7 @@ export default function App() {
               if (p) await handleAttachMedia(p);
             }}
             onChaptersChange={handleChaptersChange}
+            onActionsPatch={handleActionsPatch}
             setBusy={setBusy}
             setAppError={setAppError}
           />

@@ -180,15 +180,67 @@ function fmtTimeShort(ms) {
   return `${m}:${String(ss).padStart(2, '0')}`;
 }
 
+// Rebuild the working actions array by walking chapters in time order
+// and splicing each accepted chapter's freshly-toned slice in over the
+// original snapshot. Chapters that haven't been accepted pass through
+// as raw. Trailing actions past the last chapter (and gaps between
+// chapters) come straight from `originalActions`.
+//
+// Pure function: takes the original snapshot + the chapter/tone/param
+// state at the time of the accept and returns a new array. Re-running
+// with the same inputs returns equivalent output, so accept is
+// idempotent — re-accepting a chapter after tweaking its tone re-tones
+// from the original, never from previously-toned data.
+function mergeWorkingActions({ originalActions, chapters, acceptedIds, tones, params }) {
+  if (!Array.isArray(originalActions) || originalActions.length === 0) return [];
+  if (!Array.isArray(chapters) || chapters.length === 0) return originalActions;
+  const sorted = [...chapters].sort((a, b) => a.atMs - b.atMs);
+  const out = [];
+  let i = 0;
+  for (const ch of sorted) {
+    while (i < originalActions.length && originalActions[i].at < ch.atMs) {
+      out.push(originalActions[i]); i += 1;
+    }
+    const inRangeStart = i;
+    let j = inRangeStart;
+    while (j < originalActions.length && originalActions[j].at <= ch.endMs) j += 1;
+    if (acceptedIds.has(ch.id)) {
+      const toneObj = findTone(tones[ch.id]);
+      const toneParamsObj = params[ch.id]?.[toneObj.id] ?? {};
+      out.push(...applyTone(originalActions, ch.atMs, ch.endMs, toneObj, toneParamsObj));
+    } else {
+      for (let k = inRangeStart; k < j; k += 1) out.push(originalActions[k]);
+    }
+    i = j;
+  }
+  while (i < originalActions.length) { out.push(originalActions[i]); i += 1; }
+  return out;
+}
+
 // Sentinel used when chapters is empty so the useMemo deps stay stable
 // across the empty → populated transition. Without this the hook deps
 // would shift between renders and we'd hit React's "rendered different
 // number of hooks" guard.
 const EMPTY_CHAPTER = { id: '__empty__', atMs: 0, endMs: 0, name: '', color: '#888' };
 
-export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, setBusy, setAppError }) {
+export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError }) {
   const totalMs = project?.durationMs ?? 0;
   const actions = Array.isArray(project?.actions) ? project.actions : [];
+
+  // Snapshot of project.actions taken when the project first loads.
+  // Tone previews + accept always tone *against the original snapshot*,
+  // never against an already-toned slice — otherwise re-accepting a
+  // chapter (after the user tweaks its tone) would compound the
+  // transform on top of itself. The `actions` reference above stays as
+  // the displayed working set (gets patched on accept); `originalActions`
+  // is the cold reference we tone from.
+  const [originalActions, setOriginalActions] = useState(() =>
+    Array.isArray(project?.actions) ? project.actions : []
+  );
+  useEffect(() => {
+    setOriginalActions(Array.isArray(project?.actions) ? project.actions : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.path]);
 
   // Local chapter state — initialised from project.chapterList (parsed from
   // the sidecar by the Rust bridge) and replaced when the user kicks off
@@ -207,6 +259,16 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     seedParams(chapters),
   );
 
+  // Per-chapter acceptance — which chapters the user has explicitly
+  // signed off on. Distinct from tonesByChapter (which is seeded for
+  // every chapter from defaults / project tone). A chapter is "accepted"
+  // when the user clicks "Accept tone · next chapter" — at that point we
+  // also bake the toned slice into the project's working actions so the
+  // viewer (and downstream tabs) reflect the toned shape immediately,
+  // not just at chain time. Local Set; lives only for the session — the
+  // tab-level chain step is still where persistence happens.
+  const [acceptedChapterIds, setAcceptedChapterIds] = useState(() => new Set());
+
   // When the user opens a different project, reset the local chapter list
   // and the per-chapter maps. Keying off project.path covers the case
   // where Rust populates chapterList for the new project.
@@ -216,6 +278,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     setActiveId(next[0]?.id ?? null);
     setTonesByChapter(seedTones(next, project?.toneSuggestion));
     setParamsByChapter(seedParams(next));
+    setAcceptedChapterIds(new Set());
   }, [project?.path]);
 
   // Auto-split + sidecar write. The Rust bridge persists the file; the
@@ -314,12 +377,12 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   const toneParams = paramsByChapter[active.id]?.[tone.id] ?? {};
 
   const beforeSlice = useMemo(
-    () => actions.filter((a) => a.at >= active.atMs && a.at <= active.endMs),
-    [actions, active.atMs, active.endMs],
+    () => originalActions.filter((a) => a.at >= active.atMs && a.at <= active.endMs),
+    [originalActions, active.atMs, active.endMs],
   );
   const afterSlice = useMemo(
-    () => applyTone(actions, active.atMs, active.endMs, tone, toneParams),
-    [actions, active.atMs, active.endMs, tone, toneParams],
+    () => applyTone(originalActions, active.atMs, active.endMs, tone, toneParams),
+    [originalActions, active.atMs, active.endMs, tone, toneParams],
   );
 
   // When the active chapter changes, jump the playhead to the chapter start
@@ -418,6 +481,36 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     }));
   };
 
+  // Accept the active chapter's tone, bake the toned slice into the
+  // project's working actions, and advance to the next chapter. Discrete
+  // from the tab-level "Accept and chain to Device" — that one writes
+  // the chain file and moves tabs; this one stays on the Chapters tab
+  // so the user can work through chapters at their own pace.
+  //
+  // Merge strategy: rebuild the working actions from the original
+  // snapshot, splicing every accepted chapter's toned slice into its
+  // range. This makes accept idempotent — if the user tweaks chapter 1's
+  // tone and re-accepts, chapter 1's slice is re-toned from the original
+  // (not from the previously-toned data), so transforms never compound.
+  const handleAcceptTone = () => {
+    if (active === EMPTY_CHAPTER) return;
+    const nextAccepted = new Set(acceptedChapterIds);
+    nextAccepted.add(active.id);
+    setAcceptedChapterIds(nextAccepted);
+    const merged = mergeWorkingActions({
+      originalActions,
+      chapters,
+      acceptedIds: nextAccepted,
+      tones: tonesByChapter,
+      params: paramsByChapter,
+    });
+    onActionsPatch?.(merged);
+    const i = chapters.findIndex((c) => c.id === active.id);
+    if (i >= 0 && i < chapters.length - 1) {
+      setActiveId(chapters[i + 1].id);
+    }
+  };
+
   return (
     <section style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* Page header */}
@@ -449,7 +542,11 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           Split-at-playhead / Join-with-prev / Join-with-next — all stubbed
           for now (handlers log TODO). The redundant Split/Join in the
           ActiveChapterHeader below has been dropped. */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 12 }}>
+      {/* Viewer column shrunk from 320px to 240px (2026-05-20) so the
+          MediaViewer's thumbnail lands near 16:9 (with thumbnailAspect
+          enforced below). The ribbon gets the reclaimed ~80px, which is
+          a meaningful boost when the chapter list is dense. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 12, alignItems: 'stretch' }}>
         <div style={{
           background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 8, padding: 12,
@@ -462,6 +559,11 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
               name: c.name,
               color: c.color,
               toneColor: findTone(tonesByChapter[c.id])?.color,
+              // Surface per-chapter acceptance to the ribbon so the
+              // upper-left corner of each band can render a checkmark
+              // for chapters the user has signed off on. The ribbon's
+              // Band component reads this flag.
+              accepted: acceptedChapterIds.has(c.id),
             }))}
             actions={actions}
             selectedId={active.id}
@@ -495,7 +597,11 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                 disabled: (_b, i) => i >= chapters.length - 1,
               },
             ]}
-            height={200}
+            // Bumped 200 → 220 (2026-05-20) so the ribbon's height
+            // roughly matches the aspect-sized viewer's height on the
+            // right side of the grid. Extra room also gives the per-
+            // band velocity waveforms more vertical detail.
+            height={220}
           />
         </div>
         <div style={{
@@ -512,7 +618,15 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
               start: active.atMs,
               end: active.endMs,
             }}
-            funscript={{ actions }}
+            // Funscript shown in the viewer = the active chapter's toned
+            // slice. The viewer's funscript-mode scrolling tape windows
+            // by chapter bounds anyway, so passing the chapter slice (vs
+            // full project actions) gives the user "see the funscript
+            // updated for that chapter in the viewer" without leaving
+            // the tab — pick a tone, the tape reflects it immediately.
+            // 'Untoned' is a passthrough so chapters without a chosen
+            // tone read the same as raw.
+            funscript={{ actions: afterSlice }}
             currentMs={currentMs}
             totalMs={totalMs}
             isPlaying={isPlaying}
@@ -545,7 +659,12 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
               if (i < chapters.length - 1) setActiveId(chapters[i + 1].id);
             }}
             width="100%"
-            height={200}
+            // 16:9 thumbnail (matches modern video / 4K sources). The
+            // outer viewer height is now content-driven: chrome + the
+            // aspect-shaped thumbnail. `height` no longer needed.
+            // Letterbox shows against the black thumbnail background
+            // when source aspect differs from 16:9.
+            thumbnailAspect="16/9"
           />
         </div>
       </div>
@@ -559,6 +678,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           chapters={chapters}
           tones={tonesByChapter}
           activeId={active.id}
+          acceptedIds={acceptedChapterIds}
           onSelect={setActiveId}
         />
 
@@ -641,6 +761,51 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             </div>
           </div>
 
+          {/* Per-chapter accept row — discrete from the tab-level
+              "Accept and chain to Device" in the AcceptBar below. This
+              one keeps the user on the Chapters tab, bakes the active
+              chapter's toned slice into the project's working actions,
+              and advances to the next chapter. The count next to it is
+              the progress through the chapter list. */}
+          {(() => {
+            const idx = chapters.findIndex((c) => c.id === active.id);
+            const isLast = idx >= chapters.length - 1;
+            const isAccepted = acceptedChapterIds.has(active.id);
+            const acceptedCount = acceptedChapterIds.size;
+            return (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                padding: '12px 14px', background: 'var(--surface)',
+                border: '1px solid var(--border)', borderRadius: 8,
+              }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', flex: 1, minWidth: 0 }}>
+                  {acceptedCount} of {chapters.length} chapters confirmed
+                  {isAccepted && (
+                    <span style={{ marginLeft: 10, color: tone.color, fontWeight: 700 }}>
+                      ✓ This chapter is set
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={handleAcceptTone}
+                  title={isLast
+                    ? 'Bake this chapter’s tone into the working funscript'
+                    : 'Bake this chapter’s tone and move to the next chapter'}
+                  style={{
+                    padding: '8px 14px', fontSize: 12.5, fontWeight: 700,
+                    background: tone.color, color: '#fff',
+                    border: 'none', borderRadius: 6,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  <Icon name="check" size={13} />
+                  {isLast ? 'Accept tone (last chapter)' : 'Accept tone · next chapter'}
+                </button>
+              </div>
+            );
+          })()}
+
           {/* Quick stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
             <ChStat label="Tone" value={tone.label} hint="chapter bias" color={tone.color} />
@@ -678,7 +843,7 @@ function BeforeAfterCol({ title, subtitle, accent, children }) {
   );
 }
 
-function ChapterRail({ chapters, tones, activeId, onSelect }) {
+function ChapterRail({ chapters, tones, activeId, acceptedIds, onSelect }) {
   return (
     <div style={{
       background: 'var(--surface)', border: '1px solid var(--border)',
@@ -694,6 +859,7 @@ function ChapterRail({ chapters, tones, activeId, onSelect }) {
       {chapters.map((c, i) => {
         const sel = c.id === activeId;
         const t = findTone(tones[c.id]);
+        const accepted = acceptedIds?.has(c.id) ?? false;
         return (
           <button
             key={c.id}
@@ -707,6 +873,22 @@ function ChapterRail({ chapters, tones, activeId, onSelect }) {
               color: 'var(--text)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
             }}
           >
+            {/* Accept indicator — a checkmark when the chapter's tone
+                has been confirmed via the per-chapter accept action.
+                Pinned to the same horizontal slot regardless of state
+                so the row layout doesn't reflow when a chapter flips
+                from pending to accepted. */}
+            <span style={{
+              width: 14, height: 14, borderRadius: 7,
+              flexShrink: 0,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              background: accepted ? (t.color + '33') : 'transparent',
+              border: `1px solid ${accepted ? t.color : 'var(--border)'}`,
+              color: accepted ? t.color : 'var(--text-dim)',
+              opacity: accepted ? 1 : 0.45,
+            }}>
+              {accepted && <Icon name="check" size={9} />}
+            </span>
             <span style={{ width: 4, height: 36, borderRadius: 2, background: c.color, flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: sel ? 700 : 600 }}>
