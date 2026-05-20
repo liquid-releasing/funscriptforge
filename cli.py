@@ -1163,6 +1163,29 @@ def cmd_audio_peaks(args):
 
 
 @_cli_command
+def cmd_audio_spectrogram(args):
+    """Render a mel spectrogram PNG of a media file's audio track.
+
+    Visualization-only preview to decide whether the frequency-over-time
+    view is useful for funscript editing. Writes <stem>.spectrogram.png
+    next to the media file by default.
+    """
+    from forge.audio_spectrogram import render_mel_spectrogram
+
+    out = render_mel_spectrogram(
+        args.media,
+        output_path=args.output,
+        n_mels=args.n_mels,
+        fmax=args.fmax,
+        cmap=args.cmap,
+    )
+    if out is None:
+        print("audio-spectrogram: rendering failed (see warnings above).", file=sys.stderr)
+        sys.exit(1)
+    print(f"Spectrogram written: {out}")
+
+
+@_cli_command
 def cmd_parse_captions(args):
     """Parse an SRT or VTT caption file and save _captions.json."""
     from forge.captions import parse_captions, save_captions_json
@@ -1842,6 +1865,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_ap.add_argument("--format", choices=["table", "json"], default="table",
                       help="Output format (default: table)")
 
+    # --- audio-spectrogram (mel spectrogram PNG preview) ---
+    p_as = sub.add_parser(
+        "audio-spectrogram",
+        help="Render a mel spectrogram PNG next to the media file (preview tool)",
+    )
+    p_as.add_argument("media", help="Path to video or audio file")
+    p_as.add_argument("--output", help="Output PNG path (default: <stem>.spectrogram.png)")
+    p_as.add_argument("--n-mels", type=int, default=64,
+                      help="Number of mel frequency bins (default: 64)")
+    p_as.add_argument("--fmax", type=int, default=8000,
+                      help="Max frequency in Hz (default: 8000)")
+    p_as.add_argument("--cmap", default="magma",
+                      help="Matplotlib colormap (default: magma; try inferno/viridis)")
+
     # --- chapters (videoflow resolver bridge) ---
     p_ch = sub.add_parser(
         "chapters",
@@ -2130,6 +2167,7 @@ def main():
         "suggest-tone":     cmd_suggest_tone,
         "beats":            cmd_beats,
         "audio-peaks":      cmd_audio_peaks,
+        "audio-spectrogram": cmd_audio_spectrogram,
         "chapters":         cmd_chapters,
         "auto-chapter":     cmd_auto_chapter,
         "read-stanzas":     cmd_read_stanzas,
