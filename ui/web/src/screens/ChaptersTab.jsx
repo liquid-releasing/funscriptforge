@@ -237,14 +237,13 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // video already reported.
   const [currentMs, setCurrentMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  // Track the MediaViewer's mode so the ChapterRibbon baton only renders
-  // for audio + funscript views. The video itself shows playhead position
-  // visually (the frame IS the continuity), so a separate baton on the
-  // ribbon is redundant. Audio is a waveform you can't "see" through and
-  // funscript is a curve — both benefit from a "where am I" marker to
-  // align to pauses or exact beats. Default 'video' matches the viewer's
-  // default mode.
-  const [viewerMode, setViewerMode] = useState('video');
+  // The ChapterRibbon baton renders in all viewer modes — earlier shape
+  // hid it in video mode but that conflated two batons. The MediaViewer's
+  // internal *overlay* baton (over the media surface) stays hidden in
+  // video mode (correct: the frame IS the playhead, overlay would be
+  // redundant chrome). The ChapterRibbon baton (overhead "where am I in
+  // the project" view) is always useful — that's project-scope context,
+  // not an overlay on the playing frame.
   const hydrateFromChapterList = (created) => {
     setChapters(created);
     setActiveId(created[0]?.id ?? null);
@@ -467,7 +466,13 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             actions={actions}
             selectedId={active.id}
             onSelect={(band) => setActiveId(band.id)}
-            currentMs={viewerMode === 'video' ? undefined : currentMs}
+            // Click inside the currently-active chapter → scrub to that
+            // ms. Different band → onSelect handles the chapter switch.
+            // The clamp keeps a click at the very edge from spilling
+            // past the chapter bounds (which would re-clamp through
+            // the onSeek handler on MediaViewer anyway).
+            onSeek={(ms) => setCurrentMs(Math.max(active.atMs, Math.min(active.endMs, ms)))}
+            currentMs={currentMs}
             menu={[
               {
                 id: 'split',
@@ -500,8 +505,6 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           <MediaViewer
             videoSrc={toMediaUrl(project?.mediaPath)}
             media={{ kind: project?.mediaKind ?? 'video', title: active.name || active.id }}
-            mode={viewerMode}
-            onModeChange={setViewerMode}
             chapter={{
               id: active.id,
               title: active.name || `Chapter ${chapters.indexOf(active) + 1}`,
