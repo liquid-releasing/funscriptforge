@@ -359,29 +359,13 @@ export default function DeviceTab({ project, selectedDevices, onToggleDevice }) 
 
       <div style={{ height: 22 }} />
 
-      {/* 5 — Score breakdown */}
-      <SectionLabel>Forge Score breakdown · placeholder until CLI scoring lands</SectionLabel>
-      <div
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          overflow: 'hidden',
-          marginBottom: 22,
-        }}
-      >
-        {score.breakdown.map((row, i) => (
-          <BreakdownRow
-            key={row[3]}
-            label={row[0]}
-            value={row[1]}
-            weight={row[2]}
-            last={i === score.breakdown.length - 1}
-          />
-        ))}
-      </div>
+      {/* Forge Score breakdown removed 2026-05-19 — was bound to the
+          deleted `score` object. The Project Signals pills above now
+          carry the at-a-glance readout; deeper breakdowns wait for a
+          real funscript→quality function (see
+          [project-forge-score-replaced]). */}
 
-      {/* 6 — Histograms */}
+      {/* Histograms */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
         <Card padding={18}>
           <SectionLabel>BPM histogram</SectionLabel>
@@ -840,37 +824,6 @@ function CompareStat({ label, before, after, delta, negative }) {
       <div style={{ fontSize: 11, marginTop: 4, color: negative ? '#ffb547' : 'var(--text-muted)' }}>
         {delta}
       </div>
-    </div>
-  );
-}
-
-function BreakdownRow({ label, value, weight, last }) {
-  const color =
-    value >= 0.85 ? '#3ed598' :
-    value >= 0.7  ? '#a3e635' :
-    value >= 0.55 ? '#ffb547' :
-    value >= 0.4  ? '#ff8c47' : '#ff5470';
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '200px 1fr 60px 56px',
-        gap: 14,
-        padding: '12px 16px',
-        alignItems: 'center',
-        borderBottom: last ? 'none' : '1px solid var(--border)',
-      }}
-    >
-      <span style={{ fontSize: 12.5, fontWeight: 600 }}>{label}</span>
-      <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
-        <div style={{ width: `${value * 100}%`, height: '100%', background: color, transition: 'all 200ms' }} />
-      </div>
-      <span style={{ fontSize: 12, color, fontWeight: 700, textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
-        {Math.round(value * 100)}
-      </span>
-      <span style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
-        ×{weight.toFixed(2)}
-      </span>
     </div>
   );
 }
