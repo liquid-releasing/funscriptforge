@@ -222,6 +222,28 @@ export default function App() {
     }
   };
 
+  // Switch the active project from a ProjectTab recents row click. If the
+  // project is already cached in `loadedProjects` we just swap openedProject
+  // — no reload, no loading flash. Otherwise (mock fixture or recent we've
+  // never opened) we route through handleOpenScript for the full load
+  // pipeline. Earlier bug: ProjectTab maintained its own `activeProjectId`
+  // state and the picker only updated that — App's openedProject (and
+  // therefore the TopBar header) stayed pinned to whichever project was
+  // open before the switch.
+  const handleSelectProject = (project) => {
+    if (!project) return;
+    const cached =
+      project.id && loadedProjects.find((p) => p.id === project.id);
+    if (cached) {
+      setOpenedProject(cached);
+      return;
+    }
+    if (project.path) {
+      handleOpenScript(project.path);
+    }
+    // Mock recents with no path: nothing to load. Silently no-op.
+  };
+
   // ChaptersTab can mutate the chapter list (auto-split sidecar, videoflow
   // analyze). Lift that back to openedProject so downstream tabs (Patterns,
   // Phrases) see the same chapters. Without this, ChaptersTab held the new
@@ -487,6 +509,7 @@ export default function App() {
             openedProject={openedProject}
             loadedProjects={loadedProjects}
             onOpenScript={handleOpenScript}
+            onSelectProject={handleSelectProject}
             onAttachMedia={handleAttachMedia}
             onAppError={setAppError}
             isLoadingProject={isLoadingProject}

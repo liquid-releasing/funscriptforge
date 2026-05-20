@@ -241,7 +241,14 @@ pub async fn load_project(path: String) -> Result<LoadedProject, String> {
     let duration_ms = funscript.actions.last().map(|a| a.at).unwrap_or(0);
 
     let (min_pos, max_pos, avg_speed) = compute_funscript_stats(&funscript.actions);
-    let actions = downsample_actions(&funscript.actions, 1200);
+    // Return the full action set. Earlier shape downsampled to 1200 points
+    // for chart-quality preview, but the close-up Funscript view in
+    // MediaViewer zooms to a ~12s window and needs real per-stroke density
+    // to show beats (a 10-minute high-BPM script downsampled to 1200 leaves
+    // 2 actions/sec — strokes vanish into smooth curves). Overview charts
+    // that want a sparse preview can downsample client-side. Memory cost:
+    // typical 30-minute funscript = ~30k actions ≈ 660KB JSON, fine.
+    let actions = funscript.actions.clone();
 
     // ── Sidecar probe ────────────────────────────────────────────────
     let stem = strip_funscript_ext(&path);
@@ -539,19 +546,6 @@ async fn resolve_chapters_via_cli(path_for_resolution: &str, duration_ms: u64) -
         return Vec::new();
     }
     cli_chapters_to_records(parsed.chapters)
-}
-
-// Pick from min(N, max_count) evenly-spaced indices. Crude but cheap and gives
-// the velocity chart enough texture across the whole timeline.
-fn downsample_actions(actions: &[FunscriptAction], max_count: usize) -> Vec<FunscriptAction> {
-    if actions.len() <= max_count {
-        return actions.to_vec();
-    }
-    let n = actions.len();
-    let step = n as f64 / max_count as f64;
-    (0..max_count)
-        .map(|i| actions[((i as f64) * step) as usize].clone())
-        .collect()
 }
 
 // Build an equal-split chapter list and write the .chapters.json sidecar

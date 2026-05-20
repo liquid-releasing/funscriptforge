@@ -48,6 +48,7 @@ export default function ProjectTab({
   openedProject,
   loadedProjects = [],
   onOpenScript,
+  onSelectProject,
   onAttachMedia,
   onAppError,
   isLoadingProject,
@@ -143,7 +144,18 @@ export default function ProjectTab({
       <LeftRail
         projects={filtered}
         active={activeProjectId}
-        onPick={setActiveProjectId}
+        onPick={(p) => {
+          // Route through App so openedProject (and the TopBar header)
+          // follows. The smart switch avoids a reload flash when the
+          // project is already cached. Mock recents (no path) get the
+          // old local-only behavior — onSelectProject silently no-ops
+          // for them, so update activeProjectId here for the preview.
+          if (p?.path || loadedProjects.some((lp) => lp.id === p?.id)) {
+            onSelectProject?.(p);
+          } else {
+            setActiveProjectId(p?.id);
+          }
+        }}
         search={search}
         onSearch={setSearch}
         onOpen={handleOpen}
@@ -194,7 +206,7 @@ function LeftRail({ projects, active, onPick, search, onSearch, onOpen, loading 
         {loading
           ? <div style={{ padding: 16, fontSize: 12, color: 'var(--text-dim)' }}>Loading…</div>
           : projects.map((p) => (
-              <ProjectRow key={p.id} project={p} active={p.id === active} onClick={() => onPick(p.id)} />
+              <ProjectRow key={p.id} project={p} active={p.id === active} onClick={() => onPick(p)} />
             ))}
         <button
           onClick={onOpen}
