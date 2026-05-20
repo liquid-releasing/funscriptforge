@@ -320,10 +320,9 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // and clears UI state when the user hits Cancel.
   const peaksCancelledRef = useRef(false);
   useEffect(() => {
-    if (viewerMode !== 'audio') return;
-    if (!project?.mediaPath) return;
-    if (trackPeaks || peaksLoading) return;
-    let cancelled = false;
+    if (viewerMode !== 'audio') return undefined;
+    if (!project?.mediaPath) return undefined;
+    if (trackPeaks || peaksLoading) return undefined;
     peaksCancelledRef.current = false;
     setPeaksLoading(true);
     // Pre-seed the depth-2 step list so the user sees the upcoming work
@@ -344,43 +343,31 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
         setBusy?.(null);
       },
     });
+    // No local `cancelled` flag: the effect re-runs as soon as we call
+    // setTrackPeaks (since trackPeaks is in our deps), and an old-style
+    // closure flag would then skip the .finally cleanup, leaving the
+    // busy banner stuck on green checks forever. peaksCancelledRef is
+    // the right gate — it only fires on the explicit user Cancel
+    // (which already cleared busy via onCancel above).
     analyzeAudioPeaks(project.mediaPath, 10)
       .then((res) => {
-        if (cancelled || peaksCancelledRef.current) return;
+        if (peaksCancelledRef.current) return;
         if (res?.peaks?.length) {
           setTrackPeaks({ peaks: res.peaks, durationMs: res.durationMs, hopMs: res.hopMs });
         }
       })
       .catch((err) => {
-        if (cancelled || peaksCancelledRef.current) return;
+        if (peaksCancelledRef.current) return;
         console.warn('ChaptersTab: analyzeAudioPeaks failed', err);
       })
       .finally(() => {
-        if (cancelled || peaksCancelledRef.current) return;
+        if (peaksCancelledRef.current) return;
         setPeaksLoading(false);
         setBusy?.(null);
       });
-    return () => { cancelled = true; };
+    return undefined;
   }, [viewerMode, project?.mediaPath, trackPeaks, peaksLoading, setBusy]);
 
-  // Chapter-scoped slice of the full-track peaks. Indexed by ms ratio
-  // against the track's reported duration (NOT project.durationMs —
-  // librosa's decode may yield a slightly different length than the
-  // ffprobe-derived duration, and the peak indices follow the decode).
-  const audioWaveform = useMemo(() => {
-    if (!trackPeaks?.peaks?.length || !trackPeaks.durationMs) return null;
-    if (active === EMPTY_CHAPTER) return null;
-    const trackDur = trackPeaks.durationMs;
-    const startRatio = Math.max(0, Math.min(1, active.atMs / trackDur));
-    const endRatio = Math.max(startRatio, Math.min(1, active.endMs / trackDur));
-    const startIdx = Math.floor(startRatio * trackPeaks.peaks.length);
-    const endIdx = Math.ceil(endRatio * trackPeaks.peaks.length);
-    if (endIdx <= startIdx) return null;
-    return {
-      peaks: trackPeaks.peaks.slice(startIdx, endIdx),
-      durationMs: active.endMs - active.atMs,
-    };
-  }, [trackPeaks, active.atMs, active.endMs, active]);
   // The ChapterRibbon baton renders in all viewer modes — earlier shape
   // hid it in video mode but that conflated two batons. The MediaViewer's
   // internal *overlay* baton (over the media surface) stays hidden in
@@ -456,6 +443,25 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   const toneId = tonesByChapter[active.id] ?? 'build';
   const tone = findTone(toneId);
   const toneParams = paramsByChapter[active.id]?.[tone.id] ?? {};
+
+  // Chapter-scoped slice of the full-track peaks. Indexed by ms ratio
+  // against the track's reported duration (NOT project.durationMs —
+  // librosa's decode may yield a slightly different length than the
+  // ffprobe-derived duration, and the peak indices follow the decode).
+  const audioWaveform = useMemo(() => {
+    if (!trackPeaks?.peaks?.length || !trackPeaks.durationMs) return null;
+    if (active === EMPTY_CHAPTER) return null;
+    const trackDur = trackPeaks.durationMs;
+    const startRatio = Math.max(0, Math.min(1, active.atMs / trackDur));
+    const endRatio = Math.max(startRatio, Math.min(1, active.endMs / trackDur));
+    const startIdx = Math.floor(startRatio * trackPeaks.peaks.length);
+    const endIdx = Math.ceil(endRatio * trackPeaks.peaks.length);
+    if (endIdx <= startIdx) return null;
+    return {
+      peaks: trackPeaks.peaks.slice(startIdx, endIdx),
+      durationMs: active.endMs - active.atMs,
+    };
+  }, [trackPeaks, active]);
 
   const beforeSlice = useMemo(
     () => originalActions.filter((a) => a.at >= active.atMs && a.at <= active.endMs),
