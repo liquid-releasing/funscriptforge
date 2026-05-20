@@ -390,6 +390,20 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // against the track's reported duration (NOT project.durationMs —
   // librosa's decode may yield a slightly different length than the
   // ffprobe-derived duration, and the peak indices follow the decode).
+  //
+  // We bucket-downsample the raw slice to TARGET_BARS before passing to
+  // MediaViewer. WaveformCanvas in forgemoment renders one SVG <rect>
+  // per peak in its 16% visible window. At 10ms hop, a single-chapter
+  // file like LongandCut_hdr has ~360k peaks for the active slice,
+  // which means ~57k rects per frame in the visible window — Chromium
+  // locks up, the audio canvas paints black, and the video decoder
+  // starves. 600 total bars → ~96 visible bars in the window, which
+  // reads as a clean waveform and renders fast. Bucket reducer is
+  // max-per-bucket so transient loud moments still pop visually (mean
+  // would over-smooth). When the raw slice is already at or below
+  // TARGET_BARS (very short chapter), we skip the downsample. Long
+  // term this belongs in WaveformCanvas itself so every consumer
+  // benefits — see project-audio-peaks-landed for the note.
   const audioWaveform = useMemo(() => {
     if (!trackPeaks?.peaks?.length || !trackPeaks.durationMs) return null;
     if (active === EMPTY_CHAPTER) return null;
@@ -399,8 +413,34 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     const startIdx = Math.floor(startRatio * trackPeaks.peaks.length);
     const endIdx = Math.ceil(endRatio * trackPeaks.peaks.length);
     if (endIdx <= startIdx) return null;
+    const raw = trackPeaks.peaks;
+    const rawLen = endIdx - startIdx;
+    // 200 total → 32 visible bars in WaveformCanvas's 16% window. The
+    // earlier 600 target stressed Chromium's SVG diff at every video
+    // timeupdate (5Hz) — playback gets "echoy" / "frames repeat"
+    // because the main thread can't keep up. Long-term fix: canvas-
+    // based rendering in forgemoment's WaveformCanvas would handle
+    // thousands of bars cheaply (one imperative paint, no React diff).
+    const TARGET_BARS = 200;
+    let peaks;
+    if (rawLen <= TARGET_BARS) {
+      peaks = raw.slice(startIdx, endIdx);
+    } else {
+      peaks = new Array(TARGET_BARS);
+      const bucketSize = rawLen / TARGET_BARS;
+      for (let i = 0; i < TARGET_BARS; i++) {
+        const a = startIdx + Math.floor(i * bucketSize);
+        const b = startIdx + Math.floor((i + 1) * bucketSize);
+        let mx = 0;
+        for (let j = a; j < b; j++) {
+          const v = raw[j];
+          if (v > mx) mx = v;
+        }
+        peaks[i] = mx;
+      }
+    }
     return {
-      peaks: trackPeaks.peaks.slice(startIdx, endIdx),
+      peaks,
       durationMs: active.endMs - active.atMs,
     };
   }, [trackPeaks, active]);
