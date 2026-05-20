@@ -24,7 +24,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Icon, MediaViewer, Slider, ChapterRibbon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
-import { createChaptersSidecar, analyzeChaptersWithVideoflow } from '../api/forge.js';
+import { createChaptersSidecar, analyzeChaptersWithVideoflow, analyzeAudioPeaks } from '../api/forge.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 
 // The six canonical tones. Source of truth: forge/tabs/tone_tab.py::_TONES
@@ -300,6 +300,60 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // video already reported.
   const [currentMs, setCurrentMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  // MediaViewer mode lives here (controlled) so we can lazy-load audio
+  // peaks the first time the user toggles to Audio. Without controlled
+  // mode we'd have no signal to gate the librosa-decode cost on.
+  const [viewerMode, setViewerMode] = useState('video');
+  // Full-track audio peaks. Loaded lazily on the first switch to Audio
+  // mode (and reset when mediaPath changes). The CLI caches a sidecar so
+  // the second visit is a cheap JSON parse. We hold the full-track shape
+  // and derive a chapter-scoped slice below — the viewer is chapter-
+  // scoped (batonPos is chapter-relative inside MediaViewer), so feeding
+  // it full-track peaks would mis-align the waveform with the playhead.
+  const [trackPeaks, setTrackPeaks] = useState(null);
+  const [peaksLoading, setPeaksLoading] = useState(false);
+  useEffect(() => {
+    setTrackPeaks(null);
+  }, [project?.mediaPath]);
+  useEffect(() => {
+    if (viewerMode !== 'audio') return;
+    if (!project?.mediaPath) return;
+    if (trackPeaks || peaksLoading) return;
+    let cancelled = false;
+    setPeaksLoading(true);
+    analyzeAudioPeaks(project.mediaPath, 10)
+      .then((res) => {
+        if (cancelled) return;
+        if (res?.peaks?.length) {
+          setTrackPeaks({ peaks: res.peaks, durationMs: res.durationMs, hopMs: res.hopMs });
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('ChaptersTab: analyzeAudioPeaks failed', err);
+      })
+      .finally(() => { if (!cancelled) setPeaksLoading(false); });
+    return () => { cancelled = true; };
+  }, [viewerMode, project?.mediaPath, trackPeaks, peaksLoading]);
+
+  // Chapter-scoped slice of the full-track peaks. Indexed by ms ratio
+  // against the track's reported duration (NOT project.durationMs —
+  // librosa's decode may yield a slightly different length than the
+  // ffprobe-derived duration, and the peak indices follow the decode).
+  const audioWaveform = useMemo(() => {
+    if (!trackPeaks?.peaks?.length || !trackPeaks.durationMs) return null;
+    if (active === EMPTY_CHAPTER) return null;
+    const trackDur = trackPeaks.durationMs;
+    const startRatio = Math.max(0, Math.min(1, active.atMs / trackDur));
+    const endRatio = Math.max(startRatio, Math.min(1, active.endMs / trackDur));
+    const startIdx = Math.floor(startRatio * trackPeaks.peaks.length);
+    const endIdx = Math.ceil(endRatio * trackPeaks.peaks.length);
+    if (endIdx <= startIdx) return null;
+    return {
+      peaks: trackPeaks.peaks.slice(startIdx, endIdx),
+      durationMs: active.endMs - active.atMs,
+    };
+  }, [trackPeaks, active.atMs, active.endMs, active]);
   // The ChapterRibbon baton renders in all viewer modes — earlier shape
   // hid it in video mode but that conflated two batons. The MediaViewer's
   // internal *overlay* baton (over the media surface) stays hidden in
@@ -611,6 +665,9 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           <MediaViewer
             videoSrc={toMediaUrl(project?.mediaPath)}
             media={{ kind: project?.mediaKind ?? 'video', title: active.name || active.id }}
+            mode={viewerMode}
+            onModeChange={setViewerMode}
+            audioWaveform={audioWaveform}
             chapter={{
               id: active.id,
               title: active.name || `Chapter ${chapters.indexOf(active) + 1}`,

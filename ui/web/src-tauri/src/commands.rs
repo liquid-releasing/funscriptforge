@@ -665,6 +665,69 @@ pub async fn analyze_chapters_with_videoflow(
 }
 
 // ---------------------------------------------------------------------------
+// Audio peaks — pre-computed waveform sidecar for the MediaViewer Audio mode.
+//
+// Shells out to `cli.py audio-peaks <media>` which writes <stem>.audio.json
+// next to the media file. The CLI reuses the cached sidecar on subsequent
+// calls, so this command is cheap on second visit (~10ms parse vs. tens of
+// seconds librosa decode on first compute).
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioPeaksResponse {
+    pub hop_ms: u32,
+    pub duration_ms: u64,
+    pub peaks: Vec<f32>,
+    pub peak_count: usize,
+    pub from_sidecar: bool,
+}
+
+#[derive(Deserialize)]
+struct CliAudioPeaks {
+    #[serde(default = "default_hop_ms")]
+    hop_ms: u32,
+    #[serde(default)]
+    duration_ms: u64,
+    #[serde(default)]
+    peaks: Vec<f32>,
+    #[serde(default)]
+    peak_count: usize,
+    #[serde(default)]
+    from_sidecar: bool,
+}
+
+fn default_hop_ms() -> u32 { 10 }
+
+#[tauri::command]
+pub async fn analyze_audio_peaks(
+    media_path: String,
+    hop_ms: Option<u32>,
+    force: Option<bool>,
+) -> Result<AudioPeaksResponse, String> {
+    if !std::path::Path::new(&media_path).exists() {
+        return Err(format!("media file not found: {}", media_path));
+    }
+    let hop_arg = hop_ms.unwrap_or(10).to_string();
+    let mut args: Vec<&str> = vec!["audio-peaks", &media_path, "--hop-ms", &hop_arg, "--format", "json"];
+    if force.unwrap_or(false) {
+        args.push("--force");
+    }
+    let stdout = run_cli(&args).await?;
+    let parsed: CliAudioPeaks = serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse cli.py audio-peaks output: {}", e))?;
+
+    let peak_count = if parsed.peak_count > 0 { parsed.peak_count } else { parsed.peaks.len() };
+    Ok(AudioPeaksResponse {
+        hop_ms: parsed.hop_ms,
+        duration_ms: parsed.duration_ms,
+        peaks: parsed.peaks,
+        peak_count,
+        from_sidecar: parsed.from_sidecar,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Attach media — wire a video/audio file to an existing project. Scaffolding
 // only today: validates the file exists and echoes the paths back to the
 // frontend so it can update its project state. Later: write into the

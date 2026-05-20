@@ -284,6 +284,40 @@ export async function pickProjectFile() {
   return null;
 }
 
+/** Compute pre-computed waveform peaks for a media file, used by the
+ *  MediaViewer Audio mode. The Rust command shells out to
+ *  `cli.py audio-peaks <media>` which writes `<stem>.audio.json` next to
+ *  the media and reuses the cached sidecar on subsequent calls.
+ *
+ *  Cost: first run does a full librosa decode (tens of seconds on long
+ *  files); second run is a sidecar JSON parse. Caller should drive a
+ *  loading state while in-flight.
+ *
+ *  Returns: { hopMs, durationMs, peaks: number[] (0..1), peakCount, fromSidecar }.
+ *  Browser mock synthesises a noisy sine so the Audio mode shows
+ *  something instead of the placeholder. */
+export function analyzeAudioPeaks(mediaPath, hopMs, force) {
+  return call(
+    'analyze_audio_peaks',
+    { mediaPath, hopMs, force },
+    () => Promise.resolve(mockAudioPeaks(hopMs ?? 10)),
+  );
+}
+
+function mockAudioPeaks(hopMs) {
+  // 60s of noisy sine at the chosen hop. Just enough to exercise the
+  // WaveformCanvas slice math in browser mode without a real decode.
+  const durationMs = 60_000;
+  const n = Math.floor(durationMs / hopMs);
+  const peaks = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const env = 0.5 + 0.5 * Math.sin((i / n) * Math.PI * 4);
+    const noise = (Math.sin(i * 1.7) + Math.sin(i * 0.31)) * 0.18;
+    peaks[i] = Math.max(0, Math.min(1, env * 0.7 + noise));
+  }
+  return { hopMs, durationMs, peaks, peakCount: n, fromSidecar: false };
+}
+
 /** Attach a media file (video/audio) to an existing project. Real Tauri
  *  command stores the path on the project's metadata (and eventually
  *  the .ffmeta sidecar). Browser mock: echoes the path so the UI can

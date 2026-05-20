@@ -26,6 +26,7 @@ pub fn run() {
             commands::read_stanzas,
             commands::list_characters,
             commands::attach_media,
+            commands::analyze_audio_peaks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

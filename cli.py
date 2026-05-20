@@ -107,6 +107,14 @@ Forge metadata / media analysis:
       [--output-dir output/]                                   # where to write _beats.json + _beats.csv
   Requires: pip install av librosa numpy
 
+  python cli.py audio-peaks path/to/media.mp4                  # pre-computed waveform sidecar
+      [--hop-ms 10]                                            # window size (default 10ms)
+      [--force]                                                # recompute even if sidecar exists
+      [--no-write]                                             # skip writing <stem>.audio.json
+      [--format table|json]                                    # output format (default: table)
+  Writes <stem>.audio.json next to the media file (peaks: 0..1 RMS-per-hop).
+  Requires: pip install av numpy
+
   python cli.py parse-captions path/to/captions.srt            # parse SRT or VTT, save _captions.json
       [--output-dir output/]                                   # destination folder
       [--print]                                                # also print all cues to stdout
@@ -1095,6 +1103,47 @@ def cmd_beats(args):
 
 
 @_cli_command
+def cmd_audio_peaks(args):
+    """Compute pre-computed waveform peaks for a media file.
+
+    Reads or generates <stem>.audio.json next to the media. Sidecar is
+    written by default (suppress with --no-write); cached output is reused
+    unless --force is passed. Emits the full sidecar dict to stdout (in
+    --format json) so the Tauri bridge can consume it without a second
+    file read.
+    """
+    from forge.audio_peaks import extract_peaks, load_peaks, write_sidecar, sidecar_path
+
+    cached = None if args.force else load_peaks(args.media)
+    if cached is not None:
+        data = cached
+        from_sidecar = True
+    else:
+        data = extract_peaks(args.media, hop_ms=args.hop_ms)
+        if data is None:
+            print("audio-peaks: extraction failed (see warnings above).", file=sys.stderr)
+            sys.exit(1)
+        if not args.no_write:
+            write_sidecar(args.media, data)
+        from_sidecar = False
+
+    if args.format == "json":
+        out = dict(data)
+        out["from_sidecar"] = from_sidecar
+        out["sidecar_path"] = sidecar_path(args.media)
+        print(json.dumps(out))
+    else:
+        sp = sidecar_path(args.media)
+        n = data.get("peak_count", len(data.get("peaks", [])))
+        dur = data.get("duration_ms", 0) / 1000.0
+        hop = data.get("hop_ms", "?")
+        src = "sidecar" if from_sidecar else "computed"
+        print(f"audio-peaks: {n} peaks @ {hop}ms hop · {dur:.1f}s · {src}")
+        if not args.no_write or from_sidecar:
+            print(f"Sidecar: {sp}")
+
+
+@_cli_command
 def cmd_parse_captions(args):
     """Parse an SRT or VTT caption file and save _captions.json."""
     from forge.captions import parse_captions, save_captions_json
@@ -1759,6 +1808,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_beats.add_argument("--output-dir", metavar="DIR",
                          help="Directory for _beats.json and _beats.csv (default: same as video)")
 
+    # --- audio-peaks (pre-computed waveform sidecar for MediaViewer Audio mode) ---
+    p_ap = sub.add_parser(
+        "audio-peaks",
+        help="Compute pre-computed waveform peaks sidecar (RMS-per-hop) for the MediaViewer Audio mode",
+    )
+    p_ap.add_argument("media", help="Path to video or audio file")
+    p_ap.add_argument("--hop-ms", type=int, default=10,
+                      help="Window size in ms (default: 10 — ~100 peaks/sec)")
+    p_ap.add_argument("--force", action="store_true",
+                      help="Recompute even if <stem>.audio.json exists")
+    p_ap.add_argument("--no-write", action="store_true",
+                      help="Skip writing the sidecar (still prints JSON to stdout)")
+    p_ap.add_argument("--format", choices=["table", "json"], default="table",
+                      help="Output format (default: table)")
+
     # --- chapters (videoflow resolver bridge) ---
     p_ch = sub.add_parser(
         "chapters",
@@ -2046,6 +2110,7 @@ def main():
         "meta":             cmd_meta,
         "suggest-tone":     cmd_suggest_tone,
         "beats":            cmd_beats,
+        "audio-peaks":      cmd_audio_peaks,
         "chapters":         cmd_chapters,
         "auto-chapter":     cmd_auto_chapter,
         "read-stanzas":     cmd_read_stanzas,
