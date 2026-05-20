@@ -25,6 +25,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Icon, MediaViewer, Slider, ChapterRibbon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { createChaptersSidecar, analyzeChaptersWithVideoflow } from '../api/forge.js';
+import { toMediaUrl } from '../lib/mediaUrl.js';
 
 // The six canonical tones. Source of truth: forge/tabs/tone_tab.py::_TONES
 // in the Python side — the IDs MUST match (tender/build/tease/edge/climax/
@@ -225,12 +226,25 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState(null);
 
-  // Playback clock for the chapter-scoped edit loop. JS-only for now — the
-  // MediaViewer's <video> element doesn't share this clock yet (pending: tie
-  // video.currentTime to currentMs and vice versa). The timecode, the
-  // keyboard shortcuts, and the chapter-end loop all run off this state.
+  // Playback clock for the chapter-scoped edit loop. The MediaViewer
+  // owns the <video> element and emits `onTimeChange` on every
+  // timeupdate; we mirror that into `currentMs`. Seeks (manual scrub,
+  // chapter-end loop, click-on-band) go the other direction — set
+  // `currentMs` and MediaViewer's seek-sync effect moves the video.
+  // The rAF clock below covers the no-video case (audio-only or
+  // browser mock without mediaPath); when a video is loaded, timeupdate
+  // events win — the rAF tick just re-asserts the same currentMs the
+  // video already reported.
   const [currentMs, setCurrentMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  // Track the MediaViewer's mode so the ChapterRibbon baton only renders
+  // for audio + funscript views. The video itself shows playhead position
+  // visually (the frame IS the continuity), so a separate baton on the
+  // ribbon is redundant. Audio is a waveform you can't "see" through and
+  // funscript is a curve — both benefit from a "where am I" marker to
+  // align to pauses or exact beats. Default 'video' matches the viewer's
+  // default mode.
+  const [viewerMode, setViewerMode] = useState('video');
   const hydrateFromChapterList = (created) => {
     setChapters(created);
     setActiveId(created[0]?.id ?? null);
@@ -322,8 +336,19 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // The boundary is hard — we never let the playhead leave the active
   // chapter while playing (per "stay constrained in the thing we are
   // editing"). To leave the chapter the user clicks another band.
+  //
+  // Skipped when a video is attached. The video element is the master
+  // clock then — MediaViewer emits onTimeChange on every video frame,
+  // and we'd otherwise be writing currentMs from two sources (rAF
+  // estimate + real video time). Drift between the two triggered the
+  // seek-sync effect in MediaViewer to snap the video back, producing
+  // perceptible jerk. With the rAF gate, the video clock wins
+  // unopposed when present; rAF remains the fallback for the no-media
+  // case (audio-only, browser mock, missing mediaPath).
+  const hasVideoClock = !!project?.mediaPath;
   useEffect(() => {
     if (!isPlaying || active === EMPTY_CHAPTER) return undefined;
+    if (hasVideoClock) return undefined;
     let rafId;
     let last = performance.now();
     const tick = (t) => {
@@ -338,7 +363,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [isPlaying, active.atMs, active.endMs]);
+  }, [isPlaying, hasVideoClock, active.atMs, active.endMs]);
 
   // Keyboard shortcuts. Brackets for chapter nav, Space for play/pause,
   // Home jumps to chapter start, , and . step one frame (~33ms ≈ 30fps).
@@ -442,6 +467,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             actions={actions}
             selectedId={active.id}
             onSelect={(band) => setActiveId(band.id)}
+            currentMs={viewerMode === 'video' ? undefined : currentMs}
             menu={[
               {
                 id: 'split',
@@ -472,8 +498,10 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           borderRadius: 8, padding: 12,
         }}>
           <MediaViewer
-            videoSrc={project?.mediaPath ? toFileUrl(project.mediaPath) : undefined}
+            videoSrc={toMediaUrl(project?.mediaPath)}
             media={{ kind: project?.mediaKind ?? 'video', title: active.name || active.id }}
+            mode={viewerMode}
+            onModeChange={setViewerMode}
             chapter={{
               id: active.id,
               title: active.name || `Chapter ${chapters.indexOf(active) + 1}`,
@@ -489,6 +517,18 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             // Manual seek clamps to chapter bounds — you can't leave the
             // chapter via scrubbing, only via clicking another band.
             onSeek={(ms) => setCurrentMs(Math.max(active.atMs, Math.min(active.endMs, ms)))}
+            // Video-driven timeupdate. Loop back to chapter.atMs when
+            // playback crosses chapter.endMs, matching the rAF clock's
+            // semantics for the no-video case. The seek-sync effect in
+            // MediaViewer will rewind the actual <video> element when
+            // currentMs jumps backwards. Otherwise clamp to chapter
+            // bounds so the playhead doesn't leave the active chapter
+            // via the video's own clock.
+            onTimeChange={(ms) => {
+              if (ms >= active.endMs) setCurrentMs(active.atMs);
+              else if (ms < active.atMs) setCurrentMs(active.atMs);
+              else setCurrentMs(ms);
+            }}
             modeToggleAlign="start"
             modeToggleSize="sm"
             showModeLabel={false}
@@ -612,19 +652,6 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       </div>
     </section>
   );
-}
-
-// Convert a local filesystem path to a Tauri-safe file URL. Used so the
-// MediaViewer's <video src> can load the adjacent media file. In browser
-// mode mediaPath is null; this fn won't run.
-function toFileUrl(path) {
-  if (!path) return undefined;
-  // Tauri's WebView accepts file:// URLs on Windows when the path is
-  // converted from backslashes to forward slashes; the protocol allowlist
-  // is configured in tauri.conf.json. If the asset protocol gets set up
-  // later we'll swap to convertFileSrc here.
-  const fwd = String(path).replace(/\\/g, '/');
-  return fwd.startsWith('/') ? `file://${fwd}` : `file:///${fwd}`;
 }
 
 function SectionLabel({ children }) {

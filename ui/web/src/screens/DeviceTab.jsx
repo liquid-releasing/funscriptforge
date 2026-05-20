@@ -2,14 +2,19 @@
 //
 // Adapted from ui_design/ui_kits/funscriptforge-app/tab-Device.jsx.
 //
-// Layout (per user direction 2026-05-15):
+// Layout (per user direction 2026-05-15, Forge Score replaced 2026-05-19):
 //   1. Original funscript chart            (top)
-//   2. Forge Score card + compare stats    (still a design-only metric — the
-//                                           backend score doesn't exist yet)
+//   2. Project signals card + compare stats — multi-pill readout (device fit
+//                                           %, suggested tone, variety, arc)
+//                                           backed by cli.py meta + the
+//                                           selected device's BPM ceiling.
+//                                           Replaces the single-letter Forge
+//                                           Score (which was UI fiction —
+//                                           bell-curve over slider values,
+//                                           ignored funscript content).
 //   3. Settings (two cards: device-aware reset + groove bias)
 //   4. Device-aware preview chart          (moved below settings)
-//   5. Forge Score breakdown
-//   6. BPM + position histograms
+//   5. BPM + position histograms
 //
 // Synced viewport: both charts (#1 and #4) share one `view` state so panning
 // or zooming either one keeps the same time window in frame on both. Lets
@@ -90,12 +95,17 @@ export default function DeviceTab({ project, selectedDevices, onToggleDevice }) 
     [baseActions, previewActions],
   );
 
-  // Forge Score lives in the UI-only design space for now. The CLI doesn't
-  // expose a score endpoint yet — wire to `python cli.py forge-score` (or
-  // equivalent) once that ships. Until then, this is illustrative only.
-  const score = useMemo(
-    () => computeForgeScore({ bpmCap, latency, smoothing, density, recenter, contrast, tone: project?.toneSuggestion?.toLowerCase() ?? 'tease' }),
-    [bpmCap, latency, smoothing, density, recenter, contrast, project?.toneSuggestion],
+  // Device fit — share of actions that survive the limiting device's BPM
+  // ceiling. Reuses applyBpmClamp so the math matches what the preview
+  // chart would do at that cap. Returns null when no device is selected or
+  // the selection is unconstrained (all vibration-only). User wants a
+  // real Forge Score eventually (see [[project-forge-score-replaced]]);
+  // until Forgegen build-out gives us a real definition, the multi-pill
+  // readout reports the signals we can compute today rather than fake a
+  // single grade.
+  const deviceFit = useMemo(
+    () => computeDeviceFit(baseActions, limitingDevice),
+    [baseActions, limitingDevice],
   );
 
   if (!project) {
@@ -195,7 +205,11 @@ export default function DeviceTab({ project, selectedDevices, onToggleDevice }) 
           alignItems: 'stretch',
         }}
       >
-        <ForgeScoreCard score={score} />
+        <ProjectSignalsCard
+          project={project}
+          deviceFit={deviceFit}
+          limitingDevice={limitingDevice}
+        />
         <DevicePanel
           devices={selectedDeviceRecords}
           limiting={limitingDevice}
@@ -514,50 +528,39 @@ function pct(xs, p) {
   return Math.round(sorted[Math.floor(sorted.length * p)]);
 }
 
-// ─── Forge Score (UI-only placeholder until CLI ships scoring) ───────────
+// ─── Device fit ──────────────────────────────────────────────────────────
+// Share of actions that survive the limiting device's BPM ceiling, computed
+// via the same greedy clamp the preview chart uses (applyBpmClamp). The
+// limiting device is the lowest maxBpm > 0 across the selection — pure
+// vibration devices (maxBpm = 0) don't constrain stroke rate, so they're
+// excluded from the comparison and return null (no meaningful fit number).
 
-function computeForgeScore({ bpmCap, latency, smoothing, density, recenter, contrast, tone }) {
-  const bpmFit       = clamp01(1 - Math.abs(bpmCap - 180) / 220);
-  const latencyFit   = clamp01(1 - latency / 220);
-  const smoothFit    = bell(smoothing, 0.55, 0.35);
-  const densityFit   = bell(density, 0.62, 0.4);
-  const recenterFit  = bell(recenter / 100, 0.5, 0.4);
-  const contrastFit  = bell(contrast, 0.5, 0.45);
-  const toneFit =
-    tone === 'tender'   ? 0.78 :
-    tone === 'build'    ? 0.84 :
-    tone === 'tease'    ? 0.91 :
-    tone === 'edge'     ? 0.86 :
-    tone === 'climax'   ? 0.74 :
-    tone === 'dominant' ? 0.81 : 0.7;
-  const weights = [
-    ['BPM ceiling vs device',  bpmFit,      0.18, 'bpm-cap'],
-    ['Latency budget',         latencyFit,  0.10, 'latency'],
-    ['Stroke smoothing',       smoothFit,   0.14, 'smooth'],
-    ['Beat density / groove',  densityFit,  0.16, 'density'],
-    ['Mean position recenter', recenterFit, 0.10, 'recenter'],
-    ['Amplitude contrast',     contrastFit, 0.16, 'contrast'],
-    ['Tone alignment',         toneFit,     0.16, 'tone'],
-  ];
-  const totalW = weights.reduce((s, w) => s + w[2], 0);
-  const score100 = Math.round(
-    (weights.reduce((s, w) => s + w[1] * w[2], 0) / totalW) * 100,
-  );
-  const band =
-    score100 >= 92 ? { letter: 'S', label: 'Forge-perfect', color: '#3ed598' } :
-    score100 >= 82 ? { letter: 'A', label: 'Strong',        color: '#a3e635' } :
-    score100 >= 70 ? { letter: 'B', label: 'Solid',         color: '#ffb547' } :
-    score100 >= 58 ? { letter: 'C', label: 'Workable',      color: '#ff8c47' } :
-                     { letter: 'D', label: 'Needs work',    color: '#ff5470' };
-  return { score: score100, band, breakdown: weights };
+function computeDeviceFit(actions, limitingDevice) {
+  if (!limitingDevice?.maxBpm) return null;
+  if (!actions || actions.length < 2) return null;
+  const clamped = applyBpmClamp(actions, limitingDevice.maxBpm);
+  return Math.round((100 * clamped.length) / actions.length);
 }
-
-function clamp01(x) { return Math.max(0, Math.min(1, x)); }
-function bell(x, mid, w) { return clamp01(1 - Math.abs(x - mid) / w); }
 
 // ─── Sub-components ──────────────────────────────────────────────────────
 
-function ForgeScoreCard({ score }) {
+// Multi-pill readout — replaces the single-letter Forge Score. Four
+// dimensions backed by real signals from cli.py meta + the selected
+// device's BPM ceiling. A unified score is deferred until Forgegen
+// build-out gives us a real definition (see
+// [[project-forge-score-replaced]]). Variety + pauses being good is a
+// known input for that future score
+// ([[project-variety-and-pauses-signal]]) but a single grade should not
+// ship without a real funscript→quality function backing it.
+function ProjectSignalsCard({ project, deviceFit, limitingDevice }) {
+  const fitTone =
+    deviceFit == null ? 'muted' :
+    deviceFit >= 90   ? 'good'  :
+    deviceFit >= 70   ? 'warn'  : 'bad';
+  const fitSubtitle =
+    deviceFit == null
+      ? (limitingDevice ? '' : 'no device with BPM cap selected')
+      : `limited by ${limitingDevice?.label ?? 'device'} @ ${limitingDevice.maxBpm} BPM`;
   return (
     <div
       style={{
@@ -567,55 +570,92 @@ function ForgeScoreCard({ score }) {
         padding: 20,
         display: 'flex',
         flexDirection: 'column',
-        gap: 10,
-        // Sit at the top of the row rather than stretching to match the
-        // (taller) DevicePanel — keeps the score card visually compact.
+        gap: 14,
         alignSelf: 'start',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          Forge Score
+          Project signals
         </span>
-        <Pill tone="info" style={{ fontSize: 10 }}>placeholder</Pill>
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
-        <span style={{ fontSize: 56, fontWeight: 700, color: score.band.color, lineHeight: 1, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-          {score.score}
-        </span>
-        <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>/ 100</span>
-        <div style={{ flex: 1 }} />
-        <div style={{ textAlign: 'right' }}>
-          <div
-            style={{
-              display: 'inline-grid',
-              placeItems: 'center',
-              width: 38,
-              height: 38,
-              borderRadius: 8,
-              background: score.band.color + '22',
-              color: score.band.color,
-              fontSize: 22,
-              fontWeight: 800,
-            }}
-          >
-            {score.band.letter}
-          </div>
-          <div style={{ fontSize: 11, color: score.band.color, fontWeight: 600, marginTop: 4 }}>
-            {score.band.label}
-          </div>
-        </div>
-      </div>
-      <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden', marginTop: 4 }}>
-        <div style={{ width: `${score.score}%`, height: '100%', background: score.band.color, transition: 'all 200ms' }} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <SignalPill
+          label="Device fit"
+          value={deviceFit == null ? '—' : `${deviceFit}%`}
+          subtitle={fitSubtitle}
+          tone={fitTone}
+        />
+        <SignalPill
+          label="Suggested tone"
+          value={project?.toneSuggestion ?? '—'}
+          subtitle={project?.toneRationale ?? null}
+          tone="accent"
+        />
+        <SignalPill
+          label="Variety"
+          value={project?.variety ?? '—'}
+          subtitle={null}
+          tone="muted"
+        />
+        <SignalPill
+          label="Arc"
+          value={project?.arcType ?? '—'}
+          subtitle={null}
+          tone="muted"
+        />
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.45 }}>
-        Synthesised in JS while the real CLI scoring endpoint is built. Wire to{' '}
+        Tone, variety, and arc come from{' '}
         <code style={{ background: 'var(--surface-2)', padding: '0 4px', borderRadius: 2 }}>
-          python cli.py forge-score
-        </code>{' '}
-        once it ships.
+          python cli.py meta
+        </code>
+        . Device fit is the share of actions that survive the limiting
+        device's BPM ceiling.
       </div>
+    </div>
+  );
+}
+
+function SignalPill({ label, value, subtitle, tone }) {
+  const color =
+    tone === 'good'   ? '#3ed598' :
+    tone === 'warn'   ? '#ffb547' :
+    tone === 'bad'    ? '#ff5470' :
+    tone === 'accent' ? 'var(--accent)' :
+                        'var(--text)';
+  return (
+    <div
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: 12,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        minHeight: 64,
+      }}
+    >
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          color: 'var(--text-dim)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+        }}
+      >
+        {label}
+      </span>
+      <span style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1.1 }}>
+        {value}
+      </span>
+      {subtitle && (
+        <span style={{ fontSize: 10, color: 'var(--text-dim)', lineHeight: 1.3 }}>
+          {subtitle}
+        </span>
+      )}
     </div>
   );
 }
