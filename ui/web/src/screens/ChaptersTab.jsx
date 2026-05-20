@@ -315,26 +315,53 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   useEffect(() => {
     setTrackPeaks(null);
   }, [project?.mediaPath]);
+  // Cooperative cancel: librosa.load is a blocking C-side call so we
+  // can't kill the decode mid-flight; the flag just discards the result
+  // and clears UI state when the user hits Cancel.
+  const peaksCancelledRef = useRef(false);
   useEffect(() => {
     if (viewerMode !== 'audio') return;
     if (!project?.mediaPath) return;
     if (trackPeaks || peaksLoading) return;
     let cancelled = false;
+    peaksCancelledRef.current = false;
     setPeaksLoading(true);
+    // Pre-seed the depth-2 step list so the user sees the upcoming work
+    // before any events fire. The App-level ff:progress listener
+    // promotes "decode" to running, then to done with summary, and so
+    // on. On sidecar cache hit no events fire; the busy banner blinks
+    // past as the promise resolves.
+    setBusy?.({
+      message: 'Loading audio peaks…',
+      steps: [
+        { label: 'decode', status: 'queued' },
+        { label: 'rms', status: 'queued' },
+        { label: 'write', status: 'queued' },
+      ],
+      onCancel: () => {
+        peaksCancelledRef.current = true;
+        setPeaksLoading(false);
+        setBusy?.(null);
+      },
+    });
     analyzeAudioPeaks(project.mediaPath, 10)
       .then((res) => {
-        if (cancelled) return;
+        if (cancelled || peaksCancelledRef.current) return;
         if (res?.peaks?.length) {
           setTrackPeaks({ peaks: res.peaks, durationMs: res.durationMs, hopMs: res.hopMs });
         }
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (cancelled || peaksCancelledRef.current) return;
         console.warn('ChaptersTab: analyzeAudioPeaks failed', err);
       })
-      .finally(() => { if (!cancelled) setPeaksLoading(false); });
+      .finally(() => {
+        if (cancelled || peaksCancelledRef.current) return;
+        setPeaksLoading(false);
+        setBusy?.(null);
+      });
     return () => { cancelled = true; };
-  }, [viewerMode, project?.mediaPath, trackPeaks, peaksLoading]);
+  }, [viewerMode, project?.mediaPath, trackPeaks, peaksLoading, setBusy]);
 
   // Chapter-scoped slice of the full-track peaks. Indexed by ms ratio
   // against the track's reported duration (NOT project.durationMs —

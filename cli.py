@@ -1111,20 +1111,39 @@ def cmd_audio_peaks(args):
     unless --force is passed. Emits the full sidecar dict to stdout (in
     --format json) so the Tauri bridge can consume it without a second
     file read.
+
+    Emits depth-2 stage events (decode / rms / write) via _emit_progress so
+    the Tauri bridge can render a live step checklist in the busy footer.
+    Skipped entirely on sidecar cache hit — the parse is sub-50ms.
     """
-    from forge.audio_peaks import extract_peaks, load_peaks, write_sidecar, sidecar_path
+    from forge.audio_peaks import (
+        decode_audio, compute_peaks, load_peaks, write_sidecar, sidecar_path,
+    )
 
     cached = None if args.force else load_peaks(args.media)
     if cached is not None:
         data = cached
         from_sidecar = True
     else:
-        data = extract_peaks(args.media, hop_ms=args.hop_ms)
-        if data is None:
-            print("audio-peaks: extraction failed (see warnings above).", file=sys.stderr)
+        _emit_progress("start::2::decode")
+        samples = decode_audio(args.media)
+        if samples is None:
+            print("audio-peaks: decode failed (see warnings above).", file=sys.stderr)
             sys.exit(1)
+        _emit_progress(f"done::2::decode::{len(samples) / 22050:.1f}s audio")
+
+        _emit_progress("start::2::rms")
+        data = compute_peaks(samples, hop_ms=args.hop_ms)
+        if data is None:
+            print("audio-peaks: compute failed (see warnings above).", file=sys.stderr)
+            sys.exit(1)
+        _emit_progress(f"done::2::rms::{data['peak_count']} peaks @ {data['hop_ms']}ms")
+
         if not args.no_write:
+            _emit_progress("start::2::write")
             write_sidecar(args.media, data)
+            _emit_progress("done::2::write")
+
         from_sidecar = False
 
     if args.format == "json":

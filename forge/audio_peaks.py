@@ -70,30 +70,14 @@ def load_peaks(media_path: str) -> dict | None:
         return None
 
 
-def extract_peaks(
-    media_path: str,
-    hop_ms: int = 10,
-    sr: int = 22050,
-) -> dict | None:
-    """Decode media audio and compute per-hop RMS peaks.
+def decode_audio(media_path: str, sr: int = 22050):
+    """Stage 1: decode media to mono float32 samples at `sr` Hz.
 
-    Parameters
-    ----------
-    media_path:  Path to source media (video or audio).
-    hop_ms:      Window size in milliseconds. 10ms (default) gives
-                 ~100 peaks/sec; a 30-minute track ≈ 180k floats ≈ 1.4MB
-                 JSON. Larger hop trades resolution for file size.
-    sr:          Resampler sample rate (default 22050 Hz). The hop window
-                 in samples is `sr * hop_ms / 1000`.
+    Exposed separately from compute_peaks so cli.py can emit progress
+    stage events between decode and RMS — the decode is the slow path
+    (tens of seconds for a long track), the RMS pass is sub-second.
 
-    Returns
-    -------
-    dict with keys: version, hop_ms, duration_ms, peaks, peak_count,
-    generated_by. Or None if dependencies are missing / decode failed.
-
-    Peaks are RMS magnitudes normalized into [0, 1] against the global
-    max. Normalizing per-track (rather than per-hop) preserves dynamic
-    range — a quiet passage reads as quiet, not "loudest local sound."
+    Returns the numpy samples array, or None on dep / decode failure.
     """
     missing = _check_deps()
     if missing:
@@ -102,12 +86,6 @@ def extract_peaks(
             "Install with: pip install librosa numpy"
         )
         return None
-
-    if hop_ms < 1:
-        raise ValueError(f"hop_ms must be >= 1, got {hop_ms}")
-
-    import numpy as np
-
     try:
         samples = _load_audio(media_path, sr=sr)
     except Exception as exc:
@@ -116,9 +94,24 @@ def extract_peaks(
     if samples is None or len(samples) == 0:
         warnings.warn(f"audio-peaks: no audio data from {media_path!r}")
         return None
+    return samples
+
+
+def compute_peaks(samples, hop_ms: int = 10, sr: int = 22050) -> dict | None:
+    """Stage 2: per-hop RMS over decoded samples.
+
+    Peaks are RMS magnitudes normalized into [0, 1] against the global
+    max. Normalizing per-track (rather than per-hop) preserves dynamic
+    range — a quiet passage reads as quiet, not "loudest local sound."
+
+    Returns the full sidecar dict, or None when audio is too short for
+    the requested hop.
+    """
+    if hop_ms < 1:
+        raise ValueError(f"hop_ms must be >= 1, got {hop_ms}")
+    import numpy as np
 
     hop_samples = max(1, int(round(sr * hop_ms / 1000.0)))
-    # Trim to a multiple of hop_samples so we can reshape into hops.
     n_hops = len(samples) // hop_samples
     if n_hops == 0:
         warnings.warn(f"audio-peaks: audio too short for hop_ms={hop_ms}")
@@ -126,15 +119,13 @@ def extract_peaks(
     trimmed = samples[: n_hops * hop_samples].astype(np.float32, copy=False)
     frames = trimmed.reshape(n_hops, hop_samples)
 
-    # RMS per hop. Squaring float32 stays in float32 → fast and bounded.
     rms = np.sqrt(np.mean(frames * frames, axis=1))
     peak_max = float(np.max(rms))
     if peak_max > 0:
         norm = (rms / peak_max).astype(np.float32, copy=False)
     else:
-        norm = rms  # all-silence track — leave zeros
+        norm = rms
     peaks = [round(float(v), 4) for v in norm]
-
     duration_ms = int(round(n_hops * hop_ms))
 
     return {
@@ -149,6 +140,21 @@ def extract_peaks(
             "sample_rate": sr,
         },
     }
+
+
+def extract_peaks(
+    media_path: str,
+    hop_ms: int = 10,
+    sr: int = 22050,
+) -> dict | None:
+    """Convenience wrapper: decode + compute in one call. No progress
+    emission — use `decode_audio` + `compute_peaks` directly when you
+    need per-stage events.
+    """
+    samples = decode_audio(media_path, sr=sr)
+    if samples is None:
+        return None
+    return compute_peaks(samples, hop_ms=hop_ms, sr=sr)
 
 
 def write_sidecar(media_path: str, data: dict) -> str:

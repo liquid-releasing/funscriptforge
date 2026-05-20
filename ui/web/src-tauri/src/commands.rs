@@ -701,6 +701,7 @@ fn default_hop_ms() -> u32 { 10 }
 
 #[tauri::command]
 pub async fn analyze_audio_peaks(
+    app: AppHandle,
     media_path: String,
     hop_ms: Option<u32>,
     force: Option<bool>,
@@ -713,7 +714,12 @@ pub async fn analyze_audio_peaks(
     if force.unwrap_or(false) {
         args.push("--force");
     }
-    let stdout = run_cli(&args).await?;
+    // Stream depth-2 stage events ("decode" / "rms" / "write") into the
+    // global busy footer via the same `ff:progress` channel used by
+    // analyze_chapters_with_videoflow and analyze_phrases. Skipped events
+    // on sidecar cache hit (decode is bypassed entirely) — the consumer
+    // sees a brief busy banner with no steps, then the result lands.
+    let stdout = run_cli_with_progress(&app, "ff:progress", &args).await?;
     let parsed: CliAudioPeaks = serde_json::from_str(&stdout)
         .map_err(|e| format!("could not parse cli.py audio-peaks output: {}", e))?;
 
