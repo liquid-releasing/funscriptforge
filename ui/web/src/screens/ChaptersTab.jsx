@@ -223,7 +223,7 @@ function mergeWorkingActions({ originalActions, chapters, acceptedIds, tones, pa
 // number of hooks" guard.
 const EMPTY_CHAPTER = { id: '__empty__', atMs: 0, endMs: 0, name: '', color: '#888' };
 
-export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks }) {
+export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, requestAudioPeaks }) {
   const totalMs = project?.durationMs ?? 0;
   const actions = Array.isArray(project?.actions) ? project.actions : [];
 
@@ -301,10 +301,14 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   const [currentMs, setCurrentMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   // MediaViewer mode is uncontrolled (defaults to video, user toggles
-  // freely via the chip strip). The lazy-on-mode-switch gate that used
-  // to live here moved up to App.jsx, which now eager-loads peaks the
-  // moment a project lands with a mediaPath — that keeps the librosa
-  // decode out of the editing path. trackPeaks arrives here as a prop.
+  // freely via the chip strip). Audio peaks are App-level shared state
+  // that we request on tab mount — App holds trackPeaks; tabs that
+  // don't consume audio (Characters → Export estim path) never call
+  // requestAudioPeaks and never pay the decode cost. The request
+  // function is idempotent and collapses concurrent calls.
+  useEffect(() => {
+    requestAudioPeaks?.();
+  }, [requestAudioPeaks]);
 
   // The ChapterRibbon baton renders in all viewer modes — earlier shape
   // hid it in video mode but that conflated two batons. The MediaViewer's

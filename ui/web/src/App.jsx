@@ -7,7 +7,7 @@
 //   - Env badge: Tauri vs browser
 //   - Bridge ping: confirms the platform adapter is wired
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   TopBar, ScopePicker, AcceptBar, StatusBar,
   Button, Pill,
@@ -221,28 +221,36 @@ export default function App() {
     };
   }, []);
 
-  // Eager audio-peaks load — kick off the librosa decode the moment a
-  // project lands with a mediaPath, so by the time the user toggles to
-  // Audio mode (or navigates to another tab that consumes peaks), the
-  // sidecar is already on disk and trackPeaks is hydrated. Background:
-  // running this lazily on Audio-mode toggle put the 30s decode in the
-  // user's editing path and made playback choppy mid-session
-  // (project-audio-peaks-landed dogfood pass). App-level state also
-  // means the work isn't re-done when the user switches between tabs
-  // that share the same project.
+  // Audio-peaks load is tab-triggered: tabs that need the waveform
+  // (Chapters, Phrases, Stanzas, Events when they wire it) call
+  // `requestAudioPeaks` on mount; tabs that don't (Characters →
+  // Export estim-only path, Library, Project, Device) never trigger
+  // the decode. App-level state means a tab re-mount doesn't repeat
+  // the work, and a result returning after the user navigated away
+  // still lands so the next tab that needs it has it ready.
   //
   // Identity guard: tag the result with the mediaPath we decoded so a
   // late-arriving result from a previous project can't clobber the
-  // current one. Same reason consumers should verify identity before
-  // using these peaks.
+  // current one. Consumers should verify identity before use.
   const openedMediaPath = (typeof openedProject === 'object' && openedProject?.mediaPath) || null;
+  // When the project / media changes, clear stale peaks so the next
+  // consumer sees a clean slate.
   useEffect(() => {
-    if (!openedMediaPath) {
-      setTrackPeaks(null);
-      return undefined;
-    }
-    // Already loaded for this exact media — don't refire.
-    if (trackPeaks && trackPeaks.mediaPath === openedMediaPath) return undefined;
+    setTrackPeaks((prev) =>
+      prev && prev.mediaPath !== openedMediaPath ? null : prev,
+    );
+  }, [openedMediaPath]);
+  // Track an in-flight load so concurrent requestAudioPeaks calls from
+  // different tabs collapse to one decode.
+  const peaksInFlightRef = useRef(null);
+  const requestAudioPeaks = useCallback(() => {
+    if (!openedMediaPath) return;
+    // Already loaded for this exact media — no-op.
+    if (trackPeaks && trackPeaks.mediaPath === openedMediaPath) return;
+    // Decode already in flight for this media — let it finish.
+    if (peaksInFlightRef.current === openedMediaPath) return;
+    peaksInFlightRef.current = openedMediaPath;
+    const mediaPathAtStart = openedMediaPath;
     let staleGuard = false;
     setBusy?.({
       message: 'Building audio peaks (background)…',
@@ -253,10 +261,11 @@ export default function App() {
       ],
       onCancel: () => {
         staleGuard = true;
+        peaksInFlightRef.current = null;
         setBusy?.(null);
       },
     });
-    analyzeAudioPeaks(openedMediaPath, 10)
+    analyzeAudioPeaks(mediaPathAtStart, 10)
       .then((res) => {
         if (staleGuard) return;
         if (res?.peaks?.length) {
@@ -264,7 +273,7 @@ export default function App() {
             peaks: res.peaks,
             durationMs: res.durationMs,
             hopMs: res.hopMs,
-            mediaPath: openedMediaPath,
+            mediaPath: mediaPathAtStart,
           });
         }
       })
@@ -273,11 +282,13 @@ export default function App() {
         console.warn('App: analyzeAudioPeaks failed', err);
       })
       .finally(() => {
+        if (peaksInFlightRef.current === mediaPathAtStart) {
+          peaksInFlightRef.current = null;
+        }
         if (staleGuard) return;
         setBusy?.(null);
       });
-    return undefined;
-  }, [openedMediaPath, trackPeaks]);
+  }, [openedMediaPath, trackPeaks, setBusy]);
 
   const handleProjectOpened = (project) => {
     setOpenedProject(project);
@@ -615,6 +626,7 @@ export default function App() {
             setBusy={setBusy}
             setAppError={setAppError}
             trackPeaks={trackPeaks}
+            requestAudioPeaks={requestAudioPeaks}
           />
         )}
         {tab === 'patterns' && (
