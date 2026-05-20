@@ -24,7 +24,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Icon, MediaViewer, Slider, ChapterRibbon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
-import { createChaptersSidecar, analyzeChaptersWithVideoflow, analyzeAudioPeaks } from '../api/forge.js';
+import { createChaptersSidecar, analyzeChaptersWithVideoflow } from '../api/forge.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 
 // The six canonical tones. Source of truth: forge/tabs/tone_tab.py::_TONES
@@ -223,7 +223,7 @@ function mergeWorkingActions({ originalActions, chapters, acceptedIds, tones, pa
 // number of hooks" guard.
 const EMPTY_CHAPTER = { id: '__empty__', atMs: 0, endMs: 0, name: '', color: '#888' };
 
-export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError }) {
+export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks }) {
   const totalMs = project?.durationMs ?? 0;
   const actions = Array.isArray(project?.actions) ? project.actions : [];
 
@@ -300,73 +300,11 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // video already reported.
   const [currentMs, setCurrentMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  // MediaViewer mode lives here (controlled) so we can lazy-load audio
-  // peaks the first time the user toggles to Audio. Without controlled
-  // mode we'd have no signal to gate the librosa-decode cost on.
-  const [viewerMode, setViewerMode] = useState('video');
-  // Full-track audio peaks. Loaded lazily on the first switch to Audio
-  // mode (and reset when mediaPath changes). The CLI caches a sidecar so
-  // the second visit is a cheap JSON parse. We hold the full-track shape
-  // and derive a chapter-scoped slice below — the viewer is chapter-
-  // scoped (batonPos is chapter-relative inside MediaViewer), so feeding
-  // it full-track peaks would mis-align the waveform with the playhead.
-  const [trackPeaks, setTrackPeaks] = useState(null);
-  const [peaksLoading, setPeaksLoading] = useState(false);
-  useEffect(() => {
-    setTrackPeaks(null);
-  }, [project?.mediaPath]);
-  // Cooperative cancel: librosa.load is a blocking C-side call so we
-  // can't kill the decode mid-flight; the flag just discards the result
-  // and clears UI state when the user hits Cancel.
-  const peaksCancelledRef = useRef(false);
-  useEffect(() => {
-    if (viewerMode !== 'audio') return undefined;
-    if (!project?.mediaPath) return undefined;
-    if (trackPeaks || peaksLoading) return undefined;
-    peaksCancelledRef.current = false;
-    setPeaksLoading(true);
-    // Pre-seed the depth-2 step list so the user sees the upcoming work
-    // before any events fire. The App-level ff:progress listener
-    // promotes "decode" to running, then to done with summary, and so
-    // on. On sidecar cache hit no events fire; the busy banner blinks
-    // past as the promise resolves.
-    setBusy?.({
-      message: 'Loading audio peaks…',
-      steps: [
-        { label: 'decode', status: 'queued' },
-        { label: 'rms', status: 'queued' },
-        { label: 'write', status: 'queued' },
-      ],
-      onCancel: () => {
-        peaksCancelledRef.current = true;
-        setPeaksLoading(false);
-        setBusy?.(null);
-      },
-    });
-    // No local `cancelled` flag: the effect re-runs as soon as we call
-    // setTrackPeaks (since trackPeaks is in our deps), and an old-style
-    // closure flag would then skip the .finally cleanup, leaving the
-    // busy banner stuck on green checks forever. peaksCancelledRef is
-    // the right gate — it only fires on the explicit user Cancel
-    // (which already cleared busy via onCancel above).
-    analyzeAudioPeaks(project.mediaPath, 10)
-      .then((res) => {
-        if (peaksCancelledRef.current) return;
-        if (res?.peaks?.length) {
-          setTrackPeaks({ peaks: res.peaks, durationMs: res.durationMs, hopMs: res.hopMs });
-        }
-      })
-      .catch((err) => {
-        if (peaksCancelledRef.current) return;
-        console.warn('ChaptersTab: analyzeAudioPeaks failed', err);
-      })
-      .finally(() => {
-        if (peaksCancelledRef.current) return;
-        setPeaksLoading(false);
-        setBusy?.(null);
-      });
-    return undefined;
-  }, [viewerMode, project?.mediaPath, trackPeaks, peaksLoading, setBusy]);
+  // MediaViewer mode is uncontrolled (defaults to video, user toggles
+  // freely via the chip strip). The lazy-on-mode-switch gate that used
+  // to live here moved up to App.jsx, which now eager-loads peaks the
+  // moment a project lands with a mediaPath — that keeps the librosa
+  // decode out of the editing path. trackPeaks arrives here as a prop.
 
   // The ChapterRibbon baton renders in all viewer modes — earlier shape
   // hid it in video mode but that conflated two batons. The MediaViewer's
@@ -698,8 +636,6 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           <MediaViewer
             videoSrc={toMediaUrl(project?.mediaPath)}
             media={{ kind: project?.mediaKind ?? 'video', title: active.name || active.id }}
-            mode={viewerMode}
-            onModeChange={setViewerMode}
             audioWaveform={audioWaveform}
             chapter={{
               id: active.id,

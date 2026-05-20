@@ -12,7 +12,7 @@ import {
   TopBar, ScopePicker, AcceptBar, StatusBar,
   Button, Pill,
 } from 'forgemoment';
-import { isTauri, ping, loadProject, attachMedia, pickMediaFile } from './api/forge.js';
+import { isTauri, ping, loadProject, attachMedia, pickMediaFile, analyzeAudioPeaks } from './api/forge.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
 import DeviceTab from './screens/DeviceTab.jsx';
@@ -88,6 +88,15 @@ export default function App() {
   // Long-running ops (load_project, classify-patterns, transform apply,
   // export) drive this; a single surface beats N per-tab spinners.
   const [busy, setBusy] = useState(null);
+  // App-level audio peaks for the MediaViewer Audio mode. Lifted out of
+  // ChaptersTab so we can eager-load on project open (= no interruption
+  // when the user toggles to Audio while editing) and so other tabs
+  // (Phrases, Stanzas, Patterns, Characters when they wire Audio mode)
+  // can read the same full-track peaks without re-decoding. Shape:
+  //   { peaks: number[], durationMs: number, hopMs: number, mediaPath }
+  // The `mediaPath` field guards against stale data when the user
+  // switches projects mid-decode — consumers check identity before use.
+  const [trackPeaks, setTrackPeaks] = useState(null);
   // selectedDevices is lifted here so it survives tab switches — once the
   // user picks devices in Project, downstream tabs (Device, Stim, Multi-axis)
   // see the same selection without re-prompting.
@@ -211,6 +220,64 @@ export default function App() {
       if (unlistenFn) unlistenFn();
     };
   }, []);
+
+  // Eager audio-peaks load — kick off the librosa decode the moment a
+  // project lands with a mediaPath, so by the time the user toggles to
+  // Audio mode (or navigates to another tab that consumes peaks), the
+  // sidecar is already on disk and trackPeaks is hydrated. Background:
+  // running this lazily on Audio-mode toggle put the 30s decode in the
+  // user's editing path and made playback choppy mid-session
+  // (project-audio-peaks-landed dogfood pass). App-level state also
+  // means the work isn't re-done when the user switches between tabs
+  // that share the same project.
+  //
+  // Identity guard: tag the result with the mediaPath we decoded so a
+  // late-arriving result from a previous project can't clobber the
+  // current one. Same reason consumers should verify identity before
+  // using these peaks.
+  const openedMediaPath = (typeof openedProject === 'object' && openedProject?.mediaPath) || null;
+  useEffect(() => {
+    if (!openedMediaPath) {
+      setTrackPeaks(null);
+      return undefined;
+    }
+    // Already loaded for this exact media — don't refire.
+    if (trackPeaks && trackPeaks.mediaPath === openedMediaPath) return undefined;
+    let staleGuard = false;
+    setBusy?.({
+      message: 'Building audio peaks (background)…',
+      steps: [
+        { label: 'decode', status: 'queued' },
+        { label: 'rms', status: 'queued' },
+        { label: 'write', status: 'queued' },
+      ],
+      onCancel: () => {
+        staleGuard = true;
+        setBusy?.(null);
+      },
+    });
+    analyzeAudioPeaks(openedMediaPath, 10)
+      .then((res) => {
+        if (staleGuard) return;
+        if (res?.peaks?.length) {
+          setTrackPeaks({
+            peaks: res.peaks,
+            durationMs: res.durationMs,
+            hopMs: res.hopMs,
+            mediaPath: openedMediaPath,
+          });
+        }
+      })
+      .catch((err) => {
+        if (staleGuard) return;
+        console.warn('App: analyzeAudioPeaks failed', err);
+      })
+      .finally(() => {
+        if (staleGuard) return;
+        setBusy?.(null);
+      });
+    return undefined;
+  }, [openedMediaPath, trackPeaks]);
 
   const handleProjectOpened = (project) => {
     setOpenedProject(project);
@@ -547,6 +614,7 @@ export default function App() {
             onActionsPatch={handleActionsPatch}
             setBusy={setBusy}
             setAppError={setAppError}
+            trackPeaks={trackPeaks}
           />
         )}
         {tab === 'patterns' && (
