@@ -12,7 +12,10 @@ import {
   TopBar, ScopePicker, AcceptBar, StatusBar,
   Button, Pill,
 } from 'forgemoment';
-import { isTauri, ping, loadProject, attachMedia, pickMediaFile, analyzeAudioPeaks } from './api/forge.js';
+import {
+  isTauri, ping, loadProject, attachMedia, pickMediaFile,
+  loadAudioPeaks, loadAudioSpectrogram,
+} from './api/forge.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
 import DeviceTab from './screens/DeviceTab.jsx';
@@ -88,15 +91,23 @@ export default function App() {
   // Long-running ops (load_project, classify-patterns, transform apply,
   // export) drive this; a single surface beats N per-tab spinners.
   const [busy, setBusy] = useState(null);
-  // App-level audio peaks for the MediaViewer Audio mode. Lifted out of
-  // ChaptersTab so we can eager-load on project open (= no interruption
-  // when the user toggles to Audio while editing) and so other tabs
-  // (Phrases, Stanzas, Patterns, Characters when they wire Audio mode)
-  // can read the same full-track peaks without re-decoding. Shape:
-  //   { peaks: number[], durationMs: number, hopMs: number, mediaPath }
+  // App-level audio sidecars for the MediaViewer Audio + Spectrogram
+  // modes. Both are pure sidecar reads off disk — the build happens
+  // upstream during `videoflow.structural.auto_chapter` so they share
+  // one decode with chapter / beat / phrase analysis. There is NO lazy
+  // build path here anymore (it caused multi-session sidecar rebuilds
+  // and burped video playback on first mode toggle — see
+  // [[project-spectrogram-in-flight]]).
+  //
+  // trackPeaks shape:        { peaks: number[], durationMs, hopMs, mediaPath }
+  // trackSpectrogram shape:  { cells: Uint8Array, nMels, nFrames, hopMs,
+  //                            durationMs, dbFloor, dbCeiling, fmax, mediaPath }
+  //
   // The `mediaPath` field guards against stale data when the user
-  // switches projects mid-decode — consumers check identity before use.
+  // switches projects between async reads — consumers check identity
+  // before use.
   const [trackPeaks, setTrackPeaks] = useState(null);
+  const [trackSpectrogram, setTrackSpectrogram] = useState(null);
   // selectedDevices is lifted here so it survives tab switches — once the
   // user picks devices in Project, downstream tabs (Device, Stim, Multi-axis)
   // see the same selection without re-prompting.
@@ -221,74 +232,80 @@ export default function App() {
     };
   }, []);
 
-  // Audio-peaks load is tab-triggered: tabs that need the waveform
-  // (Chapters, Phrases, Stanzas, Events when they wire it) call
-  // `requestAudioPeaks` on mount; tabs that don't (Characters →
-  // Export estim-only path, Library, Project, Device) never trigger
-  // the decode. App-level state means a tab re-mount doesn't repeat
-  // the work, and a result returning after the user navigated away
-  // still lands so the next tab that needs it has it ready.
+  // Audio sidecar load — pure read off disk, no decode, no compute.
+  // Both sidecars (.audio.json, .spectrogram.json) are written upstream
+  // by `videoflow.structural.auto_chapter` as part of the chapter pass.
+  // On project open, we attempt to read both; if either is absent, the
+  // viewer renders an empty state pointing at "Analyze with videoflow."
   //
-  // Identity guard: tag the result with the mediaPath we decoded so a
-  // late-arriving result from a previous project can't clobber the
-  // current one. Consumers should verify identity before use.
+  // `refreshAudioSidecars` is called after the chapter analysis flow
+  // completes so the freshly-written sidecars get loaded without
+  // requiring a project re-open.
   const openedMediaPath = (typeof openedProject === 'object' && openedProject?.mediaPath) || null;
-  // When the project / media changes, clear stale peaks so the next
-  // consumer sees a clean slate.
+
+  const _doLoadAudioSidecars = useCallback((mediaPath) => {
+    if (!mediaPath) return;
+    Promise.all([
+      loadAudioPeaks(mediaPath).catch((err) => {
+        console.warn('App: loadAudioPeaks failed', err);
+        return null;
+      }),
+      loadAudioSpectrogram(mediaPath).catch((err) => {
+        console.warn('App: loadAudioSpectrogram failed', err);
+        return null;
+      }),
+    ]).then(([peaks, spec]) => {
+      // Identity guard — user may have switched projects while the
+      // async reads were in flight. Only commit results matching the
+      // mediaPath we started the read for.
+      if (peaks && peaks.peaks?.length) {
+        setTrackPeaks((prev) => {
+          if (prev && prev.mediaPath !== mediaPath && openedMediaPath !== mediaPath) {
+            return prev;
+          }
+          return { ...peaks, mediaPath };
+        });
+      } else if (openedMediaPath === mediaPath) {
+        setTrackPeaks(null);
+      }
+      if (spec && spec.cells?.length) {
+        setTrackSpectrogram((prev) => {
+          if (prev && prev.mediaPath !== mediaPath && openedMediaPath !== mediaPath) {
+            return prev;
+          }
+          return { ...spec, mediaPath };
+        });
+      } else if (openedMediaPath === mediaPath) {
+        setTrackSpectrogram(null);
+      }
+    });
+  }, [openedMediaPath]);
+
+  // Auto-load on project change. Clear stale state first so consumers
+  // don't briefly see another project's data.
   useEffect(() => {
+    if (!openedMediaPath) {
+      setTrackPeaks(null);
+      setTrackSpectrogram(null);
+      return undefined;
+    }
     setTrackPeaks((prev) =>
       prev && prev.mediaPath !== openedMediaPath ? null : prev,
     );
-  }, [openedMediaPath]);
-  // Track an in-flight load so concurrent requestAudioPeaks calls from
-  // different tabs collapse to one decode.
-  const peaksInFlightRef = useRef(null);
-  const requestAudioPeaks = useCallback(() => {
-    if (!openedMediaPath) return;
-    // Already loaded for this exact media — no-op.
-    if (trackPeaks && trackPeaks.mediaPath === openedMediaPath) return;
-    // Decode already in flight for this media — let it finish.
-    if (peaksInFlightRef.current === openedMediaPath) return;
-    peaksInFlightRef.current = openedMediaPath;
-    const mediaPathAtStart = openedMediaPath;
-    let staleGuard = false;
-    setBusy?.({
-      message: 'Building audio peaks (background)…',
-      steps: [
-        { label: 'decode', status: 'queued' },
-        { label: 'rms', status: 'queued' },
-        { label: 'write', status: 'queued' },
-      ],
-      onCancel: () => {
-        staleGuard = true;
-        peaksInFlightRef.current = null;
-        setBusy?.(null);
-      },
-    });
-    analyzeAudioPeaks(mediaPathAtStart, 10)
-      .then((res) => {
-        if (staleGuard) return;
-        if (res?.peaks?.length) {
-          setTrackPeaks({
-            peaks: res.peaks,
-            durationMs: res.durationMs,
-            hopMs: res.hopMs,
-            mediaPath: mediaPathAtStart,
-          });
-        }
-      })
-      .catch((err) => {
-        if (staleGuard) return;
-        console.warn('App: analyzeAudioPeaks failed', err);
-      })
-      .finally(() => {
-        if (peaksInFlightRef.current === mediaPathAtStart) {
-          peaksInFlightRef.current = null;
-        }
-        if (staleGuard) return;
-        setBusy?.(null);
-      });
-  }, [openedMediaPath, trackPeaks, setBusy]);
+    setTrackSpectrogram((prev) =>
+      prev && prev.mediaPath !== openedMediaPath ? null : prev,
+    );
+    _doLoadAudioSidecars(openedMediaPath);
+    return undefined;
+  }, [openedMediaPath, _doLoadAudioSidecars]);
+
+  // Callback for ChaptersTab to invoke after chapter analysis completes
+  // (auto_chapter writes both sidecars as part of its pipeline). Could
+  // also be invoked manually if we ever expose a "rebuild sidecars"
+  // affordance — but the chapter-analysis path is the canonical trigger.
+  const refreshAudioSidecars = useCallback(() => {
+    _doLoadAudioSidecars(openedMediaPath);
+  }, [_doLoadAudioSidecars, openedMediaPath]);
 
   const handleProjectOpened = (project) => {
     setOpenedProject(project);
@@ -626,7 +643,8 @@ export default function App() {
             setBusy={setBusy}
             setAppError={setAppError}
             trackPeaks={trackPeaks}
-            requestAudioPeaks={requestAudioPeaks}
+            trackSpectrogram={trackSpectrogram}
+            refreshAudioSidecars={refreshAudioSidecars}
           />
         )}
         {tab === 'patterns' && (

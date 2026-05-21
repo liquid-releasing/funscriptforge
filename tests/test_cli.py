@@ -575,5 +575,101 @@ class TestFunnelTransform(unittest.TestCase):
             self.assertLessEqual(a["pos"], 100)
 
 
+class TestCliAudioPeaks(unittest.TestCase):
+    """The audio-peaks subcommand round-trips through the
+    ``forge.audio_peaks`` shim into ``videoflow.audio_peaks``. If the
+    shim drops any of the legacy names (decode_audio / compute_peaks /
+    load_peaks / write_sidecar / sidecar_path) the command breaks, so
+    this test guards the shim contract.
+
+    Audio is synthesised on the fly (~1s sine) so the test stays fast
+    and doesn't need a bundled binary fixture.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # Skip the whole class if soundfile isn't available — same posture
+        # as the videoflow structural tests.
+        try:
+            import soundfile as _sf  # noqa: F401
+            import numpy as _np  # noqa: F401
+        except ImportError:
+            raise unittest.SkipTest("soundfile / numpy required for audio CLI tests")
+
+    def setUp(self):
+        import numpy as np
+        import soundfile as sf
+
+        self.tmp = tempfile.mkdtemp()
+        sr = 22050
+        t = np.arange(sr) / sr
+        y = (0.5 * np.sin(2.0 * np.pi * 440 * t)).astype(np.float32)
+        self.wav_path = os.path.join(self.tmp, "tone.wav")
+        sf.write(self.wav_path, y, sr, subtype="FLOAT")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_audio_peaks_json_stdout_shape(self):
+        # --no-write keeps the test cwd clean of sidecars; --format json
+        # emits the full dict to stdout so the Tauri bridge can consume
+        # it without a second file read.
+        rc, stdout, stderr = run(
+            "audio-peaks", self.wav_path,
+            "--no-write", "--format", "json",
+        )
+        self.assertEqual(rc, 0, f"stderr: {stderr}")
+        data = json.loads(stdout)
+        self.assertEqual(data["version"], "1.0")
+        self.assertEqual(data["hop_ms"], 10)
+        self.assertGreater(data["peak_count"], 0)
+        self.assertEqual(len(data["peaks"]), data["peak_count"])
+        self.assertFalse(data["from_sidecar"])
+
+    def test_audio_peaks_writes_sidecar(self):
+        rc, _, stderr = run("audio-peaks", self.wav_path)
+        self.assertEqual(rc, 0, f"stderr: {stderr}")
+        sidecar = self.wav_path.replace(".wav", ".audio.json")
+        self.assertTrue(os.path.exists(sidecar))
+        with open(sidecar) as f:
+            data = json.load(f)
+        self.assertEqual(data["version"], "1.0")
+        self.assertGreater(data["peak_count"], 0)
+
+    def test_audio_peaks_cached_sidecar_reused(self):
+        # First run writes the sidecar; second run should report
+        # from_sidecar=True (= no decode).
+        run("audio-peaks", self.wav_path)
+        rc, stdout, _ = run(
+            "audio-peaks", self.wav_path, "--format", "json",
+        )
+        self.assertEqual(rc, 0)
+        data = json.loads(stdout)
+        self.assertTrue(data["from_sidecar"])
+
+    def test_audio_peaks_force_recomputes(self):
+        run("audio-peaks", self.wav_path)
+        rc, stdout, _ = run(
+            "audio-peaks", self.wav_path, "--force", "--format", "json",
+        )
+        self.assertEqual(rc, 0)
+        data = json.loads(stdout)
+        self.assertFalse(data["from_sidecar"])
+
+    def test_audio_peaks_shim_re_exports_match(self):
+        """Direct symbol check — if the shim drops names, the CLI breaks
+        even if the subprocess paths above pass for some other reason."""
+        from forge.audio_peaks import (
+            decode_audio, compute_peaks, load_peaks,
+            write_sidecar, sidecar_path,
+        )
+        self.assertTrue(callable(decode_audio))
+        self.assertTrue(callable(compute_peaks))
+        self.assertTrue(callable(load_peaks))
+        self.assertTrue(callable(write_sidecar))
+        self.assertTrue(callable(sidecar_path))
+
+
 if __name__ == "__main__":
     unittest.main()

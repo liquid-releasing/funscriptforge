@@ -318,6 +318,88 @@ function mockAudioPeaks(hopMs) {
   return { hopMs, durationMs, peaks, peakCount: n, fromSidecar: false };
 }
 
+/** Load the pre-computed audio peaks sidecar for a media file (written by
+ *  `videoflow.structural.auto_chapter` during chapter analysis). This is a
+ *  read-only path — no decode, no compute, just a JSON parse off disk.
+ *  Returns null when the sidecar is absent (project hasn't had chapter
+ *  analysis run yet); the viewer renders an empty state in that case.
+ *
+ *  Shape on success: { hopMs, durationMs, peaks: number[] (0..1),
+ *                      peakCount, fromSidecar: true }. */
+export function loadAudioPeaks(mediaPath) {
+  return call(
+    'load_audio_peaks',
+    { mediaPath },
+    () => Promise.resolve(mockAudioPeaks(10)),
+  );
+}
+
+/** Load the pre-computed mel spectrogram sidecar for a media file (written
+ *  by `videoflow.structural.auto_chapter` during chapter analysis). Read-
+ *  only — no decode. Returns null when the sidecar is absent.
+ *
+ *  Decodes the base64 `cellsB64` into a Uint8Array before returning so
+ *  callers don't have to. The Uint8Array indexes directly into a magma
+ *  colormap LUT in the renderer (one byte per mel cell, time-major:
+ *  cells[t * nMels + bin]).
+ *
+ *  Shape on success: { hopMs, nMels, nFrames, durationMs, fmax,
+ *                      dbFloor, dbCeiling, cells: Uint8Array,
+ *                      fromSidecar: true }. */
+export async function loadAudioSpectrogram(mediaPath) {
+  const raw = await call(
+    'load_audio_spectrogram',
+    { mediaPath },
+    () => Promise.resolve(mockAudioSpectrogram()),
+  );
+  if (!raw) return null;
+  // Real path (Tauri / HTTP) returns cellsB64 string and we decode here.
+  // Mock path already returns cells as a Uint8Array — just pass through.
+  if (raw.cellsB64) {
+    const cells = decodeBase64ToUint8Array(raw.cellsB64);
+    const { cellsB64: _omit, ...rest } = raw;
+    return { ...rest, cells };
+  }
+  return raw;
+}
+
+function decodeBase64ToUint8Array(b64) {
+  if (!b64) return new Uint8Array(0);
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function mockAudioSpectrogram() {
+  // 60s mock at ~23ms hop × 64 mel bins. Synthesises a swept-tone pattern
+  // so the SpectrogramCanvas exercises its full colormap range in
+  // browser mode — no real librosa needed for layout work.
+  const hopMs = 23;
+  const nMels = 64;
+  const nFrames = Math.floor(60_000 / hopMs);
+  const cells = new Uint8Array(nFrames * nMels);
+  for (let t = 0; t < nFrames; t++) {
+    const sweep = (t / nFrames) * nMels;
+    for (let b = 0; b < nMels; b++) {
+      const d = Math.abs(b - sweep);
+      const v = Math.max(0, 200 - d * 18) + Math.sin(t * 0.4 + b * 0.3) * 20;
+      cells[t * nMels + b] = Math.max(0, Math.min(255, Math.floor(v)));
+    }
+  }
+  return {
+    hopMs,
+    nMels,
+    nFrames,
+    durationMs: nFrames * hopMs,
+    fmax: 8000,
+    dbFloor: -80,
+    dbCeiling: 0,
+    cells,
+    fromSidecar: false,
+  };
+}
+
 /** Attach a media file (video/audio) to an existing project. Real Tauri
  *  command stores the path on the project's metadata (and eventually
  *  the .ffmeta sidecar). Browser mock: echoes the path so the UI can

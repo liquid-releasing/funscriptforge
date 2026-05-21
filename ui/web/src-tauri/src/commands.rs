@@ -734,6 +734,143 @@ pub async fn analyze_audio_peaks(
 }
 
 // ---------------------------------------------------------------------------
+// Sidecar loaders — read existing `<stem>.audio.json` and `<stem>.spectrogram.json`
+// produced by `videoflow.structural.auto_chapter`. These are NOT analyze
+// commands — they only read what's already on disk. The build is owned by
+// the chapter-analysis pass (one user trigger, one deterministic build,
+// no video-burping lazy decodes mid-playback).
+//
+// Returns Ok(None) when the sidecar is absent so the frontend can render
+// an empty state nudging the user to run chapter analysis.
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoadedAudioPeaks {
+    pub hop_ms: u32,
+    pub duration_ms: u64,
+    pub peaks: Vec<f32>,
+    pub peak_count: usize,
+    pub from_sidecar: bool,
+}
+
+#[derive(Deserialize)]
+struct DiskAudioPeaks {
+    #[serde(default = "default_hop_ms")]
+    hop_ms: u32,
+    #[serde(default)]
+    duration_ms: u64,
+    #[serde(default)]
+    peaks: Vec<f32>,
+    #[serde(default)]
+    peak_count: usize,
+}
+
+fn peaks_sidecar_path(media_path: &str) -> String {
+    Path::new(media_path)
+        .with_extension("audio.json")
+        .to_string_lossy()
+        .into_owned()
+}
+
+#[tauri::command]
+pub async fn load_audio_peaks(
+    media_path: String,
+) -> Result<Option<LoadedAudioPeaks>, String> {
+    let sp = peaks_sidecar_path(&media_path);
+    if !Path::new(&sp).exists() {
+        return Ok(None);
+    }
+    let raw = tokio::fs::read_to_string(&sp)
+        .await
+        .map_err(|e| format!("could not read peaks sidecar at {}: {}", sp, e))?;
+    let parsed: DiskAudioPeaks = serde_json::from_str(&raw)
+        .map_err(|e| format!("could not parse peaks sidecar at {}: {}", sp, e))?;
+    let peak_count = if parsed.peak_count > 0 {
+        parsed.peak_count
+    } else {
+        parsed.peaks.len()
+    };
+    Ok(Some(LoadedAudioPeaks {
+        hop_ms: parsed.hop_ms,
+        duration_ms: parsed.duration_ms,
+        peaks: parsed.peaks,
+        peak_count,
+        from_sidecar: true,
+    }))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoadedAudioSpectrogram {
+    pub hop_ms: u32,
+    pub n_mels: u32,
+    pub n_frames: u32,
+    pub duration_ms: u64,
+    pub fmax: u32,
+    pub db_floor: f32,
+    pub db_ceiling: f32,
+    /// Base64-encoded uint8 Uint8Array[n_frames * n_mels], time-major.
+    /// The frontend atob() decodes into a Uint8Array and feeds the magma
+    /// LUT directly — each byte is the colormap index for one mel cell.
+    pub cells_b64: String,
+    pub from_sidecar: bool,
+}
+
+#[derive(Deserialize)]
+struct DiskAudioSpectrogram {
+    #[serde(default = "default_hop_ms")]
+    hop_ms: u32,
+    #[serde(default)]
+    n_mels: u32,
+    #[serde(default)]
+    n_frames: u32,
+    #[serde(default)]
+    duration_ms: u64,
+    #[serde(default)]
+    fmax: u32,
+    #[serde(default)]
+    db_floor: f32,
+    #[serde(default)]
+    db_ceiling: f32,
+    #[serde(default)]
+    cells_b64: String,
+}
+
+fn spectrogram_sidecar_path(media_path: &str) -> String {
+    Path::new(media_path)
+        .with_extension("spectrogram.json")
+        .to_string_lossy()
+        .into_owned()
+}
+
+#[tauri::command]
+pub async fn load_audio_spectrogram(
+    media_path: String,
+) -> Result<Option<LoadedAudioSpectrogram>, String> {
+    let sp = spectrogram_sidecar_path(&media_path);
+    if !Path::new(&sp).exists() {
+        return Ok(None);
+    }
+    let raw = tokio::fs::read_to_string(&sp)
+        .await
+        .map_err(|e| format!("could not read spectrogram sidecar at {}: {}", sp, e))?;
+    let parsed: DiskAudioSpectrogram = serde_json::from_str(&raw)
+        .map_err(|e| format!("could not parse spectrogram sidecar at {}: {}", sp, e))?;
+    Ok(Some(LoadedAudioSpectrogram {
+        hop_ms: parsed.hop_ms,
+        n_mels: parsed.n_mels,
+        n_frames: parsed.n_frames,
+        duration_ms: parsed.duration_ms,
+        fmax: parsed.fmax,
+        db_floor: parsed.db_floor,
+        db_ceiling: parsed.db_ceiling,
+        cells_b64: parsed.cells_b64,
+        from_sidecar: true,
+    }))
+}
+
+// ---------------------------------------------------------------------------
 // Attach media — wire a video/audio file to an existing project. Scaffolding
 // only today: validates the file exists and echoes the paths back to the
 // frontend so it can update its project state. Later: write into the

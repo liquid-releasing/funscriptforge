@@ -1,187 +1,43 @@
-"""
-Audio peaks sidecar — pre-computed waveform for the MediaViewer Audio mode.
+"""Audio peaks sidecar — thin re-export shim of :mod:`videoflow.audio_peaks`.
 
-extract_peaks(media_path, hop_ms=10, sr=22050) -> dict | None
-  Decodes audio from a video or audio file via PyAV (mono float32),
-  computes per-hop RMS, normalizes to [0, 1], and returns a sidecar
-  dict ready to write next to the media file.
+The peaks pipeline moved upstream to videoflow 2026-05-21 so all forge
+apps share one analysis path AND so peaks are built alongside chapters /
+spectrogram in `videoflow.structural.auto_chapter` (one user-triggered
+analysis pass writes all the sidecars at once, no more video-burping
+lazy decode on first viewer-mode toggle).
 
-load_peaks(media_path) -> dict | None
-  Reads <stem>.audio.json next to the media file, returns None if
-  absent or unparseable.
+This module exists only to keep `cli.py audio-peaks` and any other
+direct callers working without churn. Real implementations live in
+videoflow — see :mod:`videoflow.audio_peaks` for sidecar shape, the
+decode/compute split, and integration notes.
 
-Sidecar shape:
-    {
-      "version": "1.0",
-      "hop_ms": int,
-      "duration_ms": int,
-      "peaks": [float, ...],      # 0..1, length = duration_ms / hop_ms
-      "peak_count": int,
-      "generated_by": {"tool": "...", "method": "rms"}
-    }
+Importers can keep using these names; under the hood they call into
+videoflow:
 
-Returns None (with a warning) if PyAV / numpy aren't installed, so the UI
-can degrade gracefully — same shape as forge.beats.
+    from forge.audio_peaks import (
+        decode_audio, compute_peaks, load_peaks,
+        write_sidecar, sidecar_path,
+    )
+
+For the recommended path (build sidecars alongside chapter analysis),
+call `videoflow.structural.auto_chapter` instead — it now emits the
+peaks + spectrogram sidecars as part of the chapter pass.
 """
 
 from __future__ import annotations
 
-import json
-import warnings
-from pathlib import Path
-
-
-SIDECAR_SUFFIX = ".audio.json"
-SIDECAR_VERSION = "1.0"
-
-
-def _check_deps() -> list[str]:
-    missing = []
-    try:
-        import librosa  # noqa: F401
-    except ImportError:
-        missing.append("librosa")
-    try:
-        import numpy  # noqa: F401
-    except ImportError:
-        missing.append("numpy")
-    return missing
-
-
-def sidecar_path(media_path: str) -> str:
-    """Return the canonical sidecar path for the given media file.
-
-    Strips the media extension and appends `.audio.json`. The MediaViewer
-    lookup path on the Rust side mirrors this.
-    """
-    p = Path(media_path)
-    return str(p.with_suffix(SIDECAR_SUFFIX))
-
-
-def load_peaks(media_path: str) -> dict | None:
-    """Return the cached sidecar dict or None when absent / unparseable."""
-    sp = Path(sidecar_path(media_path))
-    if not sp.exists():
-        return None
-    try:
-        with open(sp) as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return None
-
-
-def decode_audio(media_path: str, sr: int = 22050):
-    """Stage 1: decode media to mono float32 samples at `sr` Hz.
-
-    Exposed separately from compute_peaks so cli.py can emit progress
-    stage events between decode and RMS — the decode is the slow path
-    (tens of seconds for a long track), the RMS pass is sub-second.
-
-    Returns the numpy samples array, or None on dep / decode failure.
-    """
-    missing = _check_deps()
-    if missing:
-        warnings.warn(
-            f"audio-peaks requires: {', '.join(missing)}. "
-            "Install with: pip install librosa numpy"
-        )
-        return None
-    try:
-        samples = _load_audio(media_path, sr=sr)
-    except Exception as exc:
-        warnings.warn(f"audio-peaks: could not load audio from {media_path!r}: {exc}")
-        return None
-    if samples is None or len(samples) == 0:
-        warnings.warn(f"audio-peaks: no audio data from {media_path!r}")
-        return None
-    return samples
-
-
-def compute_peaks(samples, hop_ms: int = 10, sr: int = 22050) -> dict | None:
-    """Stage 2: per-hop RMS over decoded samples.
-
-    Peaks are RMS magnitudes normalized into [0, 1] against the global
-    max. Normalizing per-track (rather than per-hop) preserves dynamic
-    range — a quiet passage reads as quiet, not "loudest local sound."
-
-    Returns the full sidecar dict, or None when audio is too short for
-    the requested hop.
-    """
-    if hop_ms < 1:
-        raise ValueError(f"hop_ms must be >= 1, got {hop_ms}")
-    import numpy as np
-
-    hop_samples = max(1, int(round(sr * hop_ms / 1000.0)))
-    n_hops = len(samples) // hop_samples
-    if n_hops == 0:
-        warnings.warn(f"audio-peaks: audio too short for hop_ms={hop_ms}")
-        return None
-    trimmed = samples[: n_hops * hop_samples].astype(np.float32, copy=False)
-    frames = trimmed.reshape(n_hops, hop_samples)
-
-    rms = np.sqrt(np.mean(frames * frames, axis=1))
-    peak_max = float(np.max(rms))
-    if peak_max > 0:
-        norm = (rms / peak_max).astype(np.float32, copy=False)
-    else:
-        norm = rms
-    peaks = [round(float(v), 4) for v in norm]
-    duration_ms = int(round(n_hops * hop_ms))
-
-    return {
-        "version": SIDECAR_VERSION,
-        "hop_ms": int(hop_ms),
-        "duration_ms": duration_ms,
-        "peaks": peaks,
-        "peak_count": len(peaks),
-        "generated_by": {
-            "tool": "funscriptforge.cli.audio-peaks",
-            "method": "rms",
-            "sample_rate": sr,
-        },
-    }
-
-
-def extract_peaks(
-    media_path: str,
-    hop_ms: int = 10,
-    sr: int = 22050,
-) -> dict | None:
-    """Convenience wrapper: decode + compute in one call. No progress
-    emission — use `decode_audio` + `compute_peaks` directly when you
-    need per-stage events.
-    """
-    samples = decode_audio(media_path, sr=sr)
-    if samples is None:
-        return None
-    return compute_peaks(samples, hop_ms=hop_ms, sr=sr)
-
-
-def write_sidecar(media_path: str, data: dict) -> str:
-    """Write `data` to `<stem>.audio.json` next to the media file.
-
-    Returns the sidecar path. Uses compact JSON (no indent) since peak
-    arrays explode in size when pretty-printed.
-    """
-    sp = sidecar_path(media_path)
-    Path(sp).parent.mkdir(parents=True, exist_ok=True)
-    with open(sp, "w") as f:
-        json.dump(data, f, separators=(",", ":"))
-    return sp
-
-
-def _load_audio(source: str, sr: int):
-    """Decode audio from `source` to mono float32 numpy array at `sr` Hz.
-
-    Uses librosa.load which routes through soundfile for plain audio and
-    audioread→ffmpeg for container formats (mp4/mkv/etc). Requires ffmpeg
-    to be on PATH for video sources. Returns None if the file has no
-    decodable audio.
-    """
-    import librosa
-    import numpy as np
-
-    samples, _ = librosa.load(source, sr=sr, mono=True)
-    if samples is None or samples.size == 0:
-        return None
-    return samples.astype(np.float32, copy=False)
+from videoflow.audio_peaks import (  # noqa: F401  (re-exports)
+    DEFAULT_HOP_MS,
+    DEFAULT_SAMPLE_RATE,
+    SIDECAR_SUFFIX,
+    SIDECAR_VERSION,
+    compute_peaks,
+    compute_sidecar_from_samples,
+    decode_audio,
+    extract_peaks,
+    extract_sidecar,
+    load_peaks,
+    load_sidecar,
+    sidecar_path,
+    write_sidecar,
+)

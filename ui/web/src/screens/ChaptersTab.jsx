@@ -223,7 +223,7 @@ function mergeWorkingActions({ originalActions, chapters, acceptedIds, tones, pa
 // number of hooks" guard.
 const EMPTY_CHAPTER = { id: '__empty__', atMs: 0, endMs: 0, name: '', color: '#888' };
 
-export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, requestAudioPeaks }) {
+export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, trackSpectrogram, refreshAudioSidecars }) {
   const totalMs = project?.durationMs ?? 0;
   const actions = Array.isArray(project?.actions) ? project.actions : [];
 
@@ -301,14 +301,12 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   const [currentMs, setCurrentMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   // MediaViewer mode is uncontrolled (defaults to video, user toggles
-  // freely via the chip strip). Audio peaks are App-level shared state
-  // that we request on tab mount — App holds trackPeaks; tabs that
-  // don't consume audio (Characters → Export estim path) never call
-  // requestAudioPeaks and never pay the decode cost. The request
-  // function is idempotent and collapses concurrent calls.
-  useEffect(() => {
-    requestAudioPeaks?.();
-  }, [requestAudioPeaks]);
+  // freely via the chip strip). Audio sidecars (peaks + spectrogram)
+  // are App-level shared state, both built upstream during the chapter-
+  // analysis pass via `videoflow.structural.auto_chapter`. App reads
+  // them off disk on project open; no lazy build is triggered here.
+  // If a sidecar is absent (chapter analysis hasn't run yet) the
+  // viewer renders an empty state for that mode.
 
   // The ChapterRibbon baton renders in all viewer modes — earlier shape
   // hid it in video mode but that conflated two batons. The MediaViewer's
@@ -365,6 +363,10 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       const detected = await analyzeChaptersWithVideoflow(project.path, null, project.mediaPath || null);
       if (analyzeCancelledRef.current) return;
       hydrateFromChapterList(detected);
+      // auto_chapter writes peaks + spectrogram sidecars in the same
+      // pass — pull them in now so the viewer's Audio / Spectrogram
+      // modes light up without a project re-open.
+      refreshAudioSidecars?.();
     } catch (err) {
       if (analyzeCancelledRef.current) return;
       console.error('ChaptersTab: analyze_chapters_with_videoflow failed', err);
@@ -386,64 +388,14 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   const tone = findTone(toneId);
   const toneParams = paramsByChapter[active.id]?.[tone.id] ?? {};
 
-  // Chapter-scoped slice of the full-track peaks. Indexed by ms ratio
-  // against the track's reported duration (NOT project.durationMs —
-  // librosa's decode may yield a slightly different length than the
-  // ffprobe-derived duration, and the peak indices follow the decode).
-  //
-  // We bucket-downsample the raw slice to TARGET_BARS before passing to
-  // MediaViewer. WaveformCanvas in forgemoment renders one SVG <rect>
-  // per peak in its 16% visible window. At 10ms hop, a single-chapter
-  // file like LongandCut_hdr has ~360k peaks for the active slice,
-  // which means ~57k rects per frame in the visible window — Chromium
-  // locks up, the audio canvas paints black, and the video decoder
-  // starves. 600 total bars → ~96 visible bars in the window, which
-  // reads as a clean waveform and renders fast. Bucket reducer is
-  // max-per-bucket so transient loud moments still pop visually (mean
-  // would over-smooth). When the raw slice is already at or below
-  // TARGET_BARS (very short chapter), we skip the downsample. Long
-  // term this belongs in WaveformCanvas itself so every consumer
-  // benefits — see project-audio-peaks-landed for the note.
-  const audioWaveform = useMemo(() => {
-    if (!trackPeaks?.peaks?.length || !trackPeaks.durationMs) return null;
-    if (active === EMPTY_CHAPTER) return null;
-    const trackDur = trackPeaks.durationMs;
-    const startRatio = Math.max(0, Math.min(1, active.atMs / trackDur));
-    const endRatio = Math.max(startRatio, Math.min(1, active.endMs / trackDur));
-    const startIdx = Math.floor(startRatio * trackPeaks.peaks.length);
-    const endIdx = Math.ceil(endRatio * trackPeaks.peaks.length);
-    if (endIdx <= startIdx) return null;
-    const raw = trackPeaks.peaks;
-    const rawLen = endIdx - startIdx;
-    // 200 total → 32 visible bars in WaveformCanvas's 16% window. The
-    // earlier 600 target stressed Chromium's SVG diff at every video
-    // timeupdate (5Hz) — playback gets "echoy" / "frames repeat"
-    // because the main thread can't keep up. Long-term fix: canvas-
-    // based rendering in forgemoment's WaveformCanvas would handle
-    // thousands of bars cheaply (one imperative paint, no React diff).
-    const TARGET_BARS = 200;
-    let peaks;
-    if (rawLen <= TARGET_BARS) {
-      peaks = raw.slice(startIdx, endIdx);
-    } else {
-      peaks = new Array(TARGET_BARS);
-      const bucketSize = rawLen / TARGET_BARS;
-      for (let i = 0; i < TARGET_BARS; i++) {
-        const a = startIdx + Math.floor(i * bucketSize);
-        const b = startIdx + Math.floor((i + 1) * bucketSize);
-        let mx = 0;
-        for (let j = a; j < b; j++) {
-          const v = raw[j];
-          if (v > mx) mx = v;
-        }
-        peaks[i] = mx;
-      }
-    }
-    return {
-      peaks,
-      durationMs: active.endMs - active.atMs,
-    };
-  }, [trackPeaks, active]);
+  // Full-track peaks pass through directly to MediaViewer — same model
+  // as spectrogram. WaveformCanvas (post-2026-05-21) does its own
+  // absolute 12s window slicing on the GPU-friendly canvas2D path, so
+  // there's no need to chapter-scope or bucket-downsample here. The
+  // earlier TARGET_BARS=200 dance existed to keep React reconciliation
+  // happy when WaveformCanvas was SVG-per-bar; once it moved to
+  // imperative canvas paint that workaround went away.
+  const audioWaveform = trackPeaks?.peaks?.length ? trackPeaks : null;
 
   const beforeSlice = useMemo(
     () => originalActions.filter((a) => a.at >= active.atMs && a.at <= active.endMs),
@@ -681,6 +633,11 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             videoSrc={toMediaUrl(project?.mediaPath)}
             media={{ kind: project?.mediaKind ?? 'video', title: active.name || active.id }}
             audioWaveform={audioWaveform}
+            // Spectrogram is full-track: SpectrogramCanvas does its own
+            // absolute-time windowing from currentMs (mirrors how
+            // FunscriptBeatWindow handles its 12s scroll). No chapter-
+            // scope slicing needed here, unlike the peaks waveform.
+            spectrogram={trackSpectrogram}
             chapter={{
               id: active.id,
               title: active.name || `Chapter ${chapters.indexOf(active) + 1}`,
