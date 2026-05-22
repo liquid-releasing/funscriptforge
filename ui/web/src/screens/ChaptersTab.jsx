@@ -789,11 +789,29 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             showModeLabel={false}
             showMark={false}
             onPrev={() => {
+              // Spotify / iTunes convention: when mid-chapter (more
+              // than 3s past the start), restart the current chapter
+              // instead of jumping to the previous one. The user has
+              // to press twice — once to restart, once to go back —
+              // which matches how every other media player handles the
+              // "back" button. Reaching the previous chapter when
+              // already at the start (or within 3s of it) is the
+              // direct path.
+              const PREV_RESTART_THRESHOLD_MS = 3000;
               const i = chapters.indexOf(active);
-              if (i > 0) setActiveId(chapters[i - 1].id);
-              else setCurrentMs(active.atMs);
+              const intoChapter = (currentMs || 0) - active.atMs;
+              if (intoChapter > PREV_RESTART_THRESHOLD_MS) {
+                setCurrentMs(active.atMs);
+              } else if (i > 0) {
+                setActiveId(chapters[i - 1].id);
+              } else {
+                setCurrentMs(active.atMs);
+              }
             }}
             onNext={() => {
+              // Next button always advances chapter — no smart "skip
+              // to end of current" behaviour (asymmetric with prev,
+              // matching media-player convention).
               const i = chapters.indexOf(active);
               if (i < chapters.length - 1) setActiveId(chapters[i + 1].id);
               else setCurrentMs(Math.max(active.atMs, active.endMs - 1));
