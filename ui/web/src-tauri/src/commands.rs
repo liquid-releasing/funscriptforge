@@ -251,20 +251,31 @@ pub async fn load_project(path: String) -> Result<LoadedProject, String> {
     let actions = funscript.actions.clone();
 
     // ── Sidecar probe ────────────────────────────────────────────────
+    // Probe the per-project forge dir for ffmeta + chapters sidecars.
+    // Mirrors videoflow.sidecar.forge_dir — every sidecar this project
+    // writes lives in <funscript_dir>/.<stem>.forge/ regardless of who
+    // wrote it (videoflow's Analyze, the Tauri auto-split command,
+    // hand-edits, etc.).
     let stem = strip_funscript_ext(&path);
+    let stem_name = Path::new(&stem)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    let forge = forge_dir(Path::new(&path));
     let mut sidecars_found = Vec::new();
     let mut ffmeta: Option<serde_json::Value> = None;
     for suffix in ["ffmeta.json", "chapters.json"] {
-        let p = format!("{}.{}", stem, suffix);
+        let p = forge.join(format!("{}.{}", stem_name, suffix));
         if tokio::fs::metadata(&p).await.is_ok() {
-            sidecars_found.push(p.clone());
+            let p_str = p.to_string_lossy().into_owned();
+            sidecars_found.push(p_str.clone());
             // ffmeta.json: parse it through. Other sidecars (chapters.json)
             // are consumed by their dedicated paths; we just record presence.
             if suffix == "ffmeta.json" {
                 if let Ok(raw) = tokio::fs::read_to_string(&p).await {
                     match serde_json::from_str::<serde_json::Value>(&raw) {
                         Ok(v)  => ffmeta = Some(v),
-                        Err(e) => eprintln!("ffmeta.json parse error at {}: {}", p, e),
+                        Err(e) => eprintln!("ffmeta.json parse error at {}: {}", p_str, e),
                     }
                 }
             }
@@ -587,7 +598,20 @@ pub async fn create_chapters_sidecar(
     }
 
     let stem = strip_funscript_ext(&funscript_path);
-    let sidecar_path = format!("{}.chapters.json", stem);
+    // Per-project forge dir mirrors videoflow.sidecar.forge_dir —
+    // sidecars live next to clips inside <dir>/.<stem>.forge/.
+    let forge = forge_dir(Path::new(&funscript_path));
+    tokio::fs::create_dir_all(&forge)
+        .await
+        .map_err(|e| format!("could not create forge dir: {}", e))?;
+    let stem_name = Path::new(&stem)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("project");
+    let sidecar_path = forge
+        .join(format!("{}.chapters.json", stem_name))
+        .to_string_lossy()
+        .into_owned();
     let payload = serde_json::json!({
         "version": "1.0",
         "auto_generated": true,
@@ -766,11 +790,21 @@ struct DiskAudioPeaks {
     peak_count: usize,
 }
 
-fn peaks_sidecar_path(media_path: &str) -> String {
-    Path::new(media_path)
-        .with_extension("audio.json")
+// Sidecar path computation. Mirrors videoflow's per-module `sidecar_path`
+// functions: every sidecar lives inside the per-project forge dir as
+// `<.stem.forge>/<stem><suffix>`. Pre-forge-dir sidecars next to source
+// are NOT read (clean break — re-Analyze rebuilds them).
+fn forge_sidecar_path(media_path: &str, suffix: &str) -> String {
+    let p = Path::new(media_path);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("media");
+    forge_dir(p)
+        .join(format!("{}{}", stem, suffix))
         .to_string_lossy()
         .into_owned()
+}
+
+fn peaks_sidecar_path(media_path: &str) -> String {
+    forge_sidecar_path(media_path, ".audio.json")
 }
 
 #[tauri::command]
@@ -838,10 +872,7 @@ struct DiskAudioSpectrogram {
 }
 
 fn spectrogram_sidecar_path(media_path: &str) -> String {
-    Path::new(media_path)
-        .with_extension("spectrogram.json")
-        .to_string_lossy()
-        .into_owned()
+    forge_sidecar_path(media_path, ".spectrogram.json")
 }
 
 #[tauri::command]
@@ -893,10 +924,7 @@ struct DiskAudioBeats {
 }
 
 fn beats_sidecar_path(media_path: &str) -> String {
-    Path::new(media_path)
-        .with_extension("beats.json")
-        .to_string_lossy()
-        .into_owned()
+    forge_sidecar_path(media_path, ".beats.json")
 }
 
 #[tauri::command]
@@ -1358,10 +1386,12 @@ pub async fn prewarm_media_range(
 // We accept that slop and report it back via actual_start_ms so the
 // frontend can offset playback accordingly.
 //
-// Cache: temp files live in the OS temp dir under funscriptforge_clips/,
-// content-addressed by (media_path stem + start + end). Re-entering a
-// chapter that's already been extracted is instant. Stale clips age
-// out via the OS temp cleanup; we don't reap explicitly.
+// Cache: clips live inside the per-project forge dir
+// (``<source_dir>/.<stem>.forge/clips/``), named deterministically by
+// (sanitized_stem + cache_version + start + end). Re-entering a chapter
+// that's already been extracted is instant. Delete the whole
+// ``.<stem>.forge/`` folder to evict everything for one project — the
+// clips and sidecars share the same per-project home.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChapterClipResult {
@@ -1419,11 +1449,16 @@ pub async fn extract_chapter_clip(
         .unwrap_or("media");
     let safe_stem = sanitize_stem(stem);
 
-    let mut temp_dir = std::env::temp_dir();
-    temp_dir.push("funscriptforge_clips");
+    // Clip cache lives inside the per-project hidden forge directory
+    // (``<source_dir>/.<source_stem>.forge/clips/``). Mirrors videoflow's
+    // ``videoflow.chapter_clips.chapter_clips_dir`` so both writers
+    // produce paths each other will hit as cache hits. The forge dir
+    // also holds all the sidecars Analyze writes (peaks, spectrogram,
+    // beats, chapters) — one folder per project, deletable as a unit.
+    let temp_dir = forge_clips_dir(src_path);
     if !temp_dir.exists() {
         std::fs::create_dir_all(&temp_dir)
-            .map_err(|e| format!("create temp dir: {}", e))?;
+            .map_err(|e| format!("create forge clips dir: {}", e))?;
     }
     let mut temp_path = temp_dir.clone();
     temp_path.push(format!(
@@ -1602,6 +1637,27 @@ pub async fn extract_chapter_clip(
         actual_end_ms: end_ms,
         cached: false,
     })
+}
+
+// Compute the per-project hidden forge directory for a media file.
+// Mirrors ``videoflow.sidecar.forge_dir``:
+//   <source_dir>/.<source_stem>.forge/
+// The forge dir holds every sidecar Analyze writes (peaks, spectrogram,
+// beats, chapters) plus the clips/ subdirectory. Tests verify both
+// languages produce the same path string.
+fn forge_dir(media_path: &Path) -> PathBuf {
+    let stem = media_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("media");
+    let parent = media_path.parent().unwrap_or(Path::new("."));
+    parent.join(format!(".{}.forge", stem))
+}
+
+// Per-project chapter-clip cache directory. The clips/ subfolder inside
+// the forge dir. Returned as-is — caller mkdir's before writing.
+fn forge_clips_dir(media_path: &Path) -> PathBuf {
+    forge_dir(media_path).join("clips")
 }
 
 // Reduce a filename stem to a filesystem-safe subset of characters.
