@@ -24,7 +24,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Icon, MediaViewer, Slider, ChapterRibbon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
-import { createChaptersSidecar, analyzeChaptersWithVideoflow } from '../api/forge.js';
+import { createChaptersSidecar, analyzeChaptersWithVideoflow, prewarmMediaRange, extractChapterClip } from '../api/forge.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 
 // The six canonical tones. Source of truth: forge/tabs/tone_tab.py::_TONES
@@ -223,7 +223,7 @@ function mergeWorkingActions({ originalActions, chapters, acceptedIds, tones, pa
 // number of hooks" guard.
 const EMPTY_CHAPTER = { id: '__empty__', atMs: 0, endMs: 0, name: '', color: '#888' };
 
-export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, trackSpectrogram, refreshAudioSidecars }) {
+export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, trackSpectrogram, trackBeats, refreshAudioSidecars }) {
   const totalMs = project?.durationMs ?? 0;
   const actions = Array.isArray(project?.actions) ? project.actions : [];
 
@@ -415,6 +415,91 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     setIsPlaying(false);
   }, [active.id]);
 
+  // Chapter clip extraction. Stream-copy the active chapter's bytes
+  // into a small temp file via ffmpeg. The MediaViewer's <video>
+  // element plays the temp file directly — no asset:// per-range-
+  // request overhead — which is the actual fix for the long-file
+  // stutter on 90min+ / 4K / 18GB sources.
+  //
+  // While extracting, videoSrc is held empty so the player doesn't keep
+  // showing the previous chapter. The "Loading chapter…" overlay covers
+  // the gap. Extracted clips are cached in the OS temp dir, so re-
+  // entering a chapter resolves instantly.
+  //
+  // Falls back to the original media path on extract failure (no
+  // ffmpeg installed, etc.) so the app stays usable — just stutters
+  // on long files like before.
+  const [chapterClip, setChapterClip] = useState(null); // { url, offsetMs, chapterId }
+  const [chapterLoading, setChapterLoading] = useState(false);
+  useEffect(() => {
+    if (!project?.mediaPath || active === EMPTY_CHAPTER) {
+      setChapterClip(null);
+      setChapterLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setChapterLoading(true);
+    // Clear current clip so the video element unloads while the new
+    // one extracts — prevents the player from continuing to show /
+    // play the previous chapter's content underneath the overlay.
+    setChapterClip(null);
+    extractChapterClip(project.mediaPath, active.atMs, active.endMs)
+      .then(async (result) => {
+        if (cancelled) return;
+        if (!result) {
+          console.warn('ChaptersTab: extractChapterClip returned null (mock?)');
+          return;
+        }
+        const assetUrl = toMediaUrl(result.tempPath);
+        // Fetch the clip into memory + create a blob: URL. The
+        // Chromium <video> element then reads from JS-heap memory
+        // with no protocol round-trip, no per-range-request overhead.
+        // The user verified the temp files play smoothly in VLC but
+        // stuttered through http://asset.localhost/, so the per-
+        // request latency of the asset protocol is the actual
+        // bottleneck — a blob: URL eliminates it entirely.
+        // Memory cost: 100-500MB per chapter on typical HD; works
+        // until 4K files where clips can exceed a couple GB and
+        // we'll need a different strategy.
+        let url = assetUrl;
+        try {
+          const resp = await fetch(assetUrl);
+          if (cancelled) return;
+          if (!resp.ok) throw new Error(`fetch ${assetUrl} ${resp.status}`);
+          const blob = await resp.blob();
+          if (cancelled) return;
+          url = URL.createObjectURL(blob);
+        } catch (err) {
+          console.warn('ChaptersTab: clip blob fetch failed, falling back to asset URL', err);
+        }
+        console.log('ChaptersTab: chapter clip ready', { tempPath: result.tempPath, url, offsetMs: result.actualStartMs, cached: result.cached, isBlob: url.startsWith('blob:') });
+        setChapterClip({
+          url,
+          offsetMs: result.actualStartMs,
+          chapterId: active.id,
+        });
+      })
+      .catch((err) => {
+        console.warn('ChaptersTab: extractChapterClip failed', err);
+      })
+      .finally(() => {
+        if (!cancelled) setChapterLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [project?.mediaPath, active.id]);
+
+  // Revoke the previous chapter's blob URL when chapterClip changes —
+  // releases the in-memory copy of the prior clip so we don't pile up
+  // hundreds of MB per chapter visit. Cleanup fires AFTER the next
+  // chapterClip has been set, so the video element has already swapped
+  // to the new URL before the old one is revoked.
+  useEffect(() => {
+    if (!chapterClip || !chapterClip.url.startsWith('blob:')) return undefined;
+    return () => {
+      URL.revokeObjectURL(chapterClip.url);
+    };
+  }, [chapterClip]);
+
   // rAF clock: advance currentMs while playing; loop back at chapter end.
   // The boundary is hard — we never let the playhead leave the active
   // chapter while playing (per "stay constrained in the thing we are
@@ -563,11 +648,17 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           Split-at-playhead / Join-with-prev / Join-with-next — all stubbed
           for now (handlers log TODO). The redundant Split/Join in the
           ActiveChapterHeader below has been dropped. */}
-      {/* Viewer column shrunk from 320px to 240px (2026-05-20) so the
-          MediaViewer's thumbnail lands near 16:9 (with thumbnailAspect
-          enforced below). The ribbon gets the reclaimed ~80px, which is
-          a meaningful boost when the chapter list is dense. */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 12, alignItems: 'stretch' }}>
+      {/* Viewer column widened to 360px 2026-05-21 — the 240px column
+          was too narrow for the AudioDashboard text, causing labels
+          like "broadband · moderate" + "ƒ: 480Hz [380–520]" to wrap
+          and shift the entire viewer's vertical alignment frame to
+          frame. Wider viewer = labels fit on one line, no jump.
+          The 16:9 thumbnail letterboxes against the black background
+          when source aspect differs (already does so via objectFit:
+          contain). Ribbon still has 1fr — narrower per-band slots
+          but the band waveforms hold up; user has explicitly preferred
+          a roomier viewer over a roomier ribbon. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 12, alignItems: 'stretch' }}>
         <div style={{
           background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 8, padding: 12,
@@ -630,14 +721,34 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           borderRadius: 8, padding: 12,
         }}>
           <MediaViewer
-            videoSrc={toMediaUrl(project?.mediaPath)}
+            // Prefer the per-chapter temp clip when available — small
+            // standalone file, no range-request overhead, smooth play
+            // even on 18GB sources. While the extract is in flight
+            // videoSrc is undefined so the player shows the loading
+            // overlay instead of the previous chapter's content.
+            videoSrc={
+              chapterClip && chapterClip.chapterId === active.id
+                ? chapterClip.url
+                : (chapterLoading ? undefined : toMediaUrl(project?.mediaPath))
+            }
+            videoSrcOffsetMs={
+              chapterClip && chapterClip.chapterId === active.id
+                ? chapterClip.offsetMs
+                : 0
+            }
             media={{ kind: project?.mediaKind ?? 'video', title: active.name || active.id }}
+            loadingLabel={chapterLoading ? 'Loading chapter…' : null}
             audioWaveform={audioWaveform}
             // Spectrogram is full-track: SpectrogramCanvas does its own
             // absolute-time windowing from currentMs (mirrors how
             // FunscriptBeatWindow handles its 12s scroll). No chapter-
             // scope slicing needed here, unlike the peaks waveform.
             spectrogram={trackSpectrogram}
+            // Beats sidecar — used by WaveformCanvas to overlay tick
+            // marks at exact beat positions, and by AudioDashboard
+            // to surface the music BPM. Full-track; the canvas
+            // filters to the visible window internally.
+            beats={trackBeats}
             chapter={{
               id: active.id,
               title: active.name || `Chapter ${chapters.indexOf(active) + 1}`,
@@ -680,18 +791,24 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             onPrev={() => {
               const i = chapters.indexOf(active);
               if (i > 0) setActiveId(chapters[i - 1].id);
+              else setCurrentMs(active.atMs);
             }}
             onNext={() => {
               const i = chapters.indexOf(active);
               if (i < chapters.length - 1) setActiveId(chapters[i + 1].id);
+              else setCurrentMs(Math.max(active.atMs, active.endMs - 1));
             }}
             width="100%"
-            // 16:9 thumbnail (matches modern video / 4K sources). The
-            // outer viewer height is now content-driven: chrome + the
-            // aspect-shaped thumbnail. `height` no longer needed.
-            // Letterbox shows against the black thumbnail background
-            // when source aspect differs from 16:9.
-            thumbnailAspect="16/9"
+            // 16:7 thumbnail (2026-05-21) — was 16:9 but the viewer
+            // chrome (chip strip + AudioDashboard + timecode + transport)
+            // made the overall card feel too tall, and the audio
+            // waveform / spectrogram surface doesn't need 16:9 the way
+            // a video frame does. 16:7 shrinks the surface ~28% so the
+            // card reads more compact while keeping the audio bands
+            // legible. Video frames letterbox with side bars (objectFit:
+            // contain) — user explicitly preferred letterbox over a
+            // taller card.
+            thumbnailAspect="16/7"
           />
         </div>
       </div>

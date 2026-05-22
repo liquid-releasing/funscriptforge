@@ -29,6 +29,9 @@ pub fn run() {
             commands::analyze_audio_peaks,
             commands::load_audio_peaks,
             commands::load_audio_spectrogram,
+            commands::load_audio_beats,
+            commands::prewarm_media_range,
+            commands::extract_chapter_clip,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

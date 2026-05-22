@@ -14,7 +14,7 @@ import {
 } from 'forgemoment';
 import {
   isTauri, ping, loadProject, attachMedia, pickMediaFile,
-  loadAudioPeaks, loadAudioSpectrogram,
+  loadAudioPeaks, loadAudioSpectrogram, loadAudioBeats,
 } from './api/forge.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
@@ -108,6 +108,11 @@ export default function App() {
   // before use.
   const [trackPeaks, setTrackPeaks] = useState(null);
   const [trackSpectrogram, setTrackSpectrogram] = useState(null);
+  // trackBeats shape: { bpm, beatsMs: number[], downbeatsMs: number[],
+  //                     durationMs, mediaPath }
+  // Rendered as a tick overlay on the Audio waveform; the BPM also
+  // surfaces in the AudioDashboard's headline row.
+  const [trackBeats, setTrackBeats] = useState(null);
   // selectedDevices is lifted here so it survives tab switches — once the
   // user picks devices in Project, downstream tabs (Device, Stim, Multi-axis)
   // see the same selection without re-prompting.
@@ -254,7 +259,11 @@ export default function App() {
         console.warn('App: loadAudioSpectrogram failed', err);
         return null;
       }),
-    ]).then(([peaks, spec]) => {
+      loadAudioBeats(mediaPath).catch((err) => {
+        console.warn('App: loadAudioBeats failed', err);
+        return null;
+      }),
+    ]).then(([peaks, spec, beats]) => {
       // Identity guard — user may have switched projects while the
       // async reads were in flight. Only commit results matching the
       // mediaPath we started the read for.
@@ -278,6 +287,16 @@ export default function App() {
       } else if (openedMediaPath === mediaPath) {
         setTrackSpectrogram(null);
       }
+      if (beats && beats.beatsMs?.length) {
+        setTrackBeats((prev) => {
+          if (prev && prev.mediaPath !== mediaPath && openedMediaPath !== mediaPath) {
+            return prev;
+          }
+          return { ...beats, mediaPath };
+        });
+      } else if (openedMediaPath === mediaPath) {
+        setTrackBeats(null);
+      }
     });
   }, [openedMediaPath]);
 
@@ -287,12 +306,16 @@ export default function App() {
     if (!openedMediaPath) {
       setTrackPeaks(null);
       setTrackSpectrogram(null);
+      setTrackBeats(null);
       return undefined;
     }
     setTrackPeaks((prev) =>
       prev && prev.mediaPath !== openedMediaPath ? null : prev,
     );
     setTrackSpectrogram((prev) =>
+      prev && prev.mediaPath !== openedMediaPath ? null : prev,
+    );
+    setTrackBeats((prev) =>
       prev && prev.mediaPath !== openedMediaPath ? null : prev,
     );
     _doLoadAudioSidecars(openedMediaPath);
@@ -644,6 +667,7 @@ export default function App() {
             setAppError={setAppError}
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
+            trackBeats={trackBeats}
             refreshAudioSidecars={refreshAudioSidecars}
           />
         )}

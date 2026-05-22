@@ -371,6 +371,91 @@ function decodeBase64ToUint8Array(b64) {
   return bytes;
 }
 
+/** Load the pre-computed beats sidecar for a media file (written by
+ *  `videoflow.structural.auto_chapter` during chapter analysis). Read-
+ *  only — no analysis, no shell-out. Returns null when the sidecar is
+ *  absent.
+ *
+ *  Shape on success: { durationMs, bpm, beatsMs: number[],
+ *                      downbeatsMs: number[], fromSidecar: true }.
+ *  beatsMs / downbeatsMs are absolute project-time positions in ms. */
+export function loadAudioBeats(mediaPath) {
+  return call(
+    'load_audio_beats',
+    { mediaPath },
+    () => Promise.resolve(mockAudioBeats()),
+  );
+}
+
+/** Pre-warm the kernel page cache for a chapter's byte range of the
+ *  media file. The video element's subsequent range requests for that
+ *  region hit warm cache instead of cold disk, eliminating the
+ *  silent-frame-drop stutter Chromium produces on long high-bitrate
+ *  files via asset://. Background-only — call on chapter change and
+ *  let it run; resolve when done.
+ *
+ *  totalMs is needed because we estimate byte offsets linearly from
+ *  ms offsets (we don't parse the container). The kernel cache is
+ *  byte-addressable so the estimate doesn't need to be exact. */
+export function prewarmMediaRange(mediaPath, startMs, endMs, totalMs) {
+  return call(
+    'prewarm_media_range',
+    {
+      mediaPath,
+      startMs: Math.max(0, Math.floor(startMs)),
+      endMs: Math.max(0, Math.floor(endMs)),
+      totalMs: Math.max(0, Math.floor(totalMs)),
+    },
+    () => Promise.resolve(0),
+  );
+}
+
+/** Extract a chapter slice of the source media to a temp file via
+ *  ffmpeg stream-copy (no re-encode). The Chromium <video> element
+ *  plays the temp file directly — a small standalone file with no
+ *  range-request overhead — eliminating the long-file stutter.
+ *
+ *  Returns { tempPath, actualStartMs, actualEndMs, cached }. The
+ *  actual bounds may differ slightly from the requested bounds because
+ *  ffmpeg snaps to keyframes; callers should use the returned actual
+ *  values for playhead math.
+ *
+ *  Browser mock returns null — clip extraction is a Tauri-only feature
+ *  (ffmpeg binary, temp filesystem). Callers must fall back to the
+ *  original media path when this returns null. */
+export function extractChapterClip(mediaPath, startMs, endMs) {
+  return call(
+    'extract_chapter_clip',
+    {
+      mediaPath,
+      startMs: Math.max(0, Math.floor(startMs)),
+      endMs: Math.max(0, Math.floor(endMs)),
+    },
+    () => Promise.resolve(null),
+  );
+}
+
+function mockAudioBeats() {
+  // Synthesise a 120 BPM grid over 60s so the tick overlay shows
+  // something in browser mode without a real librosa run. Downbeats
+  // every 4th beat.
+  const bpm = 120;
+  const interval = 60_000 / bpm; // 500ms
+  const beats = [];
+  const downbeats = [];
+  for (let t = 0, i = 0; t < 60_000; t += interval, i += 1) {
+    beats.push(Math.round(t));
+    if (i % 4 === 0) downbeats.push(Math.round(t));
+  }
+  return {
+    durationMs: 60_000,
+    bpm,
+    beatsMs: beats,
+    downbeatsMs: downbeats,
+    fromSidecar: false,
+  };
+}
+
 function mockAudioSpectrogram() {
   // 60s mock at ~23ms hop × 64 mel bins. Synthesises a swept-tone pattern
   // so the SpectrogramCanvas exercises its full colormap range in

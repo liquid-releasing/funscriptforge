@@ -16,7 +16,7 @@
 // the actions array; pan/zoom only change which slice is rendered.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Sparkline } from 'forgemoment';
+import { Sparkline, useNativeWheel } from 'forgemoment';
 
 const MIN_VIEW_MS = 200;
 
@@ -101,6 +101,9 @@ export default function FunscriptChart({
   // trackpad swipe never accidentally zooms. Mouse-drag pan still works
   // via the mousedown/move handlers below — this just adds the trackpad
   // gesture for users who don't think to drag.
+  //
+  // Attached via useNativeWheel so e.preventDefault() actually fires
+  // (React's onWheel is passive-by-default).
   const handleWheel = (e) => {
     e.preventDefault();
     const w = containerRef.current?.clientWidth ?? 1;
@@ -135,6 +138,8 @@ export default function FunscriptChart({
     setView({ start, end });
   };
 
+  useNativeWheel(containerRef, handleWheel);
+
   return (
     <div style={{ width: '100%' }}>
       <div
@@ -143,7 +148,6 @@ export default function FunscriptChart({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
         style={{
           position: 'relative',
           width: '100%',
