@@ -481,13 +481,19 @@ export default function PatternsTab({ project, trackPeaks, trackSpectrogram, tra
         </button>
       </div>
 
-      {/* Viewer grid (only when expanded). Right column 320px matches
-          TransformPanel below so the right edges align. Spacing on the
-          8px grid: gap --s-3 (12px), horizontal --s-5 (24px). */}
+      {/* Viewer grid (only when expanded) — funscript panel + video
+          viewer wrapped in ONE bordered box so they read as a single
+          unit (paint mock 2026-05-23). Same box treatment as Chapters
+          tab. */}
       {isContextExpanded && (
+      <div style={{ padding: '0 var(--s-5) var(--s-2)' }}>
       <div style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: 12,
         display: 'grid', gridTemplateColumns: '1fr 320px',
-        gap: 'var(--s-3)', padding: '0 var(--s-5) var(--s-2)', alignItems: 'start',
+        gap: 'var(--s-5)', alignItems: 'start',
       }}>
         <ChapterContextStrip
           chapter={activeChapter}
@@ -580,6 +586,7 @@ export default function PatternsTab({ project, trackPeaks, trackSpectrogram, tra
           />
         );
       })()}
+      </div>
       </div>
       )}
 

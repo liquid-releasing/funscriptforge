@@ -545,14 +545,20 @@ export default function PhrasesTab({
         </button>
       </div>
 
-      {/* ── Viewer grid (only when expanded) — funscript panel on the
-            left, MediaViewer card on the right. Spacing aligned to 8px
-            grid: gap --s-3 (12px), horizontal padding --s-5 (24px) to
-            match title + ribbon rows above. */}
+      {/* ── Viewer grid (only when expanded) — funscript panel + video
+            viewer wrapped in ONE bordered box so they read as a single
+            unit (paint mock 2026-05-23). Same box treatment as Chapters
+            tab. Outer div carries the page-edge padding; the box
+            (--surface + border + radius) contains the grid. */}
       {isPhraseViewExpanded && (
+      <div style={{ padding: '0 var(--s-5) var(--s-2)' }}>
       <div style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: 12,
         display: 'grid', gridTemplateColumns: '1fr 320px',
-        gap: 'var(--s-3)', padding: '0 var(--s-5) var(--s-2)', alignItems: 'start',
+        gap: 'var(--s-5)', alignItems: 'start',
       }}>
         <ChapterContextStrip
           chapter={{ at_ms: activeChapter.atMs, end_ms: activeChapter.endMs }}
@@ -626,6 +632,7 @@ export default function PhrasesTab({
               width="100%"
               thumbnailAspect="16/7"
             />
+      </div>
       </div>
       )}
 

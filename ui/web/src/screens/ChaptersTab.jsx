@@ -612,11 +612,15 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           contain). Ribbon still has 1fr — narrower per-band slots
           but the band waveforms hold up; user has explicitly preferred
           a roomier viewer over a roomier ribbon. */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 12, alignItems: 'stretch' }}>
-        <div style={{
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 8, padding: 12,
-        }}>
+      {/* Ribbon + viewer wrapped in ONE bordered box so they read as a
+          single unit (paint mock 2026-05-23). Column 320px matches
+          Phrases / Patterns; right edges and visual rhythm align across
+          all three editing tabs. */}
+      <div style={{
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 8, padding: 12,
+      }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'stretch' }}>
           <ChapterRibbon
             bands={chapters.map((c) => ({
               id: c.id,
@@ -669,11 +673,6 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             // band velocity waveforms more vertical detail.
             height={220}
           />
-        </div>
-        <div style={{
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 8, padding: 12,
-        }}>
           <MediaViewer
             // Prefer the per-chapter temp clip when available — small
             // standalone file, no range-request overhead, smooth play
@@ -782,7 +781,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             // taller card.
             thumbnailAspect="16/7"
           />
-        </div>
+      </div>
       </div>
 
       {/* Rail + detail row. Rail is a scannable vertical list of all chapters;
