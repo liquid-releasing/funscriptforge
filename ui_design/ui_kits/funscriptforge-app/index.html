@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>FunscriptForge — UI Kit</title>
+<meta name="viewport" content="width=1440" />
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+  body { margin: 0; }
+</style>
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="data.js"></script>
+<script src="transforms-data.js"></script>
+<script type="text/babel" src="primitives.jsx"></script>
+<script type="text/babel" src="Charts.jsx"></script>
+<script type="text/babel" src="AppShell.jsx"></script>
+<script type="text/babel" src="TransformPanel.jsx"></script>
+<script type="text/babel" src="PatternEditor.jsx"></script>
+<script type="text/babel" src="tab-Project.jsx"></script>
+<script type="text/babel" src="tab-Device.jsx"></script>
+<script type="text/babel" src="tab-Chapters.jsx"></script>
+<script type="text/babel" src="tab-Edit.jsx"></script>
+<script type="text/babel" src="tab-Stim.jsx"></script>
+<script type="text/babel" src="tab-Phrases.jsx"></script>
+<script type="text/babel" src="tabs-rest.jsx"></script>
+<script type="text/babel" src="tab-Export.jsx"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+function App() {
+  const [tab, setTab] = useState("project");
+  const [scope, setScope] = useState("all");
+  const [currentMs, setCurrentMs] = useState(58000);
+  const [isPlaying, setPlaying] = useState(false);
+  const [selectedDevices, setDevices] = useState(["handy"]);
+  const [activeChapterId, setActiveChapterId] = useState(FF_DATA.CHAPTERS[0]?.id);
+  const project = { chapters: FF_DATA.CHAPTERS, phrases: FF_DATA.PHRASES };
+  const [pipeline, setPipeline] = useState({
+    project:    { accepted: true,  chainFile: "project.ffmeta.json" },
+    device:     { accepted: false, chainFile: "_funscript_device.json" },
+    chapters:   { accepted: false, chainFile: "_funscript_chapters.json" },
+    edit:       { accepted: false, chainFile: "_funscript_edit.json" },
+    stim:       { accepted: false, chainFile: "_funscript_stim.json" },
+    multiaxis:  { accepted: false, chainFile: "_funscript_multiaxis.json" },
+    exportTab:  { accepted: false, chainFile: "forged.ffbundle.zip" },
+  });
+
+  useEffect(() => { window.lucide?.createIcons(); });
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    let raf, last = performance.now();
+    const step = (now) => {
+      const dt = now - last; last = now;
+      setCurrentMs((t) => {
+        const next = t + dt;
+        if (next >= FF_DATA.TOTAL_MS) { setPlaying(false); return FF_DATA.TOTAL_MS; }
+        return next;
+      });
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [isPlaying]);
+
+  const accept = (key) => setPipeline(p => ({ ...p, [key]: { ...p[key], accepted: true } }));
+  const reset = (key) => setPipeline(p => ({ ...p, [key]: { ...p[key], accepted: false } }));
+
+  let body = null, acceptKey = null, acceptSummary = null, acceptLabel = "Accept and chain";
+  if (tab === "project") {
+    body = <ProjectTab
+      onOpen={() => {}}
+      selectedDevices={selectedDevices}
+      onToggleDevice={(id) => setDevices(d => d.includes(id) ? d.filter(x => x !== id) : [...d, id])}
+      onContinue={() => { accept("project"); setTab("device"); }} />;
+    acceptKey = "project";
+    acceptSummary = `${selectedDevices.length} device${selectedDevices.length === 1 ? "" : "s"} selected · project metadata ready.`;
+  } else if (tab === "device") {
+    body = <DeviceTab selectedDevices={selectedDevices} />;
+    acceptKey = "device";
+    acceptSummary = "Device-aware reset applied to whole script.";
+  } else if (tab === "chapters") {
+    body = <ChaptersTab scope={scope} onScopeChange={setScope}
+                        currentMs={currentMs} onSeek={setCurrentMs} />;
+    acceptKey = "chapters";
+    acceptSummary = `Tones set on ${FF_DATA.CHAPTERS.length} chapters.`;
+  } else if (tab === "edit") {
+    body = <EditTab scope={scope} currentMs={currentMs} onSeek={setCurrentMs}
+                    isPlaying={isPlaying} onPlayPause={() => setPlaying(p => !p)} />;
+    acceptKey = "edit";
+    acceptSummary = `Phrase / pattern / tag edits committed.`;
+  } else if (tab === "stim") {
+    body = <StimTab />;
+    acceptKey = "stim";
+    acceptSummary = "Stim companion track configured.";
+  } else if (tab === "multiaxis") {
+    body = <MultiAxisTab project={project}
+                          activeChapterId={activeChapterId}
+                          setActiveChapterId={setActiveChapterId}
+                          selectedDevices={selectedDevices} />;
+    acceptKey = "multiaxis";
+    acceptSummary = "Multi-axis curves configured.";
+  } else if (tab === "exportTab") {
+    body = <ExportTab selectedDevices={selectedDevices} />;
+    acceptKey = "exportTab";
+    acceptSummary = "Bundle exported · Forge Score 87 (A · Strong).";
+    acceptLabel = "Mark exported";
+  } else if (tab === "catalog") {
+    body = <CatalogTab />;
+  }
+
+  const acceptedCount = Object.values(pipeline).filter(p => p.accepted).length;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh",
+                  background: "var(--bg)" }}>
+      <TopBar
+        file={FF_DATA.ACTIVE_FILE}
+        scope={scope} onScopeChange={setScope}
+        chapters={FF_DATA.CHAPTERS}
+        isPlaying={isPlaying} onPlayPause={() => setPlaying(p => !p)}
+        currentMs={currentMs} totalMs={FF_DATA.TOTAL_MS} />
+      <TabStrip active={tab} onChange={setTab} pipeline={pipeline} />
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        {body}
+      </div>
+      {acceptKey && (
+        <AcceptBar
+          summary={acceptSummary}
+          chainFile={pipeline[acceptKey].chainFile}
+          accepted={pipeline[acceptKey].accepted}
+          primaryLabel={acceptLabel}
+          onAccept={() => accept(acceptKey)}
+          onReset={() => reset(acceptKey)} />
+      )}
+      <StatusBar scope={scope} chainFile={acceptKey ? pipeline[acceptKey].chainFile : null} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
