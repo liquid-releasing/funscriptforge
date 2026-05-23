@@ -426,13 +426,11 @@ export default function PatternsTab({ project, trackPeaks, trackSpectrogram, tra
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
-      {/* Row 1 — CHAPTERS ribbon. Always visible (mirrors Phrases): keeping
-          the chapter context exposed reminds the user there are other
-          chapters to do, even when they've collapsed the per-pattern view.
-          User 2026-05-17. */}
-      <div style={{ padding: '8px 16px', background: 'var(--surface)',
-                    borderBottom: '1px solid var(--border)',
-                    display: 'flex', alignItems: 'center', gap: 12 }}>
+      {/* Row 1 — CHAPTERS ribbon. Transparent background; part of the
+          unified "selector area" (page bg). Padding / gap on the 8px
+          grid: --s-3 (12px) vertical, --s-5 (24px) horizontal. */}
+      <div style={{ padding: 'var(--s-3) var(--s-5)', background: 'transparent',
+                    display: 'flex', alignItems: 'center', gap: 'var(--s-3)' }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)',
                        textTransform: 'uppercase', letterSpacing: '0.08em',
                        width: 64, flexShrink: 0 }}>Chapters</span>
@@ -449,13 +447,47 @@ export default function PatternsTab({ project, trackPeaks, trackSpectrogram, tra
         </div>
       </div>
 
-      {/* Row 2 — Pattern context strip (left, waveform + phrase bands)
-          + collapse toggle above slice media viewer (right, 300px).
-          Toggle is pinned in the right column so its position is stable
-          across collapse / expand. Mirrors PhrasesTab. */}
+      {/* Title row — full pattern block on the left (always, regardless
+          of collapse), Collapse on the right. Padding on 8px grid:
+          --s-2 top (8px), --s-3 bottom (12px) for roomier space to the
+          viewer row below; --s-5 horizontal (24px). */}
       <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 300px',
-        gap: 12, padding: '8px 12px', alignItems: 'start',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        gap: 'var(--s-3)', padding: 'var(--s-2) var(--s-5) var(--s-3)',
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <PatternStripHeader
+            pattern={findPattern(activePatternId)}
+            count={activeInstances.length}
+          />
+          <PatternStripHeaderExtra pattern={findPattern(activePatternId)} />
+        </div>
+        <button
+          onClick={() => setIsContextExpanded((v) => !v)}
+          title={isContextExpanded ? 'Collapse' : 'Expand'}
+          aria-label={isContextExpanded ? 'Collapse' : 'Expand'}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '4px 8px', borderRadius: 5,
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            color: 'var(--text-dim)',
+            cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+            flexShrink: 0,
+          }}
+        >
+          <Icon name={isContextExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
+          {isContextExpanded ? 'Collapse' : 'Expand'}
+        </button>
+      </div>
+
+      {/* Viewer grid (only when expanded). Right column 320px matches
+          TransformPanel below so the right edges align. Spacing on the
+          8px grid: gap --s-3 (12px), horizontal --s-5 (24px). */}
+      {isContextExpanded && (
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 320px',
+        gap: 'var(--s-3)', padding: '0 var(--s-5) var(--s-2)', alignItems: 'start',
       }}>
         <ChapterContextStrip
           chapter={activeChapter}
@@ -465,42 +497,13 @@ export default function PatternsTab({ project, trackPeaks, trackSpectrogram, tra
             const inst = instances.find((i) => i.id === bandId);
             if (inst) setActivePatternId(inst.patternId);
           }}
-          expanded={isContextExpanded}
-          // Internal toggle suppressed — rendered above the viewer below.
-          header={isContextExpanded
-            ? <PatternStripHeader
-                pattern={findPattern(activePatternId)}
-                count={activeInstances.length}
-              />
-            : <ChapterStripHeader chapter={activeChapter} />
-          }
-          headerExtra={isContextExpanded
-            ? <PatternStripHeaderExtra pattern={findPattern(activePatternId)} />
-            : null
-          }
+          expanded={true}
+          // No header / no onToggleExpanded — title + Collapse moved to
+          // the tab-level row above so the button sits above the right-
+          // column viewer and stays put across collapse.
+          height={180}
         />
 
-        {/* Right column — collapse toggle pinned at top, slice media
-            panel below it. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              onClick={() => setIsContextExpanded((v) => !v)}
-              title={isContextExpanded ? 'Collapse' : 'Expand'}
-              aria-label={isContextExpanded ? 'Collapse' : 'Expand'}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '4px 8px', borderRadius: 5,
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                color: 'var(--text-dim)',
-                cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
-              }}
-            >
-              <Icon name={isContextExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
-              {isContextExpanded ? 'Collapse' : 'Expand'}
-            </button>
-          </div>
         {/* MediaViewer — defaults to active-chapter scope; narrows to
             phrase scope when a row is clicked. Hidden when the strip is
             collapsed so the body gets the full height. Chapter is just a
@@ -577,8 +580,8 @@ export default function PatternsTab({ project, trackPeaks, trackSpectrogram, tra
           />
         );
       })()}
-        </div>
       </div>
+      )}
 
       {/* Body — rail | center table | TransformPanel */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>

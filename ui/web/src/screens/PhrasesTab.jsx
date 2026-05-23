@@ -494,22 +494,65 @@ export default function PhrasesTab({
         </div>
       </HeaderRow>
 
-      {/* ── Row 2 — Active chapter waveform (left) + slice media viewer
-            (right) using the same `1fr 300px` split as ChaptersTab so
-            every editing tab reads with the same rhythm. Click a band
-            in the strip → focus that phrase; the viewer's scope syncs
-            from the same focusedPhrase state.
-
-            Collapse toggle: rendered in the right column ABOVE the
-            viewer (not inside the strip header), so its position is
-            stable across expand/collapse. When collapsed, the strip
-            body AND the viewer both fold; only the strip header on the
-            left and the toggle on the right remain. User request
-            2026-05-23: "collapse should be above the video; when you
-            collapse, expand should be in the same place." */}
+      {/* ── Title row — tab-level header: slice identity on the left,
+            Collapse on the right. Padding on 8px grid: --s-2 top (8px),
+            --s-3 bottom (12px) for slightly roomier space between the
+            Collapse button and the viewer row below. */}
       <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 300px',
-        gap: 12, padding: '8px 12px', alignItems: 'start',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        gap: 'var(--s-3)', padding: 'var(--s-2) var(--s-5) var(--s-3)',
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            whiteSpace: 'nowrap', overflow: 'hidden',
+          }}>
+            <span style={{
+              width: 10, height: 10, borderRadius: 2,
+              background: scope.color, flexShrink: 0,
+            }} />
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
+              {scope.title}
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-dim)' }}>
+              {fmt(scope.start)}–{fmt(scope.end)} · {fmt(scope.end - scope.start)}
+              {scopeKindLabel ? ` · ${scopeKindLabel}` : ''}
+            </span>
+          </div>
+          {/* Phrase description from the tag, when a phrase is focused. */}
+          {focusedPhrase && findTag(focusedPhrase.tag)?.desc && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.45 }}>
+              {findTag(focusedPhrase.tag).desc}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => setIsPhraseViewExpanded((v) => !v)}
+          title={isPhraseViewExpanded ? 'Collapse' : 'Expand'}
+          aria-label={isPhraseViewExpanded ? 'Collapse' : 'Expand'}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '4px 8px', borderRadius: 5,
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            color: 'var(--text-dim)',
+            cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+            flexShrink: 0,
+          }}
+        >
+          <Icon name={isPhraseViewExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
+          {isPhraseViewExpanded ? 'Collapse' : 'Expand'}
+        </button>
+      </div>
+
+      {/* ── Viewer grid (only when expanded) — funscript panel on the
+            left, MediaViewer card on the right. Spacing aligned to 8px
+            grid: gap --s-3 (12px), horizontal padding --s-5 (24px) to
+            match title + ribbon rows above. */}
+      {isPhraseViewExpanded && (
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 320px',
+        gap: 'var(--s-3)', padding: '0 var(--s-5) var(--s-2)', alignItems: 'start',
       }}>
         <ChapterContextStrip
           chapter={{ at_ms: activeChapter.atMs, end_ms: activeChapter.endMs }}
@@ -519,79 +562,28 @@ export default function PhrasesTab({
             // Two-stage click semantics:
             //   1st click on a band  → focus + land at phrase start
             //   2nd click on focused → seek to clicked position
-            // Matches the original design intent (first click selects,
-            // second click navigates within the selection).
             setMode('single');
             const newPhrase = phrasesInScope.find((x) => x.id === pid);
             if (!newPhrase) return;
             if (pid === focusPhraseId && clickedMs != null) {
-              // Re-click of already-focused band — seek to clicked x.
-              // No focus / selectNonce bump, so the scope-reset effect
-              // doesn't fire and override our setCurrentMs.
               setCurrentMs(Math.max(newPhrase.at_ms, Math.min(newPhrase.end_ms, clickedMs)));
             } else {
-              // First click on a (new or unfocused) band — focus it.
-              // The scope-reset effect lands the clock at phrase start.
               setFocusPhraseId(pid);
             }
           }}
-          expanded={isPhraseViewExpanded}
-          // No internal toggle — we render our own above the viewer in
-          // the right column so its position is stable across collapse
-          // and expand. Omitting onToggleExpanded suppresses the strip's
-          // built-in button (per ChapterContextStrip's contract).
-          header={
-            // Single-line scope header. Swaps from chapter info to
-            // phrase info when a phrase is focused (user request
-            // 2026-05-23). Same shape for either kind so the line
-            // doesn't shift visually as the user drills in.
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              whiteSpace: 'nowrap', overflow: 'hidden',
-            }}>
-              <span style={{
-                width: 10, height: 10, borderRadius: 2,
-                background: scope.color, flexShrink: 0,
-              }} />
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
-                {scope.title}
-              </span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-dim)' }}>
-                {fmt(scope.start)}–{fmt(scope.end)}
-                {isPhraseViewExpanded ? ` · ${fmt(scope.end - scope.start)}` : ''}
-                {scopeKindLabel ? ` · ${scopeKindLabel}` : ''}
-              </span>
-            </div>
-          }
+          expanded={true}
+          // No header / no onToggleExpanded — title + Collapse moved
+          // to the tab-level title row above so the button sits above
+          // the right-column viewer and stays put across collapse.
           height={180}
           currentMs={currentMs}
           onSeek={setCurrentMs}
         />
 
-        {/* Right column — collapse toggle pinned at top, slice media
-            panel below it. Toggle position stays fixed so the user's
-            mouse goes to the same place whether expanded or collapsed. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              onClick={() => setIsPhraseViewExpanded((v) => !v)}
-              title={isPhraseViewExpanded ? 'Collapse' : 'Expand'}
-              aria-label={isPhraseViewExpanded ? 'Collapse' : 'Expand'}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '4px 8px', borderRadius: 5,
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                color: 'var(--text-dim)',
-                cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
-              }}
-            >
-              <Icon name={isPhraseViewExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
-              {isPhraseViewExpanded ? 'Collapse' : 'Expand'}
-            </button>
-          </div>
-          {isPhraseViewExpanded && (
-            <MediaViewer
+        {/* Right column — just the MediaViewer card. Matches the
+            TransformPanel width (320px) below so the right edges
+            align across rows. */}
+        <MediaViewer
               videoSrc={chapterClip?.url}
               videoSrcOffsetMs={chapterClip?.offsetMs ?? 0}
               media={{ kind: mediaKind, title: sliceScope.title }}
@@ -634,9 +626,8 @@ export default function PhrasesTab({
               width="100%"
               thumbnailAspect="16/7"
             />
-          )}
-        </div>
       </div>
+      )}
 
       {/* ── Body — rail + center + transform panel. Only this row scrolls. ── */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
@@ -723,7 +714,6 @@ export default function PhrasesTab({
           cancelLabel="Cancel"
           onApply={() => console.log('Phrases/apply', { phraseIds: editedPhraseIds, transformId, params })}
           onCancel={() => { setTransformId(null); setParams({}); }}
-          width={320}
         />
       </div>
     </div>
@@ -748,12 +738,15 @@ function EmptyState({ title, body }) {
 }
 
 function HeaderRow({ children, style }) {
+  // Transparent background + no border — the ribbon row is part of the
+  // unified "selector area" (page background). Only the chapter bands
+  // inside have their own colors. Padding / gap aligned to the 8px
+  // spacing grid (forgemoment tokens.css): --s-3 = 12px, --s-5 = 24px.
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 14,
-      padding: '10px 22px',
-      background: 'var(--surface)',
-      borderBottom: '1px solid var(--border)',
+      display: 'flex', alignItems: 'center', gap: 'var(--s-3)',
+      padding: 'var(--s-3) var(--s-5)',
+      background: 'transparent',
       flexShrink: 0,
       ...style,
     }}>
