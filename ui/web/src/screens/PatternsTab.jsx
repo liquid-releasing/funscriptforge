@@ -442,7 +442,7 @@ export default function PatternsTab({ project, trackPeaks, trackSpectrogram, tra
             onSelect={(b) => setActiveChapterId(b.id)}
             showAxes={false}
             zoomable={false}
-            height={56}
+            height={36}
           />
         </div>
       </div>
