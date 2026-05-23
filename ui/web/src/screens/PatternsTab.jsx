@@ -30,11 +30,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ChapterRibbon, ChapterContextStrip, TransformPanel,
+  ChapterRibbon, ChapterContextStrip, MediaViewer, TransformPanel,
   Icon, fmtTimeShort, fmtDurationMs,
 } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
+import { useChapterClip } from '../hooks/useChapterClip.js';
 import { TRANSFORMS, BEHAVIOR_TAGS } from '../data/transforms.js';
+import { loadPhrasesSidecar } from '../api/forge.js';
 
 // ─── Catalogs (local stubs until backend ships) ───────────────────────
 //
@@ -85,44 +87,28 @@ const findPattern = (id) => PATTERN_TYPES.find((p) => p.id === id) ?? PATTERN_TY
 // Drift *transform* synthesises a Drift-shaped replacement. Same word,
 // different direction.
 
-// ─── Stub instance generator ──────────────────────────────────────────
-// Deterministic-ish fake instances per chapter so the UI has data before
-// the videoflow classifier ships. Generates a *distribution* — 3 of one
-// pattern type, 2 of another, 1 of a third — so the rail's count column
-// is non-trivial and the table demonstrates the multi-instance layout
-// for at least one pattern type. Replace with the real bridge call once
-// `analyzePatternsWithVideoflow` lands.
-function stubInstancesForChapter(chapter, projectId) {
-  if (!chapter) return [];
-  const span = Math.max(1, chapter.end_ms - chapter.at_ms);
-  const seed = (projectId || '').length + (chapter.id || '').length;
-  // Pick 3 pattern types from the catalog; assign instance counts 3/2/1.
-  const offset = seed % PATTERN_TYPES.length;
-  const buckets = [
-    { patternId: PATTERN_TYPES[(offset) % PATTERN_TYPES.length].id, count: 3 },
-    { patternId: PATTERN_TYPES[(offset + 1) % PATTERN_TYPES.length].id, count: 2 },
-    { patternId: PATTERN_TYPES[(offset + 3) % PATTERN_TYPES.length].id, count: 1 },
-  ];
-  const total = buckets.reduce((s, b) => s + b.count, 0);          // 6
-  const dur = Math.floor(span / total * 0.85);                      // each instance ~chapter/6 wide
-  const instances = [];
-  let i = 0;
-  for (const bucket of buckets) {
-    for (let k = 0; k < bucket.count; k++) {
-      const at = chapter.at_ms + Math.floor((span - dur) * (i / Math.max(1, total - 1)) * 0.95) + 200;
-      const end = Math.min(chapter.end_ms - 100, at + dur);
-      instances.push({
-        id: `${chapter.id}_inst_${i}`,
-        chapterId: chapter.id,
-        patternId: bucket.patternId,
-        at_ms: at,
-        end_ms: end,
-        bpm: 48 + ((seed + i * 17) % 80),
-      });
-      i++;
-    }
-  }
-  return instances;
+// ─── Phrase-as-instance loader ────────────────────────────────────────
+// Real data path: phrases come from `.<stem>.forge/<stem>.phrases.json`
+// (written by `cli.py assess`). Each phrase is a slice with a structural
+// `label` that matches one of PATTERN_TYPES' ids — no mapping needed,
+// the shape labeler produces those strings verbatim.
+//
+// chapter_id is null on disk today (funscript-only analysis doesn't see
+// chapter boundaries), so chapter assignment happens client-side via
+// at_ms ∈ chapter window. Phrases that straddle a chapter boundary are
+// assigned to whichever chapter contains their start.
+function phrasesForChapter(phrases, chapter) {
+  if (!chapter || !Array.isArray(phrases) || phrases.length === 0) return [];
+  return phrases
+    .filter((p) => p.at_ms >= chapter.at_ms && p.at_ms < chapter.end_ms)
+    .map((p) => ({
+      id: p.id,
+      chapterId: chapter.id,
+      patternId: p.label || 'steady',
+      at_ms: p.at_ms,
+      end_ms: p.end_ms,
+      bpm: Math.round(p?.metrics?.bpm ?? 0),
+    }));
 }
 
 // ─── Transform preview (JS-side, illustrative) ────────────────────────
@@ -173,7 +159,7 @@ function sliceForInstance(actions, instance) {
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────
-export default function PatternsTab({ project }) {
+export default function PatternsTab({ project, trackPeaks, trackSpectrogram, trackBeats }) {
   // Normalize chapter shape: ChaptersTab uses camelCase atMs/endMs, but
   // ChapterRibbon expects snake_case at_ms/end_ms. Same translation
   // ChaptersTab does — keep them in sync.
@@ -193,11 +179,41 @@ export default function PatternsTab({ project }) {
   const [activeChapterId, setActiveChapterId] = useState(null);
   const activeChapter = chapters.find((c) => c.id === activeChapterId) || chapters[0];
 
-  // Pattern instances inside the active chapter. Stub today; real call
-  // will be `analyzePatternsWithVideoflow(project.path, chapter.id)`.
+  // Load the phrase slice sidecar that `cli.py assess` writes into
+  // `.<stem>.forge/<stem>.phrases.json`. Three states:
+  //   null      — fetch hasn't completed yet (initial mount)
+  //   []        — fetch completed but no sidecar / no phrases. Drives
+  //               the "Run analysis" CTA.
+  //   [...]     — phrases loaded; each carries the structural shape
+  //               label produced by assessment/shape_labeler.py.
+  // PhrasesTab is the canonical place to *trigger* analysis; the
+  // sidecar is a write-through side effect of that. PatternsTab only
+  // reads — running analyze from two places would be confusing and
+  // double the wall-clock on first open.
+  const [allPhrases, setAllPhrases] = useState(null);
+  useEffect(() => {
+    if (!project?.path) {
+      setAllPhrases([]);
+      return undefined;
+    }
+    let cancelled = false;
+    loadPhrasesSidecar(project.path)
+      .then((data) => {
+        if (cancelled) return;
+        const slices = Array.isArray(data?.slices) ? data.slices : [];
+        setAllPhrases(slices);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('loadPhrasesSidecar failed', err);
+        setAllPhrases([]);
+      });
+    return () => { cancelled = true; };
+  }, [project?.path]);
+
   const instances = useMemo(
-    () => stubInstancesForChapter(activeChapter, project?.id),
-    [activeChapter?.id, project?.id],
+    () => phrasesForChapter(allPhrases ?? [], activeChapter),
+    [allPhrases, activeChapter?.id, activeChapter?.at_ms, activeChapter?.end_ms],
   );
 
   // Counts per pattern type — drives left-rail badges + filters the
@@ -255,6 +271,56 @@ export default function PatternsTab({ project }) {
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   };
+
+  // Focused phrase — inline state. selectNonce bumps on every focus()
+  // call (even re-click) so the scope-reset effect re-seeks on
+  // re-click instead of treating it as a no-op. Clears on chapter
+  // change.
+  const [focusedPhraseId, setFocusedPhraseId] = useState(null);
+  const [selectNonce, setSelectNonce] = useState(0);
+  const focusPhrase = (id) => {
+    setFocusedPhraseId(id);
+    setSelectNonce((n) => n + 1);
+  };
+  useEffect(() => { setFocusedPhraseId(null); }, [activeChapter?.id]);
+  const focusedPhrase = useMemo(
+    () => (focusedPhraseId != null
+      ? activeInstances.find((i) => i.id === focusedPhraseId) ?? null
+      : null),
+    [activeInstances, focusedPhraseId],
+  );
+  const focusedIdx = focusedPhrase ? activeInstances.findIndex((i) => i.id === focusedPhrase.id) : -1;
+  const prevPhrase = focusedIdx > 0 ? activeInstances[focusedIdx - 1] : null;
+  const nextPhrase = (focusedIdx >= 0 && focusedIdx < activeInstances.length - 1)
+    ? activeInstances[focusedIdx + 1] : null;
+
+  // Unified playback clock — shared across the strip baton and the
+  // MediaViewer below. Chapter is just a slice; we drive the viewer the
+  // same way ChaptersTab does. Pre-refactor the viewer (SliceMediaPanel)
+  // owned a second internal clock, which caused PhrasesTab regressions
+  // (baton gone, re-click no-seek, back-5s dead, scroll broken) — fixed
+  // by collapsing to one clock here.
+  const [currentMs, setCurrentMs] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const { clip: chapterClip } = useChapterClip(project?.mediaPath, activeChapter);
+
+  // Scope-reset: when chapter or focus changes, or the same phrase is
+  // re-clicked (selectNonce bump), land the clock at the new scope's
+  // start and pause.
+  useEffect(() => {
+    setIsPlaying(false);
+    if (focusedPhrase) {
+      setCurrentMs(focusedPhrase.at_ms);
+    } else if (activeChapter) {
+      setCurrentMs(activeChapter.at_ms);
+    }
+  }, [activeChapter?.id, focusedPhrase?.id, selectNonce]);
+
+  // Full-track audio peaks piped to MediaViewer — gate on a non-empty
+  // peaks array so the viewer doesn't render a blank Audio mode while
+  // the sidecar is loading.
+  const audioWaveform = trackPeaks?.peaks?.length ? trackPeaks : null;
 
   // TransformPanel state. Categories are now visible (Tone / Behavior /
   // Structural) — the user can pick any transform across the catalog,
@@ -324,6 +390,38 @@ export default function PatternsTab({ project }) {
       </section>
     );
   }
+  // Phrases sidecar not yet read — quiet placeholder. Distinct from the
+  // empty-after-load state below; null means the fetch hasn't returned,
+  // [] means it returned with nothing to show.
+  if (allPhrases === null) {
+    return (
+      <section style={{ flex: 1, display: 'grid', placeItems: 'center',
+                        padding: 40, color: 'var(--text-dim)' }}>
+        Loading phrase analysis…
+      </section>
+    );
+  }
+  // No phrases on disk — assess hasn't run yet for this project. Route
+  // the user to the Phrases tab where the analyze pipeline lives; that
+  // run writes the slice sidecar as a side effect, so the next time
+  // they switch back here the data appears with no extra step.
+  if (allPhrases.length === 0) {
+    return (
+      <section style={{ flex: 1, display: 'grid', placeItems: 'center',
+                        padding: 40, color: 'var(--text-dim)', textAlign: 'center' }}>
+        <div style={{ maxWidth: 420, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+            No phrase analysis yet
+          </div>
+          <div style={{ marginTop: 8, fontSize: 12.5 }}>
+            Open the <strong>Phrases</strong> tab and run analysis. Patterns
+            will populate here automatically once the assess pass writes the
+            phrase sidecar.
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -351,32 +449,136 @@ export default function PatternsTab({ project }) {
         </div>
       </div>
 
-      {/* Row 2 — Pattern context strip. Header carries the active
-          pattern's identity (label + count + description + suggested
-          transform). Waveform below is collapsible — header stays visible
-          either way so the user sees which pattern they're working on. */}
-      <ChapterContextStrip
-        chapter={activeChapter}
-        actions={project?.actions || []}
-        bands={patternBands}
-        onSelectBand={(bandId) => {
-          const inst = instances.find((i) => i.id === bandId);
-          if (inst) setActivePatternId(inst.patternId);
-        }}
-        expanded={isContextExpanded}
-        onToggleExpanded={() => setIsContextExpanded((v) => !v)}
-        header={isContextExpanded
-          ? <PatternStripHeader
-              pattern={findPattern(activePatternId)}
-              count={activeInstances.length}
-            />
-          : <ChapterStripHeader chapter={activeChapter} />
+      {/* Row 2 — Pattern context strip (left, waveform + phrase bands)
+          + collapse toggle above slice media viewer (right, 300px).
+          Toggle is pinned in the right column so its position is stable
+          across collapse / expand. Mirrors PhrasesTab. */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 300px',
+        gap: 12, padding: '8px 12px', alignItems: 'start',
+      }}>
+        <ChapterContextStrip
+          chapter={activeChapter}
+          actions={project?.actions || []}
+          bands={patternBands}
+          onSelectBand={(bandId) => {
+            const inst = instances.find((i) => i.id === bandId);
+            if (inst) setActivePatternId(inst.patternId);
+          }}
+          expanded={isContextExpanded}
+          // Internal toggle suppressed — rendered above the viewer below.
+          header={isContextExpanded
+            ? <PatternStripHeader
+                pattern={findPattern(activePatternId)}
+                count={activeInstances.length}
+              />
+            : <ChapterStripHeader chapter={activeChapter} />
+          }
+          headerExtra={isContextExpanded
+            ? <PatternStripHeaderExtra pattern={findPattern(activePatternId)} />
+            : null
+          }
+        />
+
+        {/* Right column — collapse toggle pinned at top, slice media
+            panel below it. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => setIsContextExpanded((v) => !v)}
+              title={isContextExpanded ? 'Collapse' : 'Expand'}
+              aria-label={isContextExpanded ? 'Collapse' : 'Expand'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '4px 8px', borderRadius: 5,
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                color: 'var(--text-dim)',
+                cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+              }}
+            >
+              <Icon name={isContextExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
+              {isContextExpanded ? 'Collapse' : 'Expand'}
+            </button>
+          </div>
+        {/* MediaViewer — defaults to active-chapter scope; narrows to
+            phrase scope when a row is clicked. Hidden when the strip is
+            collapsed so the body gets the full height. Chapter is just a
+            slice — same viewer, different bounds. */}
+        {activeChapter && isContextExpanded && (() => {
+        const chapterIdx = chapters.indexOf(activeChapter);
+        // VIEW = chapter (the larger context we're navigating WITHIN).
+        // SLICE = focused phrase, or chapter when nothing focused.
+        // Funscript tape scrolls inside the view; playback clamps to
+        // the slice.
+        const viewScope = {
+          id: activeChapter.id,
+          title: activeChapter.name || `Chapter ${chapterIdx + 1}`,
+          color: activeChapter.toneColor || '#4dabf7',
+          start: activeChapter.at_ms,
+          end: activeChapter.end_ms,
+        };
+        let sliceScope = viewScope;
+        if (focusedPhrase) {
+          const focusedPattern = findPattern(focusedPhrase.patternId);
+          const focusedNumber =
+            activeInstances.findIndex((i) => i.id === focusedPhrase.id) + 1;
+          sliceScope = {
+            id: focusedPhrase.id,
+            title: `${focusedPattern.label} #${focusedNumber}`,
+            color: focusedPattern.color,
+            start: focusedPhrase.at_ms,
+            end: focusedPhrase.end_ms,
+          };
         }
-        headerExtra={isContextExpanded
-          ? <PatternStripHeaderExtra pattern={findPattern(activePatternId)} />
-          : null
-        }
-      />
+        // Chapter scope: prev/next walks chapters. Phrase scope: walks
+        // phrases within the active pattern's instance list.
+        const onPrev = focusedPhrase
+          ? (prevPhrase ? () => focusPhrase(prevPhrase.id) : undefined)
+          : (chapterIdx > 0 ? () => setActiveChapterId(chapters[chapterIdx - 1].id) : undefined);
+        const onNext = focusedPhrase
+          ? (nextPhrase ? () => focusPhrase(nextPhrase.id) : undefined)
+          : (chapterIdx >= 0 && chapterIdx < chapters.length - 1
+              ? () => setActiveChapterId(chapters[chapterIdx + 1].id)
+              : undefined);
+        return (
+          <MediaViewer
+            videoSrc={chapterClip?.url}
+            videoSrcOffsetMs={chapterClip?.offsetMs ?? 0}
+            media={{ kind: project?.mediaKind || 'video', title: sliceScope.title }}
+            loadingLabel={chapterClip ? null : 'Loading chapter clip…'}
+            audioWaveform={audioWaveform}
+            spectrogram={trackSpectrogram}
+            beats={trackBeats}
+            // View = chapter; the tape scrolls inside it.
+            chapter={viewScope}
+            funscript={{ actions: project?.actions || [] }}
+            currentMs={currentMs}
+            totalMs={activeChapter.end_ms}
+            isPlaying={isPlaying}
+            onPlayPause={() => setIsPlaying((p) => !p)}
+            onSeek={(ms) => {
+              // Clamp to slice (phrase or chapter), not view.
+              setCurrentMs(Math.max(sliceScope.start, Math.min(sliceScope.end, ms)));
+            }}
+            onTimeChange={(ms) => {
+              if (ms >= sliceScope.end) setCurrentMs(sliceScope.start);
+              else if (ms < sliceScope.start) setCurrentMs(sliceScope.start);
+              else setCurrentMs(ms);
+            }}
+            onPrev={onPrev}
+            onNext={onNext}
+            modeToggleAlign="start"
+            modeToggleSize="sm"
+            showModeLabel={false}
+            showMark={false}
+            width="100%"
+            thumbnailAspect="16/7"
+          />
+        );
+      })()}
+        </div>
+      </div>
 
       {/* Body — rail | center table | TransformPanel */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
@@ -400,6 +602,8 @@ export default function PatternsTab({ project }) {
             transformId={transformId}
             params={params}
             onToggleInstance={toggleEditedInstance}
+            focusedPhraseId={focusedPhrase?.id ?? null}
+            onFocusPhrase={focusPhrase}
           />
         </div>
 
@@ -561,6 +765,7 @@ function PatternRail({ patternTypes, countsByPattern, activePatternId, onSelect 
 function InstanceTable({
   instances, actions, editedInstanceIds, patternType,
   transformId, params, onToggleInstance,
+  focusedPhraseId, onFocusPhrase,
 }) {
   if (instances.length === 0) {
     return (
@@ -623,6 +828,12 @@ function InstanceTable({
             patternType={patternType}
             isEdited={editedInstanceIds.includes(inst.id)}
             onToggle={() => onToggleInstance(inst.id)}
+            isFocused={focusedPhraseId === inst.id}
+            // Always re-focus on click — even on the already-focused row.
+            // The panel's reset effect uses selectNonce as a tiebreaker
+            // so a re-click re-seeks to phrase start. Dismiss via the X
+            // button in the panel header.
+            onFocus={() => onFocusPhrase?.(inst.id)}
           />
         ))}
       </div>
@@ -633,6 +844,7 @@ function InstanceTable({
 function InstanceRow({
   instance, number, actions, transformId, params,
   patternType, isEdited, onToggle,
+  isFocused, onFocus,
 }) {
   const patternColor = patternType.color;
   const { acts: originalActs, dur } = useMemo(
@@ -658,10 +870,15 @@ function InstanceRow({
   // ring; skipped rows get nothing (just the shared row divider). Using
   // boxShadow inset instead of `border` so the row's grid layout doesn't
   // jump when the state flips, and so it overlays the divider cleanly.
-  const rowRing = isEdited ? `inset 0 0 0 2px ${patternColor}` : 'none';
+  // Focused row stacks a white outer ring on top — clear visual
+  // hierarchy: focused (white) > edited (color) > skipped (none).
+  let rowRing = 'none';
+  if (isFocused) rowRing = `inset 0 0 0 2px #fff, inset 0 0 0 4px ${patternColor}`;
+  else if (isEdited) rowRing = `inset 0 0 0 2px ${patternColor}`;
 
   return (
     <div
+      onClick={onFocus}
       style={{
         display: 'grid',
         gridTemplateColumns: '120px 60px 1fr 1fr 80px',
@@ -669,6 +886,8 @@ function InstanceRow({
         borderBottom: '1px solid var(--border)',
         boxShadow: rowRing,
         opacity: isEdited ? 1 : 0.55,
+        cursor: onFocus ? 'pointer' : 'default',
+        background: isFocused ? 'var(--surface-2)' : 'transparent',
       }}
     >
       {/* Col 1 — stacked #/pattern · time range · length. All visible
@@ -722,9 +941,11 @@ function InstanceRow({
         />
       </div>
       {/* Toggle: include / exclude this row from the edit set. Check
-          icon when included, empty circle when not. Click toggles. */}
+          icon when included, empty circle when not. Click toggles.
+          stopPropagation so the row's onFocus doesn't also fire — the
+          edit-set toggle and the focus toggle are independent gestures. */}
       <button
-        onClick={onToggle}
+        onClick={(e) => { e.stopPropagation(); onToggle(); }}
         title={isEdited ? 'Exclude from edit' : 'Include in edit'}
         aria-label={isEdited ? 'Exclude this instance from the edit' : 'Include this instance in the edit'}
         style={{
@@ -743,3 +964,10 @@ function InstanceRow({
     </div>
   );
 }
+
+// Viewer wiring: each editing tab now calls MediaViewer directly with
+// a scope object (chapter is just one kind of slice). The brief
+// SliceMediaPanel wrapper that lived between 2026-05-22 and 2026-05-23
+// was deleted once it was clear it duplicated MediaViewer's responsibility
+// AND introduced a second clock that broke baton + transport in phrase
+// scope. The unified-clock fix collapsed four regressions into zero.

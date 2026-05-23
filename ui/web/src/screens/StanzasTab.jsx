@@ -69,6 +69,13 @@ function findMode(id) {
   return FORGEGEN_MODES.find((m) => m.id === id) || null;
 }
 
+// Module-level stable empty arrays for the cache-miss fallback. `?? []`
+// would create a fresh array each render, cascading through downstream
+// useMemo deps and triggering an infinite render loop via the edit-set
+// useEffect (observed 2026-05-23). Same pattern used in PhrasesTab.
+const EMPTY_STANZAS = [];
+const EMPTY_CLUSTERS = [];
+
 export default function StanzasTab({
   project,
   setBusy,
@@ -120,8 +127,8 @@ export default function StanzasTab({
   // Cached at App.jsx level keyed by funscript path so tab switches
   // don't re-read.
   const cacheEntry = project?.path ? stanzasByPath[project.path] : null;
-  const allStanzas = cacheEntry?.stanzas ?? [];
-  const allClusters = cacheEntry?.clusters ?? [];
+  const allStanzas = cacheEntry?.stanzas ?? EMPTY_STANZAS;
+  const allClusters = cacheEntry?.clusters ?? EMPTY_CLUSTERS;
   const stanzasLoaded = !!cacheEntry?.loaded;
 
   useEffect(() => {

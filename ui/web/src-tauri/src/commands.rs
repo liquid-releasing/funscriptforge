@@ -1081,6 +1081,94 @@ pub async fn analyze_phrases(
 }
 
 // ---------------------------------------------------------------------------
+// Phrase slice sidecar — cached reader for `.<stem>.forge/<stem>.phrases.json`,
+// the slice-schema file `cli.py assess` writes on every run. PatternsTab
+// reads this instead of re-running analyze on tab mount — the chapter
+// resolution happens client-side via at_ms ∈ chapter membership.
+//
+// Returns Ok(None) when the sidecar is missing so the tab can render an
+// "analyze first" CTA without an error surface. Parse errors DO bubble
+// up — a corrupt sidecar is worth noticing.
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct DiskPhraseSlice {
+    #[serde(default)]
+    id: String,
+    at_ms: u64,
+    end_ms: u64,
+    #[serde(default)]
+    label: String,
+    #[serde(default)]
+    chapter_id: Option<String>,
+    #[serde(default)]
+    metrics: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+struct DiskPhrasesSidecar {
+    #[serde(default)]
+    version: u32,
+    #[serde(default)]
+    slices: Vec<DiskPhraseSlice>,
+}
+
+#[derive(Serialize)]
+pub struct PhraseSlice {
+    pub id: String,
+    pub at_ms: u64,
+    pub end_ms: u64,
+    pub label: String,
+    pub chapter_id: Option<String>,
+    pub metrics: serde_json::Value,
+}
+
+#[derive(Serialize)]
+pub struct LoadedPhrases {
+    pub version: u32,
+    pub slices: Vec<PhraseSlice>,
+}
+
+fn phrases_sidecar_path(funscript_path: &str) -> String {
+    let p = Path::new(funscript_path);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("media");
+    forge_dir(p)
+        .join(format!("{}.phrases.json", stem))
+        .to_string_lossy()
+        .into_owned()
+}
+
+#[tauri::command]
+pub async fn load_phrases_sidecar(
+    funscript_path: String,
+) -> Result<Option<LoadedPhrases>, String> {
+    let sp = phrases_sidecar_path(&funscript_path);
+    if !Path::new(&sp).exists() {
+        return Ok(None);
+    }
+    let raw = tokio::fs::read_to_string(&sp)
+        .await
+        .map_err(|e| format!("could not read phrases sidecar at {}: {}", sp, e))?;
+    let parsed: DiskPhrasesSidecar = serde_json::from_str(&raw)
+        .map_err(|e| format!("could not parse phrases sidecar at {}: {}", sp, e))?;
+    Ok(Some(LoadedPhrases {
+        version: parsed.version,
+        slices: parsed
+            .slices
+            .into_iter()
+            .map(|s| PhraseSlice {
+                id: s.id,
+                at_ms: s.at_ms,
+                end_ms: s.end_ms,
+                label: s.label,
+                chapter_id: s.chapter_id,
+                metrics: s.metrics,
+            })
+            .collect(),
+    }))
+}
+
+// ---------------------------------------------------------------------------
 // Stanzas — wire shape returned by `cli.py read-stanzas`. These are
 // videoflow-classified phrases pulled directly out of the existing
 // <stem>.chapters.json sidecar. No analysis is run; the sidecar must

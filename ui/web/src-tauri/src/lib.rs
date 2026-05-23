@@ -23,6 +23,7 @@ pub fn run() {
             commands::create_chapters_sidecar,
             commands::analyze_chapters_with_videoflow,
             commands::analyze_phrases,
+            commands::load_phrases_sidecar,
             commands::read_stanzas,
             commands::list_characters,
             commands::attach_media,

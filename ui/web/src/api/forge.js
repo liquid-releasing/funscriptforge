@@ -169,6 +169,27 @@ export function analyzePhrases(funscriptPath) {
   );
 }
 
+/** Read the cached phrase slice sidecar that `cli.py assess` writes
+ *  into `.<stem>.forge/<stem>.phrases.json`. Cheap (no analyzer run,
+ *  just JSON read). Returns `null` when the sidecar is missing —
+ *  caller renders an "analyze first" CTA. Used by PatternsTab to
+ *  populate the per-chapter phrase list without paying the full
+ *  analyze cost on every tab mount; the schema is shared with future
+ *  consumers (PhrasesTab will migrate to this cached path too once
+ *  the shape field is the source of truth).
+ *
+ *  Returns: `{ version, slices: [{ id, at_ms, end_ms, label,
+ *    chapter_id, metrics }] }` where `label` is one of the 8 shape
+ *  ids (steady/pulse/three_one/tide/drift/burst/taper/swell) from
+ *  assessment/shape_labeler.py. */
+export function loadPhrasesSidecar(funscriptPath) {
+  return call(
+    'load_phrases_sidecar',
+    { funscriptPath },
+    () => Promise.resolve(null),
+  );
+}
+
 /** Read videoflow-classified stanzas (audio phrases) plus computed
  *  clusters from the `<stem>.chapters.json` sidecar next to a funscript
  *  or media file.

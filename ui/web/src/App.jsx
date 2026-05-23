@@ -669,11 +669,21 @@ export default function App() {
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}
             refreshAudioSidecars={refreshAudioSidecars}
+            // Bundled phrase analysis — ChaptersTab runs analyzePhrases
+            // alongside auto-chapter so downstream tabs (Phrases /
+            // Patterns / future Stanzas) find the sidecar already in
+            // cache when the user navigates over (user direction
+            // 2026-05-23: "it's actually pretty fast, should be in the
+            // analysis page").
+            setPhrasesByPath={setPhrasesByPath}
           />
         )}
         {tab === 'patterns' && (
           <PatternsTab
             project={typeof openedProject === 'object' ? openedProject : null}
+            trackPeaks={trackPeaks}
+            trackSpectrogram={trackSpectrogram}
+            trackBeats={trackBeats}
           />
         )}
         {tab === 'phrases' && (
@@ -683,6 +693,9 @@ export default function App() {
             setAppError={setAppError}
             phrasesByPath={phrasesByPath}
             setPhrasesByPath={setPhrasesByPath}
+            trackPeaks={trackPeaks}
+            trackSpectrogram={trackSpectrogram}
+            trackBeats={trackBeats}
           />
         )}
         {tab === 'stanzas' && (

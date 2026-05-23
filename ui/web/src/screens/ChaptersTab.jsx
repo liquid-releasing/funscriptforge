@@ -24,8 +24,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Icon, MediaViewer, Slider, ChapterRibbon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
-import { createChaptersSidecar, analyzeChaptersWithVideoflow, prewarmMediaRange, extractChapterClip } from '../api/forge.js';
+import { createChaptersSidecar, analyzeChaptersWithVideoflow, prewarmMediaRange, analyzePhrases } from '../api/forge.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
+import { useChapterClip } from '../hooks/useChapterClip.js';
 
 // The six canonical tones. Source of truth: forge/tabs/tone_tab.py::_TONES
 // in the Python side — the IDs MUST match (tender/build/tease/edge/climax/
@@ -223,7 +224,7 @@ function mergeWorkingActions({ originalActions, chapters, acceptedIds, tones, pa
 // number of hooks" guard.
 const EMPTY_CHAPTER = { id: '__empty__', atMs: 0, endMs: 0, name: '', color: '#888' };
 
-export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, trackSpectrogram, trackBeats, refreshAudioSidecars }) {
+export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, trackSpectrogram, trackBeats, refreshAudioSidecars, setPhrasesByPath }) {
   const totalMs = project?.durationMs ?? 0;
   const actions = Array.isArray(project?.actions) ? project.actions : [];
 
@@ -367,6 +368,30 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       // pass — pull them in now so the viewer's Audio / Spectrogram
       // modes light up without a project re-open.
       refreshAudioSidecars?.();
+      // Bundle phrase analysis into the same pass so downstream tabs
+      // (Phrases / Patterns) find the sidecar already cached. Failures
+      // here are non-fatal — PhrasesTab still has its lazy hydrate path
+      // so a transient error here doesn't break the editor; user can
+      // re-enter Phrases tab to retry.
+      if (setPhrasesByPath) {
+        try {
+          setBusy?.({
+            message: 'Detecting phrases…',
+            onCancel: () => { analyzeCancelledRef.current = true; },
+          });
+          const phraseRows = await analyzePhrases(project.path);
+          if (analyzeCancelledRef.current) return;
+          setPhrasesByPath((prev) => ({
+            ...prev,
+            [project.path]: {
+              phrases: Array.isArray(phraseRows) ? phraseRows : [],
+              loaded: true,
+            },
+          }));
+        } catch (err) {
+          console.warn('ChaptersTab: bundled analyzePhrases failed (non-fatal)', err);
+        }
+      }
     } catch (err) {
       if (analyzeCancelledRef.current) return;
       console.error('ChaptersTab: analyze_chapters_with_videoflow failed', err);
@@ -415,90 +440,19 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     setIsPlaying(false);
   }, [active.id]);
 
-  // Chapter clip extraction. Stream-copy the active chapter's bytes
-  // into a small temp file via ffmpeg. The MediaViewer's <video>
-  // element plays the temp file directly — no asset:// per-range-
-  // request overhead — which is the actual fix for the long-file
-  // stutter on 90min+ / 4K / 18GB sources.
+  // Chapter clip extraction. The hook stream-copies the active chapter
+  // via ffmpeg into a small temp file, fetches it into a blob: URL for
+  // smooth seeks (capped at 150 MB — bigger clips fall back to the
+  // asset URL to avoid WebView2 OOM), and revokes the previous blob
+  // on swap. While extracting, `clip` is null so the player shows the
+  // "Loading chapter…" overlay rather than the previous content.
   //
-  // While extracting, videoSrc is held empty so the player doesn't keep
-  // showing the previous chapter. The "Loading chapter…" overlay covers
-  // the gap. Extracted clips are cached in the OS temp dir, so re-
-  // entering a chapter resolves instantly.
-  //
-  // Falls back to the original media path on extract failure (no
-  // ffmpeg installed, etc.) so the app stays usable — just stutters
-  // on long files like before.
-  const [chapterClip, setChapterClip] = useState(null); // { url, offsetMs, chapterId }
-  const [chapterLoading, setChapterLoading] = useState(false);
-  useEffect(() => {
-    if (!project?.mediaPath || active === EMPTY_CHAPTER) {
-      setChapterClip(null);
-      setChapterLoading(false);
-      return undefined;
-    }
-    let cancelled = false;
-    setChapterLoading(true);
-    // Clear current clip so the video element unloads while the new
-    // one extracts — prevents the player from continuing to show /
-    // play the previous chapter's content underneath the overlay.
-    setChapterClip(null);
-    extractChapterClip(project.mediaPath, active.atMs, active.endMs)
-      .then(async (result) => {
-        if (cancelled) return;
-        if (!result) {
-          console.warn('ChaptersTab: extractChapterClip returned null (mock?)');
-          return;
-        }
-        const assetUrl = toMediaUrl(result.tempPath);
-        // Fetch the clip into memory + create a blob: URL. The
-        // Chromium <video> element then reads from JS-heap memory
-        // with no protocol round-trip, no per-range-request overhead.
-        // The user verified the temp files play smoothly in VLC but
-        // stuttered through http://asset.localhost/, so the per-
-        // request latency of the asset protocol is the actual
-        // bottleneck — a blob: URL eliminates it entirely.
-        // Memory cost: 100-500MB per chapter on typical HD; works
-        // until 4K files where clips can exceed a couple GB and
-        // we'll need a different strategy.
-        let url = assetUrl;
-        try {
-          const resp = await fetch(assetUrl);
-          if (cancelled) return;
-          if (!resp.ok) throw new Error(`fetch ${assetUrl} ${resp.status}`);
-          const blob = await resp.blob();
-          if (cancelled) return;
-          url = URL.createObjectURL(blob);
-        } catch (err) {
-          console.warn('ChaptersTab: clip blob fetch failed, falling back to asset URL', err);
-        }
-        console.log('ChaptersTab: chapter clip ready', { tempPath: result.tempPath, url, offsetMs: result.actualStartMs, cached: result.cached, isBlob: url.startsWith('blob:') });
-        setChapterClip({
-          url,
-          offsetMs: result.actualStartMs,
-          chapterId: active.id,
-        });
-      })
-      .catch((err) => {
-        console.warn('ChaptersTab: extractChapterClip failed', err);
-      })
-      .finally(() => {
-        if (!cancelled) setChapterLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [project?.mediaPath, active.id]);
-
-  // Revoke the previous chapter's blob URL when chapterClip changes —
-  // releases the in-memory copy of the prior clip so we don't pile up
-  // hundreds of MB per chapter visit. Cleanup fires AFTER the next
-  // chapterClip has been set, so the video element has already swapped
-  // to the new URL before the old one is revoked.
-  useEffect(() => {
-    if (!chapterClip || !chapterClip.url.startsWith('blob:')) return undefined;
-    return () => {
-      URL.revokeObjectURL(chapterClip.url);
-    };
-  }, [chapterClip]);
+  // Same lifecycle PatternsTab uses (and Phrases/Stanzas/Events will).
+  // See [[project-slice-viewer-pattern]] for the extraction rationale.
+  const { clip: chapterClip, loading: chapterLoading } = useChapterClip(
+    project?.mediaPath,
+    active === EMPTY_CHAPTER ? null : active,
+  );
 
   // rAF clock: advance currentMs while playing; loop back at chapter end.
   // The boundary is hard — we never let the playhead leave the active

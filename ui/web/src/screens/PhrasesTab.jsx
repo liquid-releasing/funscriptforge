@@ -39,12 +39,12 @@
 // ribbon rows above do not.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { toMediaUrl } from '../lib/mediaUrl.js';
 import {
-  ChapterRibbon, ChapterContextStrip, Segmented, TransformPanel,
+  ChapterRibbon, ChapterContextStrip, MediaViewer, Segmented, TransformPanel,
   Icon, fmtTimeShort, fmtDurationMs,
 } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
+import { useChapterClip } from '../hooks/useChapterClip.js';
 import { TRANSFORMS, BEHAVIOR_TAGS } from '../data/transforms.js';
 import { analyzePhrases } from '../api/forge.js';
 
@@ -81,6 +81,14 @@ function findTag(id) {
   return BEHAVIOR_TAGS.find((t) => t.id === id) || null;
 }
 
+// Module-level stable empty array. Used as the fallback for the
+// `allPhrases` derivation so the value is reference-stable across
+// renders when the cache hasn't loaded yet — `?? []` would create a
+// fresh array each render, cascading through downstream useMemo deps
+// and triggering an infinite render loop via the edit-set useEffect.
+// Same pattern applied in StanzasTab for the same reason.
+const EMPTY_PHRASES = [];
+
 export default function PhrasesTab({
   project,
   setBusy,
@@ -90,6 +98,12 @@ export default function PhrasesTab({
   // Keyed by funscript path.
   phrasesByPath = {},
   setPhrasesByPath = () => {},
+  // Full-track audio sidecars (peaks / spectrogram / beats). Drive the
+  // MediaViewer's Audio + Spectro modes — same shape ChaptersTab and
+  // PatternsTab consume.
+  trackPeaks,
+  trackSpectrogram,
+  trackBeats,
 }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
@@ -124,27 +138,23 @@ export default function PhrasesTab({
   // phrase context should be visible by default for the new chapter.
   useEffect(() => { setIsPhraseViewExpanded(true); }, [activeChapterId]);
 
-  // ── Media viewer clock (per-tab) ─────────────────────────────────
-  // Tab owns its own currentMs / isPlaying. Switching chapters seeks
-  // to the new chapter's start. Switching tabs unmounts → state resets,
-  // which is the per-tab clock model agreed in
-  // project_accept_chain_wiring.md (per-tab clock, not app-shared).
-  // Seed currentMs from the active chapter's start synchronously on first
-  // render so the playhead baton is correctly placed before any effect
-  // runs. (Earlier shape used useState(0) + useEffect, which left the
-  // baton at x=0 for one frame and looked like it was missing.)
+  // ── Unified playback clock ───────────────────────────────────────
+  // Single source of truth shared across the chapter strip (baton +
+  // click-to-seek) AND the MediaViewer below. Pre-refactor, the viewer
+  // (SliceMediaPanel) owned a second internal clock — the resulting
+  // two-clock split was the root cause of the four PhrasesTab
+  // regressions (baton gone in funscript mode, re-click no-seek,
+  // back-5s dead, funscript scroll broken). Chapter is just a slice;
+  // every editing tab drives MediaViewer the same way ChaptersTab does.
+  // Seed from the first chapter's start synchronously so the baton has
+  // a sensible position on the first frame (before the scope-reset
+  // effect below fires).
   const [currentMs, setCurrentMs] = useState(() => {
     const id = chapters[0]?.id ?? null;
     const ch = chapters.find((c) => c.id === id);
     return ch?.atMs ?? 0;
   });
   const [isPlaying, setIsPlaying] = useState(false);
-  useEffect(() => {
-    if (activeChapterId == null) return;
-    const ch = chapters.find((c) => c.id === activeChapterId);
-    if (ch) setCurrentMs(ch.atMs);
-  }, [activeChapterId]);  // eslint-disable-line react-hooks/exhaustive-deps
-  const mediaSrc = toMediaUrl(project?.mediaPath);
   const mediaKind = project?.mediaKind || 'video';
 
   // TransformPanel state — same shape as PatternsTab so muscle memory
@@ -154,30 +164,87 @@ export default function PhrasesTab({
   const [transformId, setTransformId] = useState(null);
   const [params, setParams] = useState({});
 
-  // Focused phrase — set by clicking a band in the chapter funscript
-  // view (Row 2). Today only drives the white inset border on the band.
-  // When single-mode center pane lands, this is the same id it shows.
-  const [focusPhraseId, setFocusPhraseId] = useState(null);
-
-  // Empty / no-project states
-  if (!project?.path) {
-    return <EmptyState title="No project open"
-      body="Open a funscript from the Library tab to apply transforms." />;
-  }
-  if (chapters.length === 0) {
-    return <EmptyState title="No chapters yet"
-      body="Transforms work on phrases inside a chapter. Create chapters on the Chapters tab first, then come back." />;
-  }
-
-  const activeChapter = chapters.find((c) => c.id === activeChapterId) ?? chapters[0];
-
-  // Phrases for the loaded funscript come from the App-level cache. Hydrated
-  // lazily via `cli.py assess` (analyze_phrases Tauri command) the first
-  // time the tab mounts for a given project path; subsequent remounts
-  // (tab switches) reuse the cached entry, so no re-analyze.
+  // Resolve the active chapter + phrasesInScope above the empty-state
+  // early returns so the hooks below can be called unconditionally
+  // (Rules of Hooks). Fall back to safe defaults when there's no
+  // project / no chapters; the early returns below catch those cases
+  // and short-circuit render before any of this matters.
+  const activeChapter = chapters.find((c) => c.id === activeChapterId) ?? chapters[0] ?? null;
   const cacheEntry = project?.path ? phrasesByPath[project.path] : null;
-  const allPhrases = cacheEntry?.phrases ?? [];
+  const allPhrases = cacheEntry?.phrases ?? EMPTY_PHRASES;
   const phrasesLoaded = !!cacheEntry?.loaded;
+  const phrasesInScope = useMemo(() => {
+    if (!activeChapter) return [];
+    return allPhrases.filter(
+      (p) => p.at_ms >= activeChapter.atMs && p.at_ms < activeChapter.endMs,
+    );
+  }, [allPhrases, activeChapter?.id, activeChapter?.atMs, activeChapter?.endMs]);
+
+  // Focused phrase — inline state. The selectNonce counter bumps on
+  // every focus call (even re-click of the same id) so the scope-reset
+  // effect below re-seeks to phrase.at_ms instead of treating the
+  // re-click as a no-op. Clears on parent-chapter change.
+  const [focusedPhraseId, setFocusedPhraseId] = useState(null);
+  const [selectNonce, setSelectNonce] = useState(0);
+  const focus = (id) => {
+    setFocusedPhraseId(id);
+    setSelectNonce((n) => n + 1);
+  };
+  const clearFocusedPhrase = () => setFocusedPhraseId(null);
+  useEffect(() => { setFocusedPhraseId(null); }, [activeChapter?.id]);
+  const focusedPhrase = useMemo(
+    () => (focusedPhraseId != null
+      ? phrasesInScope.find((p) => p.id === focusedPhraseId) ?? null
+      : null),
+    [phrasesInScope, focusedPhraseId],
+  );
+  const focusedIdx = focusedPhrase ? phrasesInScope.findIndex((p) => p.id === focusedPhrase.id) : -1;
+  const prevPhrase = focusedIdx > 0 ? phrasesInScope[focusedIdx - 1] : null;
+  const nextPhrase = (focusedIdx >= 0 && focusedIdx < phrasesInScope.length - 1)
+    ? phrasesInScope[focusedIdx + 1] : null;
+  const focusPhraseId = focusedPhrase?.id ?? null;
+  const setFocusPhraseId = (id) => (id == null ? clearFocusedPhrase() : focus(id));
+
+  // Chapter clip for the MediaViewer below — same shared hook that
+  // ChaptersTab and PatternsTab use. Handles ffmpeg extract + blob /
+  // asset-URL fallback above the 150 MB cap.
+  const { clip: chapterClip } = useChapterClip(project?.mediaPath, activeChapter);
+  // Full-track audio peaks — gate on a non-empty array so Audio mode
+  // doesn't render an empty waveform while the sidecar is loading.
+  const audioWaveform = trackPeaks?.peaks?.length ? trackPeaks : null;
+
+  // ── Scope-reset effect ───────────────────────────────────────────
+  // When the active scope changes — new chapter, new focused phrase, OR
+  // a re-click of the same phrase (selectNonce bump) — pause and land
+  // the clock inside the new scope. The functional setState honors any
+  // currentMs that the click handler ALREADY set inside the new scope
+  // (band click-to-seek path); otherwise it lands on the phrase start.
+  // For chapter scope, lands on the first phrase inside the chapter
+  // rather than chapter start so the user lands on their first edit
+  // target. Falls back to chapter start when phrases haven't loaded.
+  useEffect(() => {
+    setIsPlaying(false);
+    if (focusedPhrase) {
+      setCurrentMs((prev) => {
+        if (prev >= focusedPhrase.at_ms && prev < focusedPhrase.end_ms) return prev;
+        return focusedPhrase.at_ms;
+      });
+      return;
+    }
+    if (!activeChapter) return;
+    const cacheNow = project?.path ? phrasesByPath[project.path] : null;
+    const phrasesNow = cacheNow?.phrases ?? EMPTY_PHRASES;
+    const first = phrasesNow.find(
+      (p) => p.at_ms >= activeChapter.atMs && p.at_ms < activeChapter.endMs,
+    );
+    setCurrentMs((prev) => {
+      // Preserve currentMs when it's already inside the active chapter,
+      // matching the focused-phrase logic above. Avoids snapping the
+      // baton back to chapter start on every chapter re-render.
+      if (prev >= activeChapter.atMs && prev < activeChapter.endMs) return prev;
+      return first?.at_ms ?? activeChapter.atMs;
+    });
+  }, [activeChapter?.id, focusedPhrase?.id, selectNonce, phrasesByPath, project?.path]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const assessCancelledRef = useRef(false);
   useEffect(() => {
@@ -227,16 +294,6 @@ export default function PhrasesTab({
       });
     return () => { cancelled = true; };
   }, [project?.path]);
-
-  // Phrases filtered to the active chapter's time range. Picks phrases
-  // whose start lands inside the chapter; phrases that straddle a
-  // boundary belong to whichever chapter contains their start.
-  const phrasesInScope = useMemo(() => {
-    if (!activeChapter) return [];
-    return allPhrases.filter(
-      (p) => p.at_ms >= activeChapter.atMs && p.at_ms < activeChapter.endMs,
-    );
-  }, [allPhrases, activeChapter?.id, activeChapter?.atMs, activeChapter?.endMs]);
 
   // Tag counts inside the active chapter — drives the rail's count
   // badges and which tag is "first present" when picking a default.
@@ -307,6 +364,102 @@ export default function PhrasesTab({
     };
   }), [phrasesInScope, editedPhraseIdSet, mode, focusPhraseId]);
 
+  // Empty / no-project states. Below ALL hooks so the hook count is
+  // stable across renders (Rules of Hooks). When no project is open
+  // the hooks above no-op cleanly thanks to the EMPTY_PHRASES stable
+  // fallback + the `if (!activeChapter)` guard in the phrasesInScope
+  // memo.
+  if (!project?.path) {
+    return <EmptyState title="No project open"
+      body="Open a funscript from the Library tab to apply transforms." />;
+  }
+  if (chapters.length === 0) {
+    return <EmptyState title="No chapters yet"
+      body="Transforms work on phrases inside a chapter. Create chapters on the Chapters tab first, then come back." />;
+  }
+
+  // ── View / Slice scopes ─────────────────────────────────────────────
+  // The user's framing 2026-05-23: "in every case... we are viewing a
+  // slice, editing, selecting, scrolling, finding. the view is the
+  // chapter. the slice is the phrase."
+  //
+  //   viewScope  — the larger context the user is navigating WITHIN.
+  //                For PhrasesTab this is always the active chapter.
+  //                Drives MediaViewer's funscript tape (scrolls within
+  //                this window), audio scope, and the corner title.
+  //   sliceScope — what's being edited. Drives the strip header identity
+  //                AND playback clamps (back-5s floor, time-update loop).
+  //                Phrase when focused, otherwise the active chapter.
+  //
+  // Pre-2026-05-23 PM the code passed sliceScope as MediaViewer's
+  // `chapter` prop — which locked the funscript tape to the phrase span
+  // so it couldn't scroll. Wrong: the tape should show the chapter, the
+  // phrase is just where playback is bounded.
+  const chapterIdx = chapters.indexOf(activeChapter);
+  const viewScope = {
+    id: activeChapter.id,
+    title: activeChapter.name || `Chapter ${chapterIdx + 1}`,
+    color: activeChapter.toneColor || activeChapter.color || '#4dabf7',
+    start: activeChapter.atMs,
+    end: activeChapter.endMs,
+  };
+  let sliceScope = viewScope;
+  let scopeKindLabel = `${phrasesInScope.length} ${phrasesInScope.length === 1 ? 'phrase' : 'phrases'}`;
+  if (focusedPhrase) {
+    const tag = findTag(focusedPhrase.tag);
+    // Use the phrase's own `number` field (the global numbering the
+    // table + rail + bands already display) — NOT the chapter-scoped
+    // findIndex+1, which produced "Drone #1" for a phrase that the
+    // rest of the UI labels "Drone #3" (user-flagged 2026-05-23).
+    const phraseNumber = focusedPhrase.number
+      ?? phrasesInScope.findIndex((p) => p.id === focusedPhrase.id) + 1;
+    // CLIP TO CHAPTER BOUNDS. Stopgap for the cross-chapter phrase
+    // problem (user-flagged 2026-05-23 on Euphoria2 phrase 6, which
+    // straddles ch6/ch7). The phrase's "editable region" inside this
+    // chapter ends at chapter.endMs even if its raw end_ms reaches
+    // into ch7. The tail surfaces in ch7 when the user switches there.
+    // Source fix: videoflow detector splits phrases at chapter cuts —
+    // see [[project-funscriptforge-pending]] phrase-detector item.
+    sliceScope = {
+      id: focusedPhrase.id,
+      title: tag ? `${tag.label} #${phraseNumber}` : `Phrase #${phraseNumber}`,
+      color: tag?.color || '#7aa2ff',
+      start: Math.max(activeChapter.atMs, focusedPhrase.at_ms),
+      end: Math.min(activeChapter.endMs, focusedPhrase.end_ms),
+    };
+    scopeKindLabel = focusedPhrase.bpm ? `${focusedPhrase.bpm} BPM` : '';
+  }
+  // Strip header uses sliceScope (it identifies what's being edited).
+  // Backward-compat alias so the existing strip header JSX below
+  // (`scope.color`, `scope.title`, etc.) doesn't need rewriting.
+  const scope = sliceScope;
+  // Prev/next handlers per scope. Chapter scope walks chapters; phrase
+  // scope walks phrases within the active pattern's instance list.
+  //
+  // Prev gets Spotify-style "restart current slice if you're >3s into
+  // it" behavior — same as ChaptersTab. Mid-slice press = restart;
+  // near-the-start press = go to actual previous slice. Without this
+  // every prev-press from inside a phrase jumped backward, which made
+  // it impossible to restart-and-replay the current phrase.
+  const PREV_RESTART_THRESHOLD_MS = 3000;
+  const onPrev = () => {
+    const into = (currentMs || 0) - sliceScope.start;
+    if (into > PREV_RESTART_THRESHOLD_MS) {
+      setCurrentMs(sliceScope.start);
+      return;
+    }
+    if (focusedPhrase) {
+      if (prevPhrase) focus(prevPhrase.id);
+    } else if (chapterIdx > 0) {
+      setActiveChapterId(chapters[chapterIdx - 1].id);
+    }
+  };
+  const onNext = focusedPhrase
+    ? (nextPhrase ? () => focus(nextPhrase.id) : undefined)
+    : (chapterIdx >= 0 && chapterIdx < chapters.length - 1
+        ? () => setActiveChapterId(chapters[chapterIdx + 1].id)
+        : undefined);
+
   return (
     // The outermost layout: column with a fixed-height header stack on
     // top (rows 1-4) and a flex body below (rail + center + panel) that
@@ -341,54 +494,149 @@ export default function PhrasesTab({
         </div>
       </HeaderRow>
 
-      {/* ── Row 2 — Active chapter waveform with overlaid phrase bands.
-            Collapsible: header stays visible so the user always sees the
-            chapter context, body folds away when they want vertical room.
-            Click a band → switch to single mode and focus that phrase. */}
-      <ChapterContextStrip
-        chapter={{ at_ms: activeChapter.atMs, end_ms: activeChapter.endMs }}
-        actions={actions}
-        bands={phraseBands}
-        onSelectBand={(pid) => {
-          setMode('single');
-          setFocusPhraseId(pid);
-          // Click-to-seek: jump the playhead to the phrase start so the
-          // viewer (when media is attached) lines up with the band.
-          const p = phrasesInScope.find((x) => x.id === pid);
-          if (p) setCurrentMs(p.at_ms);
-        }}
-        expanded={isPhraseViewExpanded}
-        onToggleExpanded={() => setIsPhraseViewExpanded((v) => !v)}
-        header={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: activeChapter.color }} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
-              {activeChapter.name || activeChapter.id}
-            </span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-dim)' }}>
-              {isPhraseViewExpanded
-                ? `${fmt(activeChapter.atMs)}–${fmt(activeChapter.endMs)} · ${phrasesInScope.length} phrases`
-                : `· ${phrasesInScope.length} phrases`}
-            </span>
+      {/* ── Row 2 — Active chapter waveform (left) + slice media viewer
+            (right) using the same `1fr 300px` split as ChaptersTab so
+            every editing tab reads with the same rhythm. Click a band
+            in the strip → focus that phrase; the viewer's scope syncs
+            from the same focusedPhrase state.
+
+            Collapse toggle: rendered in the right column ABOVE the
+            viewer (not inside the strip header), so its position is
+            stable across expand/collapse. When collapsed, the strip
+            body AND the viewer both fold; only the strip header on the
+            left and the toggle on the right remain. User request
+            2026-05-23: "collapse should be above the video; when you
+            collapse, expand should be in the same place." */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 300px',
+        gap: 12, padding: '8px 12px', alignItems: 'start',
+      }}>
+        <ChapterContextStrip
+          chapter={{ at_ms: activeChapter.atMs, end_ms: activeChapter.endMs }}
+          actions={actions}
+          bands={phraseBands}
+          onSelectBand={(pid, clickedMs) => {
+            // Two-stage click semantics:
+            //   1st click on a band  → focus + land at phrase start
+            //   2nd click on focused → seek to clicked position
+            // Matches the original design intent (first click selects,
+            // second click navigates within the selection).
+            setMode('single');
+            const newPhrase = phrasesInScope.find((x) => x.id === pid);
+            if (!newPhrase) return;
+            if (pid === focusPhraseId && clickedMs != null) {
+              // Re-click of already-focused band — seek to clicked x.
+              // No focus / selectNonce bump, so the scope-reset effect
+              // doesn't fire and override our setCurrentMs.
+              setCurrentMs(Math.max(newPhrase.at_ms, Math.min(newPhrase.end_ms, clickedMs)));
+            } else {
+              // First click on a (new or unfocused) band — focus it.
+              // The scope-reset effect lands the clock at phrase start.
+              setFocusPhraseId(pid);
+            }
+          }}
+          expanded={isPhraseViewExpanded}
+          // No internal toggle — we render our own above the viewer in
+          // the right column so its position is stable across collapse
+          // and expand. Omitting onToggleExpanded suppresses the strip's
+          // built-in button (per ChapterContextStrip's contract).
+          header={
+            // Single-line scope header. Swaps from chapter info to
+            // phrase info when a phrase is focused (user request
+            // 2026-05-23). Same shape for either kind so the line
+            // doesn't shift visually as the user drills in.
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              whiteSpace: 'nowrap', overflow: 'hidden',
+            }}>
+              <span style={{
+                width: 10, height: 10, borderRadius: 2,
+                background: scope.color, flexShrink: 0,
+              }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                {scope.title}
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-dim)' }}>
+                {fmt(scope.start)}–{fmt(scope.end)}
+                {isPhraseViewExpanded ? ` · ${fmt(scope.end - scope.start)}` : ''}
+                {scopeKindLabel ? ` · ${scopeKindLabel}` : ''}
+              </span>
+            </div>
+          }
+          height={180}
+          currentMs={currentMs}
+          onSeek={setCurrentMs}
+        />
+
+        {/* Right column — collapse toggle pinned at top, slice media
+            panel below it. Toggle position stays fixed so the user's
+            mouse goes to the same place whether expanded or collapsed. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => setIsPhraseViewExpanded((v) => !v)}
+              title={isPhraseViewExpanded ? 'Collapse' : 'Expand'}
+              aria-label={isPhraseViewExpanded ? 'Collapse' : 'Expand'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '4px 8px', borderRadius: 5,
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                color: 'var(--text-dim)',
+                cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+              }}
+            >
+              <Icon name={isPhraseViewExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
+              {isPhraseViewExpanded ? 'Collapse' : 'Expand'}
+            </button>
           </div>
-        }
-        height={mediaSrc ? 160 : 108}
-        media={mediaSrc ? { src: mediaSrc, kind: mediaKind, title: project?.title } : null}
-        currentMs={currentMs}
-        onSeek={setCurrentMs}
-        onTimeChange={setCurrentMs}
-        isPlaying={isPlaying}
-        onPlayPause={() => setIsPlaying((p) => !p)}
-      />
-
-      {/* Row 3 (compact phrase chip strip) removed 2026-05-16 — redundant
-          with the predominant phrase view above. Mode bar moves up. */}
-
-      {/* "Edit by" row removed 2026-05-17 — once the mode picker moved
-          into the rail header (where it actually governs) and the
-          "N affected" chip moved into the TransformPanel header (where
-          the action originates), the row carried only a hint that the
-          rail's own segmented control already implies. */}
+          {isPhraseViewExpanded && (
+            <MediaViewer
+              videoSrc={chapterClip?.url}
+              videoSrcOffsetMs={chapterClip?.offsetMs ?? 0}
+              media={{ kind: mediaKind, title: sliceScope.title }}
+              loadingLabel={chapterClip ? null : 'Loading chapter clip…'}
+              audioWaveform={audioWaveform}
+              spectrogram={trackSpectrogram}
+              beats={trackBeats}
+              // VIEW = chapter. Funscript tape, baton positioning, and
+              // the corner title all read this as "what we're looking
+              // through." Scrolling/zoom inside the tape rides on this.
+              chapter={viewScope}
+              funscript={{ actions }}
+              currentMs={currentMs}
+              totalMs={activeChapter.endMs}
+              isPlaying={isPlaying}
+              onPlayPause={() => setIsPlaying((p) => !p)}
+              onSeek={(ms) => {
+                // Clamp to SLICE (the editing target). Transport
+                // buttons can't cross the slice boundary even though
+                // the view is wider. MediaViewer's own floor uses
+                // viewScope.start (chapter), so this tab clamp is the
+                // tight one.
+                setCurrentMs(Math.max(sliceScope.start, Math.min(sliceScope.end, ms)));
+              }}
+              onTimeChange={(ms) => {
+                // Video-driven time updates (throttled 4Hz). Loop back
+                // to sliceScope.start on overshoot so playback stays
+                // inside the focused slice even though the chapter
+                // clip extends past it.
+                if (ms >= sliceScope.end) setCurrentMs(sliceScope.start);
+                else if (ms < sliceScope.start) setCurrentMs(sliceScope.start);
+                else setCurrentMs(ms);
+              }}
+              onPrev={onPrev}
+              onNext={onNext}
+              modeToggleAlign="start"
+              modeToggleSize="sm"
+              showModeLabel={false}
+              showMark={false}
+              width="100%"
+              thumbnailAspect="16/7"
+            />
+          )}
+        </div>
+      </div>
 
       {/* ── Body — rail + center + transform panel. Only this row scrolls. ── */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
