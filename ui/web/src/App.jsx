@@ -722,6 +722,9 @@ export default function App() {
             selectedDevices={selectedDevices}
             charactersByPath={charactersByPath}
             setCharactersByPath={setCharactersByPath}
+            trackPeaks={trackPeaks}
+            trackSpectrogram={trackSpectrogram}
+            trackBeats={trackBeats}
           />
         )}
         {tab === 'export' && (

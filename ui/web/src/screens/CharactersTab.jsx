@@ -28,14 +28,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Pill, Icon, fmtTimeShort,
-  ChapterContextStrip,
+  MediaViewer, ChapterRibbon, Slider,
 } from 'forgemoment';
 import {
   CHARACTERS as STYLE_CATALOG,
   ESTIM_CHANNELS,
   seedCharacterAssignments,
+  defaultParamsFor,
 } from '../data/characters.js';
 import { listCharacters } from '../api/forge.js';
+import { useChapterClip } from '../hooks/useChapterClip.js';
 
 // Merge the canonical Python catalog (id / label / description / sliders)
 // with the JS-side UI overlay (color / tagline / devices) by id. Same
@@ -50,30 +52,55 @@ function mergeCatalogs(canonical) {
     return {
       id: c.id,
       label: c.label || style?.label || c.id,
-      description: c.description || style?.desc || '',
-      sliders: c.sliders || [],
+      description: c.description || style?.desc || style?.description || '',
+      // Sliders: prefer Python's catalog when it ships them; fall
+      // back to the JS-side defs so the slider UI lights up even
+      // before the canonical Python catalog grows sliders.
+      sliders: (c.sliders && c.sliders.length > 0) ? c.sliders : (style?.sliders || []),
       color: style?.color || '#9ca3af',
+      icon: style?.icon || 'circle',
       tagline: style?.tagline || '',
       devices: style?.devices || ['estim'],
     };
   });
 }
 
+// "Nothing" — explicit opt-out. Selecting this leaves the chapter to
+// funscript-tools' default behaviour (Edger's code). Hardcoded outside
+// the catalog because it's a UI affordance, not a character preset.
+const NOTHING_COLOR = '#64748b';
+const NOTHING = {
+  id: '__nothing__',
+  label: 'Nothing',
+  color: NOTHING_COLOR,
+  icon: null,            // grey card, no icon — neutral / opt-out
+  tagline: 'Sets to default in funscript-tool',
+  description: "Sets to default in funscript-tool — the chapter passes through with Edger's reference behaviour, untouched by the per-chapter character pipeline.",
+};
+
 export default function CharactersTab({
   project,
   selectedDevices = [],
   charactersByPath = {},
   setCharactersByPath = () => {},
+  // Full-track audio sidecars (peaks / spectrogram / beats). Same shape
+  // ChaptersTab / PhrasesTab / StanzasTab consume; drive MediaViewer's
+  // Audio + Spectro modes for the focused chapter.
+  trackPeaks,
+  trackSpectrogram,
+  trackBeats,
 }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
   const path = project?.path ?? null;
 
   // Per-chapter character assignments, read from the App-level cache.
+  // Shape: { [chapterId]: { characterId: string|null, params: {...} } }
+  // null characterId === Nothing (passthrough to funscript-tools default).
   // Seeded on first visit per path so the tab always has something to
   // show; subsequent visits reuse whatever the user picked. Real
   // persistence (chain file) lands with the wiring pass.
-  const assignments = (path && charactersByPath[path]) || null;
+  const applied = (path && charactersByPath[path]) || null;
   useEffect(() => {
     if (!path) return;
     if (charactersByPath[path]) return;
@@ -84,7 +111,7 @@ export default function CharactersTab({
     }));
   }, [path, chapters, charactersByPath, setCharactersByPath]);
 
-  const setAssignments = (updater) => {
+  const setApplied = (updater) => {
     if (!path) return;
     setCharactersByPath((prev) => {
       const current = prev[path] || {};
@@ -101,6 +128,28 @@ export default function CharactersTab({
     () => chapters.find((c) => c.id === activeChapterId) || null,
     [chapters, activeChapterId],
   );
+
+  // ── Viewer state — mirrors Phrases/Stanzas/Patterns chrome ──────────
+  // Scope here is the chapter itself (user picks a chapter on the left
+  // rail, then picks a character for that chapter). No ChapterContextStrip
+  // — chapter navigation lives in the ChapterList rail below; the viewer
+  // is purely "watch the video while you decide on a character."
+  const [currentMs, setCurrentMs] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isViewerExpanded, setIsViewerExpanded] = useState(true);
+  const mediaKind = project?.mediaKind || 'video';
+
+  // Reset clock to chapter start on chapter switch / project switch; pause.
+  useEffect(() => {
+    setIsPlaying(false);
+    if (activeChapter) setCurrentMs(activeChapter.atMs);
+    else setCurrentMs(0);
+  }, [activeChapter?.id]);
+
+  // Chapter clip for the MediaViewer — same shared hook every other
+  // editing tab uses (Chapters / Phrases / Patterns / Stanzas).
+  const { clip: chapterClip } = useChapterClip(project?.mediaPath, activeChapter);
+  const audioWaveform = trackPeaks?.peaks?.length ? trackPeaks : null;
 
   // Hydrate the character catalog from cli.py list-characters once per
   // app lifetime (catalog is global, not per-project). Browser-mock
@@ -127,12 +176,91 @@ export default function CharactersTab({
   const catalog = useMemo(() => mergeCatalogs(canonical), [canonical]);
   const findChar = (id) => catalog.find((c) => c.id === id) || null;
 
-  const activeCharId = (activeChapterId && assignments) ? assignments[activeChapterId] : null;
-  const activeChar = activeCharId ? findChar(activeCharId) : null;
+  // Applied (committed) state for the active chapter — what export
+  // would read today. Always present once seeding has run.
+  const appliedForActive = (activeChapterId && applied) ? applied[activeChapterId] : null;
 
-  const setActiveCharacter = (charId) => {
+  // Staged state — what the sliders + card grid are editing for the
+  // active chapter. Diverges from applied when the user changes the
+  // character pick or tweaks a slider; Accept commits + advances.
+  // Mirrors the original tab-Stim.jsx model.
+  const [staged, setStaged] = useState({ characterId: undefined, params: {} });
+
+  // Reset staged whenever the active chapter changes OR seeding fills
+  // in the applied entry — pull the chapter's currently-applied state
+  // into staged so the panel reflects the saved character + sliders.
+  useEffect(() => {
+    if (!appliedForActive) return;
+    setStaged({
+      characterId: appliedForActive.characterId,
+      params: { ...(appliedForActive.params || {}) },
+    });
+  }, [activeChapterId, appliedForActive?.characterId]);
+  // (intentionally don't depend on appliedForActive.params reference;
+  // chapter switch is the only trigger for staged-reset)
+
+  const stagedChar = (staged.characterId && staged.characterId !== null)
+    ? findChar(staged.characterId)
+    : null;
+  const isNothingStaged = staged.characterId === null;
+  // Applied = the committed character for the active chapter; what
+  // ChapterRibbon, ChapterList, title row, ChannelGrid show. Staged
+  // drives the CharacterPanel (cards, sliders, desc) only.
+  const appliedChar = appliedForActive?.characterId
+    ? findChar(appliedForActive.characterId)
+    : null;
+  const isNothingApplied = appliedForActive?.characterId === null;
+
+  // Dirty = staged diverges from applied for this chapter. Drives the
+  // Accept button enabled state + "unsaved changes" indicator.
+  const dirty = useMemo(() => {
+    if (!appliedForActive) return false;
+    if (staged.characterId !== appliedForActive.characterId) return true;
+    const appliedParams = appliedForActive.params || {};
+    const stagedParams = staged.params || {};
+    const keys = new Set([...Object.keys(appliedParams), ...Object.keys(stagedParams)]);
+    for (const k of keys) {
+      if (appliedParams[k] !== stagedParams[k]) return true;
+    }
+    return false;
+  }, [appliedForActive, staged]);
+
+  // ── Staged mutators ───────────────────────────────────────────────
+  // Card click — switch character (or Nothing) in staged ONLY.
+  // Sliders default fresh from the new character's catalog defs.
+  // Accept commits.
+  const setStagedCharacter = (characterId) => {
+    setStaged({
+      characterId,
+      params: characterId ? defaultParamsFor(characterId) : {},
+    });
+  };
+  const setStagedParam = (key, value) => {
+    setStaged((s) => ({ ...s, params: { ...s.params, [key]: value } }));
+  };
+  const resetStaged = () => {
+    if (!appliedForActive) return;
+    setStaged({
+      characterId: appliedForActive.characterId,
+      params: { ...(appliedForActive.params || {}) },
+    });
+  };
+  // Accept = commit staged → applied for the active chapter, then
+  // advance to the next chapter. The "Use [Character] · next chapter"
+  // button calls this. Last chapter: commit, no advance.
+  const acceptChange = () => {
     if (!activeChapterId) return;
-    setAssignments((a) => ({ ...a, [activeChapterId]: charId }));
+    setApplied((a) => ({
+      ...a,
+      [activeChapterId]: {
+        characterId: staged.characterId,
+        params: { ...staged.params },
+      },
+    }));
+    const i = chapters.findIndex((c) => c.id === activeChapterId);
+    if (i >= 0 && i < chapters.length - 1) {
+      setActiveChapterId(chapters[i + 1].id);
+    }
   };
 
   if (!project?.path) {
@@ -157,37 +285,153 @@ export default function CharactersTab({
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '22px 28px', background: 'var(--bg)' }}>
-      <Header chapter={activeChapter} character={activeChar} estimSelected={estimSelected} />
+      <Header chapter={activeChapter} character={appliedChar} estimSelected={estimSelected} />
 
       {activeChapter && (
-        <div style={{ marginTop: 12 }}>
-          <ChapterContextStrip
-            chapter={{ at_ms: activeChapter.atMs, end_ms: activeChapter.endMs }}
-            actions={actions}
-            bands={[]}
-            expanded={true}
-            header={(
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                <span style={{ fontSize: 13, fontWeight: 700 }}>{activeChapter.name || activeChapter.id}</span>
-                <span className="mono" style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+        <>
+          {/* Title row — chapter identity + character pill on left,
+              Collapse on right. Mirrors the Phrases / Stanzas / Patterns
+              chrome pattern. Stays put across expand/collapse. */}
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+            gap: 'var(--s-3)', marginTop: 12,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                whiteSpace: 'nowrap', overflow: 'hidden',
+              }}>
+                <span style={{
+                  width: 10, height: 10, borderRadius: 2,
+                  background: activeChapter.color || 'var(--text-dim)',
+                  flexShrink: 0,
+                }} />
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
+                  {activeChapter.name || activeChapter.id}
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-dim)' }}>
                   {fmtTimeShort(activeChapter.atMs)}–{fmtTimeShort(activeChapter.endMs)}
                 </span>
-                {activeChar && (
+                {appliedChar && (
                   <Pill
                     tone="neutral"
                     style={{
-                      background: activeChar.color + '22',
-                      color: activeChar.color,
-                      borderColor: activeChar.color + '55',
+                      background: appliedChar.color + '22',
+                      color: appliedChar.color,
+                      borderColor: appliedChar.color + '55',
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
                     }}
                   >
-                    {activeChar.label}
+                    <Icon name={appliedChar.icon || 'circle'} size={11} />
+                    {appliedChar.label}
+                  </Pill>
+                )}
+                {isNothingApplied && (
+                  <Pill
+                    tone="neutral"
+                    style={{
+                      background: NOTHING_COLOR + '22',
+                      color: NOTHING_COLOR,
+                      borderColor: NOTHING_COLOR + '55',
+                    }}
+                  >
+                    {NOTHING.label}
                   </Pill>
                 )}
               </div>
-            )}
-          />
-        </div>
+            </div>
+            <button
+              onClick={() => setIsViewerExpanded((v) => !v)}
+              title={isViewerExpanded ? 'Collapse' : 'Expand'}
+              aria-label={isViewerExpanded ? 'Collapse' : 'Expand'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '4px 8px', borderRadius: 5,
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                color: 'var(--text-dim)',
+                cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+                flexShrink: 0,
+              }}
+            >
+              <Icon name={isViewerExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
+              {isViewerExpanded ? 'Collapse' : 'Expand'}
+            </button>
+          </div>
+
+          {/* Bordered viewer box — multi-chapter ChapterRibbon on the
+              left (so the user sees the whole project at a glance with
+              each chapter's assigned character tinting its band), and
+              the MediaViewer on the right scoped to the active chapter.
+              Same pattern as ChaptersTab's top row; the character
+              assignment per chapter rides on the band's `toneColor`. */}
+          {isViewerExpanded && (
+            <div style={{
+              marginTop: 12,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 8, padding: 12,
+              display: 'grid', gridTemplateColumns: '1fr 320px',
+              gap: 'var(--s-5)', alignItems: 'stretch',
+            }}>
+              <ChapterRibbon
+                bands={chapters.map((c) => {
+                  const a = applied?.[c.id];
+                  const char = a?.characterId ? findChar(a.characterId) : null;
+                  return {
+                    id: c.id,
+                    at_ms: c.atMs,
+                    end_ms: c.endMs,
+                    name: c.name,
+                    color: c.color,
+                    toneColor: char?.color,
+                  };
+                })}
+                actions={actions}
+                selectedId={activeChapterId}
+                onSelect={(band) => setActiveChapterId(band.id)}
+                onSeek={(ms) => setCurrentMs(Math.max(activeChapter.atMs, Math.min(activeChapter.endMs, ms)))}
+                currentMs={currentMs}
+                height={180}
+              />
+
+              <MediaViewer
+                videoSrc={chapterClip?.url}
+                videoSrcOffsetMs={chapterClip?.offsetMs ?? 0}
+                media={{ kind: mediaKind, title: activeChapter.name || activeChapter.id }}
+                loadingLabel={chapterClip ? null : 'Loading chapter clip…'}
+                audioWaveform={audioWaveform}
+                spectrogram={trackSpectrogram}
+                beats={trackBeats}
+                chapter={{
+                  id: activeChapter.id,
+                  title: activeChapter.name || activeChapter.id,
+                  color: activeChapter.color || '#4dabf7',
+                  start: activeChapter.atMs,
+                  end: activeChapter.endMs,
+                }}
+                funscript={{ actions }}
+                currentMs={currentMs}
+                totalMs={activeChapter.endMs}
+                isPlaying={isPlaying}
+                onPlayPause={() => setIsPlaying((p) => !p)}
+                onSeek={(ms) => {
+                  setCurrentMs(Math.max(activeChapter.atMs, Math.min(activeChapter.endMs, ms)));
+                }}
+                onTimeChange={(ms) => {
+                  if (ms >= activeChapter.endMs) setCurrentMs(activeChapter.atMs);
+                  else if (ms < activeChapter.atMs) setCurrentMs(activeChapter.atMs);
+                  else setCurrentMs(ms);
+                }}
+                modeToggleAlign="start"
+                modeToggleSize="sm"
+                showModeLabel={false}
+                showMark={false}
+                width={320}
+                thumbnailAspect="16/7"
+              />
+            </div>
+          )}
+        </>
       )}
 
       <div
@@ -199,7 +443,7 @@ export default function CharactersTab({
       >
         <ChapterList
           chapters={chapters}
-          assignments={assignments}
+          applied={applied}
           catalog={catalog}
           activeId={activeChapterId}
           onSelect={setActiveChapterId}
@@ -207,14 +451,21 @@ export default function CharactersTab({
 
         <CharacterPanel
           catalog={catalog}
-          activeChar={activeChar}
-          onSelect={setActiveCharacter}
+          stagedChar={stagedChar}
+          isNothingStaged={isNothingStaged}
+          stagedParams={staged.params}
+          onSelectCharacter={setStagedCharacter}
+          onParamChange={setStagedParam}
+          onAccept={acceptChange}
+          onReset={resetStaged}
+          dirty={dirty}
+          isLastChapter={chapters.findIndex((c) => c.id === activeChapterId) >= chapters.length - 1}
           estimSelected={estimSelected}
           catalogWarning={catalogWarning}
         />
       </div>
 
-      <ChannelGrid character={activeChar} estimSelected={estimSelected} />
+      <ChannelGrid character={appliedChar} estimSelected={estimSelected} />
     </div>
   );
 }
@@ -263,7 +514,7 @@ function Header({ chapter, character, estimSelected }) {
 // ──────────────────────────────────────────────────────────────
 // ChapterList — left rail
 // ──────────────────────────────────────────────────────────────
-function ChapterList({ chapters, assignments, catalog, activeId, onSelect }) {
+function ChapterList({ chapters, applied, catalog, activeId, onSelect }) {
   const lookup = (id) => catalog.find((c) => c.id === id) || null;
   return (
     <div>
@@ -275,9 +526,12 @@ function ChapterList({ chapters, assignments, catalog, activeId, onSelect }) {
         borderRadius: 8, overflow: 'hidden', marginTop: 6,
       }}>
         {chapters.map((c, i) => {
-          const charId = assignments?.[c.id];
-          const char = lookup(charId);
+          const a = applied?.[c.id];
+          const charId = a?.characterId;
+          const char = charId ? lookup(charId) : null;
+          const isNothing = (c.id in (applied || {})) && charId === null;
           const isActive = c.id === activeId;
+          const accent = char?.color || (isNothing ? NOTHING_COLOR : null);
           return (
             <button
               key={c.id}
@@ -290,7 +544,7 @@ function ChapterList({ chapters, assignments, catalog, activeId, onSelect }) {
                 fontFamily: 'inherit',
                 background: isActive ? 'var(--surface-2)' : 'transparent',
                 border: 'none',
-                borderLeft: isActive && char ? `3px solid ${char.color}` : '3px solid transparent',
+                borderLeft: isActive && accent ? `3px solid ${accent}` : '3px solid transparent',
                 borderBottom: i < chapters.length - 1 ? '1px solid var(--border)' : 'none',
                 color: 'var(--text)',
               }}
@@ -318,9 +572,24 @@ function ChapterList({ chapters, assignments, catalog, activeId, onSelect }) {
                     color: char.color,
                     borderColor: char.color + '55',
                     justifySelf: 'end',
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
                   }}
                 >
+                  <Icon name={char.icon || 'circle'} size={11} />
                   {char.label}
+                </Pill>
+              )}
+              {isNothing && (
+                <Pill
+                  tone="neutral"
+                  style={{
+                    background: NOTHING_COLOR + '22',
+                    color: NOTHING_COLOR,
+                    borderColor: NOTHING_COLOR + '55',
+                    justifySelf: 'end',
+                  }}
+                >
+                  {NOTHING.label}
                 </Pill>
               )}
             </button>
@@ -331,14 +600,57 @@ function ChapterList({ chapters, assignments, catalog, activeId, onSelect }) {
   );
 }
 
+// One character pick — color-tinted icon + label + tagline. Used both
+// for catalog characters and the Nothing opt-out card.
+function CharacterCard({ label, tagline, color, icon, selected, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', flexDirection: 'column',
+        padding: 10, gap: 6, borderRadius: 8,
+        background: selected ? color + '20' : 'var(--surface-2)',
+        border: `1.5px solid ${selected ? color : 'var(--border)'}`,
+        color: 'var(--text)', cursor: 'pointer',
+        fontFamily: 'inherit', textAlign: 'left',
+        minHeight: 96,
+      }}
+    >
+      {/* Icon is optional — Nothing card renders without one (grey,
+          no glyph) to read as the neutral / opt-out option. */}
+      {icon
+        ? <Icon name={icon} size={20} style={{ color }} />
+        : <span style={{ height: 20 }} />}
+      <span style={{
+        fontSize: 12, fontWeight: 700,
+        color: selected ? color : 'var(--text-soft)',
+      }}>
+        {label}
+      </span>
+      <span style={{
+        fontSize: 10.5, color: 'var(--text-dim)',
+        lineHeight: 1.35,
+      }}>
+        {tagline}
+      </span>
+    </button>
+  );
+}
+
 // ──────────────────────────────────────────────────────────────
 // CharacterPanel — right rail
 // ──────────────────────────────────────────────────────────────
-function CharacterPanel({ catalog, activeChar, onSelect, estimSelected, catalogWarning }) {
-  // Card grid auto-sizes — usually 5, but accommodates a custom preset
-  // the user dropped into stim_presets.json. Cap at 6 columns; beyond
-  // that wraps to a second row.
-  const cardCols = Math.min(Math.max(catalog.length, 1), 6);
+function CharacterPanel({
+  catalog,
+  stagedChar, isNothingStaged, stagedParams,
+  onSelectCharacter, onParamChange, onAccept, onReset, dirty, isLastChapter,
+  estimSelected, catalogWarning,
+}) {
+  // Card grid auto-sizes — usually 5 + Nothing = 6, but accommodates a
+  // custom preset the user dropped into stim_presets.json. Cap at 7
+  // columns; beyond that wraps to a second row.
+  const cardCols = Math.min(Math.max(catalog.length + 1, 1), 7);
+  const sliders = stagedChar?.sliders || [];
   return (
     <div>
       <SectionLabel
@@ -362,54 +674,91 @@ function CharacterPanel({ catalog, activeChar, onSelect, estimSelected, catalogW
           gap: 8, marginBottom: 14,
         }}>
           {catalog.map((c) => {
-            const sel = activeChar && c.id === activeChar.id;
+            const sel = stagedChar && c.id === stagedChar.id;
             return (
-              <button
+              <CharacterCard
                 key={c.id}
-                onClick={() => onSelect(c.id)}
-                style={{
-                  display: 'flex', flexDirection: 'column',
-                  padding: 10, gap: 4, borderRadius: 8,
-                  background: sel ? c.color + '20' : 'var(--surface-2)',
-                  border: `1.5px solid ${sel ? c.color : 'var(--border)'}`,
-                  color: 'var(--text)', cursor: 'pointer',
-                  fontFamily: 'inherit', textAlign: 'left',
-                  minHeight: 80,
-                }}
-              >
-                <span style={{
-                  fontSize: 12, fontWeight: 700,
-                  color: sel ? c.color : 'var(--text-soft)',
-                }}>
-                  {c.label}
-                </span>
-                <span style={{
-                  fontSize: 10.5, color: 'var(--text-dim)',
-                  lineHeight: 1.35,
-                }}>
-                  {c.tagline}
-                </span>
-              </button>
+                label={c.label}
+                tagline={c.tagline}
+                color={c.color}
+                icon={c.icon || 'circle'}
+                selected={sel}
+                onClick={() => onSelectCharacter(c.id)}
+              />
             );
           })}
+          {/* Nothing — opt-out card; null staged uses Edger's defaults */}
+          <CharacterCard
+            key={NOTHING.id}
+            label={NOTHING.label}
+            tagline={NOTHING.tagline}
+            color={NOTHING.color}
+            icon={NOTHING.icon}
+            selected={isNothingStaged}
+            onClick={() => onSelectCharacter(null)}
+          />
         </div>
 
-        {activeChar && (
+        {stagedChar && (
           <div style={{
             fontSize: 12, color: 'var(--text-dim)',
             lineHeight: 1.5, marginBottom: 12,
             paddingBottom: 12,
             borderBottom: '1px solid var(--border)',
           }}>
-            {activeChar.description}
+            {stagedChar.description || stagedChar.desc}
+          </div>
+        )}
+        {isNothingStaged && (
+          <div style={{
+            fontSize: 12, color: 'var(--text-dim)',
+            lineHeight: 1.5, marginBottom: 12,
+            paddingBottom: 12,
+            borderBottom: '1px solid var(--border)',
+          }}>
+            {NOTHING.description}
           </div>
         )}
 
-        {activeChar && (
+        {/* Per-character sliders — each with left/right hint above the
+            track, matching the original tab-Stim.jsx design. Nothing
+            renders no sliders (no params to tune). */}
+        {stagedChar && sliders.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            {sliders.map((s) => {
+              const value = stagedParams?.[s.id] ?? s.def;
+              const valueLabel = typeof value === 'number'
+                ? `${value.toFixed(s.step < 1 ? 2 : 0)}${s.unit || ''}`
+                : `${value}${s.unit || ''}`;
+              return (
+                <div key={s.id} style={{ marginBottom: 12 }}>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    fontSize: 10, color: 'var(--text-dim)', marginBottom: 4,
+                  }}>
+                    <span>← {s.leftHint}</span>
+                    <span>{s.rightHint} →</span>
+                  </div>
+                  <Slider
+                    label={s.label}
+                    valueLabel={valueLabel}
+                    value={value}
+                    min={s.min}
+                    max={s.max}
+                    step={s.step}
+                    onChange={(v) => onParamChange(s.id, v)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {stagedChar && (
           <>
             <SectionLabel>Supports</SectionLabel>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-              {activeChar.devices.map((d) => (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, marginBottom: 12 }}>
+              {stagedChar.devices.map((d) => (
                 <span key={d} style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5,
                   padding: '3px 8px', borderRadius: 999,
@@ -429,27 +778,85 @@ function CharacterPanel({ catalog, activeChar, onSelect, estimSelected, catalogW
           </>
         )}
 
-        <div style={{
-          marginTop: 14, padding: 12, borderRadius: 6,
-          background: 'var(--surface-2)',
-          border: '1px dashed var(--border)',
-          fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5,
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>
-            <Icon name="cog" size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />
-            Sliders, carrier pattern, beat-sync land in the wiring pass
+        {/* Action row — Accept commits staged → applied for this
+            chapter and advances to the next. Reset restores staged
+            to the committed values. Mirrors original tab-Stim.jsx. */}
+        <ActionRow
+          stagedChar={stagedChar}
+          isNothingStaged={isNothingStaged}
+          dirty={dirty}
+          isLastChapter={isLastChapter}
+          onAccept={onAccept}
+          onReset={onReset}
+        />
+
+        {!estimSelected && (
+          <div style={{
+            marginTop: 10, fontSize: 11, color: '#ffb547',
+          }}>
+            Without e-stim selected on the Device tab, the generated channels won't be exported.
           </div>
-          Per-character sliders pull from <span className="mono">funscript_tools.get_builtin_presets()</span>{' '}
-          (the Streamlit reference impl is the schema source-of-truth).
-          The 9-channel preview below redraws when{' '}
-          <span className="mono">cli.py stim-process</span> emits real channel funscripts.
-          {!estimSelected && (
-            <div style={{ marginTop: 6, color: '#ffb547' }}>
-              Without e-stim selected on the Device tab, the generated channels won't be exported.
-            </div>
-          )}
-        </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+// Action row — "Use [Character] · next chapter" primary, Reset
+// secondary, "unsaved changes" indicator. The Accept button is the
+// commit-and-advance affordance the user asked for; it's enabled
+// even when nothing is dirty so the user can power-walk through
+// chapters where the seeded default already fits.
+function ActionRow({ stagedChar, isNothingStaged, dirty, isLastChapter, onAccept, onReset }) {
+  const label = stagedChar?.label
+    || (isNothingStaged ? NOTHING.label : null);
+  const color = stagedChar?.color
+    || (isNothingStaged ? NOTHING_COLOR : 'var(--accent)');
+  // Button text: "Use Reactive · next chapter" / "Use Reactive (last)"
+  const verb = label ? `Use ${label}` : 'Use this character';
+  const suffix = isLastChapter ? '(last chapter)' : '· next chapter';
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8, marginTop: 6,
+      paddingTop: 12, borderTop: '1px solid var(--border)',
+    }}>
+      <button
+        onClick={onAccept}
+        disabled={!label}
+        style={{
+          padding: '8px 14px', fontSize: 12.5, fontWeight: 700,
+          background: label ? color : 'var(--surface-2)',
+          color: label ? '#fff' : 'var(--text-dim)',
+          border: 'none', borderRadius: 6,
+          cursor: label ? 'pointer' : 'not-allowed',
+          fontFamily: 'inherit',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}
+        title={label ? `Commit ${label} to this chapter and move on` : 'Pick a character first'}
+      >
+        <Icon name="check" size={13} />
+        {verb} {suffix}
+      </button>
+      {dirty && (
+        <button
+          onClick={onReset}
+          style={{
+            padding: '6px 10px', fontSize: 11.5, fontWeight: 600,
+            background: 'transparent', color: 'var(--text-muted)',
+            border: '1px solid var(--border)', borderRadius: 5,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+          title="Discard staged changes for this chapter"
+        >
+          Reset
+        </button>
+      )}
+      <span style={{ flex: 1 }} />
+      {dirty && (
+        <span style={{ fontSize: 10.5, color: 'var(--accent)' }}>
+          unsaved changes
+        </span>
+      )}
     </div>
   );
 }
