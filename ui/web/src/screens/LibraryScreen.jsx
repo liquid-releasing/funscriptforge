@@ -159,12 +159,17 @@ export default function LibraryScreen({ onOpen, onAppError }) {
     // strict `<stem>.funscript` for older scan results.
     const funscriptName = project.funscriptName ?? `${project.stem}.funscript`;
     const funscriptPath = tauriFs.join(project.dirPath, funscriptName);
-    // Pass the Library card's title as a hint — when the funscript
-    // stem differs from the media stem (IPZZ-125 case), the loaded
-    // project should still read as the media-stem-titled project the
-    // user clicked, not the funscript-stem title load_project would
-    // derive on its own.
-    onOpen?.(funscriptPath, { title: project.title });
+    // Pass the Library card's title + media as hints — when the
+    // funscript stem differs from the media stem (IPZZ-125 case), the
+    // loaded project should still read as the media-stem-titled
+    // project the user clicked, AND it should pick up the media file
+    // Library already matched (Rust's find_adjacent_media uses strict-
+    // stem matching, which misses the prefix-with-boundary pairing).
+    onOpen?.(funscriptPath, {
+      title: project.title,
+      mediaPath: project.mediaPath,
+      mediaKind: project.kind, // 'video' | 'audio' from scan
+    });
   };
 
   // ── Derive the project list to display ─────────────────────────────

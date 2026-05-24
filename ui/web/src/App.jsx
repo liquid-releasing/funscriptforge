@@ -455,9 +455,16 @@ export default function App() {
     setTab('project');
     try {
       const project = await loadProject(path);
-      // Apply the caller's title hint over the Rust default. Other
-      // fields stay as load_project returned them.
-      const finalProject = meta.title ? { ...project, title: meta.title } : project;
+      // Apply caller hints over Rust defaults. Library is the main
+      // source of these — it knows the media-stem title AND the
+      // prefix-with-boundary matched mediaPath, both of which the
+      // Rust strict-stem `find_adjacent_media` would miss.
+      const finalProject = { ...project };
+      if (meta.title) finalProject.title = meta.title;
+      if (meta.mediaPath && !finalProject.mediaPath) {
+        finalProject.mediaPath = meta.mediaPath;
+        if (meta.mediaKind) finalProject.mediaKind = meta.mediaKind;
+      }
       handleProjectOpened(finalProject);
     } catch (err) {
       console.error('App: load_project failed', err);
@@ -698,6 +705,10 @@ export default function App() {
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}
+            onChaptersChange={handleChaptersChange}
+            refreshAudioSidecars={refreshAudioSidecars}
+            setBusy={setBusy}
+            setAppError={setAppError}
           />
         )}
         {tab === 'device' && (
