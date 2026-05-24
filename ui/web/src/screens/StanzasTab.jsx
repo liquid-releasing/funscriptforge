@@ -31,12 +31,13 @@
 // arrives once the Python clustering pass lands; the Segmented header
 // will gain a `Cluster` option.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ChapterRibbon, ChapterContextStrip, Segmented, TransformPanel,
+  ChapterRibbon, ChapterContextStrip, MediaViewer, Segmented, TransformPanel,
   Icon, fmtTimeShort, fmtDurationMs,
 } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
+import { useChapterClip } from '../hooks/useChapterClip.js';
 import { TRANSFORMS, BEHAVIOR_TAGS, FORGEGEN_MODES } from '../data/transforms.js';
 import { readStanzas } from '../api/forge.js';
 
@@ -82,6 +83,12 @@ export default function StanzasTab({
   setAppError,
   stanzasByPath = {},
   setStanzasByPath = () => {},
+  // Full-track audio sidecars (peaks / spectrogram / beats). Drive the
+  // MediaViewer's Audio + Spectro modes — same shape ChaptersTab,
+  // PhrasesTab, and PatternsTab consume.
+  trackPeaks,
+  trackSpectrogram,
+  trackBeats,
 }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
@@ -98,30 +105,49 @@ export default function StanzasTab({
 
   const [activeModeId, setActiveModeId] = useState(null);
   const [activeClusterId, setActiveClusterId] = useState(null);
+
+  // Focused stanza — inline state w/ selectNonce bump. Mirrors PhrasesTab
+  // so re-clicks of the same stanza re-fire the scope-reset effect (and
+  // the seek lands at stanza start) instead of treating the re-click as
+  // a no-op.
   const [focusStanzaId, setFocusStanzaId] = useState(null);
+  const [selectNonce, setSelectNonce] = useState(0);
+  const focusStanza = (id) => {
+    setFocusStanzaId(id);
+    setSelectNonce((n) => n + 1);
+  };
 
   const [isStanzaViewExpanded, setIsStanzaViewExpanded] = useState(true);
   useEffect(() => { setIsStanzaViewExpanded(true); }, [activeChapterId]);
+
+  // ── Unified playback clock ───────────────────────────────────────
+  // Single source of truth shared across the chapter strip (baton +
+  // click-to-seek) AND the MediaViewer below. Same model as PhrasesTab
+  // — chapter is the VIEW (scrolls the funscript tape, drives audio
+  // scope), focused stanza is the SLICE (clamps playback transport).
+  const [currentMs, setCurrentMs] = useState(() => {
+    const id = chapters[0]?.id ?? null;
+    const ch = chapters.find((c) => c.id === id);
+    return ch?.atMs ?? 0;
+  });
+  const [isPlaying, setIsPlaying] = useState(false);
+  const mediaKind = project?.mediaKind || 'video';
 
   // TransformPanel state — same shape as Phrases/Patterns.
   const [category, setCategory] = useState('behavior');
   const [transformId, setTransformId] = useState(null);
   const [params, setParams] = useState({});
 
-  // Empty / no-project states
-  if (!project?.path) {
-    return <EmptyState title="No project open"
-      body="Open a funscript from the Library tab to apply transforms." />;
-  }
-  if (chapters.length === 0) {
-    return <EmptyState title="No chapters yet"
-      body="Stanzas live inside chapters. Create chapters on the Chapters tab first, then come back." />;
-  }
-
-  const activeChapter = chapters.find((c) => c.id === activeChapterId) ?? chapters[0];
+  // Resolve activeChapter above the empty-state early returns so the
+  // hooks below can be called unconditionally (Rules of Hooks). Falls
+  // back to a stable {} when there's no chapter; the early returns
+  // catch those cases before render uses it.
+  const activeChapter = chapters.find((c) => c.id === activeChapterId) ?? chapters[0] ?? null;
   // Active chapter's index in the chapter list — used to filter stanzas
   // by `chapter_idx` (videoflow phrase records carry this field).
-  const activeChapterIdx = chapters.findIndex((c) => c.id === activeChapter.id);
+  const activeChapterIdx = activeChapter
+    ? chapters.findIndex((c) => c.id === activeChapter.id)
+    : -1;
 
   // Stanzas + clusters pulled from <stem>.chapters.json via readStanzas.
   // Cached at App.jsx level keyed by funscript path so tab switches
@@ -255,6 +281,124 @@ export default function StanzasTab({
     };
   }), [stanzasInScope, editedStanzaIdSet, mode, focusStanzaId]);
 
+  // Focused stanza derived from id + scope. Mirrors PhrasesTab.
+  const focusedStanza = useMemo(
+    () => (focusStanzaId != null
+      ? stanzasInScope.find((s) => s.id === focusStanzaId) ?? null
+      : null),
+    [stanzasInScope, focusStanzaId],
+  );
+  const focusedIdx = focusedStanza
+    ? stanzasInScope.findIndex((s) => s.id === focusedStanza.id)
+    : -1;
+  const prevStanza = focusedIdx > 0 ? stanzasInScope[focusedIdx - 1] : null;
+  const nextStanza = (focusedIdx >= 0 && focusedIdx < stanzasInScope.length - 1)
+    ? stanzasInScope[focusedIdx + 1] : null;
+
+  // Clear focus when chapter changes — same rule as PhrasesTab.
+  useEffect(() => { setFocusStanzaId(null); }, [activeChapter?.id]);
+
+  // Chapter clip for the MediaViewer below — same shared hook
+  // ChaptersTab / PhrasesTab / PatternsTab use.
+  const { clip: chapterClip } = useChapterClip(project?.mediaPath, activeChapter);
+  // Full-track audio peaks — gate on a non-empty array so Audio mode
+  // doesn't render an empty waveform while the sidecar is loading.
+  const audioWaveform = trackPeaks?.peaks?.length ? trackPeaks : null;
+
+  // ── Scope-reset effect ───────────────────────────────────────────
+  // When the active scope changes — new chapter, new focused stanza, OR
+  // a re-click of the same stanza (selectNonce bump) — pause and land
+  // the clock inside the new scope. Mirrors PhrasesTab.
+  useEffect(() => {
+    setIsPlaying(false);
+    if (focusedStanza) {
+      setCurrentMs((prev) => {
+        if (prev >= focusedStanza.at_ms && prev < focusedStanza.end_ms) return prev;
+        return focusedStanza.at_ms;
+      });
+      return;
+    }
+    if (!activeChapter) return;
+    const cacheNow = project?.path ? stanzasByPath[project.path] : null;
+    const stanzasNow = cacheNow?.stanzas ?? EMPTY_STANZAS;
+    const first = stanzasNow.find((s) => {
+      if (typeof s.chapter_idx === 'number') return s.chapter_idx === activeChapterIdx;
+      return s.at_ms >= activeChapter.atMs && s.at_ms < activeChapter.endMs;
+    });
+    setCurrentMs((prev) => {
+      if (prev >= activeChapter.atMs && prev < activeChapter.endMs) return prev;
+      return first?.at_ms ?? activeChapter.atMs;
+    });
+  }, [activeChapter?.id, focusedStanza?.id, selectNonce, stanzasByPath, project?.path]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Empty / no-project states. Below ALL hooks so the hook count is
+  // stable across renders (Rules of Hooks).
+  if (!project?.path) {
+    return <EmptyState title="No project open"
+      body="Open a funscript from the Library tab to apply transforms." />;
+  }
+  if (chapters.length === 0) {
+    return <EmptyState title="No chapters yet"
+      body="Stanzas live inside chapters. Create chapters on the Chapters tab first, then come back." />;
+  }
+
+  // ── View / Slice scopes ─────────────────────────────────────────────
+  // viewScope  — the larger context the user is navigating WITHIN
+  //              (active chapter). Drives MediaViewer's funscript tape
+  //              window + audio scope + corner title.
+  // sliceScope — what's being edited. Drives the strip header identity
+  //              AND playback clamps (transport floor, time-update loop).
+  //              Stanza when focused, otherwise the active chapter.
+  const chapterIdx = chapters.indexOf(activeChapter);
+  const viewScope = {
+    id: activeChapter.id,
+    title: activeChapter.name || `Chapter ${chapterIdx + 1}`,
+    color: activeChapter.toneColor || activeChapter.color || '#4dabf7',
+    start: activeChapter.atMs,
+    end: activeChapter.endMs,
+  };
+  let sliceScope = viewScope;
+  let scopeKindLabel = `${stanzasInScope.length} ${stanzasInScope.length === 1 ? 'stanza' : 'stanzas'}`;
+  if (focusedStanza) {
+    const m = findMode(focusedStanza.mode);
+    const stanzaNumber = focusedStanza.number
+      ?? stanzasInScope.findIndex((s) => s.id === focusedStanza.id) + 1;
+    sliceScope = {
+      id: focusedStanza.id,
+      title: m ? `${m.label} #${stanzaNumber}` : `Stanza #${stanzaNumber}`,
+      color: m?.color || '#7aa2ff',
+      // Clip to chapter bounds — same stopgap as PhrasesTab for
+      // cross-chapter phrases. The phrase's editable region inside this
+      // chapter ends at chapter.endMs even if its raw end_ms reaches
+      // into the next chapter.
+      start: Math.max(activeChapter.atMs, focusedStanza.at_ms),
+      end: Math.min(activeChapter.endMs, focusedStanza.end_ms),
+    };
+    scopeKindLabel = focusedStanza.source || '';
+  }
+  const scope = sliceScope;
+
+  // Prev gets Spotify-style "restart current slice if you're >3s into
+  // it" behavior — same as PhrasesTab / ChaptersTab.
+  const PREV_RESTART_THRESHOLD_MS = 3000;
+  const onPrev = () => {
+    const into = (currentMs || 0) - sliceScope.start;
+    if (into > PREV_RESTART_THRESHOLD_MS) {
+      setCurrentMs(sliceScope.start);
+      return;
+    }
+    if (focusedStanza) {
+      if (prevStanza) focusStanza(prevStanza.id);
+    } else if (chapterIdx > 0) {
+      setActiveChapterId(chapters[chapterIdx - 1].id);
+    }
+  };
+  const onNext = focusedStanza
+    ? (nextStanza ? () => focusStanza(nextStanza.id) : undefined)
+    : (chapterIdx >= 0 && chapterIdx < chapters.length - 1
+        ? () => setActiveChapterId(chapters[chapterIdx + 1].id)
+        : undefined);
+
   return (
     <div style={{
       display: 'flex', flexDirection: 'column',
@@ -283,29 +427,132 @@ export default function StanzasTab({
         </div>
       </HeaderRow>
 
-      {/* Row 2 — Active chapter waveform with overlaid stanza bands */}
-      <ChapterContextStrip
-        chapter={{ at_ms: activeChapter.atMs, end_ms: activeChapter.endMs }}
-        actions={actions}
-        bands={stanzaBands}
-        onSelectBand={(sid) => { setMode('single'); setFocusStanzaId(sid); }}
-        expanded={isStanzaViewExpanded}
-        onToggleExpanded={() => setIsStanzaViewExpanded((v) => !v)}
-        header={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: activeChapter.color }} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
-              {activeChapter.name || activeChapter.id}
+      {/* ── Title row — tab-level header: slice identity on the left,
+            Collapse on the right. Mirrors PhrasesTab/PatternsTab. */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        gap: 'var(--s-3)', padding: 'var(--s-2) var(--s-5) var(--s-3)',
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            whiteSpace: 'nowrap', overflow: 'hidden',
+          }}>
+            <span style={{
+              width: 10, height: 10, borderRadius: 2,
+              background: scope.color, flexShrink: 0,
+            }} />
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
+              {scope.title}
             </span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-dim)' }}>
-              {isStanzaViewExpanded
-                ? `${fmt(activeChapter.atMs)}–${fmt(activeChapter.endMs)} · ${stanzasInScope.length} stanzas`
-                : `· ${stanzasInScope.length} stanzas`}
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-dim)' }}>
+              {fmt(scope.start)}–{fmt(scope.end)} · {fmt(scope.end - scope.start)}
+              {scopeKindLabel ? ` · ${scopeKindLabel}` : ''}
             </span>
           </div>
-        }
-        height={108}
-      />
+          {/* Stanza mode description when a stanza is focused. */}
+          {focusedStanza && findMode(focusedStanza.mode)?.desc && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.45 }}>
+              {findMode(focusedStanza.mode).desc}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => setIsStanzaViewExpanded((v) => !v)}
+          title={isStanzaViewExpanded ? 'Collapse' : 'Expand'}
+          aria-label={isStanzaViewExpanded ? 'Collapse' : 'Expand'}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '4px 8px', borderRadius: 5,
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            color: 'var(--text-dim)',
+            cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+            flexShrink: 0,
+          }}
+        >
+          <Icon name={isStanzaViewExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
+          {isStanzaViewExpanded ? 'Collapse' : 'Expand'}
+        </button>
+      </div>
+
+      {/* ── Viewer grid (only when expanded) — funscript panel + video
+            viewer wrapped in ONE bordered box so they read as a single
+            unit. Mirrors PhrasesTab/PatternsTab. */}
+      {isStanzaViewExpanded && (
+      <div style={{ padding: '0 var(--s-5) var(--s-2)' }}>
+      <div style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: 12,
+        display: 'grid', gridTemplateColumns: '1fr 320px',
+        gap: 'var(--s-5)', alignItems: 'start',
+      }}>
+        <ChapterContextStrip
+          chapter={{ at_ms: activeChapter.atMs, end_ms: activeChapter.endMs }}
+          actions={actions}
+          bands={stanzaBands}
+          onSelectBand={(sid, clickedMs) => {
+            // Two-stage click semantics — same as PhrasesTab.
+            //   1st click on a band   → focus + land at stanza start
+            //   2nd click on focused  → seek to clicked position
+            setMode('single');
+            const newStanza = stanzasInScope.find((x) => x.id === sid);
+            if (!newStanza) return;
+            if (sid === focusStanzaId && clickedMs != null) {
+              setCurrentMs(Math.max(newStanza.at_ms, Math.min(newStanza.end_ms, clickedMs)));
+            } else {
+              focusStanza(sid);
+            }
+          }}
+          expanded={true}
+          // No header / no onToggleExpanded — title + Collapse moved
+          // to the tab-level title row above so the button sits above
+          // the right-column viewer and stays put across collapse.
+          height={180}
+          currentMs={currentMs}
+          onSeek={setCurrentMs}
+        />
+
+        <MediaViewer
+          videoSrc={chapterClip?.url}
+          videoSrcOffsetMs={chapterClip?.offsetMs ?? 0}
+          media={{ kind: mediaKind, title: sliceScope.title }}
+          loadingLabel={chapterClip ? null : 'Loading chapter clip…'}
+          audioWaveform={audioWaveform}
+          spectrogram={trackSpectrogram}
+          beats={trackBeats}
+          chapter={viewScope}
+          funscript={{ actions }}
+          currentMs={currentMs}
+          totalMs={activeChapter.endMs}
+          isPlaying={isPlaying}
+          onPlayPause={() => setIsPlaying((p) => !p)}
+          onSeek={(ms) => {
+            // Clamp to SLICE (the editing target).
+            setCurrentMs(Math.max(sliceScope.start, Math.min(sliceScope.end, ms)));
+          }}
+          onTimeChange={(ms) => {
+            // Video-driven time updates (throttled 4Hz). Loop back to
+            // sliceScope.start on overshoot so playback stays inside
+            // the focused slice.
+            if (ms >= sliceScope.end) setCurrentMs(sliceScope.start);
+            else if (ms < sliceScope.start) setCurrentMs(sliceScope.start);
+            else setCurrentMs(ms);
+          }}
+          onPrev={onPrev}
+          onNext={onNext}
+          modeToggleAlign="start"
+          modeToggleSize="sm"
+          showModeLabel={false}
+          showMark={false}
+          width="100%"
+          thumbnailAspect="16/7"
+        />
+      </div>
+      </div>
+      )}
 
       {/* Body — rail + center + transform panel */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
@@ -343,7 +590,7 @@ export default function StanzasTab({
               <StanzaRail
                 stanzas={stanzasInScope}
                 focusStanzaId={focusStanzaId}
-                onSelect={setFocusStanzaId}
+                onSelect={focusStanza}
               />
             )}
           </div>
@@ -393,7 +640,6 @@ export default function StanzasTab({
           cancelLabel="Cancel"
           onApply={() => console.log('Stanzas/apply', { stanzaIds: editedStanzaIds, transformId, params })}
           onCancel={() => { setTransformId(null); setParams({}); }}
-          width={320}
         />
       </div>
     </div>
@@ -418,12 +664,15 @@ function EmptyState({ title, body }) {
 }
 
 function HeaderRow({ children, style }) {
+  // Transparent background + no border — the ribbon row is part of the
+  // unified "selector area" (page background). Only the chapter bands
+  // inside have their own colors. Padding / gap aligned to the 8px
+  // spacing grid (forgemoment tokens.css): --s-3 = 12px, --s-5 = 24px.
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 14,
-      padding: '10px 22px',
-      background: 'var(--surface)',
-      borderBottom: '1px solid var(--border)',
+      display: 'flex', alignItems: 'center', gap: 'var(--s-3)',
+      padding: 'var(--s-3) var(--s-5)',
+      background: 'transparent',
       flexShrink: 0,
       ...style,
     }}>

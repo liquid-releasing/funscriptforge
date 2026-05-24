@@ -705,6 +705,9 @@ export default function App() {
             setAppError={setAppError}
             stanzasByPath={stanzasByPath}
             setStanzasByPath={setStanzasByPath}
+            trackPeaks={trackPeaks}
+            trackSpectrogram={trackSpectrogram}
+            trackBeats={trackBeats}
           />
         )}
         {tab === 'events' && (
