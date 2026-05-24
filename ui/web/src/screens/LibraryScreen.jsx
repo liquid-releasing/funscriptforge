@@ -159,7 +159,12 @@ export default function LibraryScreen({ onOpen, onAppError }) {
     // strict `<stem>.funscript` for older scan results.
     const funscriptName = project.funscriptName ?? `${project.stem}.funscript`;
     const funscriptPath = tauriFs.join(project.dirPath, funscriptName);
-    onOpen?.(funscriptPath);
+    // Pass the Library card's title as a hint — when the funscript
+    // stem differs from the media stem (IPZZ-125 case), the loaded
+    // project should still read as the media-stem-titled project the
+    // user clicked, not the funscript-stem title load_project would
+    // derive on its own.
+    onOpen?.(funscriptPath, { title: project.title });
   };
 
   // ── Derive the project list to display ─────────────────────────────

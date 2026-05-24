@@ -19,6 +19,7 @@ import {
 } from './api/forge.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
+import AnalysisTab from './screens/AnalysisTab.jsx';
 import DeviceTab from './screens/DeviceTab.jsx';
 import ChaptersTab from './screens/ChaptersTab.jsx';
 import PatternsTab from './screens/PatternsTab.jsx';
@@ -33,6 +34,14 @@ import AboutDialog from './components/AboutDialog.jsx';
 const TABS = [
   { id: 'library',   label: 'Library' },
   { id: 'project',   label: 'Project' },
+  // 'analysis' (2026-05-24) sits between Project and Device. Read-only
+  // overview surface — chapter strip, script overview, pitch line, beat
+  // strength bars, energy heatmap, KPI strip, category drill-down. Runs
+  // the auto-chapter pipeline on mount when sidecars are missing; per-
+  // section progressive reveal as each stage's sidecar lands. The
+  // visualization primitives live in forgemoment/src/analysis/ so
+  // ForgeGen + Beatflo can reuse them.
+  { id: 'analysis', label: 'Analysis' },
   { id: 'device',    label: 'Device' },
   { id: 'chapters',  label: 'Chapters' },
   // 'patterns' (2026-05-16) sits between Chapters and Phrases. Pattern
@@ -415,7 +424,14 @@ export default function App() {
   // the Project tab, sets the wait cursor, awaits load_project, then commits
   // the result. Pulled up here so both Library and Project tab callbacks
   // route through the same loading-state pipeline.
-  const handleOpenScript = async (path) => {
+  //
+  // `meta` is an optional override carried in from callers that have
+  // richer context than the funscript path alone. Library passes
+  // `{ title }` so the loaded project's title matches the Library card
+  // (media stem) instead of being derived from the funscript stem —
+  // matters when prefix-with-boundary matching pairs a funscript with
+  // a media file whose stem has extra qualifiers (IPZZ-125 case).
+  const handleOpenScript = async (path, meta = {}) => {
     if (!path) return;
     // Seed a pending placeholder *before* the async load so the Project
     // tab arrives with the new project's name already in the title block —
@@ -424,7 +440,8 @@ export default function App() {
     // (yet-unloaded) funscript. handleProjectOpened replaces the
     // placeholder with the full record when load_project resolves.
     const filename = path.split(/[\\/]/).pop() || 'project';
-    const placeholderTitle = filename.replace(/\.funscript$/i, '');
+    const fallbackTitle = filename.replace(/\.funscript$/i, '');
+    const placeholderTitle = meta.title || fallbackTitle;
     setOpenedProject({
       id: `pending:${path}`,
       path,
@@ -438,7 +455,10 @@ export default function App() {
     setTab('project');
     try {
       const project = await loadProject(path);
-      handleProjectOpened(project);
+      // Apply the caller's title hint over the Rust default. Other
+      // fields stay as load_project returned them.
+      const finalProject = meta.title ? { ...project, title: meta.title } : project;
+      handleProjectOpened(finalProject);
     } catch (err) {
       console.error('App: load_project failed', err);
       setAppError(err?.message ? `Failed to open script: ${err.message}` : 'Failed to open script.');
@@ -514,7 +534,8 @@ export default function App() {
   // ≥1 selected target (moved here from Project 2026-05-17 along with
   // the device picker itself).
   const TAB_CHAIN = {
-    project:  'device',
+    project:  'analysis',
+    analysis: 'device',
     device:   'chapters',
     chapters: 'patterns',
     patterns: 'phrases',
@@ -530,7 +551,7 @@ export default function App() {
     if (id === 'project') {
       if (!project?.path && !isLoadingProject) return 'Open a funscript before continuing.';
     }
-    if (['device', 'chapters', 'patterns', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
+    if (['analysis', 'device', 'chapters', 'patterns', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
         && !project?.path && !isLoadingProject) {
       return 'Open a funscript before continuing.';
     }
@@ -671,6 +692,14 @@ export default function App() {
             isLoadingProject={isLoadingProject}
           />
         )}
+        {tab === 'analysis' && (
+          <AnalysisTab
+            project={typeof openedProject === 'object' ? openedProject : null}
+            trackPeaks={trackPeaks}
+            trackSpectrogram={trackSpectrogram}
+            trackBeats={trackBeats}
+          />
+        )}
         {tab === 'device' && (
           <DeviceTab
             project={typeof openedProject === 'object' ? openedProject : null}
@@ -682,7 +711,13 @@ export default function App() {
           <ChaptersTab
             project={typeof openedProject === 'object' ? openedProject : null}
             onAttachMedia={async () => {
-              const p = await pickMediaFile();
+              // Start the picker in the project's own folder — the
+              // user is almost always looking for media that lives
+              // next to the funscript.
+              const projectDir = project?.path
+                ? project.path.slice(0, Math.max(project.path.lastIndexOf('\\'), project.path.lastIndexOf('/')))
+                : undefined;
+              const p = await pickMediaFile(projectDir || undefined);
               if (p) await handleAttachMedia(p);
             }}
             onChaptersChange={handleChaptersChange}
@@ -758,7 +793,7 @@ export default function App() {
           />
         )}
         {tab === 'catalog' && <CatalogTab />}
-        {tab !== 'library' && tab !== 'project' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && tab !== 'catalog' && (
+        {tab !== 'library' && tab !== 'project' && tab !== 'analysis' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && tab !== 'catalog' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>

@@ -300,12 +300,13 @@ function synthMockChapters(totalMs, n) {
  *
  *  Returns absolute path on desktop, null if cancelled, browser-mode null.
  *  Caller is responsible for routing by extension. */
-export async function pickProjectFile() {
+export async function pickProjectFile(defaultPath) {
   if (isTauri()) {
     const { open } = await import('@tauri-apps/plugin-dialog');
     const selected = await open({
       multiple: false,
       directory: false,
+      defaultPath: defaultPath || undefined,
       filters: [
         { name: 'Funscript',     extensions: ['funscript'] },
         { name: 'Audio',         extensions: ['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac'] },
@@ -571,12 +572,13 @@ export async function pickFunscriptFile() {
 /** Open a media file picker — used when *attaching* a media file to an
  *  existing project (Project tab > Replace files…). Not the primary input;
  *  pickFunscriptFile is. */
-export async function pickMediaFile() {
+export async function pickMediaFile(defaultPath) {
   if (isTauri()) {
     const { open } = await import('@tauri-apps/plugin-dialog');
     const selected = await open({
       multiple: false,
       directory: false,
+      defaultPath: defaultPath || undefined,
       filters: [
         {
           name: 'Audio / Video',

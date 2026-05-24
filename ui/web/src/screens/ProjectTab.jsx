@@ -120,8 +120,13 @@ export default function ProjectTab({
   // and routes by extension. Funscript → reopens the project; audio/video
   // → attaches as media; .ffmeta / .chapters.json → noted but not yet
   // wired through to import. Anything else: surface a footer error.
+  //
+  // defaultPath = the project's own folder, so the dialog starts where
+  // the user expects (the funscript's neighbourhood), not in whatever
+  // folder the OS last remembered.
   const handleAddOrReplace = async () => {
-    const path = await pickProjectFile();
+    const projectDir = projectDirname(openedProject);
+    const path = await pickProjectFile(projectDir);
     if (!path) return;
     const kind = classifyProjectFile(path);
     if (kind === 'funscript') {
@@ -584,6 +589,15 @@ function basename(p) {
   if (!p) return '';
   const parts = String(p).split(/[/\\]/);
   return parts[parts.length - 1] || String(p);
+}
+
+// Derive the project's folder from its funscript path. Skips synthetic
+// `sample://` projects and anything without a path.
+function projectDirname(project) {
+  const path = typeof project === 'object' ? project?.path : null;
+  if (!path || String(path).startsWith('sample://')) return undefined;
+  const idx = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+  return idx > 0 ? path.slice(0, idx) : undefined;
 }
 
 function FileRow({ icon, name, sub, tag, disabled, revealPath }) {
