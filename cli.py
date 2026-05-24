@@ -1439,13 +1439,12 @@ def cmd_read_stanzas(args):
         print(f"Error: file not found: {target}", file=sys.stderr)
         sys.exit(1)
 
-    sidecar = target.with_suffix("").with_suffix(".chapters.json")
-    if not sidecar.exists():
-        # Try <stem>.chapters.json — the with_suffix dance above strips
-        # only the final suffix. For "foo.funscript" we want
-        # "foo.chapters.json"; for "foo.mp4" we want "foo.chapters.json".
-        # Path.with_suffix replaces the suffix, so apply once.
-        sidecar = target.with_suffix(".chapters.json")
+    # Sidecars live in `<dir>/.<stem>.forge/<stem>.chapters.json` per the
+    # videoflow forge-dir layout. `sidecar_path_for` resolves that path
+    # whether `target` is a `.funscript` or a media file — both share
+    # the same stem.
+    from videoflow.sidecar import sidecar_path_for
+    sidecar = sidecar_path_for(target)
     if not sidecar.exists():
         print(json.dumps({"phrases": [], "clusters": []}))
         return
