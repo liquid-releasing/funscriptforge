@@ -37,7 +37,7 @@ const SORT_OPTIONS = [
   { id: 'duration',   label: 'Duration' },
 ];
 
-export default function LibraryScreen({ onOpen }) {
+export default function LibraryScreen({ onOpen, onAppError }) {
   const [config, setConfig] = useState(null);
   // Map<rootPath, ScanResult>
   const [scans, setScans] = useState(new Map());
@@ -143,15 +143,23 @@ export default function LibraryScreen({ onOpen }) {
   };
 
   const handleCardClick = (project) => {
-    // Prefer the funscript path so the existing handleOpenScript
-    // pipeline picks it up unchanged. Fall back to media path for
-    // raw projects (App.jsx will then drive a "create new" flow).
-    if (project.pills.funscript) {
-      const funscriptPath = tauriFs.join(project.dirPath, `${project.stem}.funscript`);
-      onOpen?.(funscriptPath);
-    } else {
-      onOpen?.(project.mediaPath);
+    // Raw projects (video/audio only, no .funscript) can't go through
+    // the load_project pipeline — it parses the path as a funscript.
+    // Surface a friendly message instead of triggering the UTF-8 crash.
+    // Future: route raw projects to a "create funscript from media" flow.
+    if (!project.pills.funscript) {
+      onAppError?.(
+        `${project.title} has no funscript yet. Drop one into the folder, ` +
+        `or open the funscript on the Project tab via "Add or replace…".`,
+      );
+      return;
     }
+    // Prefer the matched filename (handles prefix-with-boundary cases —
+    // funscript stem may differ from media stem). Fall back to the
+    // strict `<stem>.funscript` for older scan results.
+    const funscriptName = project.funscriptName ?? `${project.stem}.funscript`;
+    const funscriptPath = tauriFs.join(project.dirPath, funscriptName);
+    onOpen?.(funscriptPath);
   };
 
   // ── Derive the project list to display ─────────────────────────────

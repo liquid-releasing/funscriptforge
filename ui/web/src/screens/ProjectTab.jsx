@@ -1,23 +1,19 @@
 // Project — working view for a single funscript project.
 //
-// Ported from ui_design/ui_kits/funscriptforge-app/tab-Project.jsx, rewritten
-// as a real ES module: primitives come from forgemoment, recents flow through
-// the platform adapter (../api/forge.js).
-//
 // Layout:
-//   Left rail (320px)   — search + recent-project switcher; active project drives center.
+//   Left rail (320px)   — "Start a project" actions (sample / open / library)
+//                         + search + session-loaded recents.
 //   Center (flex)        — title block, funscript chart, files-in-project list,
-//                          "Replace files…" affordance. Device picker moved to
-//                          the Device tab 2026-05-17 (where it belongs — gives
-//                          a clearer home, makes the tab detachable for other
-//                          LQR apps, and supports a SFW build via vocab swap).
+//                          "Add or replace…" affordance. Device picker moved
+//                          to the Device tab 2026-05-17.
 //
-// State ownership:
-//   activeProjectId   — local; which project the center is displaying
+// Recents data: every project loaded since the app launched. No mock
+// fixtures. Lives in App.jsx as `loadedProjects`. Cross-session memory
+// belongs to the Library tab (it scans configured roots on each open).
 //
-// Project lookup precedence: the prop `openedProjectId` (passed from
-// LibraryScreen via App.jsx) seeds activeProjectId on first mount. Users can
-// then switch projects via the left rail without losing the lift to App.
+// Files-in-project: real readdir of the funscript's folder via
+// loadProjectFiles (api/library.js) — same matching rule scan.js applies
+// for funscript ↔ media pairing.
 
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -27,7 +23,8 @@ import {
   TextInput,
   SectionLabel,
 } from 'forgemoment';
-import { listRecents, pickFunscriptFile, pickProjectFile, classifyProjectFile } from '../api/forge.js';
+import { pickFunscriptFile, pickProjectFile, classifyProjectFile } from '../api/forge.js';
+import { loadProjectFiles, revealInExplorer } from '../api/library.js';
 import { generatePreviewActions, parseDurationToMs } from '../lib/funscriptPreview.js';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 
@@ -49,27 +46,21 @@ export default function ProjectTab({
   loadedProjects = [],
   onOpenScript,
   onSelectProject,
+  onPickAndOpen,
+  onLoadSample,
+  onGoToLibrary,
   onAttachMedia,
   onAppError,
   isLoadingProject,
 }) {
   const [search, setSearch] = useState('');
-  const [recents, setRecents] = useState(null);
+  // On-disk inventory for the currently active project — drives the
+  // "Files in this project" list with real readdir data instead of
+  // hardcoded placeholders. Stays null in browser mode (no Tauri readdir).
+  const [projectFiles, setProjectFiles] = useState(null);
   const seedId =
     typeof openedProject === 'string' ? openedProject : openedProject?.id ?? null;
   const [activeProjectId, setActiveProjectId] = useState(seedId);
-
-  useEffect(() => {
-    let cancelled = false;
-    listRecents()
-      .then((r) => { if (!cancelled) setRecents(r); })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error('ProjectTab: failed to load recents', err);
-        setRecents([]);
-      });
-    return () => { cancelled = true; };
-  }, []);
 
   // If the user opens a new project from Library while we're mounted, sync.
   useEffect(() => {
@@ -77,36 +68,44 @@ export default function ProjectTab({
     else if (openedProject?.id) setActiveProjectId(openedProject.id);
   }, [openedProject]);
 
-  // Merge session-loaded projects (lifted to App.jsx, survive tab unmounts)
-  // with the listRecents() result. Loaded projects always appear first,
-  // most-recently-loaded at the top.
-  const mergedRecents = useMemo(() => {
-    if (!recents) return null;
-    const loadedIds = new Set(loadedProjects.map((p) => p.id));
-    const rest = recents.filter((r) => !loadedIds.has(r.id));
-    return [...loadedProjects, ...rest];
-  }, [recents, loadedProjects]);
+  // Re-scan the active project's folder whenever the path changes —
+  // gives us companions / sidecars / forge dir / "nearby funscripts"
+  // straight from disk, instead of the hardcoded placeholder rows.
+  const activePath =
+    typeof openedProject === 'object' ? openedProject?.path : null;
+  useEffect(() => {
+    let cancelled = false;
+    if (!activePath || String(activePath).startsWith('sample://')) {
+      setProjectFiles(null);
+      return undefined;
+    }
+    loadProjectFiles(activePath).then((res) => {
+      if (!cancelled) setProjectFiles(res);
+    });
+    return () => { cancelled = true; };
+  }, [activePath]);
 
+  // Session recents = every project loaded since the app launched.
+  // No mock fixtures. Cross-session memory belongs to the Library tab
+  // (which scans configured roots on every open).
   const filtered = useMemo(() => {
-    if (!mergedRecents) return [];
-    if (!search.trim()) return mergedRecents;
+    if (!search.trim()) return loadedProjects;
     const q = search.toLowerCase();
-    return mergedRecents.filter((p) => p.title.toLowerCase().includes(q));
-  }, [mergedRecents, search]);
+    return loadedProjects.filter((p) => p.title.toLowerCase().includes(q));
+  }, [loadedProjects, search]);
 
   // Pending placeholder takes precedence — its id (`pending:<path>`) is not
-  // in the recents list, so the regular find would miss it and the
-  // fallback would silently show the first mock recent.
+  // in the recents list, so the regular find would miss it.
   const pendingPlaceholder =
     typeof openedProject === 'object' && openedProject?._pending ? openedProject : null;
   // Cold-start placeholder: when nothing is user-opened and the active id
   // doesn't match a real recent, render the ActiveProject layout with
-  // "Project" as the title + a skeleton chart, instead of silently showing
-  // the first mock or the dashed EmptyProject. Keeps layout consistent
-  // across cold-start / loading / loaded.
+  // "Project" as the title + a skeleton chart, instead of the dashed
+  // EmptyProject. Keeps layout consistent across cold-start / loading
+  // / loaded.
   const active =
     pendingPlaceholder ??
-    mergedRecents?.find((p) => p.id === activeProjectId) ??
+    loadedProjects.find((p) => p.id === activeProjectId) ??
     COLD_START_PLACEHOLDER;
 
   // Left-rail "Open" button: only ever opens a new funscript. Single-type
@@ -146,26 +145,26 @@ export default function ProjectTab({
         active={activeProjectId}
         onPick={(p) => {
           // Route through App so openedProject (and the TopBar header)
-          // follows. The smart switch avoids a reload flash when the
-          // project is already cached. Mock recents (no path) get the
-          // old local-only behavior — onSelectProject silently no-ops
-          // for them, so update activeProjectId here for the preview.
-          if (p?.path || loadedProjects.some((lp) => lp.id === p?.id)) {
-            onSelectProject?.(p);
-          } else {
-            setActiveProjectId(p?.id);
-          }
+          // follows. Session-loaded projects always have a path, so we
+          // unconditionally hand off to App.handleSelectProject — it
+          // swaps without reload when cached, reloads otherwise.
+          onSelectProject?.(p);
         }}
         search={search}
         onSearch={setSearch}
         onOpen={handleOpen}
-        loading={recents === null}
+        onLoadSample={onLoadSample}
+        onPickAndOpen={onPickAndOpen}
+        onGoToLibrary={onGoToLibrary}
+        loading={false}
       />
       <div style={{ flex: 1, overflow: 'auto', padding: '24px 28px', background: 'var(--bg)' }}>
         {active ? (
           <ActiveProject
             project={active}
+            projectFiles={projectFiles}
             onAddOrReplace={handleAddOrReplace}
+            onOpenScript={onOpenScript}
           />
         ) : (
           <EmptyProject onOpen={handleOpen} />
@@ -175,7 +174,11 @@ export default function ProjectTab({
   );
 }
 
-function LeftRail({ projects, active, onPick, search, onSearch, onOpen, loading }) {
+function LeftRail({
+  projects, active, onPick, search, onSearch, onOpen,
+  onLoadSample, onPickAndOpen, onGoToLibrary,
+}) {
+  const hasStartActions = !!(onLoadSample || onPickAndOpen || onGoToLibrary);
   return (
     <div
       style={{
@@ -187,6 +190,42 @@ function LeftRail({ projects, active, onPick, search, onSearch, onOpen, loading 
         borderRight: '1px solid var(--border)',
       }}
     >
+      {hasStartActions && (
+        <div style={{ padding: '14px 14px 12px', borderBottom: '1px solid var(--border)' }}>
+          <div
+            style={{
+              fontSize: 11, fontWeight: 700, color: 'var(--text-dim)',
+              textTransform: 'uppercase', letterSpacing: '0.08em',
+              marginBottom: 8,
+            }}
+          >
+            Start a project
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {onLoadSample && (
+              <Button kind="primary" size="sm" icon="star"
+                      onClick={onLoadSample}
+                      style={{ justifyContent: 'center' }}>
+                Load sample project
+              </Button>
+            )}
+            {onPickAndOpen && (
+              <Button kind="secondary" size="sm" icon="folder-open"
+                      onClick={onPickAndOpen}
+                      style={{ justifyContent: 'center' }}>
+                Open a funscript…
+              </Button>
+            )}
+            {onGoToLibrary && (
+              <Button kind="ghost" size="sm" icon="library"
+                      onClick={onGoToLibrary}
+                      style={{ justifyContent: 'center' }}>
+                Browse library
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
       <div style={{ padding: '16px 18px 12px', borderBottom: '1px solid var(--border)' }}>
         <div
           style={{
@@ -203,11 +242,18 @@ function LeftRail({ projects, active, onPick, search, onSearch, onOpen, loading 
         <TextInput value={search} onChange={onSearch} placeholder="Search by name…" />
       </div>
       <div style={{ flex: 1, overflow: 'auto' }}>
-        {loading
-          ? <div style={{ padding: 16, fontSize: 12, color: 'var(--text-dim)' }}>Loading…</div>
-          : projects.map((p) => (
-              <ProjectRow key={p.id} project={p} active={p.id === active} onClick={() => onPick(p)} />
-            ))}
+        {projects.length === 0 ? (
+          <div style={{
+            padding: '16px 18px', fontSize: 11.5, color: 'var(--text-dim)',
+            lineHeight: 1.5,
+          }}>
+            Projects you open this session will appear here.
+          </div>
+        ) : (
+          projects.map((p) => (
+            <ProjectRow key={p.id} project={p} active={p.id === active} onClick={() => onPick(p)} />
+          ))
+        )}
         <button
           onClick={onOpen}
           style={{
@@ -295,7 +341,7 @@ function ProjectRow({ project, active, onClick }) {
   );
 }
 
-function ActiveProject({ project, onAddOrReplace }) {
+function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript }) {
   // Real funscripts loaded via the Rust bridge populate `project.actions`
   // (downsampled to ~1200 points by load_project). Recents and mock projects
   // get a deterministic synthesised curve from the preview generator.
@@ -406,6 +452,13 @@ function ActiveProject({ project, onAddOrReplace }) {
         )}
       </div>
 
+      {projectFiles?.companionFunscripts?.length > 0 && (
+        <NearbyFunscriptBanner
+          items={projectFiles.companionFunscripts}
+          onOpen={onOpenScript}
+        />
+      )}
+
       <SectionLabel>Files in this project</SectionLabel>
       <div
         style={{
@@ -416,7 +469,29 @@ function ActiveProject({ project, onAddOrReplace }) {
           overflow: 'hidden',
         }}
       >
-        {project.mediaPath ? (
+        {/* Detected media — from readdir when available, else fall back
+            to what the project record carries (browser mode / sample). */}
+        {projectFiles ? (
+          projectFiles.media.length > 0 ? (
+            projectFiles.media.map((m) => (
+              <FileRow
+                key={`media:${m.path}`}
+                icon={m.kind === 'video' ? 'film' : 'music'}
+                name={m.name}
+                sub={`${m.kind} · same folder · auto-detected`}
+                tag="media"
+              />
+            ))
+          ) : (
+            <FileRow
+              icon="alert-circle"
+              name="no media attached"
+              sub="drop a video/audio file with the same stem next to the funscript"
+              tag="media"
+              disabled
+            />
+          )
+        ) : project.mediaPath ? (
           <FileRow
             icon={project.mediaKind === 'video' ? 'film' : 'music'}
             name={basename(project.mediaPath)}
@@ -432,28 +507,61 @@ function ActiveProject({ project, onAddOrReplace }) {
             disabled
           />
         )}
-        <FileRow icon="file-cog" name={project.path ? basename(project.path) : `${project.title}.funscript`} sub="source funscript · imported as-is" tag="source" />
-        {project.sidecarsFound?.length > 0
-          ? project.sidecarsFound.map((p) => (
-              <FileRow
-                key={p}
-                icon="settings-2"
-                name={basename(p)}
-                sub="sidecar · auto-loaded"
-                tag="meta"
-              />
-            ))
-          : (
-            <FileRow
-              icon="settings-2"
-              name={`${project.title}.ffmeta.json`}
-              sub="our edit metadata · created on first Accept"
-              tag="meta"
-              disabled
-            />
-          )}
-        <FileRow icon="git-branch" name="_funscript_device.json" sub="device-aware reset · written when Device tab is accepted" tag="chain" disabled />
-        <FileRow icon="git-branch" name="_funscript_phrases.json" sub="phrase-level edits · written when Phrases tab is accepted" tag="chain" disabled />
+
+        <FileRow
+          icon="file-cog"
+          name={projectFiles?.funscript?.name
+            ?? (project.path ? basename(project.path) : `${project.title}.funscript`)}
+          sub="source funscript · imported as-is"
+          tag="source"
+        />
+
+        {/* Detected sidecars — chapters.json / beats.json / etc. live next
+            to the funscript, surfaced from disk. */}
+        {projectFiles?.sidecars?.map((s) => (
+          <FileRow
+            key={`sidecar:${s.path}`}
+            icon={sidecarIcon(s.kind)}
+            name={s.name}
+            sub={sidecarLabel(s.kind)}
+            tag={sidecarTag(s.kind)}
+          />
+        ))}
+
+        {/* Forge dir — present once the project has artifacts. Reveal
+            button takes the user to the folder in their OS file explorer. */}
+        {projectFiles?.forgeDir && (
+          <FileRow
+            icon="folder"
+            name={basename(projectFiles.forgeDir)}
+            sub="forge folder · edits and clips stored here"
+            tag="forge"
+            revealPath={projectFiles.forgeDir}
+          />
+        )}
+
+        {/* ffmeta fallback — only when scan didn't pick up an actual
+            sidecar. Disabled so the user reads it as "will be written
+            on first Accept" rather than "exists now." */}
+        {!projectFiles?.sidecars?.some((s) => s.kind === 'ffmeta') && (
+          <FileRow
+            icon="settings-2"
+            name={`${project.title}.ffmeta.json`}
+            sub="our edit metadata · created on first Accept"
+            tag="meta"
+            disabled
+          />
+        )}
+
+        {/* Chain placeholders — forward indicators for outputs each
+            downstream tab will write on Accept. Always shown, always
+            disabled, describe the pipeline shape. */}
+        <FileRow icon="git-branch" name="_funscript_device.json"
+                 sub="device-aware reset · written when Device tab is accepted"
+                 tag="chain" disabled />
+        <FileRow icon="git-branch" name="_funscript_phrases.json"
+                 sub="phrase-level edits · written when Phrases tab is accepted"
+                 tag="chain" disabled />
       </div>
 
       {/* Device picker lives on the Device tab (2026-05-17). Project tab's
@@ -478,7 +586,10 @@ function basename(p) {
   return parts[parts.length - 1] || String(p);
 }
 
-function FileRow({ icon, name, sub, tag, disabled }) {
+function FileRow({ icon, name, sub, tag, disabled, revealPath }) {
+  const onReveal = revealPath
+    ? () => revealInExplorer(revealPath).catch((e) => console.warn('reveal failed', e))
+    : null;
   return (
     <div
       style={{
@@ -495,7 +606,108 @@ function FileRow({ icon, name, sub, tag, disabled }) {
         <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{name}</div>
         <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 1 }}>{sub}</div>
       </div>
-      <Pill tone={tag === 'source' ? 'info' : tag === 'chain' ? 'warn' : 'neutral'}>{tag}</Pill>
+      {onReveal && (
+        <button
+          onClick={onReveal}
+          title="Reveal in Explorer"
+          style={{
+            background: 'transparent', border: '1px solid var(--border)',
+            color: 'var(--text-dim)', borderRadius: 4, cursor: 'pointer',
+            padding: '4px 6px',
+            display: 'inline-flex', alignItems: 'center',
+          }}
+        >
+          <Icon name="external-link" size={12} />
+        </button>
+      )}
+      <Pill tone={pillTone(tag)}>{tag}</Pill>
+    </div>
+  );
+}
+
+function pillTone(tag) {
+  if (tag === 'source') return 'info';
+  if (tag === 'forge')  return 'warn';
+  if (tag === 'feel')   return 'accent';
+  if (tag === 'chain')  return 'warn';
+  return 'neutral';
+}
+
+function sidecarIcon(kind) {
+  switch (kind) {
+    case 'chapters':     return 'bookmark';
+    case 'beats':        return 'activity';
+    case 'audio-peaks':  return 'volume-2';
+    case 'spectrogram':  return 'layers';
+    case 'phrases':      return 'list';
+    case 'events':       return 'zap';
+    case 'feel':         return 'sliders';
+    case 'ffmeta':       return 'settings-2';
+    default:             return 'file';
+  }
+}
+
+function sidecarLabel(kind) {
+  switch (kind) {
+    case 'chapters':     return 'chapter boundaries · auto-loaded';
+    case 'beats':        return 'beat grid · auto-loaded';
+    case 'audio-peaks':  return 'waveform peaks · auto-loaded';
+    case 'spectrogram':  return 'spectrogram cells · auto-loaded';
+    case 'phrases':      return 'phrase slices · auto-loaded';
+    case 'events':       return 'point-in-time effects';
+    case 'feel':         return 'canonical .feel.yml · cross-device';
+    case 'ffmeta':       return 'project metadata · phrase tags, transforms, accept history';
+    default:             return 'sidecar';
+  }
+}
+
+function sidecarTag(kind) {
+  if (kind === 'feel' || kind === 'events') return 'feel';
+  return 'meta';
+}
+
+function NearbyFunscriptBanner({ items, onOpen }) {
+  // Funscripts whose stems differ from this project's by punctuation
+  // or case only — the strict-stem scan won't auto-attach them, so we
+  // surface them as a suggestion the user can act on.
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 12,
+      padding: '12px 14px', marginBottom: 18,
+      background: 'rgba(255, 181, 71, 0.08)',
+      border: '1px solid rgba(255, 181, 71, 0.35)',
+      borderRadius: 8,
+    }}>
+      <Icon name="link" size={16} style={{ color: '#ffb547', marginTop: 1 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
+          {items.length === 1
+            ? 'Found a nearby funscript with a similar name'
+            : `Found ${items.length} nearby funscripts with similar names`}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+          Stems differ only by punctuation or case. Open one to switch projects.
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {items.map((it) => (
+            <button
+              key={it.path}
+              onClick={() => onOpen?.(it.path)}
+              title={it.path}
+              style={{
+                padding: '4px 9px', fontSize: 11.5, fontWeight: 600,
+                background: 'var(--surface-2)', color: 'var(--text)',
+                border: '1px solid var(--border)', borderRadius: 4,
+                cursor: 'pointer', fontFamily: 'inherit',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <Icon name="file-cog" size={11} />
+              {it.name}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

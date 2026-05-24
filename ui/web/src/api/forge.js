@@ -56,22 +56,6 @@ export function ping() {
   }));
 }
 
-/** Recent projects for the Library screen. Real Tauri command reads from the
- *  user's `<config>/funscriptforge/recents.json`. Browser mock returns four
- *  fixture rows so the UI can be exercised without the desktop runtime.
- *
- *  Each project carries a `color` used to tint the MiniWave preview, plus a
- *  `mediaKind` (video|audio) and `chapters` count consumed by the Project
- *  tab. When the real backend lands these come from the .ffmeta sidecar. */
-export function listRecents() {
-  return call('list_recents', undefined, () => [
-    { id: 'r1', title: "Aftermath — Director's Cut", duration: '9:32',  edited: 'just now',   phrases: 23, chapters: 4, mediaKind: 'video', status: 'in-progress', color: '#e74c3c' },
-    { id: 'r2', title: 'Slow Burn',                  duration: '8:12',  edited: 'yesterday',  phrases: 18, chapters: 3, mediaKind: 'audio', status: 'exported',    color: '#f39c12' },
-    { id: 'r3', title: 'Quiet Rain (collab)',        duration: '21:05', edited: '3 days ago', phrases: 47, chapters: 6, mediaKind: 'audio', status: 'in-progress', color: '#4a90d9' },
-    { id: 'r4', title: 'Untitled draft',             duration: '4:30',  edited: 'last week',  phrases:  9, chapters: 2, mediaKind: 'video', status: 'draft',       color: '#9b59b6' },
-  ]);
-}
-
 /** Target devices supported by the funscriptforge pipeline. Mirrors the
  *  device catalog the Streamlit UI ships from forge/devices.py. Real backend
  *  will read the user's calibrated device list; mock returns the canonical
@@ -228,6 +212,36 @@ export function listCharacters() {
     undefined,
     () => Promise.resolve({ characters: [], warning: null }),
   );
+}
+
+/**
+ * Synthetic "Big Buck Bunny" sample project. Same shape load_project
+ * returns; lives entirely in memory so the user can exercise the full
+ * editor (chapters / phrases / patterns / characters / export) without
+ * needing a real funscript on disk. The path is a `sample://` sentinel
+ * — call sites must not pass it to load_project or any fs read.
+ *
+ * Mirrors the ForgeGen sample (7 chapters, 9:55, 90 BPM) so the two
+ * apps share a recognisable demo asset across LQR.
+ */
+export function loadSampleProject() {
+  const durationMs = 595_000;
+  return Promise.resolve({
+    id: 'sample:big_buck_bunny',
+    path: 'sample://big_buck_bunny.funscript',
+    title: 'big_buck_bunny',
+    duration: '9:55',
+    durationMs,
+    mediaKind: 'video',
+    color: '#ffb547',
+    isSample: true,
+    chapters: 7,
+    chapterList: synthMockChapters(durationMs, 7),
+    edited: 'just now',
+    actions: null,
+    actionCount: 1200,
+    sidecarsFound: [],
+  });
 }
 
 function mockLoadProject(path) {

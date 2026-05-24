@@ -13,7 +13,8 @@ import {
   Button, Pill,
 } from 'forgemoment';
 import {
-  isTauri, ping, loadProject, attachMedia, pickMediaFile,
+  isTauri, ping, loadProject, loadSampleProject, attachMedia,
+  pickFunscriptFile, pickMediaFile,
   loadAudioPeaks, loadAudioSpectrogram, loadAudioBeats,
 } from './api/forge.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
@@ -73,12 +74,13 @@ export default function App() {
   const [tab, setTab] = useState('library');
   const [pong, setPong] = useState(null);
   const [openedProject, setOpenedProject] = useState(null);
-  // Every project that's been loaded via pickFunscriptFile in this session.
-  // Held here (not in ProjectTab) so the list survives tab unmounts —
-  // otherwise switching Library → Project drops the prior loaded project.
+  // Every project loaded this session — drives the Project tab's left
+  // rail "Recent projects" list. Held at the App level so it survives
+  // tab unmounts. In-memory only; cross-session persistence is the
+  // Library tab's job (it scans configured roots on every open).
   const [loadedProjects, setLoadedProjects] = useState([]);
-  // True while load_project is in flight. Drives the wait-cursor on the
-  // whole UI plus the spinner overlay on the Project tab.
+  // True while load_project is in flight. Used by tabGate to suppress
+  // the "open a funscript" message while the load is mid-flight.
   const [isLoadingProject, setIsLoadingProject] = useState(false);
   // App-level error surfaced in the footer (AcceptBar.error). Anything
   // the user needs to see but didn't trigger directly — a failed load,
@@ -342,12 +344,8 @@ export default function App() {
 
   // Switch the active project from a ProjectTab recents row click. If the
   // project is already cached in `loadedProjects` we just swap openedProject
-  // — no reload, no loading flash. Otherwise (mock fixture or recent we've
-  // never opened) we route through handleOpenScript for the full load
-  // pipeline. Earlier bug: ProjectTab maintained its own `activeProjectId`
-  // state and the picker only updated that — App's openedProject (and
-  // therefore the TopBar header) stayed pinned to whichever project was
-  // open before the switch.
+  // — no reload, no loading flash. Otherwise (a recent we've never opened)
+  // we route through handleOpenScript for the full load pipeline.
   const handleSelectProject = (project) => {
     if (!project) return;
     const cached =
@@ -359,7 +357,6 @@ export default function App() {
     if (project.path) {
       handleOpenScript(project.path);
     }
-    // Mock recents with no path: nothing to load. Silently no-op.
   };
 
   // ChaptersTab can mutate the chapter list (auto-split sidecar, videoflow
@@ -385,6 +382,33 @@ export default function App() {
       if (!prev || typeof prev !== 'object') return prev;
       return { ...prev, actions: nextActions };
     });
+  };
+
+  // Pop the OS file picker and run the chosen funscript through the
+  // standard load pipeline. Used by TopBar "Open" and Project tab's
+  // empty state — the entry point for "open from anywhere," outside
+  // the configured library roots.
+  const handlePickAndOpen = async () => {
+    const path = await pickFunscriptFile();
+    if (path) handleOpenScript(path);
+  };
+
+  // Load the synthetic "Big Buck Bunny" sample. Skips load_project
+  // (which would parse a nonexistent file) and seeds openedProject
+  // directly. Used by the Project tab empty state.
+  const handleLoadSample = async () => {
+    setAppError(null);
+    setBusy({ message: 'Loading sample…' });
+    setTab('project');
+    try {
+      const project = await loadSampleProject();
+      handleProjectOpened(project);
+    } catch (err) {
+      console.error('App: loadSampleProject failed', err);
+      setAppError(err?.message ? `Failed to load sample: ${err.message}` : 'Failed to load sample.');
+    } finally {
+      setBusy(null);
+    }
   };
 
   // Single orchestrator for "user picked a funscript path". Pre-switches to
@@ -429,10 +453,7 @@ export default function App() {
 
   // Attach a media file to the currently-open project. Used by the Project
   // tab's "Add or replace…" picker when the user picks audio/video; the
-  // picker routes by extension. Updates BOTH openedProject and the
-  // matching entry in loadedProjects — ProjectTab reads the displayed
-  // project from the loadedProjects/recents merge, so missing the second
-  // update lets the UI keep showing the stale (no-media) shape.
+  // picker routes by extension.
   const handleAttachMedia = async (mediaPath) => {
     if (!mediaPath) return;
     const current = typeof openedProject === 'object' ? openedProject : null;
@@ -593,7 +614,7 @@ export default function App() {
         rightActions={(
           <>
             <Button kind="ghost" size="sm" icon="folder-open"
-                    onClick={() => setTab('library')}>
+                    onClick={handlePickAndOpen}>
               Open
             </Button>
             <Button kind="primary" size="sm" icon="download"
@@ -635,13 +656,16 @@ export default function App() {
       </nav>
 
       <main className="ff-main">
-        {tab === 'library' && <LibraryScreen onOpen={handleOpenScript} />}
+        {tab === 'library' && <LibraryScreen onOpen={handleOpenScript} onAppError={setAppError} />}
         {tab === 'project' && (
           <ProjectTab
             openedProject={openedProject}
             loadedProjects={loadedProjects}
             onOpenScript={handleOpenScript}
             onSelectProject={handleSelectProject}
+            onPickAndOpen={handlePickAndOpen}
+            onLoadSample={handleLoadSample}
+            onGoToLibrary={() => setTab('library')}
             onAttachMedia={handleAttachMedia}
             onAppError={setAppError}
             isLoadingProject={isLoadingProject}

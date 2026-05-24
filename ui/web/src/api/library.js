@@ -53,6 +53,11 @@ function pathBasename(p) {
   return idx >= 0 ? p.slice(idx + 1) : p;
 }
 
+function pathDirname(p) {
+  const idx = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'));
+  return idx > 0 ? p.slice(0, idx) : '';
+}
+
 function pathExtname(p) {
   const base = pathBasename(p);
   const dot = base.lastIndexOf('.');
@@ -146,3 +151,139 @@ export async function scanRoot(root) {
 export const addRoot = addRootImpl;
 export const removeRoot = removeRootImpl;
 export const renameRoot = renameRootImpl;
+
+// ── Per-project file inventory ─────────────────────────────────────────
+// loadProjectFiles is the Project tab's narrow analogue to scanRoot:
+// readdir the funscript's own folder, classify entries against the
+// project's stem, and return only what actually exists. No recursion —
+// one project's folder is small and we don't want to pull derivative
+// audio from sibling project subfolders here.
+//
+// Returns null when readdir fails (browser mock or missing dir).
+
+const VIDEO_EXTS = new Set(['.mp4', '.mkv', '.webm', '.mov', '.avi', '.m4v']);
+const AUDIO_EXTS = new Set(['.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac']);
+// Sidecar suffixes the Project tab can render today. Anything else gets
+// classified as 'unknown' so unfamiliar files don't disappear silently.
+const SIDECAR_KINDS = [
+  { suffix: '.chapters.json',    kind: 'chapters' },
+  { suffix: '.beats.json',       kind: 'beats' },
+  { suffix: '.audio.json',       kind: 'audio-peaks' },
+  { suffix: '.spectrogram.json', kind: 'spectrogram' },
+  { suffix: '.phrases.json',     kind: 'phrases' },
+  { suffix: '.events.yml',       kind: 'events' },
+  { suffix: '.feel.yml',         kind: 'feel' },
+  { suffix: '.ffmeta.json',      kind: 'ffmeta' },
+  { suffix: '.ffmeta',           kind: 'ffmeta' },
+];
+
+// Stem normalizer for the "Link nearby funscript" affordance. Collapses
+// the differences that come from naming variation (LongandCut_hdr vs
+// LongandCut-hdr vs longandcut.hdr) so we can recommend a candidate the
+// strict scan rule won't auto-link.
+function normalizeStem(s) {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// Prefix-with-boundary check — `prefix` is a valid prefix of `target`
+// if target starts with prefix followed by `.`, `_`, or `-`. Keeps
+// `Movie.funscript` from claiming `MovieExtended.mp4` while still
+// pairing `IPZZ-125.omfg.funscript` with `IPZZ-125.omfg_iris3.mp4`.
+// Same rule scan.js applies — keep them in sync.
+function isPrefixWithBoundary(prefix, target) {
+  if (prefix.length >= target.length) return false;
+  if (!target.startsWith(prefix)) return false;
+  const boundary = target.charAt(prefix.length);
+  return boundary === '.' || boundary === '_' || boundary === '-';
+}
+
+export async function loadProjectFiles(funscriptPath) {
+  if (!funscriptPath) return null;
+  // Skip non-fs URIs (the synthetic `sample://` sentinel is the only
+  // one today). They don't correspond to real directories — readdir
+  // would error out with a Tauri-level path-syntax warning.
+  if (/^[a-z]+:\/\//i.test(String(funscriptPath))) return null;
+  const dirPath = pathDirname(funscriptPath);
+  const stem = pathStem(funscriptPath);
+  let entries;
+  try {
+    entries = await tauriFs.readdir(dirPath);
+  } catch (err) {
+    console.warn('loadProjectFiles: readdir failed', dirPath, err);
+    return null;
+  }
+
+  const stemLower = stem.toLowerCase();
+  const stemNorm = normalizeStem(stemLower);
+
+  let funscript = null;
+  const media = [];
+  const companionFunscripts = [];
+  const sidecars = [];
+  let forgeDir = null;
+
+  for (const e of entries || []) {
+    const fullPath = pathJoin(dirPath, e.name);
+    if (e.isDirectory) {
+      if (e.name.toLowerCase() === `.${stemLower}.forge`) forgeDir = fullPath;
+      continue;
+    }
+    const ext = pathExtname(e.name);
+    const entryStem = pathStem(e.name);
+    const entryStemLower = entryStem.toLowerCase();
+    const lowerName = e.name.toLowerCase();
+
+    if (ext === '.funscript') {
+      if (entryStemLower === stemLower) {
+        funscript = { path: fullPath, name: e.name };
+      } else if (isPrefixWithBoundary(entryStemLower, stemLower)) {
+        // Funscript stem is a punctuation-bounded prefix of this
+        // project's stem — same rule the scan uses for pairing.
+        // Treat as the project's funscript if we haven't picked one
+        // yet (longer-prefix wins via the loop's ordering).
+        if (!funscript
+            || (funscript._matchLen ?? 0) < entryStemLower.length) {
+          funscript = { path: fullPath, name: e.name, _matchLen: entryStemLower.length };
+        }
+      } else if (normalizeStem(entryStemLower) === stemNorm) {
+        // Stem differs by punctuation/case only and ISN'T a clean prefix
+        // — surface as a "nearby" suggestion the user can act on.
+        companionFunscripts.push({ path: fullPath, name: e.name, match: 'normalized-stem' });
+      }
+      continue;
+    }
+
+    if (VIDEO_EXTS.has(ext) || AUDIO_EXTS.has(ext)) {
+      if (entryStemLower === stemLower) {
+        media.push({
+          path: fullPath,
+          name: e.name,
+          kind: VIDEO_EXTS.has(ext) ? 'video' : 'audio',
+        });
+      }
+      continue;
+    }
+
+    // Sidecars match against the project's stem prefix.
+    let sidecarKind = null;
+    for (const { suffix, kind } of SIDECAR_KINDS) {
+      if (lowerName === `${stemLower}${suffix}`) {
+        sidecarKind = kind;
+        break;
+      }
+    }
+    if (sidecarKind) {
+      sidecars.push({ path: fullPath, name: e.name, kind: sidecarKind });
+    }
+  }
+
+  return {
+    dirPath,
+    stem,
+    funscript,
+    media,
+    companionFunscripts,
+    sidecars,
+    forgeDir,
+  };
+}
