@@ -1,302 +1,715 @@
-// Library — first-run landing screen.
+// LibraryScreen — Library Phase A/C inline panel.
 //
-// Ported from ui_design/ui_kits/funscriptforge-app/LibraryScreen.jsx, but
-// rewritten as a real ES module: primitives come from forgemoment (Button,
-// Pill, Card, SectionHeading, Icon, MiniWave) rather than window globals.
-// Recents and tone templates come through the platform adapter
-// (../api/forge.js) so the same screen works in Tauri and browser modes.
+// Multi-root + project grid + status filter + sort. The data layer
+// lives in forgemoment/src/library/* (scanRoot + config helpers);
+// this screen builds the UI inline (Ladder A). Once the visual rhythm
+// is settled we extract the grid + cards into a `LibraryView`
+// component in forgemoment with a `renderCard` slot.
+//
+// Click a project card → onOpen(path). We prefer the funscript path
+// when one exists alongside the media (so the existing handleOpenScript
+// pipeline picks it up); fall back to the media path for raw projects.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Pill, Icon } from 'forgemoment';
 import {
-  Button,
-  Pill,
-  Card,
-  SectionHeading,
-  Icon,
-  Sparkline,
-} from 'forgemoment';
-import { listRecents, listToneTemplates, pickFunscriptFile } from '../api/forge.js';
-import { generatePreviewActions, parseDurationToMs } from '../lib/funscriptPreview.js';
+  getConfigPath,
+  loadConfig,
+  saveConfig,
+  scanRoot,
+  pickFolder,
+  revealInExplorer,
+  addRoot,
+  removeRoot,
+  tauriFs,
+} from '../api/library.js';
+
+const STATUS_OPTIONS = [
+  { id: 'all',       label: 'All' },
+  { id: 'raw',       label: 'Raw' },
+  { id: 'active',    label: 'Active' },
+  { id: 'completed', label: 'Completed' },
+];
+
+const SORT_OPTIONS = [
+  { id: 'lastEdited', label: 'Last edited' },
+  { id: 'title',      label: 'Title' },
+  { id: 'duration',   label: 'Duration' },
+];
 
 export default function LibraryScreen({ onOpen }) {
-  const [recents, setRecents] = useState(null);
-  const [tones, setTones] = useState(null);
+  const [config, setConfig] = useState(null);
+  // Map<rootPath, ScanResult>
+  const [scans, setScans] = useState(new Map());
+  // Set<rootPath> currently scanning
+  const [scanning, setScanning] = useState(new Set());
+  const [error, setError] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortKey, setSortKey] = useState('lastEdited');
+  // Active root in the rail; null = show all roots merged.
+  const [activeRootPath, setActiveRootPath] = useState(null);
 
+  // ── Load config on mount ───────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
-    Promise.all([listRecents(), listToneTemplates()])
-      .then(([r, t]) => {
-        if (cancelled) return;
-        setRecents(r);
-        setTones(t);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error('LibraryScreen: failed to load library data', err);
-        setRecents([]);
-        setTones([]);
-      });
+    loadConfig()
+      .then((c) => { if (!cancelled) setConfig(c); })
+      .catch((e) => { if (!cancelled) setError(String(e?.message ?? e)); });
     return () => { cancelled = true; };
   }, []);
 
-  const handleOpen = async () => {
-    const path = await pickFunscriptFile();
+  // ── Scan each configured root when the config changes ──────────────
+  useEffect(() => {
+    if (!config) return undefined;
+    let cancelled = false;
+    (async () => {
+      // Mark all roots as scanning so the UI shows progress.
+      setScanning(new Set(config.roots.map((r) => r.path)));
+      for (const root of config.roots) {
+        try {
+          const result = await scanRoot(root);
+          if (cancelled) return;
+          setScans((prev) => {
+            const next = new Map(prev);
+            next.set(root.path, result);
+            return next;
+          });
+        } catch (e) {
+          if (cancelled) return;
+          console.error('LibraryScreen: scan failed', root.path, e);
+          setScans((prev) => {
+            const next = new Map(prev);
+            next.set(root.path, { root, projects: [], errors: [String(e)], scannedAt: Date.now() });
+            return next;
+          });
+        } finally {
+          if (!cancelled) {
+            setScanning((prev) => {
+              const next = new Set(prev);
+              next.delete(root.path);
+              return next;
+            });
+          }
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [config]);
+
+  // Clear scans for roots that no longer exist in config.
+  useEffect(() => {
+    if (!config) return;
+    setScans((prev) => {
+      const configured = new Set(config.roots.map((r) => r.path));
+      const next = new Map();
+      for (const [k, v] of prev) {
+        if (configured.has(k)) next.set(k, v);
+      }
+      return next;
+    });
+  }, [config]);
+
+  // ── Handlers ───────────────────────────────────────────────────────
+  const handleAddRoot = async () => {
+    const path = await pickFolder();
     if (!path) return;
-    // Hand the path up to App.jsx, which orchestrates load_project (so the
-    // wait-cursor + tab pre-switch happen at the app level rather than
-    // here, where they'd race with the tab change).
-    onOpen?.(path);
+    const next = addRoot(config, path);
+    await saveConfig(next);
+    setConfig(next);
   };
 
+  const handleRemoveRoot = async (rootPath) => {
+    const next = removeRoot(config, rootPath);
+    await saveConfig(next);
+    setConfig(next);
+    if (activeRootPath === rootPath) setActiveRootPath(null);
+  };
+
+  const handleReveal = async (path) => {
+    try { await revealInExplorer(path); }
+    catch (e) { console.error('reveal failed', e); }
+  };
+
+  const handleRescan = async (rootPath) => {
+    const root = config.roots.find((r) => r.path === rootPath);
+    if (!root) return;
+    setScanning((prev) => new Set(prev).add(rootPath));
+    try {
+      const result = await scanRoot(root);
+      setScans((prev) => new Map(prev).set(rootPath, result));
+    } finally {
+      setScanning((prev) => { const n = new Set(prev); n.delete(rootPath); return n; });
+    }
+  };
+
+  const handleCardClick = (project) => {
+    // Prefer the funscript path so the existing handleOpenScript
+    // pipeline picks it up unchanged. Fall back to media path for
+    // raw projects (App.jsx will then drive a "create new" flow).
+    if (project.pills.funscript) {
+      const funscriptPath = tauriFs.join(project.dirPath, `${project.stem}.funscript`);
+      onOpen?.(funscriptPath);
+    } else {
+      onOpen?.(project.mediaPath);
+    }
+  };
+
+  // ── Derive the project list to display ─────────────────────────────
+  // Each project gets a `_locationLabel` computed at render time: the
+  // path from the root down to the parent folder, slash-normalized for
+  // display. Empty when the project sits directly in the root. Helps
+  // disambiguate same-stem projects in different folders (#2 nit).
+  const filteredProjects = useMemo(() => {
+    if (!config) return [];
+    const rootsToInclude = activeRootPath
+      ? config.roots.filter((r) => r.path === activeRootPath)
+      : config.roots;
+    let projects = [];
+    for (const r of rootsToInclude) {
+      const result = scans.get(r.path);
+      if (!result) continue;
+      for (const p of result.projects) {
+        projects.push({
+          ...p,
+          _locationLabel: computeLocationLabel(p.dirPath, r.path, r.label),
+        });
+      }
+    }
+    if (statusFilter !== 'all') {
+      projects = projects.filter((p) => p.status === statusFilter);
+    }
+    return sortProjects(projects, sortKey);
+  }, [config, scans, activeRootPath, statusFilter, sortKey]);
+
+  // ── Render ─────────────────────────────────────────────────────────
+  if (config === null) {
+    return <CenteredMessage>Loading library…</CenteredMessage>;
+  }
+
   return (
-    <div style={{ flex: 1, overflow: 'auto', padding: '32px 40px' }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-        <Hero onOpen={handleOpen} />
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column',
+      minHeight: 0, background: 'var(--bg)',
+    }}>
+      <Header
+        config={config}
+        scans={scans}
+        scanning={scanning}
+        error={error}
+      />
 
-        <SectionHeading
-          title="Recent"
-          subtitle="Pick up where you left off."
-          right={
-            <Button kind="ghost" size="sm" iconRight="chevron-right">
-              All projects
-            </Button>
-          }
-        />
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-            gap: 14,
-            marginBottom: 36,
-          }}
-        >
-          <NewProjectCard onClick={handleOpen} />
-          {recents === null
-            ? <RecentSkeleton count={3} />
-            : recents.map((f) => (
-                <FileCard key={f.id} file={f} onOpen={() => onOpen?.(f.id)} />
-              ))}
-        </div>
+      <RootsRow
+        config={config}
+        scans={scans}
+        scanning={scanning}
+        activeRootPath={activeRootPath}
+        onSelectRoot={setActiveRootPath}
+        onAddRoot={handleAddRoot}
+        onRemoveRoot={handleRemoveRoot}
+        onReveal={handleReveal}
+        onRescan={handleRescan}
+      />
 
-        <SectionHeading
-          title="Tone templates"
-          subtitle="Start from a forged baseline."
-        />
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: 12,
-          }}
-        >
-          {(tones ?? []).map((t) => (
-            <Card key={t.id} hoverable padding={16} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <ToneIcon tone={t} />
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{t.label}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-                  {t.tagline}
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
+      <FilterStrip
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        sortKey={sortKey}
+        onSortChange={setSortKey}
+        visibleCount={filteredProjects.length}
+        totalCount={totalCount(scans)}
+      />
+
+      <div style={{ flex: 1, overflow: 'auto', padding: '0 24px 24px' }}>
+        {config.roots.length === 0
+          ? <EmptyConfigState onAddRoot={handleAddRoot} />
+          : <ProjectGrid
+              projects={filteredProjects}
+              onClick={handleCardClick}
+              onReveal={handleReveal}
+            />}
       </div>
     </div>
   );
 }
 
-function Hero({ onOpen }) {
+// ── Subcomponents ──────────────────────────────────────────────────────
+
+function Header({ config, scans, scanning, error }) {
+  const rootCount = config.roots.length;
+  const projectCount = totalCount(scans);
   return (
-    <div
-      style={{
-        background: 'linear-gradient(135deg, rgba(255,75,75,0.12), rgba(199,125,255,0.06))',
-        border: '1px solid var(--border)',
-        borderRadius: 16,
-        padding: '32px 36px',
-        marginBottom: 32,
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          opacity: 0.08,
-          pointerEvents: 'none',
-          backgroundImage:
-            'radial-gradient(circle at 20% 30%, var(--accent), transparent 40%), ' +
-            'radial-gradient(circle at 80% 70%, #c77dff, transparent 40%)',
-        }}
-      />
-      {/* Forge artwork — right-side hero illustration at full color.
-          Source: funscriptforge/media/hammer-striking-anvil.png. */}
-      <img
-        src="/hero-forge.png"
-        alt=""
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          right: -32,
-          bottom: -32,
-          width: 280,
-          height: 280,
-          objectFit: 'contain',
-          pointerEvents: 'none',
-          filter: 'drop-shadow(0 8px 32px rgba(0,0,0,0.4))',
-        }}
-      />
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 600 }}>
-        <Pill tone="accent" dot style={{ marginBottom: 12 }}>
-          Alpha — your feedback shapes this
-        </Pill>
-        <h1 style={{ fontSize: 32, fontWeight: 700, margin: '0 0 8px', letterSpacing: '-0.02em' }}>
-          Forge a stronger script.
-        </h1>
-        <p
-          style={{
-            fontSize: 15,
-            color: 'var(--text-muted)',
-            margin: '0 0 20px',
-            maxWidth: 540,
-            lineHeight: 1.5,
-          }}
-        >
-          Drop in a funscript, refine its tone, rewrite chapters, and shape patterns
-          to match exactly what you want — without rebuilding from zero.
-        </p>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <Button kind="primary" icon="upload" onClick={onOpen}>
-            Open script
-          </Button>
-          <Button kind="secondary" icon="plus">
-            New project
-          </Button>
-        </div>
+    <div style={{ padding: '20px 24px 12px', flexShrink: 0 }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+        textTransform: 'uppercase', color: 'var(--text-dim)',
+      }}>
+        Library
       </div>
+      <h2 style={{ margin: '4px 0 6px', fontSize: 22, fontWeight: 700 }}>
+        {rootCount === 0
+          ? 'Add a folder to start your library'
+          : `${projectCount} project${projectCount === 1 ? '' : 's'} across ${rootCount} folder${rootCount === 1 ? '' : 's'}`}
+      </h2>
+      {scanning.size > 0 && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          Scanning {scanning.size} folder{scanning.size === 1 ? '' : 's'}…
+        </div>
+      )}
+      {error && (
+        <div style={{ fontSize: 12, color: '#ff4b4b' }}>{error}</div>
+      )}
     </div>
   );
 }
 
-function FileCard({ file, onOpen }) {
-  // Real funscripts get downsampled previews from the backend in
-  // `file.previewActions`. Until the Python bridge lands, generate a
-  // believable curve deterministically from the project id + duration so
-  // each card looks distinct without faking a perfectly clean wave.
-  const previewActions = file.previewActions ?? generatePreviewActions(file);
-  const durationMs = parseDurationToMs(file.duration) || 60000;
-
+function RootsRow({
+  config, scans, scanning, activeRootPath,
+  onSelectRoot, onAddRoot, onRemoveRoot, onReveal, onRescan,
+}) {
   return (
-    <Card hoverable onClick={onOpen} padding={0}>
-      <div
-        style={{
-          height: 84,
-          background: 'var(--surface-2)',
-          borderTopLeftRadius: 10,
-          borderTopRightRadius: 10,
-          overflow: 'hidden',
-          padding: 6,
-        }}
-      >
-        <Sparkline
-          actions={previewActions}
-          start={0}
-          end={durationMs}
-          colorMode="velocity"
-          filled
-          height={72}
+    <div style={{
+      display: 'flex', gap: 10, padding: '8px 24px 16px',
+      overflowX: 'auto', flexShrink: 0,
+    }}>
+      {/* "All roots" pill — only when more than one root configured */}
+      {config.roots.length > 1 && (
+        <AllRootsCard
+          selected={activeRootPath === null}
+          totalProjects={totalCount(scans)}
+          onClick={() => onSelectRoot(null)}
         />
-      </div>
-      <div style={{ padding: '12px 14px' }}>
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            marginBottom: 4,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {file.title}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-            {file.duration} · {file.phrases} ph.
-          </span>
-          <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{file.edited}</span>
-        </div>
-      </div>
-    </Card>
+      )}
+      {config.roots.map((root) => (
+        <RootCard
+          key={root.path}
+          root={root}
+          scan={scans.get(root.path)}
+          isScanning={scanning.has(root.path)}
+          selected={activeRootPath === root.path}
+          onClick={() => onSelectRoot(root.path)}
+          onRemove={() => onRemoveRoot(root.path)}
+          onReveal={() => onReveal(root.path)}
+          onRescan={() => onRescan(root.path)}
+        />
+      ))}
+      <AddRootCard onClick={onAddRoot} />
+    </div>
   );
 }
 
-function NewProjectCard({ onClick }) {
-  const [hover, setHover] = useState(false);
+function AllRootsCard({ selected, totalProjects, onClick }) {
   return (
     <button
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
       style={{
-        background: hover ? 'rgba(255,75,75,0.08)' : 'var(--surface)',
-        border: `1.5px dashed ${hover ? 'var(--accent)' : 'var(--border-strong)'}`,
-        borderRadius: 10,
-        padding: '20px 14px',
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-        color: hover ? '#ff7b7b' : 'var(--text-muted)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        minHeight: 142,
-        transition: 'all 150ms',
+        ...rootCardBase,
+        background: selected ? 'var(--surface-2)' : 'var(--surface)',
+        border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
       }}
     >
-      <Icon name="upload" size={28} stroke={1.5} />
-      <span style={{ fontSize: 13, fontWeight: 600 }}>Drop a .funscript</span>
-      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>or click to browse</span>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>All folders</div>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
+        {totalProjects} project{totalProjects === 1 ? '' : 's'}
+      </div>
     </button>
   );
 }
 
-function RecentSkeleton({ count = 3 }) {
-  return Array.from({ length: count }, (_, i) => (
-    <div
-      key={i}
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 10,
-        minHeight: 142,
-        opacity: 0.4,
-      }}
-    />
-  ));
-}
-
-function ToneIcon({ tone }) {
-  // The canonical PNGs from funscriptforge/assets/tone_cards/ — copied into
-  // /public/tones/ during scaffold so the same path works in Tauri and web.
-  // Each tone has a brand color used as a faint backplate for visual anchor.
+function RootCard({ root, scan, isScanning, selected, onClick, onRemove, onReveal, onRescan }) {
+  const count = scan?.projects.length ?? 0;
   return (
-    <div
-      style={{
-        width: 48,
-        height: 48,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
+    <div style={{
+      ...rootCardBase,
+      background: selected ? 'var(--surface-2)' : 'var(--surface)',
+      border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+      cursor: 'pointer',
+      padding: 0,
+      display: 'flex', flexDirection: 'column',
+    }}
+      onClick={onClick}
     >
-      <img
-        src={tone.icon}
-        alt={`${tone.label} tone`}
-        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-      />
+      <div style={{ padding: '10px 12px 6px', flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 13, fontWeight: 700, color: 'var(--text)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }} title={root.path}>
+          {root.label}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
+          {isScanning ? 'Scanning…' : `${count} project${count === 1 ? '' : 's'}`}
+        </div>
+      </div>
+      <div style={{
+        display: 'flex', gap: 4, padding: '4px 6px',
+        borderTop: '1px solid var(--border)',
+      }}>
+        <IconBtn name="refresh-ccw" title="Rescan"
+          onClick={(e) => { e.stopPropagation(); onRescan(); }} />
+        <IconBtn name="external-link" title="Reveal in Explorer"
+          onClick={(e) => { e.stopPropagation(); onReveal(); }} />
+        <div style={{ flex: 1 }} />
+        <IconBtn name="x" title="Remove from library"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }} />
+      </div>
     </div>
   );
+}
+
+function AddRootCard({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Add a folder to the library"
+      style={{
+        ...rootCardBase,
+        background: 'transparent',
+        border: '1.5px dashed var(--border)',
+        cursor: 'pointer',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: 4,
+      }}
+    >
+      <Icon name="plus" size={22} style={{ color: 'var(--text-dim)' }} />
+      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Add folder</span>
+    </button>
+  );
+}
+
+function IconBtn({ name, title, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        background: 'transparent', border: 'none', cursor: 'pointer',
+        padding: 6, borderRadius: 4, color: 'var(--text-dim)',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <Icon name={name} size={13} />
+    </button>
+  );
+}
+
+function FilterStrip({ statusFilter, onStatusChange, sortKey, onSortChange, visibleCount, totalCount }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '6px 24px 14px', flexShrink: 0,
+    }}>
+      <div style={{ display: 'flex', gap: 4 }}>
+        {STATUS_OPTIONS.map((o) => (
+          <button
+            key={o.id}
+            onClick={() => onStatusChange(o.id)}
+            style={{
+              padding: '5px 10px', fontSize: 11.5, fontWeight: 600,
+              border: '1px solid var(--border)', borderRadius: 4,
+              background: statusFilter === o.id ? 'var(--surface-2)' : 'transparent',
+              color: statusFilter === o.id ? 'var(--text)' : 'var(--text-dim)',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <div style={{ flex: 1 }} />
+      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+        {visibleCount} of {totalCount}
+      </span>
+      <label style={{
+        fontSize: 11, color: 'var(--text-dim)',
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+      }}>
+        Sort
+        <select
+          value={sortKey}
+          onChange={(e) => onSortChange(e.target.value)}
+          style={{
+            padding: '4px 6px', fontSize: 11.5,
+            background: 'var(--surface)', color: 'var(--text)',
+            border: '1px solid var(--border)', borderRadius: 4,
+            fontFamily: 'inherit',
+          }}
+        >
+          {SORT_OPTIONS.map((o) => (
+            <option key={o.id} value={o.id}>{o.label}</option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function ProjectGrid({ projects, onClick, onReveal }) {
+  if (projects.length === 0) {
+    return (
+      <div style={{
+        padding: 48, textAlign: 'center', color: 'var(--text-dim)',
+        fontSize: 13,
+      }}>
+        No projects match the current filter.
+      </div>
+    );
+  }
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+      gap: 12,
+    }}>
+      {projects.map((p) => (
+        <ProjectCard
+          key={p.id}
+          project={p}
+          onClick={() => onClick(p)}
+          onReveal={() => onReveal(p.mediaPath)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ProjectCard({ project, onClick, onReveal }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 8, overflow: 'hidden', cursor: 'pointer',
+        display: 'flex', flexDirection: 'column',
+        transition: 'border-color 120ms',
+        position: 'relative',
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
+      onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
+    >
+      {/* Thumbnail — placeholder for v1; resolver lands in a later pass */}
+      <div style={{
+        aspectRatio: '16/9',
+        background: 'var(--bg)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'var(--text-dim)',
+        borderBottom: '1px solid var(--border)',
+        position: 'relative',
+      }}>
+        {project.thumbPath
+          ? <img src={`asset://localhost/${project.thumbPath}`}
+                 alt=""
+                 style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : <Icon name={project.kind === 'audio' ? 'music' : 'film'} size={32} />}
+        {/* Reveal-in-Explorer button — top-right overlay on the thumb.
+            Stops propagation so it doesn't trigger card-open. */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onReveal(); }}
+          title="Reveal in Explorer"
+          style={{
+            position: 'absolute', top: 6, right: 6,
+            width: 26, height: 26, padding: 0,
+            background: 'rgba(0,0,0,0.55)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            borderRadius: 4, cursor: 'pointer',
+            color: 'rgba(255,255,255,0.8)',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Icon name="external-link" size={13} />
+        </button>
+      </div>
+
+      <div style={{ padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Title — single line truncate */}
+        <div
+          title={project.mediaPath}
+          style={{
+            fontSize: 13, fontWeight: 700, color: 'var(--text)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}
+        >
+          {project.title}
+        </div>
+
+        {/* Location — small dim secondary line; only when project isn't in
+            the root itself. Disambiguates same-stem projects across folders. */}
+        {project._locationLabel && (
+          <div
+            title={project.dirPath}
+            style={{
+              fontSize: 10.5, color: 'var(--text-dim)',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              fontFamily: 'var(--font-mono)',
+              marginTop: -2,
+            }}
+          >
+            {project._locationLabel}
+          </div>
+        )}
+
+        {/* Pills — only render the ones that are true */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          <ProjectPills pills={project.pills} status={project.status} />
+        </div>
+
+        {/* Metadata row — only render known fields */}
+        <ProjectMetaRow project={project} />
+      </div>
+    </div>
+  );
+}
+
+function ProjectPills({ pills, status }) {
+  const pillStyle = (color) => ({
+    fontSize: 9.5, fontWeight: 700,
+    padding: '2px 6px', borderRadius: 3,
+    background: `${color}22`, color,
+    border: `1px solid ${color}55`,
+    textTransform: 'uppercase', letterSpacing: '0.04em',
+  });
+  return (
+    <>
+      {pills.video && <span style={pillStyle('#4dabf7')}>video</span>}
+      {pills.audio && <span style={pillStyle('#3ed598')}>audio</span>}
+      {pills.funscript && <span style={pillStyle('#ffb547')}>funscript</span>}
+      {pills.forged && <span style={pillStyle('#ff5470')}>forged</span>}
+      {status === 'completed' && <span style={pillStyle('#c77dff')}>completed</span>}
+    </>
+  );
+}
+
+function ProjectMetaRow({ project }) {
+  const parts = [];
+  if (project.durationMs != null) parts.push(fmtDuration(project.durationMs));
+  if (project.metadata.chapters != null) parts.push(`${project.metadata.chapters} ch`);
+  if (project.metadata.bpm != null) parts.push(`${project.metadata.bpm} bpm`);
+  if (project.metadata.beats != null) parts.push(`${project.metadata.beats} beats`);
+  parts.push(fmtRelativeMtime(project.mtime));
+  if (parts.length === 0) return null;
+  return (
+    <div style={{
+      fontSize: 10, color: 'var(--text-dim)',
+      display: 'flex', flexWrap: 'wrap', gap: 8,
+      marginTop: 'auto',
+    }}>
+      {parts.map((s, i) => <span key={i}>{s}</span>)}
+    </div>
+  );
+}
+
+function EmptyConfigState({ onAddRoot }) {
+  return (
+    <div style={{
+      maxWidth: 480, margin: '48px auto', textAlign: 'center',
+      padding: 32, background: 'var(--surface)',
+      border: '1px dashed var(--border)', borderRadius: 8,
+    }}>
+      <Icon name="folder-open" size={40} style={{ color: 'var(--text-dim)', marginBottom: 12 }} />
+      <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Your library is empty</h3>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
+        Add a folder where your media lives. FunscriptForge scans for videos and audio,
+        and surfaces any projects you've already forged alongside them.
+      </p>
+      <button
+        onClick={onAddRoot}
+        style={{
+          padding: '8px 16px', fontSize: 13, fontWeight: 700,
+          background: 'var(--accent)', color: '#fff',
+          border: 'none', borderRadius: 6, cursor: 'pointer',
+          fontFamily: 'inherit',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}
+      >
+        <Icon name="plus" size={13} />
+        Add a folder
+      </button>
+    </div>
+  );
+}
+
+function CenteredMessage({ children }) {
+  return (
+    <div style={{
+      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: 'var(--text-dim)', fontSize: 13,
+    }}>
+      {children}
+    </div>
+  );
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+
+const rootCardBase = {
+  minWidth: 180, maxWidth: 220,
+  borderRadius: 8, padding: '12px 14px',
+  textAlign: 'left',
+  cursor: 'pointer', fontFamily: 'inherit',
+};
+
+function totalCount(scans) {
+  let n = 0;
+  for (const r of scans.values()) n += r.projects.length;
+  return n;
+}
+
+function sortProjects(projects, sortKey) {
+  const copy = projects.slice();
+  if (sortKey === 'title') {
+    copy.sort((a, b) => a.title.localeCompare(b.title));
+  } else if (sortKey === 'duration') {
+    copy.sort((a, b) => (b.durationMs ?? -1) - (a.durationMs ?? -1));
+  } else {
+    // lastEdited — newest first
+    copy.sort((a, b) => (b.mtime > a.mtime ? 1 : (b.mtime < a.mtime ? -1 : 0)));
+  }
+  return copy;
+}
+
+function fmtDuration(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+/**
+ * Compute the project's location label — the path from the configured
+ * root down to the project's parent folder, slash-normalized for
+ * display. Empty when the project sits directly in the root (no extra
+ * context needed).
+ *
+ * Examples (root = "/lib", rootLabel = "test_funscript"):
+ *   dirPath = "/lib"                     → "" (project at root)
+ *   dirPath = "/lib/2024"                → "2024"
+ *   dirPath = "/lib/movies/archive"      → "movies/archive"
+ *   dirPath = "C:\\Users\\bruce\\test\\sub" + root "C:\\Users\\bruce\\test"
+ *                                        → "sub"
+ */
+function computeLocationLabel(dirPath, rootPath, _rootLabel) {
+  if (!dirPath || !rootPath) return '';
+  if (dirPath === rootPath) return '';
+  // Strip the root prefix; then any leading separator.
+  let rel = dirPath;
+  if (dirPath.toLowerCase().startsWith(rootPath.toLowerCase())) {
+    rel = dirPath.slice(rootPath.length);
+  }
+  rel = rel.replace(/^[\\/]+/, '');
+  // Normalize backslashes to forward slashes for display.
+  return rel.replace(/\\/g, '/');
+}
+
+function fmtRelativeMtime(iso) {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (!then) return '';
+  const diff = Date.now() - then;
+  const day = 24 * 60 * 60 * 1000;
+  if (diff < 60 * 1000) return 'just now';
+  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / (60 * 1000))}m ago`;
+  if (diff < day) return `${Math.floor(diff / (60 * 60 * 1000))}h ago`;
+  if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`;
+  return new Date(iso).toISOString().slice(0, 10);
 }
