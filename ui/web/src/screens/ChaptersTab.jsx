@@ -692,6 +692,14 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // Join the band's chapter with its previous / next neighbour. Pure
   // transform lives in chapterOps.joinAt; this handler lifts state,
   // persists, and re-extracts the merged clip.
+  //
+  // Note on the explicit setCurrentMs: when the user was already on the
+  // earlier of the two chapters, the renumber gives the merged chapter
+  // the same id, so the [active.id] useEffect that normally snaps the
+  // playhead to atMs doesn't fire. Setting currentMs here means the
+  // cursor always lands at the start of the joined chapter regardless
+  // of which neighbour absorbed which — review the new chapter from
+  // the top.
   const handleJoin = async (band, direction) => {
     const result = joinAt(chapters, band.id, direction);
     if (!result.ok) return;
@@ -704,6 +712,8 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     setParamsByChapter(newParams);
     setAcceptedChapterIds(newAccepted);
     setActiveId(newChapters[newActiveIdx].id);
+    setCurrentMs(newChapters[newActiveIdx].atMs);
+    setIsPlaying(false);
     onChaptersChange?.(newChapters);
     await persistAndExtract(newChapters, [newChapters[newActiveIdx]]);
   };

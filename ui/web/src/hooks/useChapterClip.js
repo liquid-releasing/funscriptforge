@@ -24,43 +24,13 @@ import { useEffect, useState } from 'react';
 import { extractChapterClip } from '../api/forge.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 
+// In-flight dedup lives in forge.js now so every caller (this hook plus
+// ChaptersTab's split/join pre-warm) shares one Promise per cache key.
+// Two parallel Rust extract_chapter_clip calls on the same target would
+// race the rename and leave a corrupted file behind (PIPELINE_ERROR_DECODE
+// observed 2026-05-25 on newly split/joined chapters).
+
 const BLOB_FETCH_CAP_BYTES = 150 * 1024 * 1024;
-
-// Module-level in-flight dedup for extractChapterClip. Two paths can race
-// on the same (mediaPath, startMs, endMs):
-//   1. React StrictMode / HMR re-mounts the hook → effect fires twice.
-//   2. Background auto-chapter pipeline's chapter_clips stage extracts
-//      a clip while the user opens that same chapter in the viewer.
-// Both turn into two parallel Rust extract_chapter_clip calls writing
-// to the same cache target. On Windows the second rename fails with
-// os error 32 ("file is being used by another process") because the
-// first rename hasn't released its file handle yet.
-//
-// Dedup: keyed Map<cacheKey, Promise<result>>. Anyone asking for an
-// in-flight key gets the existing promise. The entry is cleared after
-// the promise settles so a later legitimate re-extract (post-Re-analyze
-// wipe) is not blocked. Map persists across HMR — `globalThis` survives
-// Vite module replacement, which is the whole point.
-const __pendingExtracts = (
-  globalThis.__ffPendingChapterExtracts ||= new Map()
-);
-
-function dedupedExtract(mediaPath, startMs, endMs) {
-  const key = `${mediaPath}|${startMs}|${endMs}`;
-  const inFlight = __pendingExtracts.get(key);
-  if (inFlight) return inFlight;
-  const p = extractChapterClip(mediaPath, startMs, endMs)
-    .finally(() => {
-      // Only clear if this is still the same promise — guards against
-      // a race where the same key was re-requested AFTER this one
-      // resolved, which would have stored a new promise.
-      if (__pendingExtracts.get(key) === p) {
-        __pendingExtracts.delete(key);
-      }
-    });
-  __pendingExtracts.set(key, p);
-  return p;
-}
 
 export function useChapterClip(mediaPath, chapter) {
   const id = chapter?.id ?? null;
@@ -82,7 +52,7 @@ export function useChapterClip(mediaPath, chapter) {
     // immediately rather than rendering it underneath the loading
     // overlay while ffmpeg works.
     setClip(null);
-    dedupedExtract(mediaPath, startMs, endMs)
+    extractChapterClip(mediaPath, startMs, endMs)
       .then(async (result) => {
         if (cancelled) return;
         if (!result) {

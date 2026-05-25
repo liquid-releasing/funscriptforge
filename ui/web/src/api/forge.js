@@ -497,6 +497,29 @@ export function prewarmMediaRange(mediaPath, startMs, endMs, totalMs) {
   );
 }
 
+// Module-level in-flight dedup for extract_chapter_clip. Multiple paths can
+// race on the same (mediaPath, startMs, endMs):
+//   1. React StrictMode / HMR re-mounts useChapterClip → effect fires twice.
+//   2. ChaptersTab's split/join handler kicks off pre-extraction in
+//      persistAndExtract WHILE the post-mutation re-render fires
+//      useChapterClip for the new active chapter.
+//   3. Background auto-chapter pipeline extracts a clip while the user
+//      opens that same chapter in the viewer.
+// Two parallel Rust calls write to the same cache target. On Windows the
+// second rename fails with os error 32 ("file is being used by another
+// process") AND the half-written content can survive long enough for the
+// asset URL to load a corrupted file — observed 2026-05-25 as a
+// PIPELINE_ERROR_DECODE on newly split/joined chapters while old chapters
+// played fine.
+//
+// Dedup at the forge.js layer means every caller (useChapterClip handler,
+// ChaptersTab pre-warm, future consumers) shares the same in-flight map —
+// the entry-point IS extractChapterClip itself, not a separate wrapper.
+// Map persists across HMR — `globalThis` survives Vite module replacement.
+const __pendingChapterExtracts = (
+  globalThis.__ffPendingChapterExtracts ||= new Map()
+);
+
 /** Extract a chapter slice of the source media to a temp file via
  *  ffmpeg stream-copy (no re-encode). The Chromium <video> element
  *  plays the temp file directly — a small standalone file with no
@@ -507,19 +530,32 @@ export function prewarmMediaRange(mediaPath, startMs, endMs, totalMs) {
  *  ffmpeg snaps to keyframes; callers should use the returned actual
  *  values for playhead math.
  *
+ *  In-flight calls for the same (mediaPath, startMs, endMs) share a
+ *  single Promise — see __pendingChapterExtracts above for why.
+ *
  *  Browser mock returns null — clip extraction is a Tauri-only feature
  *  (ffmpeg binary, temp filesystem). Callers must fall back to the
  *  original media path when this returns null. */
 export function extractChapterClip(mediaPath, startMs, endMs) {
-  return call(
+  const sm = Math.max(0, Math.floor(startMs));
+  const em = Math.max(0, Math.floor(endMs));
+  const key = `${mediaPath}|${sm}|${em}`;
+  const inFlight = __pendingChapterExtracts.get(key);
+  if (inFlight) return inFlight;
+  const p = call(
     'extract_chapter_clip',
-    {
-      mediaPath,
-      startMs: Math.max(0, Math.floor(startMs)),
-      endMs: Math.max(0, Math.floor(endMs)),
-    },
+    { mediaPath, startMs: sm, endMs: em },
     () => Promise.resolve(null),
-  );
+  ).finally(() => {
+    // Only clear if this is still the same promise — guards against a
+    // race where the key was re-requested AFTER this one resolved, which
+    // would have stored a new promise.
+    if (__pendingChapterExtracts.get(key) === p) {
+      __pendingChapterExtracts.delete(key);
+    }
+  });
+  __pendingChapterExtracts.set(key, p);
+  return p;
 }
 
 function mockAudioBeats() {
