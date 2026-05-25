@@ -1,31 +1,45 @@
 // AnalysisTab — read-only overview surface between Project and Device.
 //
-// Step 2 (this commit): per-section status wiring. On mount with a
-// project that has no chapters yet, fire `analyzeChaptersWithVideoflow`
-// and listen to `ff:progress` events. Each panel's status transitions
-// from `loading` → `ready` (or `error`) as the videoflow pipeline
-// emits depth-2 stage completion events.
+// On mount with a project that has no chapters yet, fires
+// `analyzeChaptersWithVideoflow` and listens to `ff:progress` events.
+// Each panel's status transitions from `loading` → `ready` (or `error`)
+// as the videoflow pipeline emits depth-2 stage completion events;
+// panels with real data paint live as their sidecars land.
 //
 // Stage → panel mapping:
 //   classify     → ChapterStripPanel + EnergyHeatRibbon (chapters known)
 //   audio_peaks  → ScriptOverviewRow (audio fallback) + PitchLine
-//   spectrogram  → PitchLine (preferred over peaks)
-//   audio_beats  → BeatStrengthBars
-//   sidecar      → chapters.json written; confirms chapter data is on disk
+//                  + BeatStrengthBars envelope
+//   spectrogram  → PitchLine (preferred over peaks) + EnergyHeatRibbon
+//   audio_beats  → BeatStrengthBars beat grid
+//   sidecar      → chapters.json + phrases.json written
 //
-// Phrases aren't part of auto_chapter today — they're written by a
-// separate analyze pass. CategoryPanel's Phrases tab stays in loading
-// until that wiring lands.
+// Top-level rows (in order down the tab):
+//   ChapterStripPanel    → chapter bands with focus state
+//   ScriptOverviewRow    → velocity heatmap (funscript or audio peaks)
+//   PitchLine            → spectral centroid / pitch baseline
+//   TempoMap             → local BPM curve + global-BPM reference
+//   BeatStrengthBars     → per-beat envelope grid, downbeats accented
+//   EnergyHeatRibbon     → per-chapter energy stripe
+//   KpiStrip             → headline counts (chapters, phrases, beats…)
 //
-// Reuse note: the visualization primitives all live in forgemoment
-// (`src/analysis/AnalysisPanels.jsx`). ForgeGen + Beatflo will compose
-// the same primitives against their own orchestrators.
+// CategoryPanel sub-tabs (drill-down container below the headline rows):
+//   structure → chapter list + per-chapter phrase mode tally
+//   beats     → BPM + regularity + beats/bar stats
+//   phrases   → phrase-mode breakdown + duration summary
+//   energy    → chapters ranked by spectrogram energy
+//   pitch     → spectrogram pitch distribution + drift (funscript fallback)
+//
+// Reuse note: every visualization primitive lives in forgemoment
+// (`src/analysis/AnalysisPanels.jsx`). ForgeGen + Beatflo compose the
+// same primitives against their own orchestrators.
 
 import { useCallback, useEffect, useState } from 'react';
 import {
   ChapterStripPanel,
   ScriptOverviewRow,
   PitchLine,
+  TempoMap,
   BeatStrengthBars,
   EnergyHeatRibbon,
   KpiStrip,
@@ -56,10 +70,12 @@ export default function AnalysisTab({
   // 'audio_peaks', 'spectrogram', 'audio_beats', 'chapter_clips',
   // 'sidecar'). Values: 'running' | 'done'. Missing = not yet started.
   const [stages, setStages] = useState({});
-  // Phrase count for the KPI cell. The auto-chapter pipeline writes a
-  // phrases sidecar but doesn't surface the count through Rust today;
-  // we read it directly so the KPI doesn't sit at 0 after analysis.
-  const [phrasesCount, setPhrasesCount] = useState(null);
+  // Phrase slices for the KPI cell + Structure sub-tab. The auto-chapter
+  // pipeline writes a phrases sidecar but doesn't surface it through
+  // Rust today; we read it directly so the KPI doesn't sit at 0 after
+  // analysis and the Structure tab has per-chapter mode tallies.
+  const [phrases, setPhrases] = useState(null);
+  const phrasesCount = phrases?.length ?? null;
   // Pipeline-level error — when the whole analysis fails (no media,
   // CLI crash, etc.), every still-loading panel surfaces this and the
   // Retry button re-triggers the same call.
@@ -105,9 +121,9 @@ export default function AnalysisTab({
       // KPI strip's Phrases cell fills in.
       loadPhrasesSidecar(project.path)
         .then((sidecar) => {
-          if (sidecar?.slices) setPhrasesCount(sidecar.slices.length);
+          if (Array.isArray(sidecar?.slices)) setPhrases(sidecar.slices);
         })
-        .catch(() => { /* sidecar absent or malformed — leave KPI null */ });
+        .catch(() => { /* sidecar absent or malformed — leave phrases null */ });
     } catch (err) {
       console.error('AnalysisTab: analyze failed', err);
       const message = err?.message ? String(err.message) : String(err);
@@ -199,6 +215,21 @@ export default function AnalysisTab({
     triggerAnalysis();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.path]);
+
+  // Always pull the phrases sidecar when the project changes — cheap
+  // JSON read, and the trigger effect above skips reanalysis when
+  // chapters already exist, which would otherwise leave Structure
+  // tab + KPI strip without phrase data on reopen.
+  useEffect(() => {
+    if (!projectExists || isSample) return;
+    if (!isTauri()) { setPhrases(null); return; }
+    setPhrases(null);
+    loadPhrasesSidecar(project.path)
+      .then((sidecar) => {
+        if (Array.isArray(sidecar?.slices)) setPhrases(sidecar.slices);
+      })
+      .catch(() => { /* sidecar absent — Structure tab shows "no phrases" */ });
+  }, [project?.path, projectExists, isSample]);
 
   // ── Empty state ─────────────────────────────────────────────────
   if (!projectExists) {
@@ -317,11 +348,22 @@ export default function AnalysisTab({
           onRetry={triggerAnalysis}
         />
 
+        <TempoMap
+          status={beatsStatus}
+          beats={trackBeats?.beatsMs ?? null}
+          globalBpm={trackBeats?.bpm ?? null}
+          durationMs={durationMs}
+          error={pipelineError}
+          onRetry={triggerAnalysis}
+        />
+
         <BeatStrengthBars
           status={beatsStatus}
-          beats={null}
+          beats={trackBeats?.beatsMs ?? null}
           downbeats={trackBeats?.downbeatsMs ?? null}
           chapters={chapterList}
+          peaks={trackPeaks?.peaks ?? null}
+          peaksHopMs={trackPeaks?.hopMs ?? null}
           durationMs={durationMs}
           focusedIdx={focusedChapterIdx}
           onFocus={setFocusedChapterIdx}
@@ -332,7 +374,7 @@ export default function AnalysisTab({
         <EnergyHeatRibbon
           status={energyStatus}
           chapters={chapterList}
-          energy={null}
+          spectrogram={trackSpectrogram}
           durationMs={durationMs}
           focusedIdx={focusedChapterIdx}
           onFocus={setFocusedChapterIdx}
@@ -349,6 +391,17 @@ export default function AnalysisTab({
           activeCategoryId={activeCategoryId}
           onChange={setActiveCategoryId}
           status={chaptersStatus}
+          data={{
+            chapters: chapterList,
+            phrases,
+            actions: project?.actions,
+            trackBeats,
+            trackPeaks,
+            trackSpectrogram,
+            durationMs,
+            focusedIdx: focusedChapterIdx,
+            onFocus: setFocusedChapterIdx,
+          }}
           error={pipelineError}
           onRetry={triggerAnalysis}
         />
