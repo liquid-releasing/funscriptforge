@@ -33,58 +33,29 @@ import {
   extractChapterClip,
 } from '../api/forge.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
+import { chapterDisplayLabel, splitAt, joinAt } from '../lib/chapterOps.js';
 import { useChapterClip } from '../hooks/useChapterClip.js';
 
-// JS mirror of the Rust CHAPTER_PALETTE in commands.rs — both sides must agree
-// or split/join would shift colors away from the analyzer-assigned palette.
-const CHAPTER_PALETTE = [
-  '#4a90d9', '#56e0a0', '#f39c12', '#9b59b6',
-  '#e74c3c', '#2ecc71', '#5a8eff', '#ff8c47',
-];
-
-// Sequential chapter IDs (`ch1`, `ch2`, ...) + deterministic palette colors,
-// applied after any split/join mutation so labels and the ribbon's swatches
-// stay aligned with the chapter's position in the list.
-function renumberChapters(chapters) {
-  return chapters.map((c, i) => ({
-    ...c,
-    id: `ch${i + 1}`,
-    color: CHAPTER_PALETTE[i % CHAPTER_PALETTE.length],
-  }));
-}
-
-// Display label for a chapter — index + style eyebrow (`01 · DRIVING`).
-// Name is dropped per 2026-05-25 decision: index identifies position,
-// content_type identifies content. Voice subtitle (`(talk)`) appended
-// when the analyzer flagged speech dominance.
-function chapterDisplayLabel(chapter, idx) {
-  const num = String(idx + 1).padStart(2, '0');
-  const style = chapter?.content_type
-    ? String(chapter.content_type).toUpperCase()
-    : '';
-  return style ? `${num} · ${style}` : num;
-}
-
-// Remap the per-chapter tone / params / accepted maps after a split or join.
-// All three are keyed by chapter.id, but the IDs renumber whenever the list
-// mutates — so we walk the new list, look up which old chapter each new
-// chapter inherits from, and copy the state across. Split: both halves
-// inherit the parent's tone. Join: the earlier chapter's state wins;
-// the later chapter's state is dropped (accepted ambiguity, see
-// project-split-join-in-flight).
-function remapChapterState({ oldChapters, newChapters, posToOldIdx, tones, params, accepted }) {
+// Apply a remap (Map<newId, oldId>) to the per-chapter tone / params /
+// accepted maps. All three are keyed by chapter.id, but IDs renumber
+// whenever the list mutates, so we copy state across by old-id lookup.
+// Split: both halves inherit the parent's tone. Join: the earlier
+// chapter's state wins; the later chapter's state is dropped.
+function applyRemap(remap, { tones, params, accepted }) {
   const newTones = {};
   const newParams = {};
   const newAccepted = new Set();
-  newChapters.forEach((c, idx) => {
-    const oldIdx = posToOldIdx(idx);
-    if (oldIdx == null || oldIdx < 0 || oldIdx >= oldChapters.length) return;
-    const oldId = oldChapters[oldIdx].id;
-    newTones[c.id] = tones[oldId] ?? 'build';
-    newParams[c.id] = params[oldId]
+  remap.forEach((oldId, newId) => {
+    if (oldId == null) {
+      newTones[newId] = 'build';
+      newParams[newId] = defaultToneParams();
+      return;
+    }
+    newTones[newId] = tones[oldId] ?? 'build';
+    newParams[newId] = params[oldId]
       ? JSON.parse(JSON.stringify(params[oldId]))
       : defaultToneParams();
-    if (accepted.has(oldId)) newAccepted.add(c.id);
+    if (accepted.has(oldId)) newAccepted.add(newId);
   });
   return { newTones, newParams, newAccepted };
 }
@@ -690,89 +661,51 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     }
   };
 
-  // Split the band's chapter at the playhead. Requires ≥500ms clearance from
-  // both boundaries — splits closer than that produce a chapter slice the
-  // analyzer can't usefully tone or the user can't usefully scrub through.
-  // Tones / params / accept inherit on BOTH halves (the user picked the
-  // parent's tone for the underlying content; both halves share that
-  // material). After mutation: renumber, lift to App, persist sidecar,
-  // re-extract clips for both halves.
-  const MIN_SPLIT_CLEARANCE_MS = 500;
+  // Split the band's chapter at the playhead. The pure transform (and the
+  // ≥500ms clearance check) lives in chapterOps.splitAt; this handler is
+  // the orchestrator that lifts state, persists, and re-extracts clips
+  // for both halves.
   const handleSplitAtPlayhead = async (band) => {
-    const i = chapters.findIndex((c) => c.id === band.id);
-    if (i < 0) return;
-    const target = chapters[i];
-    const splitMs = Math.round(currentMs);
-    if (splitMs - target.atMs < MIN_SPLIT_CLEARANCE_MS
-        || target.endMs - splitMs < MIN_SPLIT_CLEARANCE_MS) {
-      setAppError?.('Playhead too close to chapter boundary — move at least 500ms from each edge before splitting.');
+    const result = splitAt(chapters, band.id, currentMs);
+    if (!result.ok) {
+      if (result.reason === 'no-clearance') {
+        setAppError?.('Playhead too close to chapter boundary — move at least 500ms from each edge before splitting.');
+      }
       return;
     }
-    const firstHalf = { ...target, endMs: splitMs };
-    const secondHalf = { ...target, atMs: splitMs };
-    const raw = [
-      ...chapters.slice(0, i),
-      firstHalf,
-      secondHalf,
-      ...chapters.slice(i + 1),
-    ];
-    const newChapters = renumberChapters(raw);
-    const posToOld = (newIdx) => {
-      if (newIdx < i) return newIdx;
-      if (newIdx === i || newIdx === i + 1) return i;
-      return newIdx - 1;
-    };
-    const { newTones, newParams, newAccepted } = remapChapterState({
-      oldChapters: chapters, newChapters, posToOldIdx: posToOld,
+    const { chapters: newChapters, remap, newActiveIdx } = result;
+    const { newTones, newParams, newAccepted } = applyRemap(remap, {
       tones: tonesByChapter, params: paramsByChapter, accepted: acceptedChapterIds,
     });
     setChapters(newChapters);
     setTonesByChapter(newTones);
     setParamsByChapter(newParams);
     setAcceptedChapterIds(newAccepted);
-    // Land in the second half — playhead is at splitMs which is the start
-    // of the new chapter, so "split here, continue editing" reads naturally.
-    setActiveId(newChapters[i + 1].id);
+    setActiveId(newChapters[newActiveIdx].id);
     onChaptersChange?.(newChapters);
-    await persistAndExtract(newChapters, [newChapters[i], newChapters[i + 1]]);
+    await persistAndExtract(
+      newChapters,
+      [newChapters[newActiveIdx - 1], newChapters[newActiveIdx]],
+    );
   };
 
-  // Join the band's chapter with its previous / next neighbour. The earlier
-  // chapter's tone, params, accept-state, content_type, intent, and palette
-  // index win — the later chapter's state is dropped. Accept the ambiguity
-  // for v1; the user re-classifies if the merged span needs a different
-  // tone. Re-extracts one clip (the merged boundary).
+  // Join the band's chapter with its previous / next neighbour. Pure
+  // transform lives in chapterOps.joinAt; this handler lifts state,
+  // persists, and re-extracts the merged clip.
   const handleJoin = async (band, direction) => {
-    const i = chapters.findIndex((c) => c.id === band.id);
-    if (i < 0) return;
-    const earlierIdx = direction === 'prev' ? i - 1 : i;
-    const laterIdx = direction === 'prev' ? i : i + 1;
-    if (earlierIdx < 0 || laterIdx >= chapters.length) return;
-    const earlier = chapters[earlierIdx];
-    const later = chapters[laterIdx];
-    const merged = { ...earlier, endMs: later.endMs };
-    const raw = [
-      ...chapters.slice(0, earlierIdx),
-      merged,
-      ...chapters.slice(laterIdx + 1),
-    ];
-    const newChapters = renumberChapters(raw);
-    const posToOld = (newIdx) => {
-      if (newIdx < earlierIdx) return newIdx;
-      if (newIdx === earlierIdx) return earlierIdx;
-      return newIdx + 1;
-    };
-    const { newTones, newParams, newAccepted } = remapChapterState({
-      oldChapters: chapters, newChapters, posToOldIdx: posToOld,
+    const result = joinAt(chapters, band.id, direction);
+    if (!result.ok) return;
+    const { chapters: newChapters, remap, newActiveIdx } = result;
+    const { newTones, newParams, newAccepted } = applyRemap(remap, {
       tones: tonesByChapter, params: paramsByChapter, accepted: acceptedChapterIds,
     });
     setChapters(newChapters);
     setTonesByChapter(newTones);
     setParamsByChapter(newParams);
     setAcceptedChapterIds(newAccepted);
-    setActiveId(newChapters[earlierIdx].id);
+    setActiveId(newChapters[newActiveIdx].id);
     onChaptersChange?.(newChapters);
-    await persistAndExtract(newChapters, [newChapters[earlierIdx]]);
+    await persistAndExtract(newChapters, [newChapters[newActiveIdx]]);
   };
 
   return (
