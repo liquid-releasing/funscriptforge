@@ -175,17 +175,21 @@ export default function AnalysisTab({
           if (leaf === 'audio_peaks' || leaf === 'spectrogram' || leaf === 'audio_beats') {
             refreshAudioSidecars?.();
           }
-          // Chapters sidecar now lands BEFORE chapter_clips (videoflow
-          // pipeline reorder, 2026-05-24). Lift the freshly-written
-          // chapter list into App state the moment it lands — the
-          // chapter strip + category panel populate immediately while
-          // chapter_clips chugs away in the background.
+          // Chapter list lift happens on TWO stages:
+          //   chapters_sidecar — fires immediately after `detect`. The
+          //     chapter list (without phrases/energy) is on disk; the
+          //     chapter strip + Structure sub-tab fill in seconds after
+          //     analyze starts, even on long sources where beats +
+          //     audio sidecars take minutes.
+          //   sidecar — fires near the end of the pipeline. Phrases +
+          //     energy are now merged into the same file; this second
+          //     reload picks them up so the KPI strip's phrase count
+          //     and the phrase-mode tally populate.
           //
-          // We refetch via loadProject for simplicity; the round-trip
-          // also picks up the phrase count that the sidecar stage
-          // writes alongside chapters. Only fires once per analyze
-          // run, so the re-parse overhead is bounded.
-          if (leaf === 'sidecar' && project?.path) {
+          // Both reload via the same loadProject call — idempotent and
+          // cheap. The second reload's only "new" data is the merged
+          // phrase records.
+          if ((leaf === 'chapters_sidecar' || leaf === 'sidecar') && project?.path) {
             loadProject(project.path)
               .then((p) => {
                 if (Array.isArray(p?.chapterList)) onChaptersChange?.(p.chapterList);
@@ -261,10 +265,13 @@ export default function AnalysisTab({
   //       not error (the user just hasn't attached media yet)
 
   const chaptersStatus = pickStatus({
-    ready: chapterList?.length > 0 || stages.sidecar === 'done' || stages.classify === 'done',
+    ready: chapterList?.length > 0
+            || stages.chapters_sidecar === 'done'
+            || stages.sidecar === 'done'
+            || stages.classify === 'done',
     loading: analyzing || stages.classify === 'running' || stages.detect === 'running'
             || stages.whole_file === 'running' || stages.load === 'running'
-            || stages.extract === 'running',
+            || stages.extract === 'running' || stages.chapters_sidecar === 'running',
     error: pipelineError,
     empty: !hasMedia && !chapterList?.length,
   });
