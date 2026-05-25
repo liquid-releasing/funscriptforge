@@ -73,6 +73,22 @@ export default function FunscriptChart({
     return actions.filter((a) => a.at >= view.start && a.at <= view.end);
   }, [actions, view.start, view.end]);
 
+  // Absolute velocity max for the colormap denominator. Computed from
+  // the FULL actions array, not visibleActions, so the velocity colormap
+  // is stable across zoom — the same segment renders the same color at
+  // 100% zoom and 10× zoom. Without this, Sparkline normalizes per-
+  // window and identical segments shift between blue/red as you scroll.
+  const maxVelocity = useMemo(() => {
+    if (!actions || actions.length < 2) return 0;
+    let max = 0;
+    for (let i = 1; i < actions.length; i++) {
+      const dt = Math.max(1, actions[i].at - actions[i - 1].at);
+      const v = Math.abs(actions[i].pos - actions[i - 1].pos) / dt;
+      if (v > max) max = v;
+    }
+    return max;
+  }, [actions]);
+
   const handleMouseDown = (e) => {
     if (e.button !== 0) return;
     setDrag({ startX: e.clientX, startView: view });
@@ -165,6 +181,7 @@ export default function FunscriptChart({
           start={view.start}
           end={view.end}
           colorMode="velocity"
+          maxVelocity={maxVelocity}
           filled
           height={height - 28}
         />

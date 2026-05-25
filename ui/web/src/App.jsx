@@ -34,7 +34,7 @@ import AboutDialog from './components/AboutDialog.jsx';
 const TABS = [
   { id: 'library',   label: 'Library' },
   { id: 'project',   label: 'Project' },
-  // 'analysis' (2026-05-24) sits between Project and Device. Read-only
+  // 'analysis' (2026-05-24) sits between Project and Chapters. Read-only
   // overview surface — chapter strip, script overview, pitch line, beat
   // strength bars, energy heatmap, KPI strip, category drill-down. Runs
   // the auto-chapter pipeline on mount when sidecars are missing; per-
@@ -42,7 +42,6 @@ const TABS = [
   // visualization primitives live in forgemoment/src/analysis/ so
   // ForgeGen + Beatflo can reuse them.
   { id: 'analysis', label: 'Analysis' },
-  { id: 'device',    label: 'Device' },
   { id: 'chapters',  label: 'Chapters' },
   // 'patterns' (2026-05-16) sits between Chapters and Phrases. Pattern
   // recognition is FF-local for now (no second consumer yet; move to
@@ -71,6 +70,13 @@ const TABS = [
   // Tab id stays 'stim' so TAB_CHAIN / chain filenames / tabGate keep
   // working without churn. See memory `project_characters_tab.md`.
   { id: 'stim',      label: 'Characters' },
+  // 'device' moved here 2026-05-25 — was between Analysis and Chapters.
+  // Targeting belongs at the end of the editing journey (the *where*),
+  // after chapters/patterns/phrases/stanzas/events/characters define
+  // the *what*. A new multi-device UI is replacing the single-pick
+  // model that lived here previously; the current DeviceTab.jsx
+  // continues to render in this slot until the replacement lands.
+  { id: 'device',    label: 'Device' },
   { id: 'export',    label: 'Export' },
   // 'catalog' (2026-05-18) sits past Export with a visual separator —
   // utility tab, not part of the Project → Export pipeline. Source-of-
@@ -542,14 +548,14 @@ export default function App() {
   // the device picker itself).
   const TAB_CHAIN = {
     project:  'analysis',
-    analysis: 'device',
-    device:   'chapters',
+    analysis: 'chapters',
     chapters: 'patterns',
     patterns: 'phrases',
     phrases:  'stanzas',
     stanzas:  'events',
     events:   'stim',
-    stim:     'export',
+    stim:     'device',
+    device:   'export',
   };
   const tabGate = (id) => {
     // Suppress "open a funscript" while a load is in flight — the busy
@@ -575,14 +581,22 @@ export default function App() {
   // `gate` prop (amber warning banner) so the chain-status line below
   // can keep all of its informational chrome (`writes …`, downstream
   // hint) visible at all times.
+  //
+  // When `busy` is set, defer to the in-progress story: the busy
+  // panel above is already announcing what's happening, but its
+  // sibling summary line was still declaring "ready to chain" —
+  // contradictory and confusing mid-pipeline.
+  const currentTabLabel = TABS.find((t) => t.id === tab)?.label ?? 'Tab';
   let footerSummary;
   if (!project?.path) {
     footerSummary = 'Open a funscript from the Library tab to begin.';
+  } else if (busy) {
+    footerSummary = `${currentTabLabel} · in progress — chain advances when complete`;
   } else if (nextTab) {
     const nextLabel = TABS.find((t) => t.id === nextTab)?.label ?? nextTab;
-    footerSummary = `${TABS.find((t) => t.id === tab)?.label ?? 'Tab'} · ready to chain to ${nextLabel}`;
+    footerSummary = `${currentTabLabel} · ready to chain to ${nextLabel}`;
   } else {
-    footerSummary = `${TABS.find((t) => t.id === tab)?.label ?? 'Tab'} · no downstream tab`;
+    footerSummary = `${currentTabLabel} · no downstream tab`;
   }
   const chainFile = project?.path && nextTab
     ? `${(project.title ?? 'project')}.${tab}.json`

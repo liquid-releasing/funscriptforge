@@ -807,6 +807,162 @@ fn peaks_sidecar_path(media_path: &str) -> String {
     forge_sidecar_path(media_path, ".audio.json")
 }
 
+// ─── read_phrases_from_chapters_sidecar ─────────────────────────────
+//
+// Phrases produced by videoflow's auto_chapter pipeline are merged into
+// the chapters sidecar (not a separate `.phrases.json` file). Reads
+// `.forge/<stem>.chapters.json` and returns just the `phrases` array.
+// Returns an empty Vec if the file is missing or the array is absent —
+// callers render an empty state, not an error.
+//
+// Phrase shape mirrors videoflow's Phrase.to_dict(): snake_case fields
+// matching what the JS side (forgemoment PhrasesCategoryBody) reads
+// directly. NO camelCase rename here. Distinct from the existing
+// `PhraseRecord` used by `analyze_phrases` — that one carries
+// FunscriptAnalyzer's `tag` / `pattern_label` vocabulary; this one
+// carries videoflow auto_chapter's `mode` vocabulary
+// (tease/steady/edging/break/fast/slow).
+#[derive(Serialize, Deserialize, Clone)]
+pub struct AutoChapterPhrase {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub at_ms: u64,
+    #[serde(default)]
+    pub end_ms: u64,
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub chapter_id: Option<String>,
+    #[serde(default)]
+    pub chapter_idx: Option<u32>,
+    // Pass any other fields through as a flat extension. videoflow may
+    // add fields (intensity, confidence, etc.) and we don't want a
+    // strict deserializer to reject the file when it does.
+    #[serde(flatten)]
+    pub extra: std::collections::BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct ChaptersSidecarFile {
+    #[serde(default)]
+    phrases: Vec<AutoChapterPhrase>,
+}
+
+// Input shape for write_chapters_sidecar. JS sends chapters in the
+// camelCase shape that ChapterRecord serializes (because that's what
+// load_project returns and what the frontend stores). On disk the
+// sidecar uses snake_case — this struct deserializes camelCase from
+// the Tauri command then we transcribe to snake_case JSON below.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChapterInput {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub at_ms: u64,
+    #[serde(default)]
+    pub end_ms: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub intent: String,
+    #[serde(default)]
+    pub content_type: String,
+    #[serde(default)]
+    pub confidence: f32,
+    #[serde(default)]
+    pub evidence: Vec<String>,
+    #[serde(default)]
+    pub color: String,
+}
+
+// Overwrite the chapters sidecar with a user-edited chapter list.
+// Used by ChaptersTab's split / join handlers. Read-merge-write so
+// videoflow's `phrases` + `energy` keys (written by auto_chapter's
+// sidecar stage) survive — we only replace `chapters` and mark the
+// file as user-edited so a future detector run can decide whether
+// to respect manual boundaries.
+//
+// `source_path` is whichever path the sidecar belongs to — caller
+// passes `mediaPath ?? funscriptPath` matching the priority chain
+// load_project / cli.py chapters resolver use to find chapters.
+#[tauri::command]
+pub async fn write_chapters_sidecar(
+    source_path: String,
+    chapters: Vec<ChapterInput>,
+) -> Result<(), String> {
+    let sidecar_path = forge_sidecar_path(&source_path, ".chapters.json");
+    // Ensure parent .forge/ dir exists. Should be there already if
+    // anything else wrote a sidecar before, but defensive create.
+    if let Some(parent) = Path::new(&sidecar_path).parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("could not create forge dir: {}", e))?;
+    }
+
+    // Read existing payload (if any) so we preserve phrases / energy /
+    // generated_by / etc. Empty object if file is absent or unparseable
+    // — the chapters write still succeeds; other keys re-populate on
+    // the next analyze.
+    let mut payload: serde_json::Value = if Path::new(&sidecar_path).exists() {
+        let raw = tokio::fs::read_to_string(&sidecar_path)
+            .await
+            .map_err(|e| format!("could not read existing sidecar: {}", e))?;
+        serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    // Replace the chapters array. snake_case keys for on-disk format
+    // (the videoflow + cli.py side reads this).
+    payload["chapters"] = serde_json::json!(
+        chapters.iter().map(|c| serde_json::json!({
+            "id": c.id,
+            "at_ms": c.at_ms,
+            "end_ms": c.end_ms,
+            "name": c.name,
+            "intent": c.intent,
+            "content_type": c.content_type,
+            "confidence": c.confidence,
+            "evidence": c.evidence,
+            "color": c.color,
+        })).collect::<Vec<_>>()
+    );
+
+    // Stamp the edit so a future detector pass (or a debug surface)
+    // can see this file was modified outside the analyzer pipeline.
+    // Doesn't change the schema — auto_chapter ignores unknown keys.
+    payload["edited_by_user"] = serde_json::json!(true);
+
+    let json = serde_json::to_string_pretty(&payload)
+        .map_err(|e| format!("could not serialize sidecar: {}", e))?;
+    tokio::fs::write(&sidecar_path, json)
+        .await
+        .map_err(|e| format!("could not write sidecar: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn read_phrases_from_chapters_sidecar(
+    media_path: String,
+) -> Result<Vec<AutoChapterPhrase>, String> {
+    let sp = forge_sidecar_path(&media_path, ".chapters.json");
+    if !Path::new(&sp).exists() {
+        return Ok(Vec::new());
+    }
+    let raw = tokio::fs::read_to_string(&sp)
+        .await
+        .map_err(|e| format!("could not read chapters sidecar at {}: {}", sp, e))?;
+    // Tolerant parse — if the file exists but doesn't have a `phrases`
+    // array yet (e.g. read between chapters_sidecar and sidecar stages),
+    // we return an empty Vec instead of erroring out.
+    let parsed: ChaptersSidecarFile = serde_json::from_str(&raw)
+        .map_err(|e| format!("could not parse chapters sidecar at {}: {}", sp, e))?;
+    Ok(parsed.phrases)
+}
+
 #[tauri::command]
 pub async fn load_audio_peaks(
     media_path: String,
@@ -1458,6 +1614,111 @@ pub async fn prewarm_media_range(
     Ok(total_read)
 }
 
+// ─── extract_chapter_clip helpers ────────────────────────────────────
+//
+// Encode args mirror videoflow's chapter_clips.py — keep both sides
+// in sync and bump CACHE_VERSION below when the args change. The two
+// paths share a cache directory; identical args = identical bytes =
+// cache hits across paths.
+
+// Sources wider than this get the 720p downscale path. 1920 catches
+// 4K (3840), 5K (5120), 8K (7680), and 1440p (2560-wide). 1080p and
+// below keep the SDR args verbatim.
+const DOWNSCALE_WIDTH_THRESHOLD: u32 = 1920;
+
+// SDR encode args (≤1920px sources). Native-resolution H.264 re-encode
+// to baseline profile + 30fps + 48 kHz AAC. v11's `-avoid_negative_ts
+// make_zero` is the critical bit for Chromium playback — see
+// CACHE_VERSION comment in extract_chapter_clip.
+const FFMPEG_ENCODE_ARGS_SDR: &[&str] = &[
+    "-c:v", "libx264",
+    "-profile:v", "baseline",
+    "-level", "3.1",
+    "-preset", "ultrafast",
+    "-crf", "23",
+    "-pix_fmt", "yuv420p",
+    "-r", "30",
+    "-c:a", "aac",
+    "-b:a", "192k",
+    "-ar", "48000",
+    "-ac", "2",
+    "-avoid_negative_ts", "make_zero",
+    "-movflags", "+faststart",
+    "-f", "mp4",
+    "-y",
+];
+
+// 4K downscale encode args (>1920px sources). Lanczos scale to 1280x720
+// + explicit BT.709 color flags so graded sources (iris coloring etc)
+// survive the re-encode without desaturating. CRF tightened to 20
+// because lanczos cleans the codec input. WebView2 plays 720p clips
+// cleanly where it OOMs / decode-errors on multi-GB 4K clips.
+//
+// HDR / BT.2020 sources get tonemap-less conversion to SDR BT.709 —
+// acceptable for editor preview (the funscript output ignores pixel
+// colour). Proper HDR tonemapping needs zscale + a heavier pipeline.
+const FFMPEG_ENCODE_ARGS_4K_DOWNSCALE: &[&str] = &[
+    "-c:v", "libx264",
+    "-profile:v", "baseline",
+    "-level", "3.1",
+    "-preset", "ultrafast",
+    "-crf", "20",
+    "-pix_fmt", "yuv420p",
+    "-r", "30",
+    "-vf", "scale=1280:720:flags=lanczos",
+    "-color_primaries", "bt709",
+    "-color_trc", "bt709",
+    "-colorspace", "bt709",
+    "-color_range", "tv",
+    "-c:a", "aac",
+    "-b:a", "192k",
+    "-ar", "48000",
+    "-ac", "2",
+    "-avoid_negative_ts", "make_zero",
+    "-movflags", "+faststart",
+    "-f", "mp4",
+    "-y",
+];
+
+// Probe the source's first video stream width × height by running
+// `ffmpeg -i <path>` with no output. ffmpeg prints stream info to
+// stderr and exits 1 (no output file). Returns None on probe failure
+// — callers fall back to SDR args, which is safe (just no downscale).
+async fn probe_video_dimensions(
+    media_path: &str, ffmpeg_bin: &str,
+) -> Option<(u32, u32)> {
+    let output = Command::new(ffmpeg_bin)
+        .args(["-hide_banner", "-loglevel", "info", "-i", media_path])
+        .output()
+        .await
+        .ok()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    parse_video_dims(&stderr)
+}
+
+// Walk ffmpeg stderr looking for the first "Video:" line, then the
+// first WIDTHxHEIGHT token on that line (must be ≥100 in each dim
+// so we don't grab a SAR/DAR ratio like "4x3" or pixel-format digits).
+fn parse_video_dims(stderr: &str) -> Option<(u32, u32)> {
+    for line in stderr.lines() {
+        if !line.contains("Video:") {
+            continue;
+        }
+        for token in line.split([' ', ',']) {
+            let token = token.trim_matches(|c: char| !c.is_ascii_digit() && c != 'x');
+            let Some(x_pos) = token.find('x') else { continue };
+            let w_str = &token[..x_pos];
+            let h_str = &token[x_pos + 1..];
+            if let (Ok(w), Ok(h)) = (w_str.parse::<u32>(), h_str.parse::<u32>()) {
+                if w >= 100 && h >= 100 {
+                    return Some((w, h));
+                }
+            }
+        }
+    }
+    None
+}
+
 // ─── extract_chapter_clip ───────────────────────────────────────────
 //
 // Stream-copy a chapter slice from a long source media file into a
@@ -1523,7 +1784,15 @@ pub async fn extract_chapter_clip(
     // audio sample timeline doesn't share the video keyframe grid).
     // Chromium rejects packets with negative TS — that was the
     // actual root cause masquerading as a codec issue for v9/v10.
-    const CACHE_VERSION: &str = "v11";
+    //
+    // v12: Conditional 720p downscale for sources wider than 1920px.
+    // Extraction time on 4K sources drops ~10x; WebView2 OOMs and
+    // PIPELINE_ERROR_DECODE failures on stream-copied 4K audio go
+    // away because the audio gets re-encoded through Chromium-friendly
+    // AAC. SDR (≤1920px) keeps v11 args verbatim. Mirrors videoflow's
+    // chapter_clips.py CACHE_VERSION — both paths produce the same
+    // bytes for the same source so they share cache hits.
+    const CACHE_VERSION: &str = "v12";
 
     let src_path = Path::new(&media_path);
     let ext = src_path
@@ -1597,79 +1866,43 @@ pub async fn extract_chapter_clip(
         .ok_or_else(|| "tmp path is not utf-8".to_string())?
         .to_string();
 
-    // ffmpeg invocation. Video stream-copies (-c:v copy) — fast,
-    // key-frame-snapped. Audio re-encodes to 48 kHz AAC (-c:a aac
-    // -ar 48000) to fix the WebView2/Chromium stutter on 44.1 kHz
-    // sources: Chromium's audio output runs at 48 kHz internally, and
-    // its per-chunk resampler 44.1→48 causes timing drift that the
-    // decoder compensates for by silently dropping video frames. Re-
-    // sampling once during extract is cheap (audio is tiny relative
-    // to video) and produces a clip the video element can play clean.
-    //
-    // -avoid_negative_ts make_zero: clip timestamps start at 0
-    //   regardless of where the keyframe sat
-    // -movflags +faststart: moov atom at the front for fast video-
-    //   element startup
-    // -y: overwrite
+    // ffmpeg invocation. The encode args are picked based on source
+    // resolution — sources wider than DOWNSCALE_WIDTH_THRESHOLD (1920px)
+    // get scaled to 720p with explicit BT.709 color flags; smaller
+    // sources keep the v11 native-resolution path. Both arg sets share
+    // `-avoid_negative_ts make_zero`, which is the bit Chromium needs
+    // — with `-ss` before `-i` ffmpeg fast-seeks to the nearest keyframe,
+    // which can leave the audio stream's first PTS negative. Chromium
+    // rejects negative-TS packets with PIPELINE_ERROR_DECODE; `make_zero`
+    // shifts every stream so the smallest TS becomes 0.
     let ffmpeg_bin = find_bundled_ffmpeg();
     let start_sec = start_ms as f64 / 1000.0;
     let to_sec = end_ms as f64 / 1000.0;
+    let start_str = format!("{:.3}", start_sec);
+    let to_str = format!("{:.3}", to_sec);
+
+    // Probe before encoding so the encode args match the source. The
+    // probe is one extra ffmpeg invocation per non-cached clip — header
+    // read only, ~50ms. Cache hits short-circuit way above this point,
+    // so cached chapters skip the probe entirely.
+    let dims = probe_video_dimensions(&media_path, &ffmpeg_bin).await;
+    let encode_args: &[&str] = match dims {
+        Some((w, _)) if w > DOWNSCALE_WIDTH_THRESHOLD => FFMPEG_ENCODE_ARGS_4K_DOWNSCALE,
+        _ => FFMPEG_ENCODE_ARGS_SDR,
+    };
+
+    let mut ff_args: Vec<&str> = vec![
+        "-hide_banner",
+        "-loglevel", "error",
+        "-ss", &start_str,
+        "-to", &to_str,
+        "-i", &media_path,
+    ];
+    ff_args.extend_from_slice(encode_args);
+    ff_args.push(&tmp_str);
+
     let output = Command::new(&ffmpeg_bin)
-        .args([
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-ss",
-            &format!("{:.3}", start_sec),
-            "-to",
-            &format!("{:.3}", to_sec),
-            "-i",
-            &media_path,
-            "-c:v",
-            "libx264",
-            "-profile:v",
-            "baseline",
-            "-level",
-            "3.1",
-            "-preset",
-            "ultrafast",
-            "-crf",
-            "23",
-            "-pix_fmt",
-            "yuv420p",
-            "-r",
-            "30",
-            // Audio: re-encode to 48 kHz AAC stereo. Chromium's audio
-            // output runs at 48 kHz internally; matching the source rate
-            // avoids the per-chunk resampler that was masking the
-            // original stutter cause.
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-ar",
-            "48000",
-            "-ac",
-            "2",
-            // Force output timestamps to start at zero. With `-ss`
-            // before `-i` ffmpeg fast-seeks to the nearest keyframe,
-            // which can leave the audio stream's first PTS negative.
-            // Chromium rejects negative-TS packets with
-            // PIPELINE_ERROR_DECODE. `make_zero` shifts every stream
-            // so the smallest TS becomes 0 — both audio and video
-            // stay aligned, packets stay positive.
-            "-avoid_negative_ts",
-            "make_zero",
-            "-movflags",
-            "+faststart",
-            // Explicit output container. Defense against any future
-            // tmp-name shenanigans confusing ffmpeg's extension-based
-            // format guesser; the final extension is mp4 anyway.
-            "-f",
-            "mp4",
-            "-y",
-            &tmp_str,
-        ])
+        .args(&ff_args)
         .output()
         .await
         .map_err(|e| format!("spawn ffmpeg ({}): {}", ffmpeg_bin, e))?;

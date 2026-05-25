@@ -187,6 +187,44 @@ export function loadPhrasesSidecar(funscriptPath) {
   );
 }
 
+/** Read the `phrases` array out of videoflow's chapters sidecar.
+ *  Distinct from loadPhrasesSidecar above — that one reads the OLD
+ *  shape_labeler `.phrases.json` (reverted, see held-shape-labeler
+ *  memory). This one targets the merged sidecar that videoflow's
+ *  auto_chapter pipeline writes at the `sidecar` stage:
+ *  `.<stem>.forge/<stem>.chapters.json` with a `phrases` key.
+ *
+ *  Phrase shape: `{ id?, at_ms, end_ms, mode, chapter_id?, chapter_idx? }`
+ *  where `mode` is one of `tease / steady / edging / break / fast / slow`
+ *  (the vocabulary videoflow.phrases.py classifies into). Returns an
+ *  empty array if the file is missing or hasn't been filled in yet —
+ *  caller renders an empty state, no error path. */
+export function loadAutoChapterPhrases(mediaPath) {
+  return call(
+    'read_phrases_from_chapters_sidecar',
+    { mediaPath },
+    () => Promise.resolve([]),
+  );
+}
+
+/** Overwrite the chapters sidecar with a user-edited chapter list.
+ *  Used by ChaptersTab's split / join handlers. Rust read-merges so
+ *  videoflow's `phrases` + `energy` keys (written by auto_chapter at
+ *  the `sidecar` stage) survive — we only replace the `chapters`
+ *  array and stamp `edited_by_user: true` on the payload.
+ *
+ *  `sourcePath` is whichever path the sidecar belongs to —
+ *  `project.mediaPath ?? project.path`. Matches the priority chain
+ *  load_project uses to find chapters. Browser-mode is a no-op
+ *  (in-memory state only). */
+export function writeChaptersSidecar(sourcePath, chapters) {
+  return call(
+    'write_chapters_sidecar',
+    { sourcePath, chapters },
+    () => Promise.resolve(),
+  );
+}
+
 /** Read videoflow-classified stanzas (audio phrases) plus computed
  *  clusters from the `<stem>.chapters.json` sidecar next to a funscript
  *  or media file.

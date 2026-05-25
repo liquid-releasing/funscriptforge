@@ -24,14 +24,86 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Icon, MediaViewer, Slider, ChapterRibbon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
-import { createChaptersSidecar, analyzeChaptersWithVideoflow, prewarmMediaRange, analyzePhrases } from '../api/forge.js';
+import {
+  createChaptersSidecar,
+  analyzeChaptersWithVideoflow,
+  prewarmMediaRange,
+  analyzePhrases,
+  writeChaptersSidecar,
+  extractChapterClip,
+} from '../api/forge.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 import { useChapterClip } from '../hooks/useChapterClip.js';
 
-// The six canonical tones. Source of truth: forge/tabs/tone_tab.py::_TONES
-// in the Python side — the IDs MUST match (tender/build/tease/edge/climax/
+// JS mirror of the Rust CHAPTER_PALETTE in commands.rs — both sides must agree
+// or split/join would shift colors away from the analyzer-assigned palette.
+const CHAPTER_PALETTE = [
+  '#4a90d9', '#56e0a0', '#f39c12', '#9b59b6',
+  '#e74c3c', '#2ecc71', '#5a8eff', '#ff8c47',
+];
+
+// Sequential chapter IDs (`ch1`, `ch2`, ...) + deterministic palette colors,
+// applied after any split/join mutation so labels and the ribbon's swatches
+// stay aligned with the chapter's position in the list.
+function renumberChapters(chapters) {
+  return chapters.map((c, i) => ({
+    ...c,
+    id: `ch${i + 1}`,
+    color: CHAPTER_PALETTE[i % CHAPTER_PALETTE.length],
+  }));
+}
+
+// Display label for a chapter — index + style eyebrow (`01 · DRIVING`).
+// Name is dropped per 2026-05-25 decision: index identifies position,
+// content_type identifies content. Voice subtitle (`(talk)`) appended
+// when the analyzer flagged speech dominance.
+function chapterDisplayLabel(chapter, idx) {
+  const num = String(idx + 1).padStart(2, '0');
+  const style = chapter?.content_type
+    ? String(chapter.content_type).toUpperCase()
+    : '';
+  return style ? `${num} · ${style}` : num;
+}
+
+// Remap the per-chapter tone / params / accepted maps after a split or join.
+// All three are keyed by chapter.id, but the IDs renumber whenever the list
+// mutates — so we walk the new list, look up which old chapter each new
+// chapter inherits from, and copy the state across. Split: both halves
+// inherit the parent's tone. Join: the earlier chapter's state wins;
+// the later chapter's state is dropped (accepted ambiguity, see
+// project-split-join-in-flight).
+function remapChapterState({ oldChapters, newChapters, posToOldIdx, tones, params, accepted }) {
+  const newTones = {};
+  const newParams = {};
+  const newAccepted = new Set();
+  newChapters.forEach((c, idx) => {
+    const oldIdx = posToOldIdx(idx);
+    if (oldIdx == null || oldIdx < 0 || oldIdx >= oldChapters.length) return;
+    const oldId = oldChapters[oldIdx].id;
+    newTones[c.id] = tones[oldId] ?? 'build';
+    newParams[c.id] = params[oldId]
+      ? JSON.parse(JSON.stringify(params[oldId]))
+      : defaultToneParams();
+    if (accepted.has(oldId)) newAccepted.add(c.id);
+  });
+  return { newTones, newParams, newAccepted };
+}
+
+// The six canonical tones + one UI-only 'none' opt-out sentinel.
+// Source of truth for the six: forge/tabs/tone_tab.py::_TONES in the
+// Python side — the IDs MUST match (tender/build/tease/edge/climax/
 // dominant) or chapter-tone records won't round-trip when the CLI lands.
+// 'none' is FF-only (no Python counterpart) and sits at index 0 so the
+// picker reads "Untoned (opt out) → six tones" left-to-right — the
+// canonical opt-out card pattern (grey card, no icon, leftmost).
 const TONES = [
+  // 'none' (2026-05-17, repositioned to leftmost 2026-05-25) — explicit
+  // "no tone" so the user isn't forced to pick one before Accept.
+  // Selecting it returns the funscript unchanged through `applyTone`.
+  // Sits at the start of the picker grid as the opt-out option.
+  { id: 'none',     label: 'Untoned',  color: '#64748b',
+    desc: 'No tone applied — chapter passes through unchanged.',
+    params: [] },
   { id: 'tender',   label: 'Tender',   color: '#8b9bff',
     desc: 'Soft, slow, intimate. Low BPM ceiling, gentle contrast.',
     params: [
@@ -68,15 +140,17 @@ const TONES = [
       { id: 'recenter', label: 'Recenter', min: 0, max: 1, step: 0.05, def: 0.6,  fmt: (v) => v.toFixed(2) },
       { id: 'rhythm',   label: 'Rhythm',   min: 0, max: 1, step: 0.05, def: 0.55, fmt: (v) => v.toFixed(2) },
     ] },
-  // 'none' (2026-05-17) — explicit "no tone" so the user isn't forced to
-  // pick one before Accept. Selecting it returns the funscript unchanged
-  // through `applyTone`. Sits at the end of the picker grid.
-  { id: 'none',     label: 'Untoned',  color: '#64748b',
-    desc: 'No tone applied — chapter passes through unchanged.',
-    params: [] },
 ];
 
-function findTone(id) { return TONES.find((t) => t.id === id) ?? TONES[1]; }
+// Fallback to 'build' (not by index) when an unknown tone id arrives —
+// 'build' is the analyzer's most-common seeded tone, so an unrecognized
+// id reads as "default tone, not opt-out" by intent. Lookup-by-id is
+// index-stable across TONES array reorderings.
+function findTone(id) {
+  return TONES.find((t) => t.id === id)
+    ?? TONES.find((t) => t.id === 'build')
+    ?? TONES[0];
+}
 
 // Map a free-text intent or tone-suggestion to a known tone id. Unknown →
 // null so the caller can fall back. Case-insensitive; matches the label.
@@ -90,7 +164,11 @@ function intentToToneId(intent) {
 function defaultToneParams() {
   const out = {};
   TONES.forEach((t) => {
-    out[t.id] = { impact: 1.0 };
+    // Impact defaults to 50% so a freshly-picked tone preview reads
+    // as "tone-flavored toward source" rather than "tone fully applied."
+    // Users escalate by dragging up; the half-mix matches how most
+    // pickers land in practice (start moderate, push if you like it).
+    out[t.id] = { impact: 0.5 };
     t.params.forEach((p) => { out[t.id][p.id] = p.def; });
   });
   return out;
@@ -431,13 +509,24 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     [originalActions, active.atMs, active.endMs, tone, toneParams],
   );
 
+  // Shared viewport for the Before/After preview charts. Pan or zoom one
+  // and the other follows, so "compare what changed" reads the same time
+  // window on both sides. Same pattern DeviceTab uses for its original
+  // vs device-aware preview pair. Both charts use chapter-local time
+  // (action.at - active.atMs), so the viewport is [0, chapterDurationMs].
+  const chapterDurationMs = active.endMs - active.atMs;
+  const [beforeAfterView, setBeforeAfterView] = useState({ start: 0, end: chapterDurationMs });
+
   // When the active chapter changes, jump the playhead to the chapter start
   // and pause. Click-to-select shouldn't leave the user with the playhead in
-  // the middle of an unrelated chapter.
+  // the middle of an unrelated chapter. Also reset the Before/After viewport
+  // to full-chapter — a zoomed view from the previous chapter would point
+  // at a time range that may not exist in the new one.
   useEffect(() => {
     if (active === EMPTY_CHAPTER) return;
     setCurrentMs(active.atMs);
     setIsPlaying(false);
+    setBeforeAfterView({ start: 0, end: active.endMs - active.atMs });
   }, [active.id]);
 
   // Chapter clip extraction. The hook stream-copies the active chapter
@@ -571,6 +660,121 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     }
   };
 
+  // Persist a mutated chapter list and re-extract the affected clips with
+  // footer progress. Sidecar write + clip extraction are kicked off after
+  // local state has been swapped, so the UI reflects the new chapter
+  // layout immediately; the new active chapter's clip extract dedups with
+  // useChapterClip's own fetch (see useChapterClip.js __pendingExtracts).
+  const persistAndExtract = async (newChapters, affectedChapters) => {
+    const sourcePath = project?.mediaPath ?? project?.path;
+    if (sourcePath) {
+      try {
+        await writeChaptersSidecar(sourcePath, newChapters);
+      } catch (err) {
+        console.warn('ChaptersTab: writeChaptersSidecar failed', err);
+        setAppError?.(`Could not write chapters sidecar: ${err?.message ?? err}`);
+      }
+    }
+    if (project?.mediaPath && affectedChapters.length > 0) {
+      const total = affectedChapters.length;
+      for (let i = 0; i < total; i += 1) {
+        const c = affectedChapters[i];
+        setBusy?.({ message: `Extracting new chapter clip ${i + 1}/${total}…` });
+        try {
+          await extractChapterClip(project.mediaPath, c.atMs, c.endMs);
+        } catch (err) {
+          console.warn('ChaptersTab: extractChapterClip failed', c.id, err);
+        }
+      }
+      setBusy?.(null);
+    }
+  };
+
+  // Split the band's chapter at the playhead. Requires ≥500ms clearance from
+  // both boundaries — splits closer than that produce a chapter slice the
+  // analyzer can't usefully tone or the user can't usefully scrub through.
+  // Tones / params / accept inherit on BOTH halves (the user picked the
+  // parent's tone for the underlying content; both halves share that
+  // material). After mutation: renumber, lift to App, persist sidecar,
+  // re-extract clips for both halves.
+  const MIN_SPLIT_CLEARANCE_MS = 500;
+  const handleSplitAtPlayhead = async (band) => {
+    const i = chapters.findIndex((c) => c.id === band.id);
+    if (i < 0) return;
+    const target = chapters[i];
+    const splitMs = Math.round(currentMs);
+    if (splitMs - target.atMs < MIN_SPLIT_CLEARANCE_MS
+        || target.endMs - splitMs < MIN_SPLIT_CLEARANCE_MS) {
+      setAppError?.('Playhead too close to chapter boundary — move at least 500ms from each edge before splitting.');
+      return;
+    }
+    const firstHalf = { ...target, endMs: splitMs };
+    const secondHalf = { ...target, atMs: splitMs };
+    const raw = [
+      ...chapters.slice(0, i),
+      firstHalf,
+      secondHalf,
+      ...chapters.slice(i + 1),
+    ];
+    const newChapters = renumberChapters(raw);
+    const posToOld = (newIdx) => {
+      if (newIdx < i) return newIdx;
+      if (newIdx === i || newIdx === i + 1) return i;
+      return newIdx - 1;
+    };
+    const { newTones, newParams, newAccepted } = remapChapterState({
+      oldChapters: chapters, newChapters, posToOldIdx: posToOld,
+      tones: tonesByChapter, params: paramsByChapter, accepted: acceptedChapterIds,
+    });
+    setChapters(newChapters);
+    setTonesByChapter(newTones);
+    setParamsByChapter(newParams);
+    setAcceptedChapterIds(newAccepted);
+    // Land in the second half — playhead is at splitMs which is the start
+    // of the new chapter, so "split here, continue editing" reads naturally.
+    setActiveId(newChapters[i + 1].id);
+    onChaptersChange?.(newChapters);
+    await persistAndExtract(newChapters, [newChapters[i], newChapters[i + 1]]);
+  };
+
+  // Join the band's chapter with its previous / next neighbour. The earlier
+  // chapter's tone, params, accept-state, content_type, intent, and palette
+  // index win — the later chapter's state is dropped. Accept the ambiguity
+  // for v1; the user re-classifies if the merged span needs a different
+  // tone. Re-extracts one clip (the merged boundary).
+  const handleJoin = async (band, direction) => {
+    const i = chapters.findIndex((c) => c.id === band.id);
+    if (i < 0) return;
+    const earlierIdx = direction === 'prev' ? i - 1 : i;
+    const laterIdx = direction === 'prev' ? i : i + 1;
+    if (earlierIdx < 0 || laterIdx >= chapters.length) return;
+    const earlier = chapters[earlierIdx];
+    const later = chapters[laterIdx];
+    const merged = { ...earlier, endMs: later.endMs };
+    const raw = [
+      ...chapters.slice(0, earlierIdx),
+      merged,
+      ...chapters.slice(laterIdx + 1),
+    ];
+    const newChapters = renumberChapters(raw);
+    const posToOld = (newIdx) => {
+      if (newIdx < earlierIdx) return newIdx;
+      if (newIdx === earlierIdx) return earlierIdx;
+      return newIdx + 1;
+    };
+    const { newTones, newParams, newAccepted } = remapChapterState({
+      oldChapters: chapters, newChapters, posToOldIdx: posToOld,
+      tones: tonesByChapter, params: paramsByChapter, accepted: acceptedChapterIds,
+    });
+    setChapters(newChapters);
+    setTonesByChapter(newTones);
+    setParamsByChapter(newParams);
+    setAcceptedChapterIds(newAccepted);
+    setActiveId(newChapters[earlierIdx].id);
+    onChaptersChange?.(newChapters);
+    await persistAndExtract(newChapters, [newChapters[earlierIdx]]);
+  };
+
   return (
     <section style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* Page header */}
@@ -622,11 +826,16 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'stretch' }}>
           <ChapterRibbon
-            bands={chapters.map((c) => ({
+            bands={chapters.map((c, i) => ({
               id: c.id,
               at_ms: c.atMs,
               end_ms: c.endMs,
-              name: c.name,
+              // Display label is index + style eyebrow (`01 · DRIVING`).
+              // chapter.name is intentionally dropped (2026-05-25) —
+              // names rot across split/join; the index always identifies
+              // the chapter's position and content_type identifies what
+              // it is. See project-split-join-in-flight memory.
+              name: chapterDisplayLabel(c, i),
               color: c.color,
               toneColor: findTone(tonesByChapter[c.id])?.color,
               // Surface per-chapter acceptance to the ribbon so the
@@ -650,20 +859,20 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                 id: 'split',
                 label: 'Split at playhead',
                 icon: 'scissors',
-                onClick: (band) => console.log('TODO: split chapter at playhead', band.id),
+                onClick: handleSplitAtPlayhead,
               },
               {
                 id: 'join-prev',
                 label: 'Join with previous',
                 icon: 'corner-up-left',
-                onClick: (band) => console.log('TODO: join with previous', band.id),
+                onClick: (band) => handleJoin(band, 'prev'),
                 disabled: (_b, i) => i <= 0,
               },
               {
                 id: 'join-next',
                 label: 'Join with next',
                 icon: 'corner-up-right',
-                onClick: (band) => console.log('TODO: join with next', band.id),
+                onClick: (band) => handleJoin(band, 'next'),
                 disabled: (_b, i) => i >= chapters.length - 1,
               },
             ]}
@@ -689,7 +898,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                 ? chapterClip.offsetMs
                 : 0
             }
-            media={{ kind: project?.mediaKind ?? 'video', title: active.name || active.id }}
+            media={{ kind: project?.mediaKind ?? 'video', title: chapterDisplayLabel(active, chapters.indexOf(active)) }}
             loadingLabel={chapterLoading ? 'Loading chapter…' : null}
             audioWaveform={audioWaveform}
             // Spectrogram is full-track: SpectrogramCanvas does its own
@@ -704,7 +913,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             beats={trackBeats}
             chapter={{
               id: active.id,
-              title: active.name || `Chapter ${chapters.indexOf(active) + 1}`,
+              title: chapterDisplayLabel(active, chapters.indexOf(active)),
               color: active.color,
               start: active.atMs,
               end: active.endMs,
@@ -800,6 +1009,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <ActiveChapterHeader
             chapter={active}
+            displayLabel={chapterDisplayLabel(active, chapters.indexOf(active))}
             tone={tone}
             mediaPath={project?.mediaPath}
             onAttachMedia={onAttachMedia}
@@ -827,49 +1037,66 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             background: 'var(--surface)', border: '1px solid var(--border)',
             borderRadius: 8, padding: 16,
           }}>
-            <Slider
-              label="Impact — how much of this tone to apply"
-              value={toneParams.impact ?? 1}
-              min={0} max={1} step={0.01}
-              valueLabel={(toneParams.impact ?? 1).toFixed(2)}
-              onChange={(v) => setParam('impact', v)}
-            />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 14 }}>
-              {tone.params.map((p) => {
-                const v = toneParams[p.id] ?? p.def;
-                return (
-                  <Slider
-                    key={p.id}
-                    label={p.label}
-                    value={v}
-                    min={p.min} max={p.max} step={p.step}
-                    valueLabel={p.fmt(v)}
-                    onChange={(nv) => setParam(p.id, nv)}
-                  />
-                );
-              })}
-            </div>
+            {/* Hide Impact + tone-specific params when the user picked
+                Untoned — there's nothing to apply, so the controls would
+                read as no-ops. The Before/After charts still render so
+                you can still scrub through the chapter to confirm what
+                you're "not touching." */}
+            {tone.id !== 'none' && (
+              <>
+                <Slider
+                  label="Impact — how much of this tone to apply"
+                  value={toneParams.impact ?? 0.5}
+                  min={0} max={1} step={0.01}
+                  valueLabel={(toneParams.impact ?? 0.5).toFixed(2)}
+                  onChange={(v) => setParam('impact', v)}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 14 }}>
+                  {tone.params.map((p) => {
+                    const v = toneParams[p.id] ?? p.def;
+                    return (
+                      <Slider
+                        key={p.id}
+                        label={p.label}
+                        value={v}
+                        min={p.min} max={p.max} step={p.step}
+                        valueLabel={p.fmt(v)}
+                        onChange={(nv) => setParam(p.id, nv)}
+                      />
+                    );
+                  })}
+                </div>
 
-            <div style={{ height: 1, background: 'var(--border)', margin: '16px 0 14px' }} />
+                <div style={{ height: 1, background: 'var(--border)', margin: '16px 0 14px' }} />
+              </>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              <BeforeAfterCol title="Before" subtitle="source — device aware">
+              <BeforeAfterCol title="Untoned" subtitle="source · chapter slice">
                 <FunscriptChart
                   actions={beforeSlice.map((a) => ({ at: a.at - active.atMs, pos: a.pos }))}
                   totalMs={active.endMs - active.atMs}
                   height={120}
+                  view={beforeAfterView}
+                  onViewChange={setBeforeAfterView}
                   bare
                 />
               </BeforeAfterCol>
               <BeforeAfterCol
                 title="After"
-                subtitle={`${tone.label} · impact ${Math.round((toneParams.impact ?? 1) * 100)}%`}
+                subtitle={
+                  tone.id === 'none'
+                    ? 'passthrough — no transform applied'
+                    : `${tone.label} · impact ${Math.round((toneParams.impact ?? 0.5) * 100)}%`
+                }
                 accent={tone.color}
               >
                 <FunscriptChart
                   actions={afterSlice.map((a) => ({ at: a.at - active.atMs, pos: a.pos }))}
                   totalMs={active.endMs - active.atMs}
                   height={120}
+                  view={beforeAfterView}
+                  onViewChange={setBeforeAfterView}
                   bare
                 />
               </BeforeAfterCol>
@@ -877,7 +1104,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           </div>
 
           {/* Per-chapter accept row — discrete from the tab-level
-              "Accept and chain to Device" in the AcceptBar below. This
+              "Accept and chain to Patterns" in the AcceptBar below. This
               one keeps the user on the Chapters tab, bakes the active
               chapter's toned slice into the project's working actions,
               and advances to the next chapter. The count next to it is
@@ -1007,7 +1234,7 @@ function ChapterRail({ chapters, tones, activeId, acceptedIds, onSelect }) {
             <span style={{ width: 4, height: 36, borderRadius: 2, background: c.color, flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: sel ? 700 : 600 }}>
-                {c.name || `Chapter ${i + 1}`}
+                {chapterDisplayLabel(c, i)}
               </div>
               <div style={{
                 fontSize: 10.5, color: 'var(--text-dim)',
@@ -1026,12 +1253,12 @@ function ChapterRail({ chapters, tones, activeId, acceptedIds, onSelect }) {
   );
 }
 
-function ActiveChapterHeader({ chapter, tone, mediaPath, onAttachMedia }) {
+function ActiveChapterHeader({ chapter, displayLabel, tone, mediaPath, onAttachMedia }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
       <span style={{ width: 14, height: 14, borderRadius: 3, background: chapter.color }} />
       <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>
-        {chapter.name || chapter.id}
+        {displayLabel ?? chapter.id}
       </h3>
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-muted)' }}>
         {fmtTimeShort(chapter.atMs)}–{fmtTimeShort(chapter.endMs)}
@@ -1077,6 +1304,12 @@ function TonePicker({ tones, value, onChange }) {
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tones.length}, 1fr)`, gap: 6 }}>
       {tones.map((t) => {
         const sel = t.id === value;
+        // The 'none' opt-out card follows the opt-out pattern (see
+        // feedback-opt-out-card-pattern memory): grey surface, no
+        // colored dot, neutral selected state — visually distinct
+        // from the 6 tone cards so users read it as "choose to skip"
+        // rather than "tone number 0."
+        const isOptOut = t.id === 'none';
         return (
           <button
             key={t.id}
@@ -1085,13 +1318,29 @@ function TonePicker({ tones, value, onChange }) {
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '8px 10px', borderRadius: 6,
-              background: sel ? t.color + '22' : 'var(--surface)',
-              border: `1.5px solid ${sel ? t.color : 'var(--border)'}`,
+              background: sel
+                ? (isOptOut ? 'var(--surface-2)' : t.color + '22')
+                : 'var(--surface)',
+              border: `1.5px solid ${
+                sel
+                  ? (isOptOut ? 'var(--text-dim)' : t.color)
+                  : 'var(--border)'
+              }`,
               color: 'var(--text)', cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: t.color, flexShrink: 0 }} />
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: sel ? t.color : 'var(--text)' }}>
+            {!isOptOut && (
+              <span style={{
+                width: 8, height: 8, borderRadius: 2,
+                background: t.color, flexShrink: 0,
+              }} />
+            )}
+            <span style={{
+              fontSize: 12.5, fontWeight: 700,
+              color: sel
+                ? (isOptOut ? 'var(--text)' : t.color)
+                : (isOptOut ? 'var(--text-muted)' : 'var(--text)'),
+            }}>
               {t.label}
             </span>
           </button>
