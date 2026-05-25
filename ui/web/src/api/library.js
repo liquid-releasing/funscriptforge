@@ -254,7 +254,14 @@ export async function loadProjectFiles(funscriptPath) {
     }
 
     if (VIDEO_EXTS.has(ext) || AUDIO_EXTS.has(ext)) {
-      if (entryStemLower === stemLower) {
+      // Same prefix-with-boundary rule the Library scan uses to pair
+      // funscripts with media — symmetric here: the funscript stem can
+      // be a boundary-bounded prefix of the media stem (IPZZ-125 case
+      // where `IPZZ-125.molester.omfg.funscript` pairs with the qualified
+      // `IPZZ-125.molester.omfg_iris3.mp4`). Without this, the Files
+      // panel reads "no media attached" even though Library matched it.
+      if (entryStemLower === stemLower
+          || isPrefixWithBoundary(stemLower, entryStemLower)) {
         media.push({
           path: fullPath,
           name: e.name,

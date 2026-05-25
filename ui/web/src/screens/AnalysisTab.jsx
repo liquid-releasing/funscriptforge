@@ -385,15 +385,20 @@ function deriveScriptSource(project, trackPeaks) {
   return null;
 }
 
+// PitchLine prefers AUDIO over funscript — opposite priority from
+// ScriptOverviewRow. The two rows then carry complementary signals:
+// heatmap above = "what the script is doing," pitch below = "what the
+// music is doing" (spectral centroid / envelope). Falling back to the
+// funscript baseline keeps the row populated for audio-less projects.
 function derivePitchSource(project, trackSpectrogram, trackPeaks) {
-  if (project?.actions?.length) {
-    return { kind: 'funscript', actions: project.actions, durationMs: project.durationMs };
-  }
   if (trackSpectrogram?.cells?.length) {
     return { kind: 'audio', cells: trackSpectrogram.cells, nMels: trackSpectrogram.nMels };
   }
   if (trackPeaks?.peaks?.length) {
     return { kind: 'audio', peaks: trackPeaks.peaks, hopMs: trackPeaks.hopMs };
+  }
+  if (project?.actions?.length) {
+    return { kind: 'funscript', actions: project.actions, durationMs: project.durationMs };
   }
   return null;
 }
