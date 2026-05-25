@@ -1807,3 +1807,28 @@ fn find_bundled_ffmpeg() -> String {
     // returns an OS error which propagates up as an extract failure.
     "ffmpeg".to_string()
 }
+
+// Wipe a project's entire `.forge/` cache (all sidecars + clips) so the
+// next analyze runs fresh from extract. Used by the AnalysisTab's
+// "Re-analyze" button to give the user a way out of stale or partial
+// cache states without manually deleting folders in the file manager.
+//
+// Returns Ok(true) if the forge dir was removed, Ok(false) if it didn't
+// exist (a clean no-op). Errors propagate so the React side can surface
+// a meaningful message if the removal failed (locked files, permission
+// denied, etc.).
+#[tauri::command]
+pub async fn wipe_forge_dir(media_path: String) -> Result<bool, String> {
+    let p = Path::new(&media_path);
+    let forge = forge_dir(p);
+    if !forge.exists() {
+        return Ok(false);
+    }
+    tokio::fs::remove_dir_all(&forge)
+        .await
+        .map_err(|e| format!(
+            "could not remove forge dir at {}: {}",
+            forge.display(), e,
+        ))?;
+    Ok(true)
+}

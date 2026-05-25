@@ -50,6 +50,7 @@ import {
   isTauri,
   loadPhrasesSidecar,
   loadProject,
+  wipeForgeDir,
 } from '../api/forge.js';
 
 export default function AnalysisTab({
@@ -220,6 +221,42 @@ export default function AnalysisTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.path]);
 
+  // Re-analyze button handler. Wipes the project's .forge/ cache then
+  // calls triggerAnalysis. The wipe is destructive (deletes sidecars +
+  // clips) so we confirm first. After the wipe, we clear chapterList in
+  // App state so the chapter strip flips to its loading skeleton while
+  // the new pipeline runs.
+  const handleReanalyze = useCallback(async () => {
+    if (!projectExists || isSample) return;
+    if (!isTauri()) return;
+    if (analyzing) return;
+    const confirmed = window.confirm(
+      'Re-analyze this project?\n\n'
+      + 'This deletes the cached chapter sidecars and chapter clips, '
+      + 'then rebuilds them from the source. The source file itself is '
+      + 'not touched. Existing analysis sidecars (audio peaks, '
+      + 'spectrogram, beats) will be overwritten as the new pipeline '
+      + 'progresses.',
+    );
+    if (!confirmed) return;
+    try {
+      if (project?.mediaPath) {
+        await wipeForgeDir(project.mediaPath);
+      }
+    } catch (err) {
+      console.warn('AnalysisTab: wipe forge dir failed', err);
+      setAppError?.(`Could not wipe cache: ${err?.message ?? err}`);
+      // Don't abort — triggerAnalysis still runs and will overwrite
+      // whatever sidecars it can.
+    }
+    onChaptersChange?.([]);
+    setPhrases(null);
+    triggerAnalysis();
+  }, [
+    projectExists, isSample, analyzing, project?.mediaPath,
+    onChaptersChange, setAppError, triggerAnalysis,
+  ]);
+
   // Always pull the phrases sidecar when the project changes — cheap
   // JSON read, and the trigger effect above skips reanalysis when
   // chapters already exist, which would otherwise leave Structure
@@ -327,7 +364,12 @@ export default function AnalysisTab({
   return (
     <div style={{ flex: 1, overflow: 'auto', background: 'var(--bg)' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 28px' }}>
-        <Header project={project} analyzing={analyzing} hasMedia={hasMedia} />
+        <Header
+          project={project}
+          analyzing={analyzing}
+          hasMedia={hasMedia}
+          onReanalyze={handleReanalyze}
+        />
 
         <ChapterStripPanel
           status={chaptersStatus}
@@ -417,29 +459,59 @@ export default function AnalysisTab({
   );
 }
 
-function Header({ project, analyzing, hasMedia }) {
+function Header({ project, analyzing, hasMedia, onReanalyze }) {
   const subtitle = !hasMedia
     ? "No media attached — attach a video or audio file on the Project tab to analyze structure, beats, and energy."
     : analyzing
       ? 'Detecting chapters, beats, and energy from the media. Panels light up as each stage completes.'
       : 'Chapters, beat grid, energy, and pitch — auto-detected from the media and funscript. Click a chapter band to focus the deep-dive panel below.';
+  // Re-analyze is only useful once media is attached. While a pipeline
+  // is already running we disable it (re-triggering mid-run would just
+  // queue a second analyze and confuse the progress footer).
+  const canReanalyze = hasMedia && !analyzing && onReanalyze;
   return (
-    <div style={{ marginBottom: 22 }}>
-      <div style={{
-        fontSize: 11, fontWeight: 700, color: 'var(--text-dim)',
-        textTransform: 'uppercase', letterSpacing: '0.08em',
-        marginBottom: 4,
-      }}>
-        Stage · Analysis
+    <div style={{
+      marginBottom: 22,
+      display: 'flex', alignItems: 'flex-start', gap: 16,
+      justifyContent: 'space-between',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 11, fontWeight: 700, color: 'var(--text-dim)',
+          textTransform: 'uppercase', letterSpacing: '0.08em',
+          marginBottom: 4,
+        }}>
+          Stage · Analysis
+        </div>
+        <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }}>
+          {project?.title ? `Reviewing ${project.title}` : 'Review the structure'}
+        </h2>
+        <p style={{
+          margin: 0, fontSize: 13, color: 'var(--text-muted)', maxWidth: 720, lineHeight: 1.5,
+        }}>
+          {subtitle}
+        </p>
       </div>
-      <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }}>
-        {project?.title ? `Reviewing ${project.title}` : 'Review the structure'}
-      </h2>
-      <p style={{
-        margin: 0, fontSize: 13, color: 'var(--text-muted)', maxWidth: 720, lineHeight: 1.5,
-      }}>
-        {subtitle}
-      </p>
+      {canReanalyze && (
+        <button
+          onClick={onReanalyze}
+          title="Wipe cached sidecars + clips and run the pipeline from scratch"
+          style={{
+            flexShrink: 0,
+            padding: '8px 14px',
+            fontSize: 12, fontWeight: 600,
+            borderRadius: 6,
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border)',
+            color: 'var(--text)',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+          }}
+        >
+          Re-analyze
+        </button>
+      )}
     </div>
   );
 }

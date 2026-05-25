@@ -34,6 +34,7 @@ pub fn run() {
             commands::load_audio_beats,
             commands::prewarm_media_range,
             commands::extract_chapter_clip,
+            commands::wipe_forge_dir,
             // Library — FsAdapter primitives + config path + native ops
             library::library_fs_readdir,
             library::library_fs_stat,

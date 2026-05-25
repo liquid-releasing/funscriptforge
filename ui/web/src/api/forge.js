@@ -138,6 +138,19 @@ export function analyzeChaptersWithVideoflow(funscriptPath, targetMinutes, media
   );
 }
 
+/** Wipe a project's `.forge/` cache (sidecars + clips) so the next analyze
+ *  runs fresh from extract. Used by the AnalysisTab's Re-analyze button.
+ *
+ *  Returns true if the directory was removed, false if it didn't exist
+ *  (clean no-op). Errors (locked files, permission denied) propagate. */
+export function wipeForgeDir(mediaPath) {
+  return call(
+    'wipe_forge_dir',
+    { mediaPath },
+    () => Promise.resolve(false),
+  );
+}
+
 /** Run `cli.py assess` against the funscript and return the parsed phrase
  *  records. Used by the Phrases tab to hydrate its per-phrase edit table.
  *  Each record: { id, at_ms, end_ms, number, bpm, tag, all_tags,
