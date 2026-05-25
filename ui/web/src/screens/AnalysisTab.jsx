@@ -31,7 +31,12 @@ import {
   KpiStrip,
   CategoryPanel,
 } from 'forgemoment';
-import { analyzeChaptersWithVideoflow, isTauri, loadPhrasesSidecar } from '../api/forge.js';
+import {
+  analyzeChaptersWithVideoflow,
+  isTauri,
+  loadPhrasesSidecar,
+  loadProject,
+} from '../api/forge.js';
 
 export default function AnalysisTab({
   project,
@@ -154,6 +159,25 @@ export default function AnalysisTab({
           if (leaf === 'audio_peaks' || leaf === 'spectrogram' || leaf === 'audio_beats') {
             refreshAudioSidecars?.();
           }
+          // Chapters sidecar now lands BEFORE chapter_clips (videoflow
+          // pipeline reorder, 2026-05-24). Lift the freshly-written
+          // chapter list into App state the moment it lands — the
+          // chapter strip + category panel populate immediately while
+          // chapter_clips chugs away in the background.
+          //
+          // We refetch via loadProject for simplicity; the round-trip
+          // also picks up the phrase count that the sidecar stage
+          // writes alongside chapters. Only fires once per analyze
+          // run, so the re-parse overhead is bounded.
+          if (leaf === 'sidecar' && project?.path) {
+            loadProject(project.path)
+              .then((p) => {
+                if (Array.isArray(p?.chapterList)) onChaptersChange?.(p.chapterList);
+              })
+              .catch((err) => {
+                console.warn('AnalysisTab: chapter-sidecar reload failed', err);
+              });
+          }
         }
       });
       if (cancelled) off();
@@ -163,7 +187,7 @@ export default function AnalysisTab({
       cancelled = true;
       if (unlisten) unlisten();
     };
-  }, [refreshAudioSidecars]);
+  }, [refreshAudioSidecars, project?.path, onChaptersChange]);
 
   // Fire the analysis when the project lands without chapters. The
   // chapterList check is the cheap "is this analyzed?" probe — Rust's
