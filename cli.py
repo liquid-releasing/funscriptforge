@@ -131,6 +131,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -277,6 +278,17 @@ def cmd_assess(args):
     if _stages_seen:
         _emit_progress(f"done::2::{_stages_seen[-1]}")
     elapsed = time.time() - t0
+
+    # Length splitter post-pass — phrases > 4 min get divided into
+    # ~2-min pieces snapped to nearest downbeat. Mutates result.phrases so
+    # the json_mode stdout payload reflects the split too.
+    result.phrases = _split_long_phrases(result.phrases, args.funscript)
+
+    # Phrase slice sidecar — `<stem>.forge/<stem>.phrases.json`. Read by
+    # PhrasesTab / PatternsTab. chapter_id resolved via midpoint lookup
+    # into the chapters sidecar; null when no chapters available.
+    if not getattr(args, "no_save", False):
+        _write_phrases_slice_sidecar(args.funscript, result)
 
     if json_mode:
         # Structured stdout payload for the Tauri bridge (PhrasesTab consumer).
@@ -2141,6 +2153,210 @@ def cmd_device_aware(args):
 def _default_path(source: str, suffix: str) -> str:
     base, _ = os.path.splitext(source)
     return base + suffix
+
+
+_PHRASES_SIDECAR_VERSION = 1
+
+# Length splitter thresholds. Phrases longer than _SPLIT_TRIGGER_MS get
+# divided into floor(duration / _SPLIT_TARGET_MS) pieces. ph_2 in
+# VictoriaOaks_separated/8 (273 s) is the canonical case: splits into 2
+# pieces of ~136 s each. Snap window is symmetric around the ideal
+# midpoint; falls back to the unsnapped ideal when no downbeat lies in
+# the window.
+_SPLIT_TRIGGER_MS = 240_000
+_SPLIT_TARGET_MS = 120_000
+_SPLIT_SNAP_WINDOW_MS = 3_000
+
+
+def _load_downbeats(funscript_path: str) -> list:
+    try:
+        from videoflow.sidecar import forge_dir
+    except ImportError:
+        return []
+    stem = Path(funscript_path).stem
+    beats_path = forge_dir(funscript_path) / f"{stem}.beats.json"
+    if not beats_path.exists():
+        return []
+    try:
+        with open(beats_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return []
+    return data.get("downbeats_ms") or []
+
+
+def _snap_to_downbeat(ideal_ms: int, downbeats: list, window_ms: int) -> Optional[int]:
+    if not downbeats:
+        return None
+    import bisect
+    idx = bisect.bisect_left(downbeats, ideal_ms)
+    candidates = []
+    if idx < len(downbeats):
+        candidates.append(downbeats[idx])
+    if idx > 0:
+        candidates.append(downbeats[idx - 1])
+    best = None
+    best_delta = window_ms + 1
+    for c in candidates:
+        delta = abs(c - ideal_ms)
+        if delta <= window_ms and delta < best_delta:
+            best, best_delta = c, delta
+    return best
+
+
+def _split_long_phrases(phrases: list, funscript_path: str) -> list:
+    """Split phrases longer than 4 min into ~2-min pieces snapped to downbeats.
+
+    Children inherit the parent's pattern_label, tags, metrics (with
+    duration_ms updated per piece), and oscillation_count + cycle_count
+    proportional to their share of the parent's duration. Each child
+    gets a runtime ``.evidence`` attribute = ``["length_split"]`` that the
+    writer surfaces in the sidecar. Re-classification per piece is
+    explicitly v1.x (see plan doc).
+    """
+    from models import Phrase
+
+    downbeats = _load_downbeats(funscript_path)
+    out = []
+    for p in phrases:
+        duration = p.end_ms - p.start_ms
+        if duration <= _SPLIT_TRIGGER_MS:
+            out.append(p)
+            continue
+
+        n_pieces = duration // _SPLIT_TARGET_MS
+        if n_pieces < 2:
+            out.append(p)
+            continue
+
+        ideal_step = duration / n_pieces
+        boundaries = [p.start_ms]
+        for k in range(1, n_pieces):
+            ideal_t = p.start_ms + round(k * ideal_step)
+            snap = _snap_to_downbeat(ideal_t, downbeats, _SPLIT_SNAP_WINDOW_MS)
+            boundaries.append(snap if snap is not None else ideal_t)
+        boundaries.append(p.end_ms)
+
+        for at_ms, end_ms in zip(boundaries[:-1], boundaries[1:]):
+            child_duration = end_ms - at_ms
+            ratio = child_duration / duration if duration else 0
+            child = Phrase(
+                start_ms=int(at_ms),
+                end_ms=int(end_ms),
+                pattern_label=p.pattern_label,
+                cycle_count=int(round((p.cycle_count or 0) * ratio)),
+                description=p.description,
+                oscillation_count=int(round((p.oscillation_count or 0) * ratio)),
+                tags=list(p.tags or []),
+                metrics={**(p.metrics or {}), "duration_ms": child_duration},
+            )
+            child.evidence = ["length_split"]
+            out.append(child)
+    return out
+
+
+def _load_chapters_for_phrases(funscript_path: str) -> list:
+    try:
+        from videoflow.sidecar import forge_dir
+    except ImportError:
+        return []
+    stem = Path(funscript_path).stem
+    chapters_path = forge_dir(funscript_path) / f"{stem}.chapters.json"
+    if not chapters_path.exists():
+        return []
+    try:
+        with open(chapters_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return []
+    return data.get("chapters") or []
+
+
+def _resolve_chapter_id(at_ms: int, end_ms: int, chapters: list) -> Optional[int]:
+    if not chapters:
+        return None
+    midpoint = (at_ms + end_ms) // 2
+    for idx, ch in enumerate(chapters):
+        if ch.get("at_ms", 0) <= midpoint < ch.get("end_ms", 0):
+            return idx
+    return None
+
+
+def _detect_straddling(at_ms: int, end_ms: int, chapters: list) -> Optional[str]:
+    """Return ``"straddles:ch<N>→ch<M>"`` if the phrase covers >1 chapter, else None.
+
+    Uses half-open overlap (chapter.at_ms < phrase.end_ms and
+    chapter.end_ms > phrase.at_ms). Span is leftmost→rightmost; the
+    assigned chapter_id (midpoint) is still the primary chapter — this
+    is observational diagnostic only.
+    """
+    if not chapters:
+        return None
+    spans = [
+        idx for idx, ch in enumerate(chapters)
+        if ch.get("at_ms", 0) < end_ms and ch.get("end_ms", 0) > at_ms
+    ]
+    if len(spans) > 1:
+        return f"straddles:ch{spans[0]}→ch{spans[-1]}"
+    return None
+
+
+def _write_phrases_slice_sidecar(funscript_path: str, result) -> Optional[Path]:
+    """Write `<funscript_stem>.phrases.json` into the funscript's `.forge/`.
+
+    Returns the written path on success, ``None`` if videoflow isn't
+    importable (test environments).
+    """
+    try:
+        from videoflow.sidecar import forge_dir
+    except ImportError:
+        return None
+
+    target_dir = forge_dir(funscript_path)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    stem = Path(funscript_path).stem
+    out = target_dir / f"{stem}.phrases.json"
+
+    chapters = _load_chapters_for_phrases(funscript_path)
+
+    slices = []
+    for i, p in enumerate(result.phrases):
+        at_ms = int(p.start_ms)
+        end_ms = int(p.end_ms)
+        # label is reserved for the shape_labeler when it returns (see
+        # project-held-shape-labeler). Hardcode "steady" in v1; behavioral
+        # info lives in metrics.tags.
+        slice_rec = {
+            "id":         f"ph_{i}",
+            "kind":       "phrase",
+            "at_ms":      at_ms,
+            "end_ms":     end_ms,
+            "label":      "steady",
+            "chapter_id": _resolve_chapter_id(at_ms, end_ms, chapters),
+            "metrics": {
+                "bpm":           float(p.bpm or 0.0),
+                "pattern_label": p.pattern_label,
+                "cycle_count":   int(getattr(p, "cycle_count", 0) or 0),
+                "tags":          list(getattr(p, "tags", []) or []),
+                **(getattr(p, "metrics", None) or {}),
+            },
+        }
+        evidence = list(getattr(p, "evidence", []) or [])
+        straddle = _detect_straddling(at_ms, end_ms, chapters)
+        if straddle:
+            evidence.append(straddle)
+        if evidence:
+            slice_rec["evidence"] = evidence
+        slices.append(slice_rec)
+
+    payload = {
+        "version":     _PHRASES_SIDECAR_VERSION,
+        "kind":        "phrase",
+        "source_file": str(Path(funscript_path).resolve()),
+        "slices":      slices,
+    }
+    out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return out
 
 
 def main():
