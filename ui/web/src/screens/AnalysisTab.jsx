@@ -52,7 +52,7 @@ import {
 import {
   analyzeChaptersWithVideoflow,
   isTauri,
-  loadAutoChapterPhrases,
+  loadAutoChapterStanzas,
   loadProject,
   wipeForgeDir,
 } from '../api/forge.js';
@@ -137,7 +137,7 @@ export default function AnalysisTab({
       // both the KPI count cell and the Phrases sub-tab's chronological
       // strip. Modes: tease / steady / edging / break / fast / slow.
       if (project.mediaPath) {
-        loadAutoChapterPhrases(project.mediaPath)
+        loadAutoChapterStanzas(project.mediaPath)
           .then((arr) => { if (Array.isArray(arr)) setPhrases(arr); })
           .catch(() => { /* sidecar absent — render empty state */ });
       }
@@ -220,7 +220,7 @@ export default function AnalysisTab({
           // the KPI count + Phrases sub-tab populate as soon as the
           // file is on disk, before chapter_clips finishes.
           if (leaf === 'sidecar' && project?.mediaPath) {
-            loadAutoChapterPhrases(project.mediaPath)
+            loadAutoChapterStanzas(project.mediaPath)
               .then((arr) => { if (Array.isArray(arr)) setPhrases(arr); })
               .catch(() => { /* sidecar absent — leave phrases null */ });
           }
@@ -294,7 +294,7 @@ export default function AnalysisTab({
     if (!isTauri()) { setPhrases(null); return; }
     setPhrases(null);
     if (!project?.mediaPath) return;
-    loadAutoChapterPhrases(project.mediaPath)
+    loadAutoChapterStanzas(project.mediaPath)
       .then((arr) => { if (Array.isArray(arr)) setPhrases(arr); })
       .catch(() => { /* sidecar absent — empty state on the sub-tab */ });
   }, [project?.path, project?.mediaPath, projectExists, isSample]);

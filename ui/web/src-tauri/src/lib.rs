@@ -26,7 +26,7 @@ pub fn run() {
             commands::write_chapters_sidecar,
             commands::analyze_phrases,
             commands::load_phrases_sidecar,
-            commands::read_phrases_from_chapters_sidecar,
+            commands::read_stanzas_from_chapters_sidecar,
             commands::read_stanzas,
             commands::list_characters,
             commands::attach_media,

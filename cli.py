@@ -1467,7 +1467,11 @@ def cmd_read_stanzas(args):
         print(f"Error reading sidecar {sidecar}: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    raw_phrases = data.get("phrases") or []
+    # videoflow schema 3.0+ writes `stanzas:`; older 2.x caches wrote
+    # `phrases:` for the same data. Read both so a fresh auto-chapter
+    # populates the tab and pre-rename caches still render until the
+    # next analyze regenerates them.
+    raw_phrases = data.get("stanzas") or data.get("phrases") or []
 
     # Number stanzas 1..N within each chapter so the UI gets stable
     # "#3 in chapter 2" labels without re-deriving them on every render.

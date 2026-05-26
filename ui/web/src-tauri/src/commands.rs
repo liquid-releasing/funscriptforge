@@ -807,23 +807,23 @@ fn peaks_sidecar_path(media_path: &str) -> String {
     forge_sidecar_path(media_path, ".audio.json")
 }
 
-// ─── read_phrases_from_chapters_sidecar ─────────────────────────────
+// ─── read_stanzas_from_chapters_sidecar ─────────────────────────────
 //
-// Phrases produced by videoflow's auto_chapter pipeline are merged into
-// the chapters sidecar (not a separate `.phrases.json` file). Reads
-// `.forge/<stem>.chapters.json` and returns just the `phrases` array.
+// Stanzas produced by videoflow's auto_chapter pipeline are merged into
+// the chapters sidecar (not a separate `.stanzas.json` file). Reads
+// `.forge/<stem>.chapters.json` and returns just the `stanzas` array.
 // Returns an empty Vec if the file is missing or the array is absent —
 // callers render an empty state, not an error.
 //
-// Phrase shape mirrors videoflow's Phrase.to_dict(): snake_case fields
-// matching what the JS side (forgemoment PhrasesCategoryBody) reads
-// directly. NO camelCase rename here. Distinct from the existing
+// Stanza shape mirrors videoflow's Stanza.to_dict(): snake_case fields
+// matching what the JS side (forgemoment StanzasCategoryBody) reads
+// directly. NO camelCase rename here. Distinct from the editing-phrase
 // `PhraseRecord` used by `analyze_phrases` — that one carries
 // FunscriptAnalyzer's `tag` / `pattern_label` vocabulary; this one
 // carries videoflow auto_chapter's `mode` vocabulary
 // (tease/steady/edging/break/fast/slow).
 #[derive(Serialize, Deserialize, Clone)]
-pub struct AutoChapterPhrase {
+pub struct AutoChapterStanza {
     #[serde(default)]
     pub id: Option<String>,
     #[serde(default)]
@@ -846,7 +846,7 @@ pub struct AutoChapterPhrase {
 #[derive(Deserialize)]
 struct ChaptersSidecarFile {
     #[serde(default)]
-    phrases: Vec<AutoChapterPhrase>,
+    stanzas: Vec<AutoChapterStanza>,
 }
 
 // Input shape for write_chapters_sidecar. JS sends chapters in the
@@ -879,7 +879,7 @@ pub struct ChapterInput {
 
 // Overwrite the chapters sidecar with a user-edited chapter list.
 // Used by ChaptersTab's split / join handlers. Read-merge-write so
-// videoflow's `phrases` + `energy` keys (written by auto_chapter's
+// videoflow's `stanzas` + `energy` keys (written by auto_chapter's
 // sidecar stage) survive — we only replace `chapters` and mark the
 // file as user-edited so a future detector run can decide whether
 // to respect manual boundaries.
@@ -901,7 +901,7 @@ pub async fn write_chapters_sidecar(
             .map_err(|e| format!("could not create forge dir: {}", e))?;
     }
 
-    // Read existing payload (if any) so we preserve phrases / energy /
+    // Read existing payload (if any) so we preserve stanzas / energy /
     // generated_by / etc. Empty object if file is absent or unparseable
     // — the chapters write still succeeds; other keys re-populate on
     // the next analyze.
@@ -945,9 +945,9 @@ pub async fn write_chapters_sidecar(
 }
 
 #[tauri::command]
-pub async fn read_phrases_from_chapters_sidecar(
+pub async fn read_stanzas_from_chapters_sidecar(
     media_path: String,
-) -> Result<Vec<AutoChapterPhrase>, String> {
+) -> Result<Vec<AutoChapterStanza>, String> {
     let sp = forge_sidecar_path(&media_path, ".chapters.json");
     if !Path::new(&sp).exists() {
         return Ok(Vec::new());
@@ -955,12 +955,12 @@ pub async fn read_phrases_from_chapters_sidecar(
     let raw = tokio::fs::read_to_string(&sp)
         .await
         .map_err(|e| format!("could not read chapters sidecar at {}: {}", sp, e))?;
-    // Tolerant parse — if the file exists but doesn't have a `phrases`
+    // Tolerant parse — if the file exists but doesn't have a `stanzas`
     // array yet (e.g. read between chapters_sidecar and sidecar stages),
     // we return an empty Vec instead of erroring out.
     let parsed: ChaptersSidecarFile = serde_json::from_str(&raw)
         .map_err(|e| format!("could not parse chapters sidecar at {}: {}", sp, e))?;
-    Ok(parsed.phrases)
+    Ok(parsed.stanzas)
 }
 
 #[tauri::command]

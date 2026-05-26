@@ -187,21 +187,22 @@ export function loadPhrasesSidecar(funscriptPath) {
   );
 }
 
-/** Read the `phrases` array out of videoflow's chapters sidecar.
- *  Distinct from loadPhrasesSidecar above — that one reads the OLD
- *  shape_labeler `.phrases.json` (reverted, see held-shape-labeler
- *  memory). This one targets the merged sidecar that videoflow's
- *  auto_chapter pipeline writes at the `sidecar` stage:
- *  `.<stem>.forge/<stem>.chapters.json` with a `phrases` key.
+/** Read the `stanzas` array out of videoflow's chapters sidecar.
+ *  Distinct from loadPhrasesSidecar above — that one reads
+ *  funscriptforge's editing-phrase `.phrases.json` sidecar (cycle-
+ *  character segments from FunscriptAnalyzer). This one targets the
+ *  merged sidecar that videoflow's auto_chapter pipeline writes at the
+ *  `sidecar` stage: `.<stem>.forge/<stem>.chapters.json` with a
+ *  `stanzas` key (16-beat rhythmic units).
  *
- *  Phrase shape: `{ id?, at_ms, end_ms, mode, chapter_id?, chapter_idx? }`
+ *  Stanza shape: `{ id?, at_ms, end_ms, mode, chapter_id?, chapter_idx? }`
  *  where `mode` is one of `tease / steady / edging / break / fast / slow`
- *  (the vocabulary videoflow.phrases.py classifies into). Returns an
+ *  (the vocabulary videoflow.stanzas.py classifies into). Returns an
  *  empty array if the file is missing or hasn't been filled in yet —
  *  caller renders an empty state, no error path. */
-export function loadAutoChapterPhrases(mediaPath) {
+export function loadAutoChapterStanzas(mediaPath) {
   return call(
-    'read_phrases_from_chapters_sidecar',
+    'read_stanzas_from_chapters_sidecar',
     { mediaPath },
     () => Promise.resolve([]),
   );
