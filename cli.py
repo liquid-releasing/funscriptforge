@@ -279,14 +279,44 @@ def cmd_assess(args):
         _emit_progress(f"done::2::{_stages_seen[-1]}")
     elapsed = time.time() - t0
 
-    # Length splitter post-pass — phrases > 4 min get divided into
-    # ~2-min pieces snapped to nearest downbeat. Mutates result.phrases so
+    # Chapter-scoped phrase re-detection — when chapters exist, replace
+    # the global phrase pass with per-chapter detection so each chapter's
+    # natural duration drives the analyzer's auto_scale thresholds. Solves
+    # the previously-observed mashup-vs-individual mismatch: the 93-min
+    # mashup yielded 37 phrases globally vs 111 across the 16 component
+    # clips with tight per-chapter scoping. chapter_id is tagged at
+    # detection time (no midpoint lookup needed).
+    chapters = _load_chapters_for_phrases(args.funscript)
+    if chapters:
+        per_chapter_phrases = []
+        for ch_idx, ch in enumerate(chapters):
+            ch_start = int(ch.get("at_ms", 0))
+            ch_end = int(ch.get("end_ms", 0))
+            ch_actions = [
+                a for a in analyzer._actions
+                if ch_start <= a["at"] < ch_end
+            ]
+            if not ch_actions:
+                continue
+            sub = FunscriptAnalyzer(config=_build_analyzer_config(args))
+            sub._actions = ch_actions
+            sub._source_file = analyzer._source_file
+            sub_result = sub.analyze(progress_callback=None)
+            for p in sub_result.phrases:
+                p.chapter_id = ch_idx
+            per_chapter_phrases.extend(sub_result.phrases)
+        result.phrases = per_chapter_phrases
+
+    # Length splitter post-pass — chapter-scoped phrases > 4 min still
+    # benefit from the splitter (e.g. one long chapter of uniform
+    # character produces an oversized phrase). Mutates result.phrases so
     # the json_mode stdout payload reflects the split too.
     result.phrases = _split_long_phrases(result.phrases, args.funscript)
 
     # Phrase slice sidecar — `<stem>.forge/<stem>.phrases.json`. Read by
-    # PhrasesTab / PatternsTab. chapter_id resolved via midpoint lookup
-    # into the chapters sidecar; null when no chapters available.
+    # PhrasesTab / PatternsTab. chapter_id comes from the runtime
+    # attribute set during per-chapter detection above (None when the
+    # project has no chapters sidecar).
     if not getattr(args, "no_save", False):
         _write_phrases_slice_sidecar(args.funscript, result)
 
@@ -2255,6 +2285,9 @@ def _split_long_phrases(phrases: list, funscript_path: str) -> list:
                 metrics={**(p.metrics or {}), "duration_ms": child_duration},
             )
             child.evidence = ["length_split"]
+            # Inherit chapter_id from parent so split children stay tagged
+            # with their chapter under the new per-chapter detection model.
+            child.chapter_id = getattr(p, "chapter_id", None)
             out.append(child)
     return out
 
@@ -2276,40 +2309,14 @@ def _load_chapters_for_phrases(funscript_path: str) -> list:
     return data.get("chapters") or []
 
 
-def _resolve_chapter_id(at_ms: int, end_ms: int, chapters: list) -> Optional[int]:
-    if not chapters:
-        return None
-    midpoint = (at_ms + end_ms) // 2
-    for idx, ch in enumerate(chapters):
-        if ch.get("at_ms", 0) <= midpoint < ch.get("end_ms", 0):
-            return idx
-    return None
-
-
-def _detect_straddling(at_ms: int, end_ms: int, chapters: list) -> Optional[str]:
-    """Return ``"straddles:ch<N>→ch<M>"`` if the phrase covers >1 chapter, else None.
-
-    Uses half-open overlap (chapter.at_ms < phrase.end_ms and
-    chapter.end_ms > phrase.at_ms). Span is leftmost→rightmost; the
-    assigned chapter_id (midpoint) is still the primary chapter — this
-    is observational diagnostic only.
-    """
-    if not chapters:
-        return None
-    spans = [
-        idx for idx, ch in enumerate(chapters)
-        if ch.get("at_ms", 0) < end_ms and ch.get("end_ms", 0) > at_ms
-    ]
-    if len(spans) > 1:
-        return f"straddles:ch{spans[0]}→ch{spans[-1]}"
-    return None
-
-
 def _write_phrases_slice_sidecar(funscript_path: str, result) -> Optional[Path]:
     """Write `<funscript_stem>.phrases.json` into the funscript's `.forge/`.
 
     Returns the written path on success, ``None`` if videoflow isn't
-    importable (test environments).
+    importable (test environments). ``chapter_id`` is read directly off
+    each Phrase's runtime attribute (set by the per-chapter detection
+    loop in ``cmd_assess``); ``None`` when the project has no chapters
+    sidecar and detection ran globally.
     """
     try:
         from videoflow.sidecar import forge_dir
@@ -2320,8 +2327,6 @@ def _write_phrases_slice_sidecar(funscript_path: str, result) -> Optional[Path]:
     target_dir.mkdir(parents=True, exist_ok=True)
     stem = Path(funscript_path).stem
     out = target_dir / f"{stem}.phrases.json"
-
-    chapters = _load_chapters_for_phrases(funscript_path)
 
     slices = []
     for i, p in enumerate(result.phrases):
@@ -2336,7 +2341,7 @@ def _write_phrases_slice_sidecar(funscript_path: str, result) -> Optional[Path]:
             "at_ms":      at_ms,
             "end_ms":     end_ms,
             "label":      "steady",
-            "chapter_id": _resolve_chapter_id(at_ms, end_ms, chapters),
+            "chapter_id": getattr(p, "chapter_id", None),
             "metrics": {
                 "bpm":           float(p.bpm or 0.0),
                 "pattern_label": p.pattern_label,
@@ -2346,9 +2351,6 @@ def _write_phrases_slice_sidecar(funscript_path: str, result) -> Optional[Path]:
             },
         }
         evidence = list(getattr(p, "evidence", []) or [])
-        straddle = _detect_straddling(at_ms, end_ms, chapters)
-        if straddle:
-            evidence.append(straddle)
         if evidence:
             slice_rec["evidence"] = evidence
         slices.append(slice_rec)
