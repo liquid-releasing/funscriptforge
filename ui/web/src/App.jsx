@@ -214,15 +214,22 @@ export default function App() {
         setBusy((prev) => {
           if (!prev) return prev;
           const steps = Array.isArray(prev.steps) ? prev.steps.slice() : [];
-          // In-stage message: bubble to the headline + attach as the
-          // running step's detail line. Don't touch step status.
+          // In-stage message: bubble to the headline.
           if (kind === 'msg' && message) {
             return { ...prev, message };
           }
-          // Sub-stage start/done events: only update message, don't
-          // disturb the depth-2 step list.
+          // Sub-stage events (depth>=3) — don't disturb the depth-2 step list.
+          // On start: prefix with parent depth-2 stage so the user can tell
+          // "audio_beats > extract" apart from the outer `extract` stage.
+          // On done: clear message so the rolling header doesn't keep showing
+          // a stale sub-stage label after the sub-stage has completed.
           if (depth >= 3) {
-            return kind === 'start' ? { ...prev, message: leaf } : prev;
+            if (kind === 'start') {
+              const parent = steps.find((s) => s.status === 'running')?.label;
+              const prefixed = parent ? `${parent} › ${leaf}` : leaf;
+              return { ...prev, message: prefixed };
+            }
+            return { ...prev, message: '' };
           }
           // Top-level (depth 2) start/done events drive the step list.
           const idx = steps.findIndex((s) => s.label === leaf);
@@ -240,7 +247,11 @@ export default function App() {
             // we want to surface next to the green check.
             const summary = parts.slice(3).join('::') || undefined;
             steps[idx] = { ...steps[idx], status: 'done', summary };
-            return { ...prev, steps };
+            // Clear the message — no stage is actively emitting now, so
+            // don't leave stale "Classifying chapter X/N" text in the
+            // header. The next start::2 will repaint to the new stage name;
+            // until then the consumer renders the neutral "Working…" fallback.
+            return { ...prev, steps, message: '' };
           }
           return prev;
         });
