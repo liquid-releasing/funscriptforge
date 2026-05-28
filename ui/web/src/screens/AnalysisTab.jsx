@@ -53,6 +53,7 @@ import {
   analyzeChaptersWithVideoflow,
   isTauri,
   loadAutoChapterStanzas,
+  loadPhrasesSidecar,
   loadProject,
   wipeForgeDir,
 } from '../api/forge.js';
@@ -88,10 +89,18 @@ export default function AnalysisTab({
   // 'audio_peaks', 'spectrogram', 'audio_beats', 'chapter_clips',
   // 'sidecar'). Values: 'running' | 'done'. Missing = not yet started.
   const [stages, setStages] = useState({});
-  // Phrase count for the KPI strip. The Phrases sub-tab + per-chapter
-  // mode tally are intentionally NOT surfaced here — phrases own that
-  // story on the Phrases tab. But the count is a useful "what did
-  // analysis find?" headline number alongside chapters + beats + BPM.
+  // Two distinct counts surfaced in KPI + sub-tabs:
+  //   stanzas — videoflow's rhythmic-units classifier output (modes:
+  //     STEADY / TEASE / EDGING / BREAK). Loaded via loadAutoChapterStanzas
+  //     from the merged <stem>.chapters.json sidecar.
+  //   phrases — funscriptforge's editing-phrases from cmd_assess Step 1+2
+  //     (evidence: top_drift / bottom_drift / density_drift / drone_grid /
+  //     snap_only / seed). Loaded via loadPhrasesSidecar from
+  //     <funscript stem>.phrases.json.
+  // Both surface in the KPI strip side-by-side; the Stanzas + Phrases
+  // sub-tabs each own their respective surface.
+  const [stanzas, setStanzas] = useState(null);
+  const stanzasCount = stanzas?.length ?? null;
   const [phrases, setPhrases] = useState(null);
   const phrasesCount = phrases?.length ?? null;
   // Pipeline-level error — when the whole analysis fails (no media,
@@ -140,11 +149,16 @@ export default function AnalysisTab({
       // have trackPeaks / trackSpectrogram / trackBeats populated.
       if (Array.isArray(newChapters)) onChaptersChange?.(newChapters);
       refreshAudioSidecars?.();
-      // Pull phrases from videoflow's merged chapters sidecar. Powers
-      // both the KPI count cell and the Phrases sub-tab's chronological
-      // strip. Modes: tease / steady / edging / break / fast / slow.
+      // Pull stanzas from videoflow's merged chapters sidecar (modes:
+      // tease / steady / edging / break / fast / slow) AND phrases from
+      // FF's editing-phrase sidecar. Both feed their KPI cells + sub-tabs.
       if (project.mediaPath) {
         loadAutoChapterStanzas(project.mediaPath)
+          .then((arr) => { if (Array.isArray(arr)) setStanzas(arr); })
+          .catch(() => { /* sidecar absent — render empty state */ });
+      }
+      if (project.path) {
+        loadPhrasesSidecar(project.path)
           .then((arr) => { if (Array.isArray(arr)) setPhrases(arr); })
           .catch(() => { /* sidecar absent — render empty state */ });
       }
@@ -221,16 +235,24 @@ export default function AnalysisTab({
                 console.warn('AnalysisTab: chapter-sidecar reload failed', err);
               });
           }
-          // Phrases land on disk at the `sidecar` stage — that's the
-          // final merge where videoflow writes phrases + energy INTO
-          // the chapters sidecar. Earlier stages (beats/classify) only
-          // have phrases in memory. Triggering on `sidecar` done means
-          // the KPI count + Phrases sub-tab populate as soon as the
+          // Stanzas land on disk at the `sidecar` stage — that's the
+          // final merge where videoflow writes stanzas + energy INTO
+          // the chapters sidecar. Triggering on `sidecar` done means
+          // the KPI count + Stanzas sub-tab populate as soon as the
           // file is on disk, before chapter_clips finishes.
           if (leaf === 'sidecar' && project?.mediaPath) {
             loadAutoChapterStanzas(project.mediaPath)
+              .then((arr) => { if (Array.isArray(arr)) setStanzas(arr); })
+              .catch(() => { /* sidecar absent — leave stanzas null */ });
+          }
+          // FF editing-phrases land in <funscript stem>.phrases.json. This
+          // sidecar is currently written by `cli.py assess`. Try to load on
+          // both chapters_sidecar (in case a prior run produced phrases)
+          // and sidecar done events — cheap JSON read off disk.
+          if ((leaf === 'chapters_sidecar' || leaf === 'sidecar') && project?.path) {
+            loadPhrasesSidecar(project.path)
               .then((arr) => { if (Array.isArray(arr)) setPhrases(arr); })
-              .catch(() => { /* sidecar absent — leave phrases null */ });
+              .catch(() => { /* phrases sidecar absent — leave null */ });
           }
         }
       });
@@ -285,6 +307,7 @@ export default function AnalysisTab({
       // whatever sidecars it can.
     }
     onChaptersChange?.([]);
+    setStanzas(null);
     setPhrases(null);
     triggerAnalysis();
   }, [
@@ -292,19 +315,26 @@ export default function AnalysisTab({
     onChaptersChange, setAppError, triggerAnalysis,
   ]);
 
-  // Pull phrases from videoflow's chapters sidecar when a project
-  // changes. The KPI count + Phrases sub-tab need to populate even
-  // when the trigger effect skips reanalysis (project already has
-  // chapters on disk). Phrases live merged inside chapters.json, so
-  // we key off mediaPath (not funscript path).
+  // Pull stanzas (videoflow) + phrases (FF) sidecars when a project
+  // changes. KPIs + sub-tabs need to populate even when the trigger
+  // effect skips reanalysis (project already has sidecars on disk).
+  // Stanzas live merged inside chapters.json (key on mediaPath);
+  // phrases live in <funscript stem>.phrases.json (key on funscript path).
   useEffect(() => {
     if (!projectExists || isSample) return;
-    if (!isTauri()) { setPhrases(null); return; }
+    if (!isTauri()) { setStanzas(null); setPhrases(null); return; }
+    setStanzas(null);
     setPhrases(null);
-    if (!project?.mediaPath) return;
-    loadAutoChapterStanzas(project.mediaPath)
-      .then((arr) => { if (Array.isArray(arr)) setPhrases(arr); })
-      .catch(() => { /* sidecar absent — empty state on the sub-tab */ });
+    if (project?.mediaPath) {
+      loadAutoChapterStanzas(project.mediaPath)
+        .then((arr) => { if (Array.isArray(arr)) setStanzas(arr); })
+        .catch(() => { /* sidecar absent — empty state on the sub-tab */ });
+    }
+    if (project?.path) {
+      loadPhrasesSidecar(project.path)
+        .then((arr) => { if (Array.isArray(arr)) setPhrases(arr); })
+        .catch(() => { /* sidecar absent — empty state on the sub-tab */ });
+    }
   }, [project?.path, project?.mediaPath, projectExists, isSample]);
 
   // ── Empty state ─────────────────────────────────────────────────
@@ -499,7 +529,7 @@ export default function AnalysisTab({
 
         <KpiStrip
           status={kpiStatus}
-          kpis={buildKpis(project, trackBeats, phrasesCount)}
+          kpis={buildKpis(project, trackBeats, stanzasCount, phrasesCount)}
         />
 
         <CategoryPanel
@@ -509,6 +539,7 @@ export default function AnalysisTab({
           categories={FF_ANALYSIS_CATEGORIES}
           data={{
             chapters: chapterList,
+            stanzas,
             phrases,
             actions: project?.actions,
             trackBeats,
@@ -756,18 +787,13 @@ function derivePitchSource(project, trackSpectrogram, trackPeaks) {
   return null;
 }
 
-function buildKpis(project, trackBeats, phrasesCount) {
+function buildKpis(project, trackBeats, stanzasCount, phrasesCount) {
   const beatsCount = trackBeats?.beatsMs?.length ?? null;
   const downbeatsCount = trackBeats?.downbeatsMs?.length ?? null;
   // BPM comes back from librosa as a float (e.g. 117.11346). Round to
   // one decimal so the cell reads as music tempo, not a raw analysis
   // output. `null` stays as null so the cell renders its placeholder.
   const bpm = trackBeats?.bpm != null ? Math.round(trackBeats.bpm * 10) / 10 : null;
-  // Phrases count comes from the freshly-loaded phrases sidecar; fall
-  // back to project.phrases (rarely set today). The Phrases SUB-TAB is
-  // intentionally filtered out via FF_ANALYSIS_CATEGORIES — this cell
-  // is informational only.
-  const phrases = phrasesCount ?? project?.phrases ?? null;
   return [
     {
       label: 'Chapters', icon: 'layers',
@@ -777,9 +803,18 @@ function buildKpis(project, trackBeats, phrasesCount) {
         : 'duration',
     },
     {
+      // Videoflow's rhythmic-units classifier (STEADY / TEASE / EDGING /
+      // BREAK). The Stanzas sub-tab owns the per-mode story.
+      label: 'Stanzas', icon: 'activity',
+      value: stanzasCount,
+      subtitle: 'rhythmic units',
+    },
+    {
+      // FF editing-phrases from cmd_assess (Step 1 + Step 2 character
+      // drift). The Phrases sub-tab owns the per-phrase + evidence story.
       label: 'Phrases', icon: 'list',
-      value: phrases,
-      subtitle: 'across all chapters',
+      value: phrasesCount,
+      subtitle: 'editing units',
     },
     {
       label: 'Beats', icon: 'activity',
