@@ -321,6 +321,14 @@ def cmd_assess(args):
     # the json_mode stdout payload reflects the split too.
     result.phrases = _split_long_phrases(result.phrases, args.funscript)
 
+    # Step 2 — character-drift splitter. Subdivides on top/bottom/density drift,
+    # adds beat-aligned drone-grid in long uniform stretches, snaps interior
+    # boundaries to downbeats when the beats sidecar is available. Validated
+    # against VictoriaOaks + IPZZ-125 dogfood; user-confirmed direction.
+    from assessment.character_drift import split_phrases as _drift_split
+    downbeats_ms = _load_downbeats_for_phrases(args.funscript)
+    result.phrases = _drift_split(result.phrases, analyzer._actions, downbeats_ms=downbeats_ms)
+
     # Phrase slice sidecar — `<stem>.forge/<stem>.phrases.json`. Read by
     # PhrasesTab / PatternsTab. chapter_id comes from the runtime
     # attribute set during per-chapter detection above (None when the
@@ -2315,6 +2323,25 @@ def _load_chapters_for_phrases(funscript_path: str) -> list:
     except (OSError, ValueError):
         return []
     return data.get("chapters") or []
+
+
+def _load_downbeats_for_phrases(funscript_path: str) -> list:
+    """Read downbeats (ms) from the beats sidecar. Returns [] when missing — the
+    character-drift splitter falls back to even time-ticks for drone-grid."""
+    try:
+        from videoflow.sidecar import forge_dir
+    except ImportError:
+        return []
+    stem = Path(funscript_path).stem
+    beats_path = forge_dir(funscript_path) / f"{stem}.beats.json"
+    if not beats_path.exists():
+        return []
+    try:
+        with open(beats_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return []
+    return data.get("downbeats_ms") or []
 
 
 def _write_phrases_slice_sidecar(funscript_path: str, result) -> Optional[Path]:
