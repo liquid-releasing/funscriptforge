@@ -298,7 +298,15 @@ def cmd_assess(args):
             ]
             if not ch_actions:
                 continue
-            sub = FunscriptAnalyzer(config=_build_analyzer_config(args))
+            # Per-chapter sub-analyzer: disable auto-scale. auto_scale targets
+            # ~15 phrases per analyzed span; applied per-chapter that forces
+            # 15 phrases into every chapter, over-splitting uniform regions
+            # and burying real transitions under widened tolerances. Fixed
+            # defaults (min_phrase_duration_ms=20_000, amplitude_tolerance=0.30)
+            # split on actual character drift instead of a target count.
+            sub_config = _build_analyzer_config(args)
+            sub_config.auto_scale_phrases = False
+            sub = FunscriptAnalyzer(config=sub_config)
             sub._actions = ch_actions
             sub._source_file = analyzer._source_file
             sub_result = sub.analyze(progress_callback=None)
