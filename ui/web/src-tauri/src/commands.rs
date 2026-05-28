@@ -1205,6 +1205,10 @@ pub async fn analyze_phrases(
     app: AppHandle,
     funscript_path: String,
 ) -> Result<Vec<PhraseRecord>, String> {
+    // No --no-save: writing the phrases sidecar means AnalysisTab can
+    // read the same data via loadPhrasesSidecar. Without the write, the
+    // Structure cards' "phrases" column shows em-dash because the
+    // sidecar that bucket logic depends on doesn't exist.
     let stdout = run_cli_with_progress(
         &app,
         "ff:progress",
@@ -1213,7 +1217,6 @@ pub async fn analyze_phrases(
             &funscript_path,
             "--format",
             "json",
-            "--no-save",
         ],
     )
     .await?;

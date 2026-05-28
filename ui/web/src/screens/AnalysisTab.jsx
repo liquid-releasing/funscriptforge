@@ -51,6 +51,7 @@ import {
 } from 'forgemoment';
 import {
   analyzeChaptersWithVideoflow,
+  analyzePhrases,
   isTauri,
   loadAutoChapterStanzas,
   loadPhrasesSidecar,
@@ -150,17 +151,26 @@ export default function AnalysisTab({
       if (Array.isArray(newChapters)) onChaptersChange?.(newChapters);
       refreshAudioSidecars?.();
       // Pull stanzas from videoflow's merged chapters sidecar (modes:
-      // tease / steady / edging / break / fast / slow) AND phrases from
-      // FF's editing-phrase sidecar. Both feed their KPI cells + sub-tabs.
+      // tease / steady / edging / break / fast / slow). Phrases come
+      // from FF's cmd_assess (the analyzePhrases call below) — both
+      // surface in their KPI cells + sub-tabs.
       if (project.mediaPath) {
         loadAutoChapterStanzas(project.mediaPath)
           .then((arr) => { if (Array.isArray(arr)) setStanzas(arr); })
           .catch(() => { /* sidecar absent — render empty state */ });
       }
+      // Bundle phrase analysis into the analyze flow so the phrases
+      // sidecar exists for downstream tabs (Structure / Stanzas /
+      // Phrases sub-tabs all consume it). Same pattern as ChaptersTab's
+      // Analyze button; AnalysisTab's auto-trigger was missing it.
+      // Cheap on real-length funscripts (~seconds); deduped at forge.js
+      // so parallel calls from multiple surfaces merge to one Rust run.
       if (project.path) {
-        loadPhrasesSidecar(project.path)
+        analyzePhrases(project.path)
           .then((arr) => { if (Array.isArray(arr)) setPhrases(arr); })
-          .catch(() => { /* sidecar absent — render empty state */ });
+          .catch((err) => {
+            console.warn('AnalysisTab: bundled analyzePhrases failed (non-fatal)', err);
+          });
       }
     } catch (err) {
       console.error('AnalysisTab: analyze failed', err);
