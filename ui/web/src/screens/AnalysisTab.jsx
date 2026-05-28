@@ -37,7 +37,7 @@
 // (`src/analysis/AnalysisPanels.jsx`). ForgeGen + Beatflo compose the
 // same primitives against their own orchestrators.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChapterStripPanel,
   ScriptOverviewRow,
@@ -100,7 +100,12 @@ export default function AnalysisTab({
   const [pipelineError, setPipelineError] = useState(null);
   // Tracks whether we've kicked off analysis this mount. Prevents a
   // double-fire when React StrictMode double-invokes effects in dev.
+  // The state version drives UI (button disabled, etc); the ref version
+  // closes the race window between an effect-fire and React's state
+  // commit so a second sync effect-fire sees the in-flight flag too.
+  // forge.js also dedups at the entry point — this ref is belt-and-suspenders.
   const [analyzing, setAnalyzing] = useState(false);
+  const analyzingRef = useRef(false);
 
   const projectExists = !!project?.path;
   const isSample = String(project?.path ?? '').startsWith('sample://');
@@ -118,6 +123,8 @@ export default function AnalysisTab({
     if (!projectExists || isSample) return;
     if (!isTauri()) return;
     if (!hasMedia) return; // no media → audio panels stay empty
+    if (analyzingRef.current) return; // hard-dedup (state-check race resilient)
+    analyzingRef.current = true;
     setPipelineError(null);
     setStages({}); // clear stale stage status from a previous run
     setAnalyzing(true);
@@ -149,6 +156,7 @@ export default function AnalysisTab({
       // they switch tabs before the analysis finishes.
       setAppError?.(`Analysis failed: ${message}`);
     } finally {
+      analyzingRef.current = false;
       setAnalyzing(false);
       setBusy?.(null);
     }

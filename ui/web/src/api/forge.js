@@ -42,6 +42,32 @@ async function call(command, args, mockFn) {
 }
 
 // ---------------------------------------------------------------------------
+// In-flight Promise dedup — when multiple component-level call-sites fire the
+// same expensive command in parallel (StrictMode double-invoke, race between
+// AnalysisTab auto-trigger and ChaptersTab manual click, etc), merge them into
+// ONE backend invocation. Each consumer awaits the same shared Promise.
+//
+// This implements the rule in [[feedback-dedup-at-entry-point]]: dedup MUST
+// live at the forge.js wrapper, not at consumers. Component-level guards
+// (state flags, refs) have race windows React can't close; only a shared
+// in-flight map at the entry point provides hard guarantees.
+//
+// Caller-supplied key disambiguates concurrent calls for DIFFERENT targets
+// (e.g. two open projects). Same key + in-flight = shared Promise.
+// ---------------------------------------------------------------------------
+
+const _inflight = new Map();
+
+function dedupedCall(key, runFn) {
+  const existing = _inflight.get(key);
+  if (existing) return existing;
+  const p = (async () => runFn())()
+    .finally(() => { _inflight.delete(key); });
+  _inflight.set(key, p);
+  return p;
+}
+
+// ---------------------------------------------------------------------------
 // API surface — one wrapper per Tauri command. Mirrors forgegen/api/videoflow.
 // As real commands land in src-tauri/src/commands.rs, add wrappers here.
 // ---------------------------------------------------------------------------
@@ -129,12 +155,21 @@ export function createChaptersSidecar(funscriptPath, n) {
  *  adjacent — surface that to the user so they know to attach a file.
  *
  *  Cost: this is slow (librosa loads the whole audio, runs RMS / spectral-flux
- *  analysis, then clusters). Caller should show a progress indicator. */
+ *  analysis, then clusters). Caller should show a progress indicator.
+ *
+ *  Deduped at the forge.js layer per [[feedback-dedup-at-entry-point]] —
+ *  parallel calls for the same funscriptPath (e.g. AnalysisTab auto-trigger
+ *  racing ChaptersTab manual click, or StrictMode double-invoke) merge into
+ *  one Rust invocation. The orphan-process incident 2026-05-28 came from
+ *  not having this guard. */
 export function analyzeChaptersWithVideoflow(funscriptPath, targetMinutes, mediaPath) {
-  return call(
-    'analyze_chapters_with_videoflow',
-    { funscriptPath, targetMinutes, mediaPath },
-    () => Promise.resolve(synthMockChapters(754000, 6)),
+  return dedupedCall(
+    `analyze_chapters_with_videoflow::${funscriptPath}`,
+    () => call(
+      'analyze_chapters_with_videoflow',
+      { funscriptPath, targetMinutes, mediaPath },
+      () => Promise.resolve(synthMockChapters(754000, 6)),
+    ),
   );
 }
 
@@ -157,12 +192,18 @@ export function wipeForgeDir(mediaPath) {
  *  pattern_label }. Cost: full FunscriptAnalyzer pipeline (a few seconds
  *  on real-length funscripts) — caller should drive the footer busy
  *  indicator while it's in flight. Browser-mode mock returns empty so
- *  the empty state renders. */
+ *  the empty state renders.
+ *
+ *  Deduped at the forge.js layer — both ChaptersTab (bundled analyze) and
+ *  PhrasesTab (lazy hydrate) can call this concurrently for the same path. */
 export function analyzePhrases(funscriptPath) {
-  return call(
-    'analyze_phrases',
-    { funscriptPath },
-    () => Promise.resolve([]),
+  return dedupedCall(
+    `analyze_phrases::${funscriptPath}`,
+    () => call(
+      'analyze_phrases',
+      { funscriptPath },
+      () => Promise.resolve([]),
+    ),
   );
 }
 
