@@ -687,6 +687,21 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       newChapters,
       [newChapters[newActiveIdx - 1], newChapters[newActiveIdx]],
     );
+    // Chapters changed → phrase boundaries are stale (Step 1 is chapter-
+    // scoped; chapter_ids on existing phrases now point at the wrong slot).
+    // Re-run + refresh the per-path phrases cache so PhrasesTab / AnalysisTab
+    // see fresh data without a manual reload.
+    if (setPhrasesByPath) {
+      analyzePhrases(project.path)
+        .then((phraseRows) => {
+          if (!Array.isArray(phraseRows)) return;
+          setPhrasesByPath((prev) => ({
+            ...prev,
+            [project.path]: { phrases: phraseRows, loaded: true },
+          }));
+        })
+        .catch((err) => console.warn('ChaptersTab: phrase re-run after split failed', err));
+    }
   };
 
   // Join the band's chapter with its previous / next neighbour. Pure
@@ -716,6 +731,18 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     setIsPlaying(false);
     onChaptersChange?.(newChapters);
     await persistAndExtract(newChapters, [newChapters[newActiveIdx]]);
+    // Chapters changed → phrase boundaries stale; re-run + refresh cache.
+    if (setPhrasesByPath) {
+      analyzePhrases(project.path)
+        .then((phraseRows) => {
+          if (!Array.isArray(phraseRows)) return;
+          setPhrasesByPath((prev) => ({
+            ...prev,
+            [project.path]: { phrases: phraseRows, loaded: true },
+          }));
+        })
+        .catch((err) => console.warn('ChaptersTab: phrase re-run after join failed', err));
+    }
   };
 
   return (
