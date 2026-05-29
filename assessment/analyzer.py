@@ -149,10 +149,19 @@ class FunscriptAnalyzer:
         phrase_dicts = [p.to_dict() for p in phrases]
         cycle_dicts  = [c.to_dict() for c in sum([p.cycles for p in patterns], [])]
         annotate_phrases(phrase_dicts, cycle_dicts, self._actions)
+
+        # Structural shape labeling — the "patterns" lens. Adds
+        # "shape_label" (steady/pulse/three_one/tide/drift/burst/taper/
+        # swell) to each phrase. Parallel vocabulary to tags; PhrasesTab
+        # uses tags, PatternsTab uses shape_label.
+        from assessment.shape_labeler import label_phrases
+        label_phrases(phrase_dicts, self._actions)
+
         # Store annotations back onto the Phrase objects
         for phrase, pd in zip(phrases, phrase_dicts):
-            phrase.tags    = pd.get("tags", [])
-            phrase.metrics = pd.get("metrics", {})
+            phrase.tags        = pd.get("tags", [])
+            phrase.metrics     = pd.get("metrics", {})
+            phrase.shape_label = pd.get("shape_label", "steady")
 
         return AssessmentResult(
             source_file=self._source_file,

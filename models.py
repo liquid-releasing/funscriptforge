@@ -117,6 +117,7 @@ class Phrase:
     oscillation_count: int = 0  # total up-down pairs across all cycles in this phrase
     tags: list = field(default_factory=list)    # behavioral tag keys, e.g. ["stingy", "drone"]
     metrics: dict = field(default_factory=dict)  # computed metrics from classifier
+    shape_label: str = "steady"  # structural shape (the patterns lens): steady/pulse/three_one/tide/drift/burst/taper/swell
 
     @property
     def start_ts(self) -> str:
@@ -146,6 +147,7 @@ class Phrase:
             "description": self.description,
             "tags": list(self.tags),
             "metrics": dict(self.metrics),
+            "shape_label": self.shape_label,
         }
 
     @classmethod
@@ -157,6 +159,7 @@ class Phrase:
         )
         obj.tags    = d.get("tags", [])
         obj.metrics = d.get("metrics", {})
+        obj.shape_label = d.get("shape_label", "steady")
         return obj
 
 

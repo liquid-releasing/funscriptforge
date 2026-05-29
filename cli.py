@@ -329,6 +329,22 @@ def cmd_assess(args):
     downbeats_ms = _load_downbeats_for_phrases(args.funscript)
     result.phrases = _drift_split(result.phrases, analyzer._actions, downbeats_ms=downbeats_ms)
 
+    # Re-classify post-split phrases. _split_long_phrases and _drift_split
+    # create NEW phrase boundaries; without this pass, tags / metrics /
+    # shape_label reflect the pre-split phrases, which yields wrong
+    # labels (e.g. a "swell" that was split into two equal halves would
+    # carry "swell" on both halves even though each half is now
+    # structurally different from the original).
+    from assessment.classifier import annotate_phrases as _annotate_phrases
+    from assessment.shape_labeler import label_phrases as _label_phrases
+    _post_split_phrase_dicts = [p.to_dict() for p in result.phrases]
+    _annotate_phrases(_post_split_phrase_dicts, [], analyzer._actions)
+    _label_phrases(_post_split_phrase_dicts, analyzer._actions)
+    for _phrase, _pd in zip(result.phrases, _post_split_phrase_dicts):
+        _phrase.tags        = _pd.get("tags", [])
+        _phrase.metrics     = _pd.get("metrics", {})
+        _phrase.shape_label = _pd.get("shape_label", "steady")
+
     # Phrase slice sidecar — `<stem>.forge/<stem>.phrases.json`. Read by
     # PhrasesTab / PatternsTab. chapter_id comes from the runtime
     # attribute set during per-chapter detection above (None when the
@@ -2367,15 +2383,17 @@ def _write_phrases_slice_sidecar(funscript_path: str, result) -> Optional[Path]:
     for i, p in enumerate(result.phrases):
         at_ms = int(p.start_ms)
         end_ms = int(p.end_ms)
-        # label is reserved for the shape_labeler when it returns (see
-        # project-held-shape-labeler). Hardcode "steady" in v1; behavioral
-        # info lives in metrics.tags.
+        # label is the structural shape from assessment/shape_labeler.py
+        # (one of steady/pulse/three_one/tide/drift/burst/taper/swell) —
+        # the "patterns" lens consumed by PatternsTab. Behavior tags
+        # (the "phrases" lens — stingy/drone/etc.) live in metrics.tags
+        # as a parallel vocabulary on the same phrase.
         slice_rec = {
             "id":         f"ph_{i}",
             "kind":       "phrase",
             "at_ms":      at_ms,
             "end_ms":     end_ms,
-            "label":      "steady",
+            "label":      getattr(p, "shape_label", "steady"),
             "chapter_id": getattr(p, "chapter_id", None),
             "metrics": {
                 "bpm":           float(p.bpm or 0.0),
