@@ -38,10 +38,10 @@ import {
 } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { useChapterClip } from '../hooks/useChapterClip.js';
-import { TRANSFORMS, BEHAVIOR_TAGS, FORGEGEN_MODES } from '../data/transforms.js';
+import { BEHAVIOR_TAGS, FORGEGEN_MODES } from '../data/transforms.js';
+import { useTransformCatalog } from '../data/useTransformCatalog.js';
+import { useTransformPreview } from '../api/useTransformPreview.js';
 import { readStanzas } from '../api/forge.js';
-
-function clamp01_100(v) { return Math.max(0, Math.min(100, v)); }
 
 function sliceForStanza(actions, stanza) {
   if (!actions || !stanza) return { acts: [], dur: 0 };
@@ -53,23 +53,11 @@ function sliceForStanza(actions, stanza) {
   return { acts, dur: Math.max(1, e - s) };
 }
 
-function previewActions(actions, transformId, params) {
-  if (!actions || actions.length === 0) return actions;
-  if (transformId === 'amplitude_scale') {
-    const s = Number(params?.scale ?? 1);
-    return actions.map((a) => ({ at: a.at, pos: clamp01_100(50 + (a.pos - 50) * s) }));
-  }
-  if (transformId === 'recenter') {
-    // Mirror pattern_catalog _Recenter: shift so the midpoint ((min+max)/2)
-    // lands on the target center. Param id is `center` — the old code read
-    // a nonexistent `offset` so the preview never moved.
-    const target = Number(params?.center ?? 50);
-    let lo = Infinity, hi = -Infinity;
-    for (const a of actions) { if (a.pos < lo) lo = a.pos; if (a.pos > hi) hi = a.pos; }
-    const offset = target - (lo + hi) / 2;
-    return actions.map((a) => ({ at: a.at, pos: clamp01_100(a.pos + offset) }));
-  }
-  return actions;
+// Re-base backend-preview actions (ABSOLUTE time) to a stanza-local 0
+// origin so they render on the same 0-based chart as the original slice.
+function rebasePreview(previewAbs, stanza) {
+  if (!previewAbs) return null;
+  return previewAbs.map((a) => ({ at: a.at - stanza.at_ms, pos: a.pos }));
 }
 
 function findMode(id) {
@@ -143,6 +131,9 @@ export default function StanzasTab({
   const [category, setCategory] = useState('behavior');
   const [transformId, setTransformId] = useState(null);
   const [params, setParams] = useState({});
+  // Authoritative transform catalog from the Python backend (param keys
+  // match what apply expects — no hand-port drift). Static fallback in dev.
+  const transformCatalog = useTransformCatalog();
 
   // Resolve activeChapter above the empty-state early returns so the
   // hooks below can be called unconditionally (Rules of Hooks). Falls
@@ -289,6 +280,21 @@ export default function StanzasTab({
       title: m ? `${m.label} · click to focus` : 'Click to focus',
     };
   }), [stanzasInScope, editedStanzaIdSet, mode, focusStanzaId]);
+
+  // Backend before/after preview for the edit set. previewBySpanStart is
+  // keyed by stanza.at_ms (== span start_ms); rows re-base to 0.
+  const previewSpans = useMemo(
+    () => stanzasInScope
+      .filter((s) => editedStanzaIdSet.has(s.id))
+      .map((s) => ({ start_ms: s.at_ms, end_ms: s.end_ms })),
+    [stanzasInScope, editedStanzaIdSet],
+  );
+  const { previewBySpanStart, previewLoading } = useTransformPreview({
+    funscriptPath: project?.path,
+    transformId,
+    params,
+    spans: previewSpans,
+  });
 
   // Focused stanza derived from id + scope. Mirrors PhrasesTab.
   const focusedStanza = useMemo(
@@ -634,8 +640,8 @@ export default function StanzasTab({
             })()}
             actions={actions}
             editedStanzaIds={editedStanzaIds}
-            transformId={transformId}
-            params={params}
+            previewBySpanStart={previewBySpanStart}
+            previewLoading={previewLoading}
             onToggleStanza={toggleEditedStanza}
             loaded={stanzasLoaded}
             allStanzasCount={allStanzas.length}
@@ -643,7 +649,7 @@ export default function StanzasTab({
         </div>
 
         <TransformPanel
-          transforms={TRANSFORMS}
+          transforms={transformCatalog}
           tags={BEHAVIOR_TAGS}
           category={category}
           onCategoryChange={setCategory}
@@ -907,8 +913,8 @@ function StanzaRail({ stanzas, focusStanzaId, onSelect }) {
 // ─── Stanza table ────────────────────────────────────────────────────
 
 function StanzaTable({
-  stanzas, actions, editedStanzaIds, transformId, params, onToggleStanza,
-  loaded = true, allStanzasCount = 0,
+  stanzas, actions, editedStanzaIds, previewBySpanStart, previewLoading,
+  onToggleStanza, loaded = true, allStanzasCount = 0,
 }) {
   if (!stanzas || stanzas.length === 0) {
     return (
@@ -943,6 +949,7 @@ function StanzaTable({
       }}>
         <SectionEyebrow>Per-stanza preview · before / after</SectionEyebrow>
         <div className="mono" style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+          {previewLoading ? 'updating… · ' : ''}
           {stanzas.length} stanza{stanzas.length === 1 ? '' : 's'}
         </div>
       </div>
@@ -969,8 +976,7 @@ function StanzaTable({
             key={s.id}
             stanza={s}
             actions={actions}
-            transformId={transformId}
-            params={params}
+            previewAbs={previewBySpanStart?.get(s.at_ms) ?? null}
             isEdited={editedStanzaIds.includes(s.id)}
             onToggle={() => onToggleStanza(s.id)}
           />
@@ -980,14 +986,15 @@ function StanzaTable({
   );
 }
 
-function StanzaRow({ stanza, actions, transformId, params, isEdited, onToggle }) {
+function StanzaRow({ stanza, actions, previewAbs, isEdited, onToggle }) {
   const { acts: originalActs, dur } = useMemo(
     () => sliceForStanza(actions, stanza),
     [actions, stanza],
   );
+  // Backend preview re-based to 0; falls back to original until it lands.
   const previewActs = useMemo(
-    () => (isEdited ? previewActions(originalActs, transformId, params) : originalActs),
-    [originalActs, transformId, params, isEdited],
+    () => (isEdited ? (rebasePreview(previewAbs, stanza) ?? originalActs) : originalActs),
+    [isEdited, previewAbs, stanza, originalActs],
   );
 
   const [view, setView] = useState({ start: 0, end: dur });

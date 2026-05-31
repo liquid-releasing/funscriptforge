@@ -45,15 +45,15 @@ import {
 } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { useChapterClip } from '../hooks/useChapterClip.js';
-import { TRANSFORMS, BEHAVIOR_TAGS } from '../data/transforms.js';
+import { BEHAVIOR_TAGS } from '../data/transforms.js';
+import { useTransformCatalog } from '../data/useTransformCatalog.js';
+import { useTransformPreview } from '../api/useTransformPreview.js';
 import { SHAPE_TYPES, findShape } from '../data/shapes.js';
 import { analyzePhrases, loadPhrasesSidecar } from '../api/forge.js';
 
 // Phrase helpers — duplicated from PatternsTab today. When a third
 // consumer appears, lift these into `src/lib/phrase_slice.js` or
 // similar. For now duplication beats premature abstraction.
-function clamp01_100(v) { return Math.max(0, Math.min(100, v)); }
-
 function sliceForPhrase(actions, phrase) {
   if (!actions || !phrase) return { acts: [], dur: 0 };
   const s = phrase.at_ms;
@@ -64,25 +64,13 @@ function sliceForPhrase(actions, phrase) {
   return { acts, dur: Math.max(1, e - s) };
 }
 
-function previewActions(actions, transformId, params) {
-  if (!actions || actions.length === 0) return actions;
-  if (transformId === 'amplitude_scale') {
-    const s = Number(params?.scale ?? 1);
-    return actions.map((a) => ({ at: a.at, pos: clamp01_100(50 + (a.pos - 50) * s) }));
-  }
-  if (transformId === 'recenter') {
-    // Mirror pattern_catalog _Recenter: shift so the phrase midpoint
-    // ((min+max)/2) lands on the target center; amplitude unchanged.
-    // (Param id is `center` — the old code read a nonexistent `offset`
-    // and added 0, so the preview was a silent no-op.)
-    const target = Number(params?.center ?? 50);
-    let lo = Infinity, hi = -Infinity;
-    for (const a of actions) { if (a.pos < lo) lo = a.pos; if (a.pos > hi) hi = a.pos; }
-    const offset = target - (lo + hi) / 2;
-    return actions.map((a) => ({ at: a.at, pos: clamp01_100(a.pos + offset) }));
-  }
-  // Other transforms: pass-through preview until CLI integration lands.
-  return actions;
+// Re-base backend-preview actions (ABSOLUTE time) to a phrase-local 0
+// origin so they render on the same 0-based chart as the original slice.
+// Structural transforms may change the count/timing — that rides through
+// unchanged because we map every returned action, not a position lookup.
+function rebasePreview(previewAbs, phrase) {
+  if (!previewAbs) return null;
+  return previewAbs.map((a) => ({ at: a.at - phrase.at_ms, pos: a.pos }));
 }
 
 function findTag(id) {
@@ -180,6 +168,9 @@ export default function PhrasesTab({
   const [category, setCategory] = useState('behavior');
   const [transformId, setTransformId] = useState(null);
   const [params, setParams] = useState({});
+  // Authoritative transform catalog from the Python backend (param keys
+  // match what apply expects — no hand-port drift). Static fallback in dev.
+  const transformCatalog = useTransformCatalog();
 
   // Resolve the active chapter + phrasesInScope above the empty-state
   // early returns so the hooks below can be called unconditionally
@@ -427,6 +418,22 @@ export default function PhrasesTab({
         : (tag ? `${tag.label} · click to focus` : 'Click to focus'),
     };
   }), [phrasesInScope, editedPhraseIdSet, mode, focusPhraseId, shapeByAtMs]);
+
+  // Backend before/after preview for the edit set. Spans = the affected
+  // phrases' absolute windows; the hook debounces + drops stale responses.
+  // previewBySpanStart is keyed by phrase.at_ms (== span start_ms).
+  const previewSpans = useMemo(
+    () => phrasesInScope
+      .filter((p) => editedPhraseIdSet.has(p.id))
+      .map((p) => ({ start_ms: p.at_ms, end_ms: p.end_ms })),
+    [phrasesInScope, editedPhraseIdSet],
+  );
+  const { previewBySpanStart, previewLoading } = useTransformPreview({
+    funscriptPath: project?.path,
+    transformId,
+    params,
+    spans: previewSpans,
+  });
 
   // Empty / no-project states. Below ALL hooks so the hook count is
   // stable across renders (Rules of Hooks). When no project is open
@@ -775,21 +782,20 @@ export default function PhrasesTab({
             }
             actions={actions}
             editedPhraseIds={editedPhraseIds}
-            transformId={transformId}
-            params={params}
+            previewBySpanStart={previewBySpanStart}
+            previewLoading={previewLoading}
             onTogglePhrase={toggleEditedPhrase}
             loaded={phrasesLoaded}
           />
         </div>
 
-        {/* Right — TransformPanel. Real mount (was a placeholder). The
-            transform catalog comes from the same TRANSFORMS source as
-            the Patterns tab; param editor surfaces accordingly. The
-            "N affected" chip in the panel's header reads from
-            editedPhraseIds — empty today, will populate when phrase
-            data is wired. */}
+        {/* Right — TransformPanel. Catalog is sourced from the Python
+            backend via useTransformCatalog (authoritative param ids);
+            param editor surfaces accordingly. The "N affected" chip
+            reads editedPhraseIds. Preview rides on useTransformPreview;
+            Apply on transform_apply (Accept chain). */}
         <TransformPanel
-          transforms={TRANSFORMS}
+          transforms={transformCatalog}
           tags={BEHAVIOR_TAGS}
           category={category}
           onCategoryChange={setCategory}
@@ -1057,8 +1063,8 @@ function PhraseRail({ phrases, focusPhraseId, onSelect }) {
 // preview chart, edit toggle. Empty state when phrase data isn't wired
 // yet (`cli.py assess` pending).
 function PhraseTable({
-  phrases, actions, editedPhraseIds, transformId, params, onTogglePhrase,
-  loaded = true,
+  phrases, actions, editedPhraseIds, previewBySpanStart, previewLoading,
+  onTogglePhrase, loaded = true,
 }) {
   if (!phrases || phrases.length === 0) {
     return (
@@ -1087,6 +1093,7 @@ function PhraseTable({
       }}>
         <SectionEyebrow>Per-phrase preview · before / after</SectionEyebrow>
         <div className="mono" style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+          {previewLoading ? 'updating… · ' : ''}
           {phrases.length} phrase{phrases.length === 1 ? '' : 's'}
         </div>
       </div>
@@ -1113,8 +1120,7 @@ function PhraseTable({
             key={p.id}
             phrase={p}
             actions={actions}
-            transformId={transformId}
-            params={params}
+            previewAbs={previewBySpanStart?.get(p.at_ms) ?? null}
             isEdited={editedPhraseIds.includes(p.id)}
             onToggle={() => onTogglePhrase(p.id)}
           />
@@ -1124,14 +1130,16 @@ function PhraseTable({
   );
 }
 
-function PhraseRow({ phrase, actions, transformId, params, isEdited, onToggle }) {
+function PhraseRow({ phrase, actions, previewAbs, isEdited, onToggle }) {
   const { acts: originalActs, dur } = useMemo(
     () => sliceForPhrase(actions, phrase),
     [actions, phrase],
   );
+  // Preview is the backend result re-based to 0. Until it arrives (or when
+  // skipped) the preview chart shows the original, so it never goes blank.
   const previewActs = useMemo(
-    () => (isEdited ? previewActions(originalActs, transformId, params) : originalActs),
-    [originalActs, transformId, params, isEdited],
+    () => (isEdited ? (rebasePreview(previewAbs, phrase) ?? originalActs) : originalActs),
+    [isEdited, previewAbs, phrase, originalActs],
   );
 
   const [view, setView] = useState({ start: 0, end: dur });
