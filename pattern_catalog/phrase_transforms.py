@@ -1471,18 +1471,18 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
         _Tame(
             key="tame",
             name="Tame",
-            description="Cap runaway BPM to a playable ceiling by dropping over-fast strokes, then humanize for device-aware feel. Fixes 600/1200-BPM bursts.",
+            description="Gentle corrective: only thins strokes that exceed the BPM ceiling, then lightly humanizes. No amplitude reshaping — a light touch, not a sledgehammer like the expressive tones. Does nothing to already-playable content.",
             structural=True,
             params={
                 "max_bpm": TransformParam(
                     label="Max BPM", type="int", default=360,
                     min_val=60, max_val=450, step=5,
-                    help="Ceiling for stroke rate. Strokes faster than this are thinned out. 360 ≈ estim (FOC) limit; lower for strokers.",
+                    help="Ceiling for stroke rate. Only strokes FASTER than this are thinned — normal content passes through untouched. 360 ≈ estim (FOC) limit; lower for strokers.",
                 ),
                 "groove": TransformParam(
-                    label="Groove", type="float", default=0.35,
+                    label="Groove", type="float", default=0.2,
                     min_val=0.0, max_val=1.0, step=0.05,
-                    help="Humanize — adds velocity variation to monotone sections (needs ~60s+ of motion to bite). 0 = off. 0.35 ≈ natural.",
+                    help="Light humanize — subtle velocity variation in monotone sections (needs ~60s+ to bite). 0 = off. 0.2 = gentle; 0.35 ≈ natural.",
                 ),
             },
         ),
