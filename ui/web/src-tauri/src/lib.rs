@@ -32,6 +32,7 @@ pub fn run() {
             commands::list_transforms,
             commands::transform_preview,
             commands::transform_apply,
+            commands::transform_apply_actions,
             commands::attach_media,
             commands::analyze_audio_peaks,
             commands::load_audio_peaks,

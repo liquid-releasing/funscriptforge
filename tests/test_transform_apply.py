@@ -41,10 +41,11 @@ def _sine_funscript(path, dur_ms=30000, step_ms=50):
 
 
 def _args(funscript, spans, transform, preview=True, param=None,
-          params_json=None, output=None):
+          params_json=None, output=None, emit_actions=False):
     return Namespace(
         funscript=funscript, spans=spans, transform=transform,
-        preview=preview, param=param, params_json=params_json, output=output,
+        preview=preview, emit_actions=emit_actions, param=param,
+        params_json=params_json, output=output,
     )
 
 
@@ -102,6 +103,44 @@ class TransformApplyBridge(unittest.TestCase):
                 for a in data["actions"]:
                     self.assertGreaterEqual(a["pos"], 0)
                     self.assertLessEqual(a["pos"], 100)
+
+    # --- emit-actions: full merged list for the editor's roll-forward -----
+    def test_every_transform_emits_merged_actions(self):
+        # The Apply path: emit the full merged action list (no file write).
+        # Must equal what the file-write path would persist — same merge.
+        orig_len = len(json.load(open(self.fs))["actions"])
+        for key in sorted(TRANSFORM_CATALOG):
+            with self.subTest(transform=key):
+                res = _run(_args(self.fs, self.spans_path, key,
+                                 preview=False, emit_actions=True))
+                self.assertEqual(res["transform"], key)
+                self.assertNotIn("spans", res)
+                acts = res["actions"]
+                self.assertGreater(len(acts), 0)
+                for a in acts:
+                    self.assertGreaterEqual(a["pos"], 0)
+                    self.assertLessEqual(a["pos"], 100)
+                # Non-structural transforms preserve the action count; the
+                # merge only rewrites positions inside the spans.
+                if not TRANSFORM_CATALOG[key].structural:
+                    self.assertEqual(len(acts), orig_len)
+                # Out-of-span actions are untouched (merge is span-local).
+                before_span = [a for a in acts if a["at"] < 5000]
+                orig_before = [a for a in json.load(open(self.fs))["actions"]
+                               if a["at"] < 5000]
+                self.assertEqual(before_span, orig_before)
+
+    def test_emit_actions_matches_file_write(self):
+        # Roll-forward (emit) and chain-write (file) must be byte-identical so
+        # session state never diverges from a later persisted funscript.
+        key = "amplitude_scale"
+        out = os.path.join(self.tmp, "match.funscript")
+        _run(_args(self.fs, self.spans_path, key, preview=False, output=out,
+                   param=["scale=0.7"]))
+        emitted = _run(_args(self.fs, self.spans_path, key, preview=False,
+                             emit_actions=True, param=["scale=0.7"]))
+        written = json.load(open(out))["actions"]
+        self.assertEqual(emitted["actions"], written)
 
     # --- structural transforms may change action count in-span ------------
     def test_structural_retime_changes_count(self):

@@ -41,7 +41,7 @@ import { useChapterClip } from '../hooks/useChapterClip.js';
 import { BEHAVIOR_TAGS, FORGEGEN_MODES } from '../data/transforms.js';
 import { useTransformCatalog } from '../data/useTransformCatalog.js';
 import { useTransformPreview } from '../api/useTransformPreview.js';
-import { readStanzas } from '../api/forge.js';
+import { readStanzas, transformApplyActions } from '../api/forge.js';
 
 function sliceForStanza(actions, stanza) {
   if (!actions || !stanza) return { acts: [], dur: 0 };
@@ -77,6 +77,11 @@ export default function StanzasTab({
   setAppError,
   stanzasByPath = {},
   setStanzasByPath = () => {},
+  // In-memory roll-forward of the working funscript. Apply patches the
+  // transformed action list into App state (same path ChaptersTab's
+  // "Accept tone" uses) so charts reflect the result immediately; disk
+  // persistence rides the later chain-write.
+  onActionsPatch = () => {},
   // Full-track audio sidecars (peaks / spectrogram / beats). Drive the
   // MediaViewer's Audio + Spectro modes — same shape ChaptersTab,
   // PhrasesTab, and PatternsTab consume.
@@ -295,6 +300,32 @@ export default function StanzasTab({
     params,
     spans: previewSpans,
   });
+
+  // Apply — roll the transform forward into the working funscript. Backend
+  // re-runs the same merge preview shows (Python owns it → identical to a
+  // later chain-write) and returns the full merged action list; we patch it
+  // into App state and reset the edit selection so the panel returns to a
+  // clean browsing state (the applied "after" is now the baseline). Disk
+  // persistence rides the chain step. Mirrors PhrasesTab.handleApply.
+  const handleApply = async () => {
+    if (!project?.path || !transformId || previewSpans.length === 0) return;
+    setBusy?.(true);
+    try {
+      const res = await transformApplyActions(
+        project.path, transformId, params, previewSpans,
+      );
+      if (res && Array.isArray(res.actions)) {
+        onActionsPatch(res.actions);
+        setEditedStanzaIds([]);
+        setTransformId(null);
+        setParams({});
+      }
+    } catch (e) {
+      setAppError?.(`Could not apply transform: ${e?.message ?? e}`);
+    } finally {
+      setBusy?.(false);
+    }
+  };
 
   // Focused stanza derived from id + scope. Mirrors PhrasesTab.
   const focusedStanza = useMemo(
@@ -660,7 +691,7 @@ export default function StanzasTab({
           affected={editedStanzaIds.length}
           applyLabel="Apply"
           cancelLabel="Cancel"
-          onApply={() => console.log('Stanzas/apply', { stanzaIds: editedStanzaIds, transformId, params })}
+          onApply={handleApply}
           onCancel={() => { setTransformId(null); setParams({}); }}
         />
       </div>

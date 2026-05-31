@@ -49,7 +49,7 @@ import { BEHAVIOR_TAGS } from '../data/transforms.js';
 import { useTransformCatalog } from '../data/useTransformCatalog.js';
 import { useTransformPreview } from '../api/useTransformPreview.js';
 import { SHAPE_TYPES, findShape } from '../data/shapes.js';
-import { analyzePhrases, loadPhrasesSidecar } from '../api/forge.js';
+import { analyzePhrases, loadPhrasesSidecar, transformApplyActions } from '../api/forge.js';
 
 // Phrase helpers — duplicated from PatternsTab today. When a third
 // consumer appears, lift these into `src/lib/phrase_slice.js` or
@@ -94,6 +94,11 @@ export default function PhrasesTab({
   // Keyed by funscript path.
   phrasesByPath = {},
   setPhrasesByPath = () => {},
+  // In-memory roll-forward of the working funscript. Apply patches the
+  // transformed action list into App state (same path ChaptersTab's
+  // "Accept tone" uses) so charts reflect the result immediately; disk
+  // persistence rides the later chain-write.
+  onActionsPatch = () => {},
   // Full-track audio sidecars (peaks / spectrogram / beats). Drive the
   // MediaViewer's Audio + Spectro modes — same shape ChaptersTab and
   // PatternsTab consume.
@@ -434,6 +439,33 @@ export default function PhrasesTab({
     params,
     spans: previewSpans,
   });
+
+  // Apply — roll the transform forward into the working funscript. The
+  // backend re-runs the same merge preview shows (Python owns it, so the
+  // result is identical to a later chain-write), returning the full merged
+  // action list; we patch it into App state and reset the edit selection so
+  // the panel returns to a clean browsing state (the applied "after" is now
+  // the baseline; keeping the selection would preview transform-on-already-
+  // transformed). Persistence to disk rides the chain step.
+  const handleApply = async () => {
+    if (!project?.path || !transformId || previewSpans.length === 0) return;
+    setBusy?.(true);
+    try {
+      const res = await transformApplyActions(
+        project.path, transformId, params, previewSpans,
+      );
+      if (res && Array.isArray(res.actions)) {
+        onActionsPatch(res.actions);
+        setEditedPhraseIds([]);
+        setTransformId(null);
+        setParams({});
+      }
+    } catch (e) {
+      setAppError?.(`Could not apply transform: ${e?.message ?? e}`);
+    } finally {
+      setBusy?.(false);
+    }
+  };
 
   // Empty / no-project states. Below ALL hooks so the hook count is
   // stable across renders (Rules of Hooks). When no project is open
@@ -793,7 +825,9 @@ export default function PhrasesTab({
             backend via useTransformCatalog (authoritative param ids);
             param editor surfaces accordingly. The "N affected" chip
             reads editedPhraseIds. Preview rides on useTransformPreview;
-            Apply on transform_apply (Accept chain). */}
+            Apply rolls the merged result into the working funscript via
+            transform_apply_actions + onActionsPatch (disk persistence
+            rides the chain step). */}
         <TransformPanel
           transforms={transformCatalog}
           tags={BEHAVIOR_TAGS}
@@ -806,7 +840,7 @@ export default function PhrasesTab({
           affected={editedPhraseIds.length}
           applyLabel="Apply"
           cancelLabel="Cancel"
-          onApply={() => console.log('Phrases/apply', { phraseIds: editedPhraseIds, transformId, params })}
+          onApply={handleApply}
           onCancel={() => { setTransformId(null); setParams({}); }}
         />
       </div>

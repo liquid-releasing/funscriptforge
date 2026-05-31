@@ -867,7 +867,17 @@ def cmd_transform_apply(args):
         sys.stdout.write("\n")
         return
 
-    data["actions"] = [_clamp_action(a) for a in result]
+    merged = [_clamp_action(a) for a in result]
+
+    if args.emit_actions:
+        # Full merged list for the editor's in-memory roll-forward (Apply).
+        # Same merge as the file-write path below — just returned instead of
+        # written, so session state and a later chain-write stay identical.
+        json.dump({"transform": key, "params": params, "actions": merged}, sys.stdout)
+        sys.stdout.write("\n")
+        return
+
+    data["actions"] = merged
     output = args.output or _default_path(args.funscript, "_transform_applied.funscript")
     with open(output, "w") as f:
         json.dump(data, f, indent=2)
@@ -1915,7 +1925,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_ta.add_argument(
         "--preview", action="store_true",
-        help="Emit transformed actions as JSON to stdout; write nothing.",
+        help="Emit per-span transformed actions as JSON to stdout; write nothing.",
+    )
+    p_ta.add_argument(
+        "--emit-actions", action="store_true",
+        help="Emit the full MERGED action list as JSON {transform, params, "
+             "actions} to stdout; write nothing. The editor's in-memory "
+             "roll-forward path (Apply) — keeps Python the single source of "
+             "the span-merge instead of re-deriving it in JS.",
     )
     p_ta.add_argument(
         "--output", metavar="FILE",

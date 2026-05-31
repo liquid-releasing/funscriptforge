@@ -777,6 +777,7 @@ export default function App() {
             setAppError={setAppError}
             phrasesByPath={phrasesByPath}
             setPhrasesByPath={setPhrasesByPath}
+            onActionsPatch={handleActionsPatch}
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}
@@ -789,6 +790,7 @@ export default function App() {
             setAppError={setAppError}
             stanzasByPath={stanzasByPath}
             setStanzasByPath={setStanzasByPath}
+            onActionsPatch={handleActionsPatch}
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}

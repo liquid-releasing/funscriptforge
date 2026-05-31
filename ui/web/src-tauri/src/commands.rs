@@ -1529,6 +1529,33 @@ pub async fn transform_preview(
         .map_err(|e| format!("could not parse transform-apply preview: {}", e))
 }
 
+/// Apply ONE transform over a set of spans and return the full MERGED
+/// action list — {transform, params, actions:[{at,pos}]}. Writes nothing.
+/// This is the editor's in-memory roll-forward (Apply button): the result
+/// is patched into the session's working funscript so charts reflect it,
+/// while disk persistence rides the later chain-write. Python owns the
+/// span-merge so session state and a future chain-write stay identical.
+#[tauri::command]
+pub async fn transform_apply_actions(
+    funscript_path: String,
+    transform: String,
+    params: serde_json::Value,
+    spans: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let spans_s = serde_json::to_string(&spans).map_err(|e| format!("serialize spans: {}", e))?;
+    let params_s = serde_json::to_string(&params).map_err(|e| format!("serialize params: {}", e))?;
+    let stdout = run_cli(&[
+        "transform-apply", &funscript_path,
+        "--transform", &transform,
+        "--spans", &spans_s,
+        "--params-json", &params_s,
+        "--emit-actions",
+    ])
+    .await?;
+    serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse transform-apply actions: {}", e))
+}
+
 /// Apply ONE transform over a set of spans and write the merged funscript
 /// to `output_path`. Returns {saved, transform, spans}.
 #[tauri::command]

@@ -334,6 +334,19 @@ export function transformPreview(funscriptPath, transform, params, spans) {
   );
 }
 
+/** Apply one transform over `spans` and return the full MERGED action list
+ *  — {transform, params, actions:[{at,pos}]}. Writes nothing. The editor's
+ *  in-memory roll-forward (Apply): patch `actions` into the working
+ *  funscript so charts reflect it; disk persistence rides the chain step.
+ *  Python owns the merge so session state matches a later chain-write. */
+export function transformApplyActions(funscriptPath, transform, params, spans) {
+  return call(
+    'transform_apply_actions',
+    { funscriptPath, transform, params, spans },
+    () => Promise.resolve(null),
+  );
+}
+
 /** Apply one transform over `spans`, writing the merged funscript to
  *  `outputPath`. Returns {saved, transform, spans}. */
 export function transformApply(funscriptPath, transform, params, spans, outputPath) {
