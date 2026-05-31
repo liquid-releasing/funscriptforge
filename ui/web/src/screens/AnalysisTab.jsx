@@ -260,8 +260,15 @@ export default function AnalysisTab({
           // both chapters_sidecar (in case a prior run produced phrases)
           // and sidecar done events — cheap JSON read off disk.
           if ((leaf === 'chapters_sidecar' || leaf === 'sidecar') && project?.path) {
+            // loadPhrasesSidecar returns `{ version, slices }` — an OBJECT,
+            // NOT an array (unlike analyzePhrases, which returns a bare
+            // array). Extract `.slices` or the count silently stays "—".
+            // PhrasesTab consumes the same shape; keep them in sync.
             loadPhrasesSidecar(project.path)
-              .then((arr) => { if (Array.isArray(arr)) setPhrases(arr); })
+              .then((data) => {
+                const slices = Array.isArray(data?.slices) ? data.slices : null;
+                if (slices) setPhrases(slices);
+              })
               .catch(() => { /* phrases sidecar absent — leave null */ });
           }
         }
