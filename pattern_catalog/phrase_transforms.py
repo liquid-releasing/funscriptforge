@@ -698,6 +698,62 @@ class _HalveTempo(PhraseTransform):
         return new_actions
 
 
+class _Tame(PhraseTransform):
+    """Tame runaway BPM to a playable ceiling, then humanize for feel.
+
+    Two independent stages, matching the two sliders:
+
+    1. **Cycle-drop to the Max-BPM ceiling.** "BPM" in this app is a pure
+       *timing* metric — ``60000/(2·dt)`` between consecutive actions — so
+       the ONLY way to lower a 1200-BPM burst is to widen the interval, i.e.
+       drop actions closer together than ``min_dt = 60000/(2·max_bpm)``.
+       (Velocity/position clamping leaves timing untouched and so never
+       moves the BPM number; see [[project tame]] / device_specs.) This is
+       the same greedy drop DeviceTab's `applyBpmClamp` uses, ported to
+       Python so the catalog transform and the tab agree.
+    2. **Groove (humanize).** Adds velocity variation to monotone sections
+       via `forge.device_specs.apply_humanize` (target CV = groove). 0 = off.
+       Needs ≥~60s windows to bite, so on a short phrase slice it cleanly
+       no-ops; on a chapter-scoped slice it's the device-aware "feel" pass.
+
+    Structural — drops actions / changes count, so callers replace the slice.
+    """
+
+    def _transform(self, actions, p):
+        if len(actions) < 2:
+            return actions
+
+        max_bpm = max(1.0, float(p["max_bpm"]))
+        groove = float(p["groove"])
+
+        # Stage 1 — greedy cycle-drop. Keep the first action, then keep each
+        # later action only once it's at least min_dt past the last kept one.
+        min_dt = 60_000.0 / (2.0 * max_bpm)
+        kept = [actions[0]]
+        for a in actions[1:]:
+            if a["at"] - kept[-1]["at"] >= min_dt:
+                kept.append(a)
+        # Preserve the slice's end anchor (avoids a gap at the merge seam).
+        # If the final action lands closer than min_dt to the last kept one,
+        # REPLACE that penultimate rather than append — otherwise the anchor
+        # would re-introduce an over-ceiling gap right at the end (the very
+        # thing we're capping). Replacing keeps the min-gap invariant because
+        # the gap into the replaced slot only grows.
+        if kept[-1]["at"] != actions[-1]["at"]:
+            if actions[-1]["at"] - kept[-1]["at"] >= min_dt or len(kept) < 2:
+                kept.append(actions[-1])
+            else:
+                kept[-1] = actions[-1]
+
+        # Stage 2 — groove. Lazy import to avoid any load-order coupling with
+        # forge.device_specs (mirrors apply_device_awareness's inline imports).
+        if groove > 0 and len(kept) >= 2:
+            from forge.device_specs import apply_humanize
+            kept, _ = apply_humanize(kept, target_cv=groove)
+
+        return kept
+
+
 # ------------------------------------------------------------------
 # Replacement transforms
 # ------------------------------------------------------------------
@@ -1412,6 +1468,24 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
                 ),
             },
         ),
+        _Tame(
+            key="tame",
+            name="Tame",
+            description="Cap runaway BPM to a playable ceiling by dropping over-fast strokes, then humanize for device-aware feel. Fixes 600/1200-BPM bursts.",
+            structural=True,
+            params={
+                "max_bpm": TransformParam(
+                    label="Max BPM", type="int", default=360,
+                    min_val=60, max_val=450, step=5,
+                    help="Ceiling for stroke rate. Strokes faster than this are thinned out. 360 ≈ estim (FOC) limit; lower for strokers.",
+                ),
+                "groove": TransformParam(
+                    label="Groove", type="float", default=0.35,
+                    min_val=0.0, max_val=1.0, step=0.05,
+                    help="Humanize — adds velocity variation to monotone sections (needs ~60s+ of motion to bite). 0 = off. 0.35 ≈ natural.",
+                ),
+            },
+        ),
         # Timing / Sync
         _Nudge(
             key="nudge",
@@ -1590,7 +1664,7 @@ TRANSFORM_ORDER: List[str] = [
     # Break / Recovery
     "break", "waiting",
     # Performance / Device Realism
-    "performance",
+    "performance", "tame",
     # Rhythmic Patterns
     "beat_accent", "three_one",
     # Timing / Sync
