@@ -1075,6 +1075,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tame
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#nudge" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1828,6 +1839,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#tame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tame
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#nudge" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1919,7 +1941,7 @@
 
 
 <h1 id="transforms">Transforms<a class="headerlink" href="#transforms" title="Permanent link">&para;</a></h1>
-<p>FunscriptForge has 23 built-in transforms plus 6 tone transforms. Each one is designed to fix a specific kind of problem. Some are subtle finishing tools; others make substantial changes.</p>
+<p>FunscriptForge has 26 built-in transforms plus 6 tone transforms. Each one is designed to fix a specific kind of problem. Some are subtle finishing tools; others make substantial changes.</p>
 <hr />
 <h2 id="how-to-choose">How to choose<a class="headerlink" href="#how-to-choose" title="Permanent link">&para;</a></h2>
 <p>Start with the behavioral tag. Each tag has a primary recommendation:</p>
@@ -1966,6 +1988,7 @@
 </tbody>
 </table>
 <p>See <a href="../../reference/behavioral-tags/">Behavioral Tags →</a> for the full recommendation list per tag.</p>
+<p>Separately, if a section is genuinely <strong>too fast for your device to play cleanly</strong> — runaway bursts well above a comfortable stroke rate — reach for <strong><a href="#tame">Tame</a></strong> (under Structural transforms). This is rare; most content never needs it.</p>
 <hr />
 <h2 id="non-structural-transforms">Non-structural transforms<a class="headerlink" href="#non-structural-transforms" title="Permanent link">&para;</a></h2>
 <p>These transforms preserve all action timestamps — they only change position values.</p>
@@ -2414,6 +2437,37 @@
 </tbody>
 </table>
 <p><strong>Use it when:</strong> A phrase is frantic (BPM &gt; 200) or simply too fast to feel meaningful. Halve Tempo is the primary fix for frantic phrases.</p>
+<hr />
+<h3 id="tame">Tame<a class="headerlink" href="#tame" title="Permanent link">&para;</a></h3>
+<p><strong>What it does:</strong> Caps stroke rate at a maximum BPM by thinning out only the strokes that exceed the ceiling, then applies a light <em>groove</em> (subtle velocity variation) so the result doesn't feel mechanical. It does <strong>not</strong> reshape stroke depth or reposition anything — content already under the ceiling passes through completely untouched.</p>
+<p>Think of Tame as the gentle, surgical member of the family: where most transforms actively reshape a phrase, Tame only steps in when motion is faster than a device can comfortably play, and leaves everything else alone.</p>
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Range</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Max BPM</td>
+<td>360</td>
+<td>60 – 450</td>
+<td>Stroke-rate ceiling. Only strokes faster than this are thinned. 360 ≈ an e-stim (FOC) limit; lower it for mechanical strokers (e.g. ~120 for The Handy).</td>
+</tr>
+<tr>
+<td>Groove</td>
+<td>0.2</td>
+<td>0.0 – 1.0</td>
+<td>Light humanize — adds subtle velocity variation to long monotone runs (needs ~60s+ of motion to take effect). 0 = off. 0.2 = gentle; 0.35 ≈ natural.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Use it when:</strong> A section is genuinely too fast for your device to play cleanly — runaway bursts well above a comfortable stroke rate. This is an <strong>edge case</strong>: the vast majority of scripts are already well within device limits and will see no change from Tame. For phrases that are merely <em>frantic</em> but still playable, use <strong>Halve Tempo</strong> instead.</p>
+<p><strong>Tame vs. the tones:</strong> Tame shares the <em>spirit</em> of the <a href="../tone/">tones</a> — a named, slider-driven adjustment — but it sits on the opposite end. The six expressive tones (Tender → Dominant) reshape the <strong>feel</strong> of your whole script. Tame changes nothing about the feel; it's a <strong>corrective</strong> that quietly removes speed a device can't play, applied per phrase or stanza from the transform picker rather than globally from the Tone tab.</p>
 <hr />
 <h3 id="nudge">Nudge<a class="headerlink" href="#nudge" title="Permanent link">&para;</a></h3>
 <p><strong>What it does:</strong> Shifts the phrase forward or backward in time by a specified number of milliseconds. The gap created at the leading edge is filled with a short transition from the preceding position.</p>
