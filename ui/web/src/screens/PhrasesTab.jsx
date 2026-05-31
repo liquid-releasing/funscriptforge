@@ -46,7 +46,8 @@ import {
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { useChapterClip } from '../hooks/useChapterClip.js';
 import { TRANSFORMS, BEHAVIOR_TAGS } from '../data/transforms.js';
-import { analyzePhrases } from '../api/forge.js';
+import { SHAPE_TYPES, findShape } from '../data/shapes.js';
+import { analyzePhrases, loadPhrasesSidecar } from '../api/forge.js';
 
 // Phrase helpers — duplicated from PatternsTab today. When a third
 // consumer appears, lift these into `src/lib/phrase_slice.js` or
@@ -108,7 +109,16 @@ export default function PhrasesTab({
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
   const [activeChapterId, setActiveChapterId] = useState(chapters[0]?.id ?? null);
-  const [mode, setMode] = useState('tag');   // 'tag' | 'single'
+  const [mode, setMode] = useState('tag');   // 'tag' | 'shape' | 'single'
+
+  // Shape lens (2026-05-31): groups phrases by `shape_label` (the 8
+  // structural shapes from shape_labeler.py — Steady/Swell/Taper/Pulse/
+  // Burst/Gallop/Tide/Drift). PhrasesTab's records (from analyzePhrases)
+  // don't carry shape_label, so we read it from the `.phrases.json`
+  // sidecar and key it by at_ms (both come from the same assess pass, so
+  // phrase starts match exactly). Map: at_ms → shape id.
+  const [shapeByAtMs, setShapeByAtMs] = useState(() => new Map());
+  const [activeShapeId, setActiveShapeId] = useState(null);
 
   // Mirrors PatternsTab's edit-set model. The TransformPanel's "affected"
   // chip and the per-row Edit/Skip toggle key off this list. Default is
@@ -295,6 +305,24 @@ export default function PhrasesTab({
     return () => { cancelled = true; };
   }, [project?.path]);
 
+  // Load shape_label per phrase from the `.phrases.json` sidecar (the
+  // analyzePhrases records lack it). Keyed by at_ms. Independent of the
+  // assess cache; cheap JSON read. Empty map until it lands.
+  useEffect(() => {
+    if (!project?.path) { setShapeByAtMs(new Map()); return undefined; }
+    let cancelled = false;
+    loadPhrasesSidecar(project.path)
+      .then((data) => {
+        if (cancelled) return;
+        const m = new Map();
+        const slices = Array.isArray(data?.slices) ? data.slices : [];
+        for (const s of slices) if (s?.label) m.set(s.at_ms, s.label);
+        setShapeByAtMs(m);
+      })
+      .catch(() => { if (!cancelled) setShapeByAtMs(new Map()); });
+    return () => { cancelled = true; };
+  }, [project?.path]);
+
   // Tag counts inside the active chapter — drives the rail's count
   // badges and which tag is "first present" when picking a default.
   const tagsWithCount = useMemo(() => {
@@ -309,6 +337,20 @@ export default function PhrasesTab({
     [tagsWithCount],
   );
 
+  // Shape counts inside the active chapter — same shape as tagsWithCount.
+  const shapesWithCount = useMemo(() => {
+    const counts = {};
+    for (const p of phrasesInScope) {
+      const sid = shapeByAtMs.get(p.at_ms);
+      if (sid) counts[sid] = (counts[sid] || 0) + 1;
+    }
+    return SHAPE_TYPES.map((s) => ({ ...s, count: counts[s.id] || 0 }));
+  }, [phrasesInScope, shapeByAtMs]);
+  const firstPresentShapeId = useMemo(
+    () => shapesWithCount.find((s) => s.count > 0)?.id ?? null,
+    [shapesWithCount],
+  );
+
   // Whenever the scope changes (chapter switch or phrases hydrate),
   // reset the rail selection. Tag mode → first tag with phrases.
   // Single mode → first phrase in scope. These defaults are what the
@@ -316,6 +358,9 @@ export default function PhrasesTab({
   useEffect(() => {
     setActiveTagId(firstPresentTagId);
   }, [firstPresentTagId, activeChapterId]);
+  useEffect(() => {
+    setActiveShapeId(firstPresentShapeId);
+  }, [firstPresentShapeId, activeChapterId]);
   useEffect(() => {
     if (mode === 'single' && phrasesInScope.length > 0) {
       const stillExists = focusPhraseId && phrasesInScope.some((p) => p.id === focusPhraseId);
@@ -330,12 +375,14 @@ export default function PhrasesTab({
   useEffect(() => {
     if (mode === 'tag') {
       setEditedPhraseIds(phrasesInScope.filter((p) => p.tag === activeTagId).map((p) => p.id));
+    } else if (mode === 'shape') {
+      setEditedPhraseIds(phrasesInScope.filter((p) => shapeByAtMs.get(p.at_ms) === activeShapeId).map((p) => p.id));
     } else if (mode === 'single') {
       setEditedPhraseIds(focusPhraseId ? [focusPhraseId] : []);
     } else {
       setEditedPhraseIds(phrasesInScope.map((p) => p.id));
     }
-  }, [mode, activeTagId, focusPhraseId, phrasesInScope]);
+  }, [mode, activeTagId, activeShapeId, focusPhraseId, phrasesInScope, shapeByAtMs]);
 
   // Project phrases into ChapterContextStrip's band vocabulary. Targets
   // (edit set) get a brighter tag-color wash + bold border; skipped get
@@ -344,7 +391,9 @@ export default function PhrasesTab({
   const editedPhraseIdSet = useMemo(() => new Set(editedPhraseIds), [editedPhraseIds]);
   const phraseBands = useMemo(() => phrasesInScope.map((p, i) => {
     const tag = BEHAVIOR_TAGS.find((t) => t.id === p.tag);
-    const color = tag?.color || 'var(--text-dim)';
+    const sid = shapeByAtMs.get(p.at_ms);
+    const shape = (mode === 'shape' && sid) ? findShape(sid) : null;
+    const color = (mode === 'shape' ? shape?.color : tag?.color) || 'var(--text-dim)';
     const isTarget = editedPhraseIdSet.has(p.id);
     const isFocused = mode === 'single' && focusPhraseId === p.id;
     return {
@@ -360,9 +409,11 @@ export default function PhrasesTab({
       label: `P${p.number ?? i + 1}`,
       labelBg: isTarget ? color : 'rgba(0,0,0,0.45)',
       labelColor: isTarget ? '#0e1117' : 'rgba(255,255,255,0.7)',
-      title: tag ? `${tag.label} · click to focus` : 'Click to focus',
+      title: mode === 'shape'
+        ? (shape ? `${shape.label} · click to focus` : 'Click to focus')
+        : (tag ? `${tag.label} · click to focus` : 'Click to focus'),
     };
-  }), [phrasesInScope, editedPhraseIdSet, mode, focusPhraseId]);
+  }), [phrasesInScope, editedPhraseIdSet, mode, focusPhraseId, shapeByAtMs]);
 
   // Empty / no-project states. Below ALL hooks so the hook count is
   // stable across renders (Rules of Hooks). When no project is open
@@ -650,10 +701,12 @@ export default function PhrasesTab({
             flexShrink: 0,
           }}>
             <Segmented value={mode} onChange={setMode} options={[
-              // Pattern mode removed 2026-05-16 PM — Patterns has its own
-              // tab now. What stays here is phrase-scoped: tag-bucket
-              // transforms vs single-phrase detail.
-              { value: 'tag',     label: 'Behavior tag' },
+              // Lenses = group-bys on the SAME phrases (memory
+              // project_patterns_phrases_one_segmentation): Behavior tag
+              // (what's wrong), Shape (structural form, was the Patterns/
+              // Motifs tab — 2026-05-31), Single phrase (surgical).
+              { value: 'tag',     label: 'Behavior' },
+              { value: 'shape',   label: 'Shape' },
               { value: 'single',  label: 'Single phrase' },
             ]} />
           </div>
@@ -663,6 +716,12 @@ export default function PhrasesTab({
                 tagsWithCount={tagsWithCount}
                 activeTagId={activeTagId}
                 onSelect={setActiveTagId}
+              />
+            ) : mode === 'shape' ? (
+              <ShapeRail
+                shapesWithCount={shapesWithCount}
+                activeShapeId={activeShapeId}
+                onSelect={setActiveShapeId}
               />
             ) : (
               <PhraseRail
@@ -688,6 +747,8 @@ export default function PhrasesTab({
             phrases={
               mode === 'tag'
                 ? phrasesInScope.filter((p) => p.tag === activeTagId)
+                : mode === 'shape'
+                ? phrasesInScope.filter((p) => shapeByAtMs.get(p.at_ms) === activeShapeId)
                 : (focusPhraseId
                   ? phrasesInScope.filter((p) => p.id === focusPhraseId)
                   : [])
@@ -852,6 +913,60 @@ function BehaviorTagRail({ tagsWithCount, activeTagId, onSelect }) {
               padding: '2px 7px', borderRadius: 4, minWidth: 24, textAlign: 'center',
             }}>
               {t.count}
+            </span>
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
+function ShapeRail({ shapesWithCount, activeShapeId, onSelect }) {
+  return (
+    <>
+      <RailSectionHeader>Shapes</RailSectionHeader>
+      {shapesWithCount.map((s) => {
+        const sel = s.id === activeShapeId;
+        const has = s.count > 0;
+        return (
+          <button
+            key={s.id}
+            onClick={() => has && onSelect(s.id)}
+            disabled={!has}
+            title={has ? `${s.label} — ${s.count} phrase${s.count === 1 ? '' : 's'}` : `${s.label} — none in this chapter`}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+              padding: '9px 14px', border: 'none',
+              borderLeft: `3px solid ${sel ? s.color : 'transparent'}`,
+              background: sel ? 'var(--surface-2)' : 'transparent',
+              color: has ? 'var(--text)' : 'var(--text-dim)',
+              cursor: has ? 'pointer' : 'not-allowed',
+              opacity: has ? 1 : 0.45,
+              textAlign: 'left', fontFamily: 'inherit',
+            }}
+          >
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: s.color, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 12.5, fontWeight: sel ? 700 : 500,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {s.label}
+              </div>
+              <div style={{
+                fontSize: 10.5, color: 'var(--text-dim)', marginTop: 1, lineHeight: 1.3,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {s.desc}
+              </div>
+            </div>
+            <span className="mono" style={{
+              fontSize: 11, fontWeight: 600,
+              color: has ? 'var(--text)' : 'var(--text-dim)',
+              background: has ? 'var(--surface-2)' : 'transparent',
+              padding: '2px 7px', borderRadius: 4, minWidth: 24, textAlign: 'center',
+            }}>
+              {s.count}
             </span>
           </button>
         );

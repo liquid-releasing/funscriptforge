@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "kind": "phrase",
+  "source_file": "C:\\Users\\bruce\\Projects\\_lqr\\funscriptforge\\tests\\fixtures\\sample.funscript",
+  "slices": [
+    {
+      "id": "ph_0",
+      "kind": "phrase",
+      "at_ms": 0,
+      "end_ms": 7400,
+      "label": "steady",
+      "chapter_id": null,
+      "metrics": {
+        "bpm": 145.95,
+        "pattern_label": "up \u2192 down",
+        "cycle_count": 18,
+        "tags": [
+          "stingy"
+        ],
+        "mean_pos": 48.9,
+        "span": 80,
+        "mean_velocity": 0.4778,
+        "peak_velocity": 0.8,
+        "cv_bpm": 0.4443,
+        "duration_ms": 7400,
+        "ramp_delta": -3.1
+      }
+    }
+  ]
+}

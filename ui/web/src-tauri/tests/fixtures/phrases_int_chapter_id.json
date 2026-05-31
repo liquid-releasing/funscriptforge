@@ -1,0 +1,300 @@
+{
+  "version": 1,
+  "kind": "phrase",
+  "source_file": "C:\\Users\\bruce\\Projects\\_lqr\\funscriptforge\\test_funscript\\victoriaoaks_separated\\8.funscript",
+  "slices": [
+    {
+      "id": "ph_0",
+      "kind": "phrase",
+      "at_ms": 174,
+      "end_ms": 30818,
+      "label": "steady",
+      "chapter_id": 0,
+      "metrics": {
+        "bpm": 248.66,
+        "pattern_label": "flat \u2192 up \u2192 down",
+        "cycle_count": 127,
+        "tags": [
+          "frantic"
+        ],
+        "mean_pos": 54.3,
+        "span": 67,
+        "mean_velocity": 0.1728,
+        "peak_velocity": 0.2112,
+        "cv_bpm": 0.0,
+        "duration_ms": 30644,
+        "ramp_delta": -1.7
+      },
+      "evidence": [
+        "seed"
+      ]
+    },
+    {
+      "id": "ph_1",
+      "kind": "phrase",
+      "at_ms": 30818,
+      "end_ms": 61486,
+      "label": "steady",
+      "chapter_id": 0,
+      "metrics": {
+        "bpm": 248.47,
+        "pattern_label": "flat \u2192 up \u2192 down",
+        "cycle_count": 127,
+        "tags": [
+          "frantic"
+        ],
+        "mean_pos": 53.5,
+        "span": 61,
+        "mean_velocity": 0.1883,
+        "peak_velocity": 0.209,
+        "cv_bpm": 0.0,
+        "duration_ms": 30668,
+        "ramp_delta": 0.3
+      },
+      "evidence": [
+        "drone_grid"
+      ]
+    },
+    {
+      "id": "ph_2",
+      "kind": "phrase",
+      "at_ms": 61486,
+      "end_ms": 99892,
+      "label": "steady",
+      "chapter_id": 0,
+      "metrics": {
+        "bpm": 124.98,
+        "pattern_label": "up \u2192 down",
+        "cycle_count": 80,
+        "tags": [
+          "stingy"
+        ],
+        "mean_pos": 50.1,
+        "span": 100,
+        "mean_velocity": 0.3588,
+        "peak_velocity": 0.4057,
+        "cv_bpm": 0.0,
+        "duration_ms": 38406,
+        "ramp_delta": 1.3
+      },
+      "evidence": [
+        "snap_only"
+      ]
+    },
+    {
+      "id": "ph_3",
+      "kind": "phrase",
+      "at_ms": 99892,
+      "end_ms": 134676,
+      "label": "steady",
+      "chapter_id": 0,
+      "metrics": {
+        "bpm": 489.88,
+        "pattern_label": "up \u2192 down",
+        "cycle_count": 284,
+        "tags": [
+          "stingy",
+          "frantic"
+        ],
+        "mean_pos": 49.8,
+        "span": 100,
+        "mean_velocity": 0.3912,
+        "peak_velocity": 0.4057,
+        "cv_bpm": 0.0,
+        "duration_ms": 34784,
+        "ramp_delta": 0.7
+      },
+      "evidence": [
+        "snap_only"
+      ]
+    },
+    {
+      "id": "ph_4",
+      "kind": "phrase",
+      "at_ms": 134676,
+      "end_ms": 167323,
+      "label": "steady",
+      "chapter_id": 0,
+      "metrics": {
+        "bpm": 521.95,
+        "pattern_label": "up \u2192 down",
+        "cycle_count": 284,
+        "tags": [
+          "stingy",
+          "frantic"
+        ],
+        "mean_pos": 49.3,
+        "span": 100,
+        "mean_velocity": 0.3908,
+        "peak_velocity": 0.4057,
+        "cv_bpm": 0.0,
+        "duration_ms": 32647,
+        "ramp_delta": 0.0
+      },
+      "evidence": [
+        "drone_grid"
+      ]
+    },
+    {
+      "id": "ph_5",
+      "kind": "phrase",
+      "at_ms": 167323,
+      "end_ms": 201898,
+      "label": "steady",
+      "chapter_id": 0,
+      "metrics": {
+        "bpm": 492.84,
+        "pattern_label": "up \u2192 down",
+        "cycle_count": 284,
+        "tags": [
+          "stingy",
+          "frantic"
+        ],
+        "mean_pos": 49.1,
+        "span": 100,
+        "mean_velocity": 0.3925,
+        "peak_velocity": 0.4057,
+        "cv_bpm": 0.0,
+        "duration_ms": 34575,
+        "ramp_delta": 0.2
+      },
+      "evidence": [
+        "drone_grid"
+      ]
+    },
+    {
+      "id": "ph_6",
+      "kind": "phrase",
+      "at_ms": 201898,
+      "end_ms": 236472,
+      "label": "steady",
+      "chapter_id": 0,
+      "metrics": {
+        "bpm": 492.86,
+        "pattern_label": "up \u2192 down",
+        "cycle_count": 284,
+        "tags": [
+          "stingy",
+          "frantic"
+        ],
+        "mean_pos": 49.1,
+        "span": 100,
+        "mean_velocity": 0.3933,
+        "peak_velocity": 0.4095,
+        "cv_bpm": 0.0,
+        "duration_ms": 34574,
+        "ramp_delta": -0.0
+      },
+      "evidence": [
+        "drone_grid"
+      ]
+    },
+    {
+      "id": "ph_7",
+      "kind": "phrase",
+      "at_ms": 236472,
+      "end_ms": 271047,
+      "label": "steady",
+      "chapter_id": 0,
+      "metrics": {
+        "bpm": 492.84,
+        "pattern_label": "up \u2192 down",
+        "cycle_count": 284,
+        "tags": [
+          "stingy",
+          "frantic"
+        ],
+        "mean_pos": 49.1,
+        "span": 100,
+        "mean_velocity": 0.3926,
+        "peak_velocity": 0.4074,
+        "cv_bpm": 0.0,
+        "duration_ms": 34575,
+        "ramp_delta": 0.3
+      },
+      "evidence": [
+        "seed"
+      ]
+    },
+    {
+      "id": "ph_8",
+      "kind": "phrase",
+      "at_ms": 271047,
+      "end_ms": 305621,
+      "label": "steady",
+      "chapter_id": 0,
+      "metrics": {
+        "bpm": 492.86,
+        "pattern_label": "up \u2192 down",
+        "cycle_count": 284,
+        "tags": [
+          "stingy",
+          "frantic"
+        ],
+        "mean_pos": 49.1,
+        "span": 100,
+        "mean_velocity": 0.3931,
+        "peak_velocity": 0.4057,
+        "cv_bpm": 0.0,
+        "duration_ms": 34574,
+        "ramp_delta": -0.2
+      },
+      "evidence": [
+        "drone_grid"
+      ]
+    },
+    {
+      "id": "ph_9",
+      "kind": "phrase",
+      "at_ms": 305621,
+      "end_ms": 338292,
+      "label": "steady",
+      "chapter_id": 0,
+      "metrics": {
+        "bpm": 521.56,
+        "pattern_label": "up \u2192 down",
+        "cycle_count": 284,
+        "tags": [
+          "stingy",
+          "frantic"
+        ],
+        "mean_pos": 49.1,
+        "span": 99,
+        "mean_velocity": 0.3927,
+        "peak_velocity": 0.4057,
+        "cv_bpm": 0.0,
+        "duration_ms": 32671,
+        "ramp_delta": 0.1
+      },
+      "evidence": [
+        "drone_grid"
+      ]
+    },
+    {
+      "id": "ph_10",
+      "kind": "phrase",
+      "at_ms": 338292,
+      "end_ms": 373075,
+      "label": "steady",
+      "chapter_id": 0,
+      "metrics": {
+        "bpm": 489.89,
+        "pattern_label": "up \u2192 down",
+        "cycle_count": 284,
+        "tags": [
+          "frantic"
+        ],
+        "mean_pos": 49.9,
+        "span": 100,
+        "mean_velocity": 0.3478,
+        "peak_velocity": 0.4077,
+        "cv_bpm": 0.0,
+        "duration_ms": 34783,
+        "ramp_delta": 1.3
+      },
+      "evidence": [
+        "drone_grid"
+      ]
+    }
+  ]
+}

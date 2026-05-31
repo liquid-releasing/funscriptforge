@@ -1258,8 +1258,13 @@ struct DiskPhraseSlice {
     end_ms: u64,
     #[serde(default)]
     label: String,
+    // chapter_id's type drifted: the per-chapter phrase-detection work made
+    // the Python writer emit an integer chapter index (0, 1, …); older
+    // sidecars wrote a string or null. Accept any JSON shape so a type
+    // change in the writer can't break parsing again (Rust-mirror-drift
+    // guard). Consumers that need it can coerce client-side.
     #[serde(default)]
-    chapter_id: Option<String>,
+    chapter_id: serde_json::Value,
     #[serde(default)]
     metrics: serde_json::Value,
 }
@@ -1278,7 +1283,7 @@ pub struct PhraseSlice {
     pub at_ms: u64,
     pub end_ms: u64,
     pub label: String,
-    pub chapter_id: Option<String>,
+    pub chapter_id: serde_json::Value,
     pub metrics: serde_json::Value,
 }
 
@@ -2067,4 +2072,61 @@ pub async fn wipe_forge_dir(media_path: String) -> Result<bool, String> {
             forge.display(), e,
         ))?;
     Ok(true)
+}
+
+// ---------------------------------------------------------------------------
+// Regression: phrase sidecar parsing across chapter_id type drift.
+//
+// The phrase sidecar's `chapter_id` field changed type when per-chapter
+// phrase detection landed — the Python writer began emitting an integer
+// chapter index (0, 1, …) where older sidecars wrote a string or null.
+// The Rust reader's struct still demanded `Option<String>`, so serde
+// rejected the ENTIRE file (`invalid type: integer`), silently emptying
+// Patterns / Adv. Patterns. These tests pin the reader to every shape the
+// writer can emit, using REAL sidecars pulled from `.forge/` dirs.
+// See memory feedback_rust_mirror_drift.
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod phrases_sidecar_tests {
+    use super::DiskPhrasesSidecar;
+
+    #[test]
+    fn parses_integer_chapter_id() {
+        // Real sidecar (project "8") with the integer-`chapter_id` format
+        // that originally broke the reader.
+        let raw = include_str!("../tests/fixtures/phrases_int_chapter_id.json");
+        let parsed: DiskPhrasesSidecar =
+            serde_json::from_str(raw).expect("integer chapter_id sidecar must parse");
+        assert!(!parsed.slices.is_empty(), "expected slices");
+        let cid = &parsed.slices[0].chapter_id;
+        assert!(
+            cid.is_i64() || cid.is_u64(),
+            "chapter_id should be an integer, got {cid:?}"
+        );
+        // motion-shape rides in metrics — the field the Patterns rail groups by.
+        assert!(
+            parsed.slices[0].metrics.get("pattern_label").is_some(),
+            "metrics.pattern_label must be present"
+        );
+    }
+
+    #[test]
+    fn parses_null_chapter_id() {
+        // Old-format sidecar (chapter_id: null) must still parse.
+        let raw = include_str!("../tests/fixtures/phrases_null_chapter_id.json");
+        let parsed: DiskPhrasesSidecar =
+            serde_json::from_str(raw).expect("null chapter_id (old format) must still parse");
+        assert!(!parsed.slices.is_empty());
+        assert!(parsed.slices[0].chapter_id.is_null());
+    }
+
+    #[test]
+    fn parses_string_chapter_id() {
+        // A string chapter_id (the original declared type) must also parse,
+        // so the reader is type-agnostic in both directions.
+        let raw = r#"{"version":1,"slices":[{"id":"ph0","at_ms":0,"end_ms":1000,"label":"steady","chapter_id":"ch_1","metrics":{"pattern_label":"up -> down"}}]}"#;
+        let parsed: DiskPhrasesSidecar =
+            serde_json::from_str(raw).expect("string chapter_id must parse");
+        assert_eq!(parsed.slices[0].chapter_id.as_str(), Some("ch_1"));
+    }
 }

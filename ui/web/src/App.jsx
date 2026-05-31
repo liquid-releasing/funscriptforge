@@ -22,7 +22,6 @@ import ProjectTab from './screens/ProjectTab.jsx';
 import AnalysisTab from './screens/AnalysisTab.jsx';
 import DeviceTab from './screens/DeviceTab.jsx';
 import ChaptersTab from './screens/ChaptersTab.jsx';
-import PatternsTab from './screens/PatternsTab.jsx';
 import PhrasesTab from './screens/PhrasesTab.jsx';
 import StanzasTab from './screens/StanzasTab.jsx';
 import EventsTab from './screens/EventsTab.jsx';
@@ -43,11 +42,10 @@ const TABS = [
   // ForgeGen + Beatflo can reuse them.
   { id: 'analysis', label: 'Analysis' },
   { id: 'chapters',  label: 'Chapters' },
-  // 'patterns' (2026-05-16) sits between Chapters and Phrases. Pattern
-  // recognition is FF-local for now (no second consumer yet; move to
-  // videoflow when forgegen/forgeplayer need it). Detection is stubbed
-  // until `cli.py classify-patterns` lands.
-  { id: 'patterns',  label: 'Patterns' },
+  // Motifs + Behaviors live INSIDE the Phrases tab as left-sidebar lenses
+  // (2026-05-31) — they're groupings of the same phrases, not separate
+  // analyses. The short-lived top-level Patterns / Adv.Patterns tabs were
+  // retired here. See memory project_patterns_phrases_one_segmentation.
   // 'phrases' lineage: edit → transform → phrases (2026-05-16 PM). Both
   // patterns and phrases apply transforms, so the tab name follows the
   // unit you're operating on, not the verb. Pattern mode in the mode
@@ -560,8 +558,7 @@ export default function App() {
   const TAB_CHAIN = {
     project:  'analysis',
     analysis: 'chapters',
-    chapters: 'patterns',
-    patterns: 'phrases',
+    chapters: 'phrases',
     phrases:  'stanzas',
     stanzas:  'events',
     events:   'stim',
@@ -575,7 +572,7 @@ export default function App() {
     if (id === 'project') {
       if (!project?.path && !isLoadingProject) return 'Open a funscript before continuing.';
     }
-    if (['analysis', 'device', 'chapters', 'patterns', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
+    if (['analysis', 'device', 'chapters', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
         && !project?.path && !isLoadingProject) {
       return 'Open a funscript before continuing.';
     }
@@ -773,14 +770,6 @@ export default function App() {
             setPhrasesByPath={setPhrasesByPath}
           />
         )}
-        {tab === 'patterns' && (
-          <PatternsTab
-            project={typeof openedProject === 'object' ? openedProject : null}
-            trackPeaks={trackPeaks}
-            trackSpectrogram={trackSpectrogram}
-            trackBeats={trackBeats}
-          />
-        )}
         {tab === 'phrases' && (
           <PhrasesTab
             project={typeof openedProject === 'object' ? openedProject : null}
@@ -829,7 +818,7 @@ export default function App() {
           />
         )}
         {tab === 'catalog' && <CatalogTab />}
-        {tab !== 'library' && tab !== 'project' && tab !== 'analysis' && tab !== 'device' && tab !== 'chapters' && tab !== 'patterns' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && tab !== 'catalog' && (
+        {tab !== 'library' && tab !== 'project' && tab !== 'analysis' && tab !== 'device' && tab !== 'chapters' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && tab !== 'catalog' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>
