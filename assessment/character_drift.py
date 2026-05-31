@@ -1,14 +1,24 @@
 """Character-drift phrase splitter (Step 2 of phrase detection).
 
 Consumes Step 1 chapter-scoped phrases from `cmd_assess` and subdivides each
-phrase at points where the funscript's motion character drifts. Three signals
+phrase at points where the funscript's motion character drifts. Four signals
 fire splits:
 
-  - top_drift     — local max position (per 3s window) shifts ≥10 units
-  - bottom_drift  — local min position shifts ≥10 units
-  - density_drift — actions-per-window ratio falls below 0.65 between adjacent
-                    windows (with absolute floor) — catches "wall of red"
-                    sparsity changes that top/bottom miss
+  - top_drift      — local max position (per 3s window) shifts ≥10 units
+  - bottom_drift   — local min position shifts ≥10 units
+  - density_drift  — actions-per-window ratio falls below 0.65 between adjacent
+                     windows (with absolute floor) — catches "wall of red"
+                     sparsity changes that top/bottom miss
+  - velocity_drift — stroke SPEED flips between a sustained calm run and a
+                     sustained loud run (the blue↔orange transition the user
+                     sees in the heat ribbon). Speed is normalized to the
+                     chapter's own velocity scale (p95 of 2s-window means),
+                     exactly mirroring how the ribbon colors each stroke
+                     relative to a local max — so "loud" means fast *for this
+                     chapter*, not fast absolutely. This is the only signal
+                     keyed on velocity; top/bottom/density/amplitude all key
+                     on position or count, so a pure speed change (same stroke
+                     range, faster strokes) was previously invisible.
 
 After drift detection, each resulting sub-phrase of duration ≥45s also gets
 beat-aligned drone-grid subdivision (~35s segments snapped to nearest downbeat
@@ -43,15 +53,33 @@ TOP_DELTA = 10
 BOTTOM_DELTA = 10
 DENSITY_RATIO = 0.65
 DENSITY_MIN_DELTA = 4
-MIN_SPLITTABLE_MS = 40_000
-MIN_SUBPHRASE_MS = 20_000
+# Floors lowered 2026-05-31 for the "~10s phrase" sharpening pass: phrases as
+# short as ~20s become splittable, and sub-phrases can reach ~10s so the grain
+# can follow the velocity contour the user edits by. Was 40k / 20k.
+MIN_SPLITTABLE_MS = 18_000
+MIN_SUBPHRASE_MS = 9_000
 UNIFORM_RANGE = 12
 
-DRONE_MIN_PHRASE_MS = 45_000
-DRONE_TARGET_SEGMENT_MS = 35_000
-DRONE_DOWNBEAT_TOLERANCE_MS = 6_000
+# Drone-grid: finer (was 45k min / 35k segment) so uniform stretches get a
+# ~12s editable grid instead of ~35s — the floor of the "10 second phrases"
+# request. Velocity seams (below) are applied first; the grid only subdivides
+# whatever uniform span is left between them.
+DRONE_MIN_PHRASE_MS = 20_000
+DRONE_TARGET_SEGMENT_MS = 12_000
+DRONE_DOWNBEAT_TOLERANCE_MS = 4_000
 
 DOWNBEAT_SNAP_TOLERANCE_MS = 3_000
+
+# ── Velocity-drift (blue↔orange) ──────────────────────────────────────────
+# Stroke speed = |Δpos/Δt| in pos-units/ms (same quantity the heat ribbon
+# colors by). Per-window means are normalized to the chapter's p95 so the
+# scale matches what the user sees locally. A seam fires where a sustained
+# CALM run meets a sustained LOUD run (split on a single mid threshold with
+# run-length hysteresis — the "~5s blue then ~5s orange" rule).
+VEL_WINDOW_MS = 2_000
+VEL_HOP_MS = 1_000
+VEL_MID = 0.45          # normalized speed below = calm, above = loud
+VEL_MIN_RUN = 4         # windows a state must hold (~5s) to count as sustained
 
 
 @dataclass
@@ -145,6 +173,93 @@ def find_splits(actions, span_start_ms, span_end_ms,
     return accepted
 
 
+def _stroke_vels(actions):
+    """[(at_ms, speed)] per stroke; speed = |Δpos/Δt| in pos-units/ms."""
+    out = []
+    for i in range(1, len(actions)):
+        dt = max(1, actions[i]["at"] - actions[i - 1]["at"])
+        out.append((actions[i]["at"], abs(actions[i]["pos"] - actions[i - 1]["pos"]) / dt))
+    return out
+
+
+def _vel_window_means(svels, start_ms, end_ms):
+    """Mean stroke speed per VEL_WINDOW_MS/VEL_HOP_MS window over [start,end)."""
+    out = []
+    t = start_ms
+    while t + VEL_WINDOW_MS <= end_ms:
+        v = [s for (at, s) in svels if t <= at < t + VEL_WINDOW_MS]
+        if v:
+            out.append((t + VEL_WINDOW_MS // 2, sum(v) / len(v)))
+        t += VEL_HOP_MS
+    return out
+
+
+def chapter_vel_scale(svels, start_ms, end_ms):
+    """p95 of per-window mean speed over a chapter span — the local 'max' the
+    heat ribbon normalizes against. Returns None when there's too little data."""
+    wm = _vel_window_means(svels, start_ms, end_ms)
+    if len(wm) < VEL_MIN_RUN:
+        return None
+    vals = sorted(v for _, v in wm)
+    scale = vals[int(0.95 * (len(vals) - 1))]
+    return scale or None
+
+
+def velocity_seams(svels, span_start_ms, span_end_ms, vel_scale,
+                   downbeats_ms: Optional[list] = None) -> list:
+    """Split candidates where a sustained calm run meets a sustained loud run.
+
+    Speed is normalized to `vel_scale` (the chapter p95) and thresholded at
+    VEL_MID into calm/loud; a seam fires only when BOTH sides hold for
+    ≥VEL_MIN_RUN windows (the run-length hysteresis that ignores per-stroke
+    flicker). Fires in either direction — calm→loud (a build) and loud→calm
+    (a drop, e.g. a chapter's dead-calm tail). Each carries ['velocity_drift'].
+    """
+    if not vel_scale or span_end_ms - span_start_ms < MIN_SPLITTABLE_MS:
+        return []
+    wm = _vel_window_means(svels, span_start_ms, span_end_ms)
+    if len(wm) < VEL_MIN_RUN * 2:
+        return []
+    states = ['L' if (v / vel_scale) < VEL_MID else 'H' for _, v in wm]
+    runs = []
+    for i, s in enumerate(states):
+        if runs and runs[-1][0] == s:
+            runs[-1][2] = i
+        else:
+            runs.append([s, i, i])
+    seams = []
+    for k in range(1, len(runs)):
+        a, b = runs[k - 1], runs[k]
+        if (a[2] - a[1] + 1) >= VEL_MIN_RUN and (b[2] - b[1] + 1) >= VEL_MIN_RUN:
+            seam_ms = (wm[a[2]][0] + wm[b[1]][0]) // 2
+            if downbeats_ms:
+                best = min(downbeats_ms, key=lambda db: abs(db - seam_ms))
+                if abs(best - seam_ms) <= DOWNBEAT_SNAP_TOLERANCE_MS:
+                    seam_ms = best
+            seams.append(CharacterDriftSplit(ms=seam_ms, evidence=["velocity_drift"]))
+    return seams
+
+
+def _merge_spaced(splits, span_start_ms, span_end_ms, min_gap=MIN_SUBPHRASE_MS):
+    """Greedy left-to-right accept of merged candidates with min_gap spacing.
+    Candidates landing within min_gap of an accepted one fold their evidence
+    into it rather than producing a too-short sub-phrase."""
+    if not splits:
+        return []
+    out = []
+    last = span_start_ms
+    for s in sorted(splits, key=lambda c: c.ms):
+        if s.ms - last < min_gap or span_end_ms - s.ms < min_gap:
+            if out and abs(s.ms - out[-1].ms) < min_gap:
+                for e in s.evidence:
+                    if e not in out[-1].evidence:
+                        out[-1].evidence.append(e)
+            continue
+        out.append(CharacterDriftSplit(ms=s.ms, evidence=list(s.evidence)))
+        last = s.ms
+    return out
+
+
 def _snap_to_downbeat(ms: int, downbeats_ms: list,
                       prev_boundary_ms: int, next_boundary_ms: int,
                       tolerance_ms: int = DOWNBEAT_SNAP_TOLERANCE_MS) -> int:
@@ -204,15 +319,37 @@ def split_phrases(phrases, actions, downbeats_ms: Optional[list] = None) -> list
             out_segs.append((cuts[i], cuts[i + 1], ev))
         return out_segs
 
+    # Per-chapter velocity scale (p95 of window-mean speed over the whole
+    # chapter span) so velocity_drift normalizes the same way the heat ribbon
+    # colors strokes — locally, per chapter. Chapter span is derived from the
+    # phrases that carry each chapter_id.
+    svels = _stroke_vels(actions)
+    by_chap = {}
+    for p in phrases:
+        by_chap.setdefault(getattr(p, "chapter_id", None), []).append(p)
+    chap_scale = {}
+    for cid, plist in by_chap.items():
+        c0 = min(pp.start_ms for pp in plist)
+        c1 = max(pp.end_ms for pp in plist)
+        chap_scale[cid] = chapter_vel_scale(svels, c0, c1)
+
     out = []
     for p in phrases:
         ph_actions = [a for a in actions if p.start_ms <= a["at"] < p.end_ms]
         drift_splits = find_splits(ph_actions, p.start_ms, p.end_ms, downbeats_ms=downbeats_ms)
+        vel_splits = velocity_seams(
+            svels, p.start_ms, p.end_ms,
+            chap_scale.get(getattr(p, "chapter_id", None)),
+            downbeats_ms=downbeats_ms,
+        )
+        # Merge both signal sets under one spacing pass so a velocity seam and
+        # a position-drift seam that land close don't create a too-short stub.
+        splits = _merge_spaced(drift_splits + vel_splits, p.start_ms, p.end_ms)
 
-        if drift_splits:
+        if splits:
             cut_points = [p.start_ms]
             evidence_per_seg = [["seed"]]
-            for s in drift_splits:
+            for s in splits:
                 cut_points.append(s.ms)
                 evidence_per_seg.append(s.evidence)
             cut_points.append(p.end_ms)
