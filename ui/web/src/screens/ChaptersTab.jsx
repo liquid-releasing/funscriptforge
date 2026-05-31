@@ -223,6 +223,33 @@ function applyTone(actions, chapterStart, chapterEnd, tone, params) {
   });
 }
 
+// Tame — runaway-BPM diagnostics. "BPM" here is a pure timing metric
+// (60000/(2·dt) between consecutive actions), so a chapter's peak BPM is
+// just its tightest in-chapter gap. Chapters whose peak exceeds the Tame
+// ceiling get a warning pill prompting the Tame tone. Default 360 ≈ estim
+// (FOC) limit; see device_specs.json + [[project-tame-tone]]. Once the Tame
+// card lands, its Max-BPM slider supplies this threshold instead.
+const TAME_WARN_CEILING = 360;
+
+function peakBpmInRange(actions, startMs, endMs) {
+  if (!Array.isArray(actions)) return 0;
+  let peak = 0;
+  let prev = null;
+  for (const a of actions) {
+    if (a.at < startMs) continue;
+    if (a.at > endMs) break;
+    if (prev !== null) {
+      const dt = a.at - prev.at;
+      if (dt > 0) {
+        const bpm = 60000 / (2 * dt);
+        if (bpm > peak) peak = bpm;
+      }
+    }
+    prev = a;
+  }
+  return Math.round(peak);
+}
+
 function fmtTimeShort(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(s / 60);
@@ -458,6 +485,16 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // active falls back to a zero-length sentinel so the useMemo deps stay
   // stable when chapters is empty.
   const active = chapters.find((c) => c.id === activeId) ?? chapters[0] ?? EMPTY_CHAPTER;
+
+  // Peak BPM per chapter — drives the rail's "needs taming" warning pill.
+  // Recomputes when the working actions change (so applying Tame to a
+  // chapter clears its pill). Full-resolution actions matter here: a
+  // downsampled set would smooth away the tight gaps that ARE the spikes.
+  const peakBpmByChapter = useMemo(() => {
+    const m = {};
+    for (const c of chapters) m[c.id] = peakBpmInRange(actions, c.atMs, c.endMs);
+    return m;
+  }, [actions, chapters]);
   const toneId = tonesByChapter[active.id] ?? 'build';
   const tone = findTone(toneId);
   const toneParams = paramsByChapter[active.id]?.[tone.id] ?? {};
@@ -974,6 +1011,8 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           activeId={active.id}
           acceptedIds={acceptedChapterIds}
           onSelect={setActiveId}
+          peakBpm={peakBpmByChapter}
+          warnCeiling={TAME_WARN_CEILING}
         />
 
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1155,7 +1194,7 @@ function BeforeAfterCol({ title, subtitle, accent, children }) {
   );
 }
 
-function ChapterRail({ chapters, tones, activeId, acceptedIds, onSelect }) {
+function ChapterRail({ chapters, tones, activeId, acceptedIds, onSelect, peakBpm = {}, warnCeiling = TAME_WARN_CEILING }) {
   return (
     <div style={{
       background: 'var(--surface)', border: '1px solid var(--border)',
@@ -1172,6 +1211,8 @@ function ChapterRail({ chapters, tones, activeId, acceptedIds, onSelect }) {
         const sel = c.id === activeId;
         const t = findTone(tones[c.id]);
         const accepted = acceptedIds?.has(c.id) ?? false;
+        const peak = peakBpm[c.id] ?? 0;
+        const needsTame = peak > warnCeiling;
         return (
           <button
             key={c.id}
@@ -1213,6 +1254,18 @@ function ChapterRail({ chapters, tones, activeId, acceptedIds, onSelect }) {
                 {fmtTimeShort(c.atMs)}–{fmtTimeShort(c.endMs)}
               </div>
             </div>
+            {/* Runaway-BPM warning — chapter peak exceeds the Tame ceiling.
+                Amber pill so it reads as "needs attention," distinct from
+                the tone pill. Title carries the exact peak + the fix. */}
+            {needsTame && (
+              <Pill
+                tone="neutral"
+                title={`Peak ${peak} BPM exceeds ${warnCeiling} — apply the Tame tone`}
+                style={{ background: '#f3981222', color: '#ffb547', borderColor: '#f3981255', flexShrink: 0 }}
+              >
+                ⚠ {peak}
+              </Pill>
+            )}
             <Pill tone="neutral" style={{ background: t.color + '22', color: t.color, borderColor: t.color + '55' }}>
               {t.label}
             </Pill>
