@@ -495,10 +495,22 @@ def cmd_list_transforms(args):
     if args.format == "json":
         out = {}
         for key, spec in catalog.items():
+            # Category is the UI grouping (Tone / Behavior / Structural).
+            # Derived, not stored: structural transforms carry the flag,
+            # tone_* are the mood-arc set, everything else is behavioral.
+            # Emitted here so the UI catalog is single-source — no hand
+            # mapping that can drift from the Python truth.
+            if spec.structural:
+                category = "structural"
+            elif key.startswith("tone_"):
+                category = "tone"
+            else:
+                category = "behavior"
             entry = {
                 "name": spec.name,
                 "description": spec.description,
                 "structural": spec.structural,
+                "category": category,
                 "source": "builtin" if key in _BUILTIN_KEYS else "user",
             }
             if args.verbose:
@@ -730,6 +742,123 @@ def cmd_phrase_transform(args):
     with open(output, "w") as f:
         json.dump(data, f, indent=2)
     print(f"\nSaved: {output}")
+
+
+def _clamp_action(a):
+    """Funscript actions are int pos in [0,100] at int ms. Transforms may
+    emit floats; normalise on the way out so preview == apply exactly."""
+    return {"at": int(round(a["at"])), "pos": max(0, min(100, int(round(a["pos"]))))}
+
+
+@_cli_command
+def cmd_transform_apply(args):
+    """Apply ONE catalog transform to a set of spans — the UI bridge for
+    both preview and apply.
+
+    This is intentionally decoupled from the assessment file: the editor
+    already knows the phrase/stanza spans, so it passes them directly as
+    a JSON list of {start_ms, end_ms} (--spans FILE). One transform + one
+    param set is applied to every span (the edit set).
+
+    Param keys MUST match the authoritative catalog (`list-transforms`),
+    not the UI's historical aliases — that drift (center vs target_center,
+    every_n vs every_nth, …) is exactly what this wiring exists to kill.
+
+    --preview  → emit JSON {transform, params, spans:[{start_ms,end_ms,
+                 actions:[{at,pos}]}]} to stdout, write nothing. Structural
+                 transforms may change the action count/timing within a
+                 span, so preview returns the transformed actions per span
+                 rather than a position map.
+    apply      → merge every span back into the full action list and write
+                 the funscript to --output (or a *_transform_applied suffix).
+    """
+    key = args.transform
+    if key not in TRANSFORM_CATALOG:
+        raise ValueError(
+            f"unknown transform {key!r}. "
+            f"Available: {', '.join(sorted(TRANSFORM_CATALOG))}"
+        )
+    spec = TRANSFORM_CATALOG[key]
+
+    with open(args.funscript) as f:
+        data = json.load(f)
+    actions = data["actions"]
+
+    # --- spans (disjoint phrase/stanza windows) ---
+    with open(args.spans) as f:
+        raw_spans = json.load(f)
+    spans = []
+    for s in raw_spans:
+        start = s.get("start_ms", s.get("at_ms"))
+        end = s.get("end_ms")
+        if start is None or end is None:
+            raise ValueError(f"span missing start_ms/end_ms: {s!r}")
+        spans.append((int(start), int(end)))
+    spans.sort()
+
+    # --- params: authoritative defaults, then file, then --param ---
+    # Cast every value to the param's DECLARED type (int/float/bool).
+    # PhraseTransform.apply does no coercion and silently drops unknown
+    # keys, so a stringy "0.5" reaches the transform as text and a wrong
+    # key vanishes into the default — both invisible failures. Casting by
+    # spec type here makes the bridge robust to string-typed CLI args and
+    # to UI JSON that may arrive as strings.
+    spec_params = spec.params or {}
+
+    def _cast(pkey, value):
+        sp = spec_params.get(pkey)
+        t = getattr(sp, "type", None) if sp else None
+        try:
+            if t == "int":
+                return int(round(float(value)))
+            if t == "float":
+                return float(value)
+            if t == "bool":
+                return str(value).strip().lower() in ("1", "true", "yes", "on")
+        except (TypeError, ValueError):
+            pass
+        return _coerce(value) if isinstance(value, str) else value
+
+    params = {k: p.default for k, p in spec_params.items()}
+    if args.params_json:
+        with open(args.params_json) as f:
+            for k, v in json.load(f).items():
+                params[k] = _cast(k, v)
+    for kv in (args.param or []):
+        if "=" not in kv:
+            raise ValueError(f"--param must be key=value, got: {kv!r}")
+        k, v = kv.split("=", 1)
+        k = k.strip()
+        params[k] = _cast(k, v.strip())
+
+    # --- apply each span on a working copy ---
+    result = copy.deepcopy(actions)
+    per_span = []
+    for start, end in spans:
+        slice_ = copy.deepcopy([a for a in result if start <= a["at"] <= end])
+        transformed = [_clamp_action(a) for a in spec.apply(slice_, params)]
+        per_span.append({"start_ms": start, "end_ms": end, "actions": transformed})
+        if spec.structural:
+            # Structural transforms can retime/drop actions — replace the
+            # whole window with the new actions.
+            result = [a for a in result if not (start <= a["at"] <= end)]
+            result = sorted(result + transformed, key=lambda a: a["at"])
+        else:
+            t_map = {a["at"]: a["pos"] for a in transformed}
+            for a in result:
+                if a["at"] in t_map:
+                    a["pos"] = t_map[a["at"]]
+
+    if args.preview:
+        json.dump({"transform": key, "params": params, "spans": per_span}, sys.stdout)
+        sys.stdout.write("\n")
+        return
+
+    data["actions"] = [_clamp_action(a) for a in result]
+    output = args.output or _default_path(args.funscript, "_transform_applied.funscript")
+    with open(output, "w") as f:
+        json.dump(data, f, indent=2)
+    print(json.dumps({"saved": output, "transform": key, "spans": len(spans)}))
 
 
 @_cli_command
@@ -1747,6 +1876,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print the transform plan without writing any file.",
     )
 
+    # --- transform-apply (UI bridge: preview + apply for one transform) ---
+    p_ta = sub.add_parser(
+        "transform-apply",
+        help="Apply one transform to a set of spans (editor preview/apply bridge)",
+    )
+    p_ta.add_argument("funscript", help="Path to input .funscript file")
+    p_ta.add_argument(
+        "--transform", required=True, metavar="KEY",
+        help="Transform key (see 'python cli.py list-transforms').",
+    )
+    p_ta.add_argument(
+        "--spans", required=True, metavar="FILE",
+        help="JSON file: list of {start_ms, end_ms} spans (the edit set).",
+    )
+    p_ta.add_argument(
+        "--param", metavar="key=value", action="append",
+        help="Override a transform parameter (repeatable). Keys must match list-transforms.",
+    )
+    p_ta.add_argument(
+        "--params-json", metavar="FILE",
+        help="JSON file of {param: value} overrides (applied before --param).",
+    )
+    p_ta.add_argument(
+        "--preview", action="store_true",
+        help="Emit transformed actions as JSON to stdout; write nothing.",
+    )
+    p_ta.add_argument(
+        "--output", metavar="FILE",
+        help="Output .funscript path (apply mode; default: *_transform_applied.funscript).",
+    )
+
     # --- finalize ---
     p_fin = sub.add_parser(
         "finalize",
@@ -2427,6 +2587,7 @@ def main():
         "assess":           cmd_assess,
         "transform":        cmd_transform,
         "phrase-transform": cmd_phrase_transform,
+        "transform-apply":  cmd_transform_apply,
         "customize":        cmd_customize,
         "finalize":         cmd_finalize,
         "export-plan":      cmd_export_plan,
