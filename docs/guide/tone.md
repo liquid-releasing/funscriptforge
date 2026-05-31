@@ -22,6 +22,8 @@ Six tones, ordered from softest to most intense. Each one changes how transforms
 ![Six tone cards with suggestion bubbles](media/screenshots/05-tone-cards.png)
 *Six tones from Tender to Dominant. Suggestion bubbles highlight the best match and most variety.*
 
+> **Looking to calm something down, not reshape it?** The six tones above all *reshape the feel* of your script. If instead you just need to remove motion that's too fast for your device to play cleanly, that's a job for the **Tame** transform — a gentle corrective applied per phrase or stanza, not a global tone. See [Tame →](transforms.md#tame). This is an edge case; most scripts never need it.
+
 ---
 
 ## Card interaction

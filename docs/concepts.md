@@ -107,7 +107,7 @@ BPM transitions appear as thin vertical markers on the Phrase Selector chart. Th
 
 An operation applied to a phrase that changes how it feels. A transform does not change *when* things happen — it changes *how* they happen: the stroke range, the velocity shape, the dynamics, the smoothing.
 
-There are 25 built-in transforms. See [Transforms →](guide/transforms.md) for the full reference.
+There are 26 built-in transforms. See [Transforms →](guide/transforms.md) for the full reference.
 
 Transforms are non-destructive until you export. Accept a transform to mark it for export; reject it in the Export tab to remove it. Undo with **Ctrl+Z**.
 

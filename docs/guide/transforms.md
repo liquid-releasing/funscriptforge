@@ -1,6 +1,6 @@
 # Transforms
 
-FunscriptForge has 23 built-in transforms plus 6 tone transforms. Each one is designed to fix a specific kind of problem. Some are subtle finishing tools; others make substantial changes.
+FunscriptForge has 26 built-in transforms plus 6 tone transforms. Each one is designed to fix a specific kind of problem. Some are subtle finishing tools; others make substantial changes.
 
 ---
 
@@ -20,6 +20,8 @@ Start with the behavioral tag. Each tag has a primary recommendation:
 | frantic | Halve Tempo |
 
 See [Behavioral Tags →](../reference/behavioral-tags.md) for the full recommendation list per tag.
+
+Separately, if a section is genuinely **too fast for your device to play cleanly** — runaway bursts well above a comfortable stroke rate — reach for **[Tame](#tame)** (under Structural transforms). This is rare; most content never needs it.
 
 ---
 
@@ -279,6 +281,25 @@ These transforms change the number of actions, their timestamps, or both. The ph
 | Amplitude scale | 1.0 | 0.1 – 3.0 | Optional scale factor applied after halving |
 
 **Use it when:** A phrase is frantic (BPM > 200) or simply too fast to feel meaningful. Halve Tempo is the primary fix for frantic phrases.
+
+---
+
+### Tame
+
+**What it does:** Caps stroke rate at a maximum BPM by thinning out only the strokes that exceed the ceiling, then applies a light *groove* (subtle velocity variation) so the result doesn't feel mechanical. It does **not** reshape stroke depth or reposition anything — content already under the ceiling passes through completely untouched.
+
+Think of Tame as the gentle, surgical member of the family: where most transforms actively reshape a phrase, Tame only steps in when motion is faster than a device can comfortably play, and leaves everything else alone.
+
+**Parameters:**
+
+| Parameter | Default | Range | Description |
+|---|---|---|---|
+| Max BPM | 360 | 60 – 450 | Stroke-rate ceiling. Only strokes faster than this are thinned. 360 ≈ an e-stim (FOC) limit; lower it for mechanical strokers (e.g. ~120 for The Handy). |
+| Groove | 0.2 | 0.0 – 1.0 | Light humanize — adds subtle velocity variation to long monotone runs (needs ~60s+ of motion to take effect). 0 = off. 0.2 = gentle; 0.35 ≈ natural. |
+
+**Use it when:** A section is genuinely too fast for your device to play cleanly — runaway bursts well above a comfortable stroke rate. This is an **edge case**: the vast majority of scripts are already well within device limits and will see no change from Tame. For phrases that are merely *frantic* but still playable, use **Halve Tempo** instead.
+
+**Tame vs. the tones:** Tame shares the *spirit* of the [tones](tone.md) — a named, slider-driven adjustment — but it sits on the opposite end. The six expressive tones (Tender → Dominant) reshape the **feel** of your whole script. Tame changes nothing about the feel; it's a **corrective** that quietly removes speed a device can't play, applied per phrase or stanza from the transform picker rather than globally from the Tone tab.
 
 ---
 
