@@ -362,10 +362,20 @@ def split_phrases(phrases, actions, downbeats_ms: Optional[list] = None) -> list
             seg_end = cut_points[i + 1]
             seg_seed_ev = evidence_per_seg[i]
             sub_segs = _apply_drone_grid(seg_start, seg_end, seg_seed_ev)
+            # oscillation_count / cycle_count are span totals on the parent;
+            # a shallow copy that only retimes start/end would leave the FULL
+            # parent counts on a fraction of the span, so phrase.bpm (= osc ·
+            # 60000/dur) inflates by 1/ratio (a 127s→10s split read 12× too
+            # hot — Prisoner showed 1641 for a real ~135 BPM). Scale both by
+            # the duration fraction, matching cli._split_long_phrases.
+            parent_dur = max(1, p.end_ms - p.start_ms)
             for sub_start, sub_end, sub_ev in sub_segs:
                 sub = _copy.copy(p)
                 sub.start_ms = sub_start
                 sub.end_ms = sub_end
+                ratio = (sub_end - sub_start) / parent_dur
+                sub.oscillation_count = int(round((p.oscillation_count or 0) * ratio))
+                sub.cycle_count = int(round((p.cycle_count or 0) * ratio))
                 sub.evidence = sub_ev
                 sub.chapter_id = getattr(p, "chapter_id", None)
                 out.append(sub)
