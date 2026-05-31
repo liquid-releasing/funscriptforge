@@ -17,6 +17,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkline, useNativeWheel } from 'forgemoment';
+import { axisTickLabels, fmtTimeMs } from '../lib/axisTicks.js';
 
 const MIN_VIEW_MS = 200;
 
@@ -42,6 +43,11 @@ export default function FunscriptChart({
   // `bare` to suppress them. Lets the parent stack two compact charts
   // without redundant time labels.
   bare = false,
+  // Added to time-axis tick LABELS only (not the curve or viewport, which
+  // stay 0-based so the transform preview keeps working). Used by slice
+  // previews (per-phrase before/after) so the axis reads the phrase's real
+  // timeline position (e.g. 22:33) instead of 0:00.
+  axisOffsetMs = 0,
 }) {
   const containerRef = useRef(null);
   const [internalView, setInternalView] = useState({ start: 0, end: totalMs });
@@ -185,7 +191,7 @@ export default function FunscriptChart({
           filled
           height={height - 28}
         />
-        <TimeAxis startMs={view.start} endMs={view.end} compact={bare} />
+        <TimeAxis startMs={view.start} endMs={view.end} originMs={axisOffsetMs} compact={bare} />
       </div>
       {!bare && <StatsRow stats={stats} />}
     </div>
@@ -195,11 +201,13 @@ export default function FunscriptChart({
 // `compact` mode (used by per-row edit-table charts) renders 3 ticks:
 // left / center / right. Six ticks at row-chart widths overlap and read
 // as noise; three give the user enough "where am I" without crowding.
-function TimeAxis({ startMs, endMs, compact = false }) {
+function TimeAxis({ startMs, endMs, originMs = 0, compact = false }) {
   const tickCount = compact ? 3 : 6;
+  // originMs shifts the displayed time into the real timeline (slice previews
+  // pass the phrase's at_ms) while ticks are computed on the 0-based viewport.
   const ticks = useMemo(
-    () => makeTicks(startMs, endMs, tickCount),
-    [startMs, endMs, tickCount],
+    () => axisTickLabels(startMs, endMs, tickCount, originMs),
+    [startMs, endMs, tickCount, originMs],
   );
   return (
     <div
@@ -221,7 +229,7 @@ function TimeAxis({ startMs, endMs, compact = false }) {
       }}
     >
       {ticks.map((t, i) => (
-        <span key={i}>{fmtTimeMs(t)}</span>
+        <span key={i}>{t}</span>
       ))}
     </div>
   );
@@ -284,17 +292,3 @@ function computeStats(actions, totalMs) {
   };
 }
 
-function makeTicks(startMs, endMs, n) {
-  const out = [];
-  for (let i = 0; i < n; i++) {
-    out.push(Math.round(startMs + ((endMs - startMs) * i) / (n - 1)));
-  }
-  return out;
-}
-
-function fmtTimeMs(ms) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(s / 60);
-  const ss = s % 60;
-  return `${m}:${String(ss).padStart(2, '0')}`;
-}

@@ -1023,13 +1023,13 @@ function StanzaRow({ stanza, actions, transformId, params, isEdited, onToggle })
       <div style={{ height: 64 }}>
         <FunscriptChart
           actions={originalActs} totalMs={dur} height={64}
-          view={view} onViewChange={setView} bare
+          view={view} onViewChange={setView} axisOffsetMs={stanza.at_ms} bare
         />
       </div>
       <div style={{ height: 64 }}>
         <FunscriptChart
           actions={previewActs} totalMs={dur} height={64}
-          view={view} onViewChange={setView} bare
+          view={view} onViewChange={setView} axisOffsetMs={stanza.at_ms} bare
         />
       </div>
       <button
