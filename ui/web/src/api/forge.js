@@ -307,6 +307,43 @@ export function listCharacters() {
   );
 }
 
+/* ── Transforms — catalog + preview/apply bridge ──────────────────────
+ * The TransformPanel sources its catalog from `listTransforms` (the
+ * authoritative pattern_catalog, NOT the static hand-port that drifted)
+ * and drives before/after previews + Apply through the Python
+ * implementations. Browser-dev mocks return empty/null so the UI falls
+ * back to the static seed catalog and shows originals unchanged. */
+
+/** Full transform catalog as a {key: {name, description, category,
+ *  structural, params:{pkey:{label,type,default,min,max,step,help}}}}
+ *  map. Param keys are authoritative — they match what the backend
+ *  apply expects (no center/target_center-style drift). */
+export function listTransforms() {
+  return call('list_transforms', undefined, () => Promise.resolve({}));
+}
+
+/** Preview one transform over `spans` (a list of {start_ms,end_ms}).
+ *  Returns {transform, params, spans:[{start_ms,end_ms,actions:[{at,pos}]}]}
+ *  — actions are the transformed result per span (structural transforms
+ *  may change count/timing). Writes nothing. */
+export function transformPreview(funscriptPath, transform, params, spans) {
+  return call(
+    'transform_preview',
+    { funscriptPath, transform, params, spans },
+    () => Promise.resolve(null),
+  );
+}
+
+/** Apply one transform over `spans`, writing the merged funscript to
+ *  `outputPath`. Returns {saved, transform, spans}. */
+export function transformApply(funscriptPath, transform, params, spans, outputPath) {
+  return call(
+    'transform_apply',
+    { funscriptPath, transform, params, spans, outputPath },
+    () => Promise.resolve(null),
+  );
+}
+
 /**
  * Synthetic "Big Buck Bunny" sample project. Same shape load_project
  * returns; lives entirely in memory so the user can exercise the full

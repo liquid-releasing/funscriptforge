@@ -1488,6 +1488,71 @@ pub async fn list_characters() -> Result<CharactersResponse, String> {
     })
 }
 
+// ─── Transforms — catalog + preview/apply bridge ────────────────────
+// The editor's TransformPanel drives these. The authoritative catalog
+// (ids, param keys/types/defaults) lives in pattern_catalog; the UI must
+// source it from here rather than a hand-port, which drifted (center vs
+// target_center, every_n vs every_nth, …) and made sliders silently
+// no-op. See cli.py `transform-apply` / `list-transforms`.
+
+/// Full transform catalog as JSON (ids, category, params with types/
+/// defaults/ranges). The UI builds its picker from this — single source.
+#[tauri::command]
+pub async fn list_transforms() -> Result<serde_json::Value, String> {
+    let stdout = run_cli(&["list-transforms", "--format", "json", "--verbose"]).await?;
+    serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse cli.py list-transforms output: {}", e))
+}
+
+/// Preview ONE transform over a set of spans. Returns
+/// {transform, params, spans:[{start_ms,end_ms,actions:[{at,pos}]}]}.
+/// Writes nothing — drives the before/after charts. Spans + params are
+/// passed as inline JSON (small payloads) so no temp files are needed.
+#[tauri::command]
+pub async fn transform_preview(
+    funscript_path: String,
+    transform: String,
+    params: serde_json::Value,
+    spans: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let spans_s = serde_json::to_string(&spans).map_err(|e| format!("serialize spans: {}", e))?;
+    let params_s = serde_json::to_string(&params).map_err(|e| format!("serialize params: {}", e))?;
+    let stdout = run_cli(&[
+        "transform-apply", &funscript_path,
+        "--transform", &transform,
+        "--spans", &spans_s,
+        "--params-json", &params_s,
+        "--preview",
+    ])
+    .await?;
+    serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse transform-apply preview: {}", e))
+}
+
+/// Apply ONE transform over a set of spans and write the merged funscript
+/// to `output_path`. Returns {saved, transform, spans}.
+#[tauri::command]
+pub async fn transform_apply(
+    funscript_path: String,
+    transform: String,
+    params: serde_json::Value,
+    spans: serde_json::Value,
+    output_path: String,
+) -> Result<serde_json::Value, String> {
+    let spans_s = serde_json::to_string(&spans).map_err(|e| format!("serialize spans: {}", e))?;
+    let params_s = serde_json::to_string(&params).map_err(|e| format!("serialize params: {}", e))?;
+    let stdout = run_cli(&[
+        "transform-apply", &funscript_path,
+        "--transform", &transform,
+        "--spans", &spans_s,
+        "--params-json", &params_s,
+        "--output", &output_path,
+    ])
+    .await?;
+    serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse transform-apply result: {}", e))
+}
+
 // Deterministic chapter color cycle. Matches the prototype's ChapterBands
 // where each chapter has a stable swatch independent of tone selection.
 const CHAPTER_PALETTE: &[&str] = &[

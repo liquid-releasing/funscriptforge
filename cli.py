@@ -627,6 +627,21 @@ def cmd_validate_plugins(args):
         sys.exit(1)
 
 
+def _load_json_arg(val: str):
+    """Accept either a path to a JSON file or an inline JSON string.
+
+    The Tauri bridge passes spans/params as inline JSON argv strings
+    (small payloads, well under argv limits) to avoid temp files; the CLI
+    and tests can still pass a file path. Inline is detected by a leading
+    '[' or '{'.
+    """
+    s = val.strip()
+    if s[:1] in ("[", "{"):
+        return json.loads(s)
+    with open(val) as f:
+        return json.load(f)
+
+
 def _coerce(v: str):
     """Parse a string value as int, float, or str."""
     try:
@@ -785,8 +800,7 @@ def cmd_transform_apply(args):
     actions = data["actions"]
 
     # --- spans (disjoint phrase/stanza windows) ---
-    with open(args.spans) as f:
-        raw_spans = json.load(f)
+    raw_spans = _load_json_arg(args.spans)
     spans = []
     for s in raw_spans:
         start = s.get("start_ms", s.get("at_ms"))
@@ -821,9 +835,8 @@ def cmd_transform_apply(args):
 
     params = {k: p.default for k, p in spec_params.items()}
     if args.params_json:
-        with open(args.params_json) as f:
-            for k, v in json.load(f).items():
-                params[k] = _cast(k, v)
+        for k, v in _load_json_arg(args.params_json).items():
+            params[k] = _cast(k, v)
     for kv in (args.param or []):
         if "=" not in kv:
             raise ValueError(f"--param must be key=value, got: {kv!r}")
@@ -1887,16 +1900,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Transform key (see 'python cli.py list-transforms').",
     )
     p_ta.add_argument(
-        "--spans", required=True, metavar="FILE",
-        help="JSON file: list of {start_ms, end_ms} spans (the edit set).",
+        "--spans", required=True, metavar="FILE|JSON",
+        help="List of {start_ms, end_ms} spans (the edit set): a JSON file "
+             "path or an inline JSON string.",
     )
     p_ta.add_argument(
         "--param", metavar="key=value", action="append",
         help="Override a transform parameter (repeatable). Keys must match list-transforms.",
     )
     p_ta.add_argument(
-        "--params-json", metavar="FILE",
-        help="JSON file of {param: value} overrides (applied before --param).",
+        "--params-json", metavar="FILE|JSON",
+        help="{param: value} overrides as a JSON file path or inline JSON "
+             "string (applied before --param).",
     )
     p_ta.add_argument(
         "--preview", action="store_true",
