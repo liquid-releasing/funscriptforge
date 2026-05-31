@@ -49,7 +49,7 @@ import { BEHAVIOR_TAGS } from '../data/transforms.js';
 import { useTransformCatalog } from '../data/useTransformCatalog.js';
 import { useTransformPreview } from '../api/useTransformPreview.js';
 import { SHAPE_TYPES, findShape } from '../data/shapes.js';
-import { analyzePhrases, loadPhrasesSidecar, transformApplyActions } from '../api/forge.js';
+import { analyzePhrases, loadPhrasesSidecar, transformApplyActions, saveWorkingFunscript } from '../api/forge.js';
 
 // Phrase helpers — duplicated from PatternsTab today. When a third
 // consumer appears, lift these into `src/lib/phrase_slice.js` or
@@ -456,6 +456,11 @@ export default function PhrasesTab({
       );
       if (res && Array.isArray(res.actions)) {
         onActionsPatch(res.actions);
+        // Write-through to the durable working funscript so the edit
+        // survives close/reopen and Export reads it. In-memory is already
+        // patched above; a save failure leaves the session ahead of disk
+        // (recoverable on the next Apply) — surface it but don't roll back.
+        await saveWorkingFunscript(project.path, res.actions);
         setEditedPhraseIds([]);
         setTransformId(null);
         setParams({});

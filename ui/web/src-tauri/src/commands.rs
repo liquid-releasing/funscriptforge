@@ -177,6 +177,10 @@ pub struct LoadedProject {
     chapters: u32,
     chapter_list: Vec<ChapterRecord>,
     edited: String,
+    // True when a `<stem>.work.funscript` is present — the loaded actions
+    // are edited working state, not the pristine original. Drives the
+    // "edited / Revert to original" affordance.
+    has_working_edits: bool,
     actions: Vec<FunscriptAction>,
     action_count: usize,
     // Stats over the *full* action set, not the downsampled `actions`. JS-side
@@ -232,11 +236,22 @@ fn compute_funscript_stats(actions: &[FunscriptAction]) -> (i32, i32, f64) {
 #[tauri::command]
 pub async fn load_project(path: String) -> Result<LoadedProject, String> {
     // ── Read the funscript ────────────────────────────────────────────
-    let raw = tokio::fs::read_to_string(&path)
+    // If a working copy exists in the forge dir (edits made in a prior
+    // session), load THAT — it's the durable save state. The original stays
+    // pristine for Revert. `path` remains the original everywhere else so
+    // stem/forge/sidecar resolution is unchanged; only the actions swap.
+    let work_path = working_funscript_path(Path::new(&path));
+    let has_working_edits = tokio::fs::metadata(&work_path).await.is_ok();
+    let read_path = if has_working_edits {
+        work_path.to_string_lossy().into_owned()
+    } else {
+        path.clone()
+    };
+    let raw = tokio::fs::read_to_string(&read_path)
         .await
-        .map_err(|e| format!("Could not read {}: {}", &path, e))?;
+        .map_err(|e| format!("Could not read {}: {}", &read_path, e))?;
     let funscript: FunscriptFile = serde_json::from_str(&raw)
-        .map_err(|e| format!("Invalid funscript JSON in {}: {}", &path, e))?;
+        .map_err(|e| format!("Invalid funscript JSON in {}: {}", &read_path, e))?;
     let action_count = funscript.actions.len();
     let duration_ms = funscript.actions.last().map(|a| a.at).unwrap_or(0);
 
@@ -322,6 +337,7 @@ pub async fn load_project(path: String) -> Result<LoadedProject, String> {
         chapters: chapter_count,
         chapter_list,
         edited: "just now".to_string(),
+        has_working_edits,
         actions,
         action_count,
         min_pos,
@@ -1517,8 +1533,11 @@ pub async fn transform_preview(
 ) -> Result<serde_json::Value, String> {
     let spans_s = serde_json::to_string(&spans).map_err(|e| format!("serialize spans: {}", e))?;
     let params_s = serde_json::to_string(&params).map_err(|e| format!("serialize params: {}", e))?;
+    // Read the EFFECTIVE funscript (working copy once edits begin) so the
+    // before/after reflects cumulative state, not the pristine original.
+    let src = effective_funscript_path(&funscript_path);
     let stdout = run_cli(&[
-        "transform-apply", &funscript_path,
+        "transform-apply", &src,
         "--transform", &transform,
         "--spans", &spans_s,
         "--params-json", &params_s,
@@ -1544,8 +1563,11 @@ pub async fn transform_apply_actions(
 ) -> Result<serde_json::Value, String> {
     let spans_s = serde_json::to_string(&spans).map_err(|e| format!("serialize spans: {}", e))?;
     let params_s = serde_json::to_string(&params).map_err(|e| format!("serialize params: {}", e))?;
+    // Merge against the EFFECTIVE funscript (working copy once edits begin)
+    // so successive applies stack instead of each re-deriving from original.
+    let src = effective_funscript_path(&funscript_path);
     let stdout = run_cli(&[
-        "transform-apply", &funscript_path,
+        "transform-apply", &src,
         "--transform", &transform,
         "--spans", &spans_s,
         "--params-json", &params_s,
@@ -1578,6 +1600,111 @@ pub async fn transform_apply(
     .await?;
     serde_json::from_str(&stdout)
         .map_err(|e| format!("could not parse transform-apply result: {}", e))
+}
+
+/// Persist the current working actions to `<stem>.work.funscript` in the
+/// forge dir — the durable save state Export reads and reopen restores. The
+/// ORIGINAL funscript is never touched (Revert = delete the work file).
+///
+/// Reads the original as generic JSON so every non-`actions` field
+/// (metadata, range, inverted, …) is preserved; only `actions` is replaced.
+/// Upserts a minimal `<stem>.ffmeta.json` manifest pointing at the work
+/// file + an `edited_at` stamp so the UI/Export can tell a project carries
+/// unsaved-to-original edits. Write-through happens on every Apply, so this
+/// is crash-safe: closing without an explicit Accept loses nothing.
+#[tauri::command]
+pub async fn save_working_funscript(
+    funscript_path: String,
+    actions: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let original = Path::new(&funscript_path);
+    let forge = forge_dir(original);
+    tokio::fs::create_dir_all(&forge)
+        .await
+        .map_err(|e| format!("create forge dir {}: {}", forge.display(), e))?;
+
+    // Preserve all non-action fields from the pristine original.
+    let raw = tokio::fs::read_to_string(&funscript_path)
+        .await
+        .map_err(|e| format!("read original {}: {}", &funscript_path, e))?;
+    let mut doc: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|e| format!("parse original funscript: {}", e))?;
+    if !doc.is_object() {
+        return Err("original funscript is not a JSON object".into());
+    }
+    doc["actions"] = actions;
+
+    let work = working_funscript_path(original);
+    let work_str = work.to_string_lossy().into_owned();
+    let body = serde_json::to_string(&doc).map_err(|e| format!("serialize work fs: {}", e))?;
+    tokio::fs::write(&work, body)
+        .await
+        .map_err(|e| format!("write {}: {}", work_str, e))?;
+
+    // Upsert the authoring manifest. Minimal for now — version, the work-fs
+    // basename, the source basename, and an edited_at stamp. Export + load
+    // read it; richer per-tab fields land with the chain pass.
+    let stem_name = original
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("project");
+    let edited_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let manifest_path = forge.join(format!("{}.ffmeta.json", stem_name));
+    let mut manifest = match tokio::fs::read_to_string(&manifest_path).await {
+        Ok(s) => serde_json::from_str::<serde_json::Value>(&s).unwrap_or_else(|_| serde_json::json!({})),
+        Err(_) => serde_json::json!({}),
+    };
+    if !manifest.is_object() {
+        manifest = serde_json::json!({});
+    }
+    manifest["version"] = serde_json::json!(1);
+    manifest["source"] = serde_json::json!(format!("{}.funscript", stem_name));
+    manifest["work_funscript"] = serde_json::json!(format!("{}.work.funscript", stem_name));
+    manifest["edited_at"] = serde_json::json!(edited_at);
+    let manifest_body =
+        serde_json::to_string_pretty(&manifest).map_err(|e| format!("serialize manifest: {}", e))?;
+    tokio::fs::write(&manifest_path, manifest_body)
+        .await
+        .map_err(|e| format!("write manifest {}: {}", manifest_path.display(), e))?;
+
+    Ok(serde_json::json!({ "saved": work_str, "edited_at": edited_at }))
+}
+
+/// Revert to the original funscript by deleting the working copy + its
+/// manifest work pointer. The next load_project falls back to the pristine
+/// original. No-op (Ok) if there's nothing to revert.
+#[tauri::command]
+pub async fn revert_working_funscript(
+    funscript_path: String,
+) -> Result<serde_json::Value, String> {
+    let original = Path::new(&funscript_path);
+    let work = working_funscript_path(original);
+    let existed = tokio::fs::metadata(&work).await.is_ok();
+    if existed {
+        tokio::fs::remove_file(&work)
+            .await
+            .map_err(|e| format!("remove {}: {}", work.display(), e))?;
+    }
+    // Drop the work pointer from the manifest (leave other fields intact).
+    let stem_name = original
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("project");
+    let manifest_path = forge_dir(original).join(format!("{}.ffmeta.json", stem_name));
+    if let Ok(s) = tokio::fs::read_to_string(&manifest_path).await {
+        if let Ok(mut m) = serde_json::from_str::<serde_json::Value>(&s) {
+            if let Some(obj) = m.as_object_mut() {
+                obj.remove("work_funscript");
+                obj.remove("edited_at");
+                let body = serde_json::to_string_pretty(&m).unwrap_or(s);
+                let _ = tokio::fs::write(&manifest_path, body).await;
+            }
+        }
+    }
+    Ok(serde_json::json!({ "reverted": existed }))
 }
 
 // Deterministic chapter color cycle. Matches the prototype's ChapterBands
@@ -2079,6 +2206,38 @@ fn forge_dir(media_path: &Path) -> PathBuf {
 // the forge dir. Returned as-is — caller mkdir's before writing.
 fn forge_clips_dir(media_path: &Path) -> PathBuf {
     forge_dir(media_path).join("clips")
+}
+
+// ── Working funscript (durable edit state) ──────────────────────────────
+// Edits made in the editor (transform Apply, tone bake, …) accumulate into
+// a SEPARATE working funscript inside the forge dir — the original is never
+// mutated, so "Revert to original" is just deleting the work file. This is
+// the durable save state that survives close/reopen and is what Export
+// reads. See project-transforms-wiring / project-export-bundle-design.
+//
+// Named `<stem>.work.funscript` so it sorts next to the source sidecars and
+// reads obviously in a file browser.
+fn working_funscript_path(funscript_path: &Path) -> PathBuf {
+    let stem = funscript_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("project");
+    forge_dir(funscript_path).join(format!("{}.work.funscript", stem))
+}
+
+// The funscript an EDIT operation should read: the working copy if edits
+// have begun, else the pristine original. Every transform/preview/export
+// op routes through this so successive edits stack (apply #2 sees apply
+// #1's result) instead of each re-deriving from the original. `path` stays
+// the original everywhere else (stem/forge/sidecar resolution) — only the
+// action source swaps.
+fn effective_funscript_path(funscript_path: &str) -> String {
+    let work = working_funscript_path(Path::new(funscript_path));
+    if std::fs::metadata(&work).is_ok() {
+        work.to_string_lossy().into_owned()
+    } else {
+        funscript_path.to_string()
+    }
 }
 
 // Reduce a filename stem to a filesystem-safe subset of characters.

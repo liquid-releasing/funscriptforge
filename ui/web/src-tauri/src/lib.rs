@@ -33,6 +33,8 @@ pub fn run() {
             commands::transform_preview,
             commands::transform_apply,
             commands::transform_apply_actions,
+            commands::save_working_funscript,
+            commands::revert_working_funscript,
             commands::attach_media,
             commands::analyze_audio_peaks,
             commands::load_audio_peaks,

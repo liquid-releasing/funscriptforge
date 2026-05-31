@@ -347,6 +347,28 @@ export function transformApplyActions(funscriptPath, transform, params, spans) {
   );
 }
 
+/** Persist the current working actions to `<stem>.work.funscript` in the
+ *  forge dir — the durable save state Export reads and reopen restores. The
+ *  ORIGINAL funscript is never touched. Write-through on every Apply so a
+ *  close-without-Accept loses nothing. Returns {saved, edited_at}. */
+export function saveWorkingFunscript(funscriptPath, actions) {
+  return call(
+    'save_working_funscript',
+    { funscriptPath, actions },
+    () => Promise.resolve(null),
+  );
+}
+
+/** Revert to the original by deleting the working copy. The next
+ *  load_project falls back to the pristine original. Returns {reverted}. */
+export function revertWorkingFunscript(funscriptPath) {
+  return call(
+    'revert_working_funscript',
+    { funscriptPath },
+    () => Promise.resolve(null),
+  );
+}
+
 /** Apply one transform over `spans`, writing the merged funscript to
  *  `outputPath`. Returns {saved, transform, spans}. */
 export function transformApply(funscriptPath, transform, params, spans, outputPath) {

@@ -41,7 +41,7 @@ import { useChapterClip } from '../hooks/useChapterClip.js';
 import { BEHAVIOR_TAGS, FORGEGEN_MODES } from '../data/transforms.js';
 import { useTransformCatalog } from '../data/useTransformCatalog.js';
 import { useTransformPreview } from '../api/useTransformPreview.js';
-import { readStanzas, transformApplyActions } from '../api/forge.js';
+import { readStanzas, transformApplyActions, saveWorkingFunscript } from '../api/forge.js';
 
 function sliceForStanza(actions, stanza) {
   if (!actions || !stanza) return { acts: [], dur: 0 };
@@ -316,6 +316,11 @@ export default function StanzasTab({
       );
       if (res && Array.isArray(res.actions)) {
         onActionsPatch(res.actions);
+        // Write-through to the durable working funscript (survives reopen,
+        // read by Export). In-memory is patched above; a save failure leaves
+        // the session ahead of disk (recovers on next Apply) — surface but
+        // don't roll back. Mirrors PhrasesTab.handleApply.
+        await saveWorkingFunscript(project.path, res.actions);
         setEditedStanzaIds([]);
         setTransformId(null);
         setParams({});
