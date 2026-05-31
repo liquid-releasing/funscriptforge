@@ -71,8 +71,15 @@ function previewActions(actions, transformId, params) {
     return actions.map((a) => ({ at: a.at, pos: clamp01_100(50 + (a.pos - 50) * s) }));
   }
   if (transformId === 'recenter') {
-    const off = Number(params?.offset ?? 0);
-    return actions.map((a) => ({ at: a.at, pos: clamp01_100(a.pos + off) }));
+    // Mirror pattern_catalog _Recenter: shift so the phrase midpoint
+    // ((min+max)/2) lands on the target center; amplitude unchanged.
+    // (Param id is `center` — the old code read a nonexistent `offset`
+    // and added 0, so the preview was a silent no-op.)
+    const target = Number(params?.center ?? 50);
+    let lo = Infinity, hi = -Infinity;
+    for (const a of actions) { if (a.pos < lo) lo = a.pos; if (a.pos > hi) hi = a.pos; }
+    const offset = target - (lo + hi) / 2;
+    return actions.map((a) => ({ at: a.at, pos: clamp01_100(a.pos + offset) }));
   }
   // Other transforms: pass-through preview until CLI integration lands.
   return actions;
@@ -385,9 +392,14 @@ export default function PhrasesTab({
   }, [mode, activeTagId, activeShapeId, focusPhraseId, phrasesInScope, shapeByAtMs]);
 
   // Project phrases into ChapterContextStrip's band vocabulary. Targets
-  // (edit set) get a brighter tag-color wash + bold border; skipped get
-  // a faint wash + dimmed border. Focused phrase (single mode) layers a
-  // white inset ring on top.
+  // (edit set) get a brighter category-color wash + a crisp WHITE border;
+  // skipped get a faint wash + dimmed category-color border. White is the
+  // selection channel (orthogonal to category color) so the edit set stays
+  // legible even when the chosen tag/shape color is the wash — e.g. a red
+  // shape no longer hides its own selection in a sea of red. The label
+  // keeps the category color (black text) so "what is this" survives.
+  // Focused phrase (single mode) already layers a white inset ring; this
+  // makes edit-set and single-focus selection read the same way.
   const editedPhraseIdSet = useMemo(() => new Set(editedPhraseIds), [editedPhraseIds]);
   const phraseBands = useMemo(() => phrasesInScope.map((p, i) => {
     const tag = BEHAVIOR_TAGS.find((t) => t.id === p.tag);
@@ -402,8 +414,9 @@ export default function PhrasesTab({
       end_ms: p.end_ms,
       fill: color,
       fillOpacity: isTarget ? 0.18 : 0.08,
-      stroke: color,
-      strokeWidth: isTarget ? 1.5 : 1,
+      // White = "in my edit set", crisp; skipped keep the dim category color.
+      stroke: isTarget ? '#ffffff' : color,
+      strokeWidth: isTarget ? 2 : 1,
       strokeOpacity: isTarget ? 1 : 0.45,
       focused: isFocused,
       label: `P${p.number ?? i + 1}`,
@@ -644,6 +657,13 @@ export default function PhrasesTab({
               videoSrc={chapterClip?.url}
               videoSrcOffsetMs={chapterClip?.offsetMs ?? 0}
               media={{ kind: mediaKind, title: sliceScope.title }}
+              // Corner slice tag — only when a single phrase is in focus.
+              // Read the EXACT ribbon band label (which falls back to i+1
+              // when a phrase lacks `.number`) so the player chip and ribbon
+              // can never disagree.
+              sliceLabel={focusedPhrase
+                ? (phraseBands.find((b) => b.id === focusedPhrase.id)?.label ?? null)
+                : null}
               loadingLabel={chapterClip ? null : 'Loading chapter clip…'}
               audioWaveform={audioWaveform}
               spectrogram={trackSpectrogram}

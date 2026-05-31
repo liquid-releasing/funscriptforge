@@ -60,8 +60,14 @@ function previewActions(actions, transformId, params) {
     return actions.map((a) => ({ at: a.at, pos: clamp01_100(50 + (a.pos - 50) * s) }));
   }
   if (transformId === 'recenter') {
-    const off = Number(params?.offset ?? 0);
-    return actions.map((a) => ({ at: a.at, pos: clamp01_100(a.pos + off) }));
+    // Mirror pattern_catalog _Recenter: shift so the midpoint ((min+max)/2)
+    // lands on the target center. Param id is `center` — the old code read
+    // a nonexistent `offset` so the preview never moved.
+    const target = Number(params?.center ?? 50);
+    let lo = Infinity, hi = -Infinity;
+    for (const a of actions) { if (a.pos < lo) lo = a.pos; if (a.pos > hi) hi = a.pos; }
+    const offset = target - (lo + hi) / 2;
+    return actions.map((a) => ({ at: a.at, pos: clamp01_100(a.pos + offset) }));
   }
   return actions;
 }
@@ -270,8 +276,11 @@ export default function StanzasTab({
       end_ms: s.end_ms,
       fill: color,
       fillOpacity: isTarget ? 0.18 : 0.08,
-      stroke: color,
-      strokeWidth: isTarget ? 1.5 : 1,
+      // White = "in my edit set" (orthogonal to category color), so the
+      // selection stays legible even when the mode/cluster color is the
+      // wash. Mirrors PhrasesTab. Skipped keep the dim category border.
+      stroke: isTarget ? '#ffffff' : color,
+      strokeWidth: isTarget ? 2 : 1,
       strokeOpacity: isTarget ? 1 : 0.45,
       focused: isFocused,
       label: `S${s.number ?? i + 1}`,
@@ -519,6 +528,13 @@ export default function StanzasTab({
           videoSrc={chapterClip?.url}
           videoSrcOffsetMs={chapterClip?.offsetMs ?? 0}
           media={{ kind: mediaKind, title: sliceScope.title }}
+          // Corner slice tag — only when a single stanza is in focus.
+          // Read the EXACT ribbon band label (which falls back to i+1 when
+          // a stanza lacks `.number`) so the player chip can never show a
+          // bare "S" while the ribbon shows "S7".
+          sliceLabel={focusedStanza
+            ? (stanzaBands.find((b) => b.id === focusedStanza.id)?.label ?? null)
+            : null}
           loadingLabel={chapterClip ? null : 'Loading chapter clip…'}
           audioWaveform={audioWaveform}
           spectrogram={trackSpectrogram}
