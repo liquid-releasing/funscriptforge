@@ -348,8 +348,17 @@ export default function AnalysisTab({
         .catch(() => { /* sidecar absent — empty state on the sub-tab */ });
     }
     if (project?.path) {
+      // loadPhrasesSidecar returns `{ version, slices }` — an OBJECT, not a
+      // bare array. Extract `.slices` (fall back to a bare array defensively)
+      // or the count silently stays "—". This is the same trap the
+      // event-driven path above (chapters_sidecar/sidecar) already guards.
       loadPhrasesSidecar(project.path)
-        .then((arr) => { if (Array.isArray(arr)) setPhrases(arr); })
+        .then((data) => {
+          const slices = Array.isArray(data?.slices)
+            ? data.slices
+            : (Array.isArray(data) ? data : null);
+          if (slices) setPhrases(slices);
+        })
         .catch(() => { /* sidecar absent — empty state on the sub-tab */ });
     }
   }, [project?.path, project?.mediaPath, projectExists, isSample]);
