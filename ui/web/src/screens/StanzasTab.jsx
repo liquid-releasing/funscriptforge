@@ -688,7 +688,11 @@ export default function StanzasTab({
           transforms={transformCatalog}
           tags={BEHAVIOR_TAGS}
           category={category}
-          onCategoryChange={setCategory}
+          // Switching category clears the current selection (and its
+          // params) so the dropdown resets to "Select a transform…" rather
+          // than lingering on a transform from the old category. See
+          // feedback-transform-selection-deliberate.
+          onCategoryChange={(c) => { setCategory(c); setTransformId(null); setParams({}); }}
           transformId={transformId}
           onTransformChange={setTransformId}
           params={params}

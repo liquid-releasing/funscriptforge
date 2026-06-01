@@ -837,7 +837,12 @@ export default function PhrasesTab({
           transforms={transformCatalog}
           tags={BEHAVIOR_TAGS}
           category={category}
-          onCategoryChange={setCategory}
+          // Switching category clears the current selection (and its
+          // params) so the dropdown resets to "Select a transform…" rather
+          // than lingering on a transform from the old category — browsing
+          // a category is not selecting one. See feedback-transform-
+          // selection-deliberate.
+          onCategoryChange={(c) => { setCategory(c); setTransformId(null); setParams({}); }}
           transformId={transformId}
           onTransformChange={setTransformId}
           params={params}
