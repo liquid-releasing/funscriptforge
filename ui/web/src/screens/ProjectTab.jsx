@@ -51,9 +51,14 @@ export default function ProjectTab({
   onGoToLibrary,
   onAttachMedia,
   onAppError,
+  onRevertToOriginal,
   isLoadingProject,
 }) {
   const [search, setSearch] = useState('');
+  // Inline two-step confirm for the destructive "Revert to original"
+  // action — matches AnalysisTab's Re-analyze confirm rather than a
+  // browser confirm() dialog.
+  const [confirmingRevert, setConfirmingRevert] = useState(false);
   // On-disk inventory for the currently active project — drives the
   // "Files in this project" list with real readdir data instead of
   // hardcoded placeholders. Stays null in browser mode (no Tauri readdir).
@@ -422,11 +427,53 @@ function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript }) 
                 ) : (
                   <Pill tone="info" dot>last opened {project.edited}</Pill>
                 )}
+                {/* Working-copy indicator. When the project has accumulated
+                    edits (Apply / Tone), the app shows the work funscript
+                    everywhere — including reanalyze — not the original.
+                    Surfacing it here answers "am I on the original or my
+                    edits?" at a glance, and pairs with Revert below. */}
+                {project.hasWorkingEdits && (
+                  <Pill tone="warn" dot title="This project has unsaved edits. The editor (and reanalyze) read this working copy, not the original file. Use Revert to original to discard all edits.">
+                    Edited — working copy
+                  </Pill>
+                )}
               </>
             )}
           </div>
         </div>
-        <Button kind="ghost" size="sm" icon="more-horizontal">More</Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {/* Revert to original — only when there are working edits to
+              discard. Two-step inline confirm because it's destructive
+              (throws away every edit across all tabs). Distinct from the
+              per-tab footer Reset. */}
+          {!isPlaceholder && !isPending && project.hasWorkingEdits && (
+            confirmingRevert ? (
+              <>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Discard all edits?
+                </span>
+                <Button
+                  kind="danger" size="sm" icon="rotate-ccw"
+                  onClick={() => { setConfirmingRevert(false); onRevertToOriginal?.(); }}
+                >
+                  Revert
+                </Button>
+                <Button kind="ghost" size="sm" onClick={() => setConfirmingRevert(false)}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                kind="ghost" size="sm" icon="rotate-ccw"
+                title="Discard all edits and restore the original funscript"
+                onClick={() => setConfirmingRevert(true)}
+              >
+                Revert to original
+              </Button>
+            )
+          )}
+          <Button kind="ghost" size="sm" icon="more-horizontal">More</Button>
+        </div>
       </div>
 
       <SectionLabel

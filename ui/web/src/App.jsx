@@ -16,6 +16,7 @@ import {
   isTauri, ping, loadProject, loadSampleProject, attachMedia,
   pickFunscriptFile, pickMediaFile,
   loadAudioPeaks, loadAudioSpectrogram, loadAudioBeats,
+  revertWorkingFunscript,
 } from './api/forge.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
@@ -634,6 +635,34 @@ export default function App() {
     console.log(`reset working state for ${tab}`);
   };
 
+  // Revert to original — global, destructive: delete the accumulated
+  // working funscript so the effective path falls back to the pristine
+  // original, then reload the project to re-seed actions from it. Distinct
+  // from the (stubbed, per-tab) footer Reset: this throws away ALL edits
+  // across every tab and is the only thing that clears persisted Apply/
+  // Tone edits today. The original .funscript on disk is never touched —
+  // we only remove the side-car work copy. See
+  // project_working_funscript_persistence.
+  const handleRevertToOriginal = async () => {
+    const current = typeof openedProject === 'object' ? openedProject : null;
+    if (!current?.path) return;
+    setBusy({ message: 'Reverting to original…' });
+    try {
+      await revertWorkingFunscript(current.path);
+      // Reload from the now-pristine effective path (work copy gone), which
+      // re-seeds project.actions from the original and resets hasWorkingEdits.
+      await handleOpenScript(current.path, {
+        title: current.title,
+        mediaPath: current.mediaPath,
+        mediaKind: current.mediaKind,
+      });
+    } catch (err) {
+      setAppError(`Could not revert: ${err?.message ?? err}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="ff-app" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <TopBar
@@ -718,6 +747,7 @@ export default function App() {
             onGoToLibrary={() => setTab('library')}
             onAttachMedia={handleAttachMedia}
             onAppError={setAppError}
+            onRevertToOriginal={handleRevertToOriginal}
             isLoadingProject={isLoadingProject}
           />
         )}
