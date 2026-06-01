@@ -31,7 +31,10 @@ import {
   analyzePhrases,
   writeChaptersSidecar,
   extractChapterClip,
+  transformApplyActions,
+  saveWorkingFunscript,
 } from '../api/forge.js';
+import { useTransformPreview } from '../api/useTransformPreview.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 import { chapterDisplayLabel, splitAt, joinAt } from '../lib/chapterOps.js';
 import { useChapterClip } from '../hooks/useChapterClip.js';
@@ -111,6 +114,21 @@ const TONES = [
       { id: 'recenter', label: 'Recenter', min: 0, max: 1, step: 0.05, def: 0.6,  fmt: (v) => v.toFixed(2) },
       { id: 'rhythm',   label: 'Rhythm',   min: 0, max: 1, step: 0.05, def: 0.55, fmt: (v) => v.toFixed(2) },
     ] },
+  // Tame (2026-06-01) — the one *corrective* tone. Unlike the six
+  // expressive tones above (synchronous JS preview math in applyTone),
+  // Tame runs the REAL backend `tame` transform (cycle-drop + device-aware
+  // humanize) over the chapter span: its before/after comes from
+  // useTransformPreview and Accept rolls the result through
+  // transform_apply_actions + the working funscript — the same path
+  // Phrases/Stanzas Apply uses. Param ids MUST match the backend
+  // transform's keys (max_bpm / groove). Gentle by default — Max BPM 360
+  // only thins content faster than a device can play. See [[project tame]].
+  { id: 'tame', label: 'Tame', color: '#2dd4bf',
+    desc: 'Device-aware corrective. Caps runaway stroke rate to a playable ceiling, then lightly humanizes. Gentle by default — only thins content faster than the ceiling, never reshapes amplitude.',
+    params: [
+      { id: 'max_bpm', label: 'Max BPM', min: 60, max: 450, step: 5,    def: 360, fmt: (v) => `${v}` },
+      { id: 'groove',  label: 'Groove',  min: 0,  max: 1,   step: 0.05, def: 0.2, fmt: (v) => v.toFixed(2) },
+    ] },
 ];
 
 // Fallback to 'build' (not by index) when an unknown tone id arrives —
@@ -179,6 +197,11 @@ function applyTone(actions, chapterStart, chapterEnd, tone, params) {
   // 'none' / Untoned — passthrough, no transform. Lets the user Accept
   // a chapter without committing to a tone.
   if (tone.id === 'none') return slice.map((a) => ({ at: a.at, pos: a.pos }));
+  // 'tame' is applied via the backend transform on Accept (cycle-drop +
+  // humanize); its real before/after comes from useTransformPreview, not
+  // this JS path. Passthrough here so any merge that happens to encounter
+  // a tame'd chapter doesn't throw — it just leaves the slice untouched.
+  if (tone.id === 'tame') return slice.map((a) => ({ at: a.at, pos: a.pos }));
   const dur = Math.max(1, chapterEnd - chapterStart);
   const impact = params.impact ?? 1;
   const clamp = (v) => Math.max(0, Math.min(100, v));
@@ -475,10 +498,35 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     () => originalActions.filter((a) => a.at >= active.atMs && a.at <= active.endMs),
     [originalActions, active.atMs, active.endMs],
   );
-  const afterSlice = useMemo(
-    () => applyTone(originalActions, active.atMs, active.endMs, tone, toneParams),
-    [originalActions, active.atMs, active.endMs, tone, toneParams],
+
+  // Tame is the one tone whose preview comes from the backend (the real
+  // cycle-drop + humanize), not applyTone. Hook runs unconditionally
+  // (transformId null → it no-ops) to keep hook order stable; it only
+  // fires a python preview when Tame is the active chapter's tone.
+  const tameActive = tone.id === 'tame' && active !== EMPTY_CHAPTER;
+  const tameSpans = useMemo(
+    () => (tameActive ? [{ start_ms: active.atMs, end_ms: active.endMs }] : []),
+    [tameActive, active.atMs, active.endMs],
   );
+  const { previewBySpanStart: tamePreview, previewLoading: tameLoading } = useTransformPreview({
+    funscriptPath: project?.path,
+    transformId: tameActive ? 'tame' : null,
+    params: tameActive
+      ? { max_bpm: toneParams.max_bpm ?? 360, groove: toneParams.groove ?? 0.2 }
+      : {},
+    spans: tameSpans,
+  });
+
+  const afterSlice = useMemo(() => {
+    if (tone.id === 'tame') {
+      // Backend preview returns ABSOLUTE-time actions keyed by span start;
+      // fall back to the source slice while the debounced request is in
+      // flight so the After chart never blanks.
+      const abs = tamePreview.get(active.atMs);
+      return Array.isArray(abs) ? abs : beforeSlice;
+    }
+    return applyTone(originalActions, active.atMs, active.endMs, tone, toneParams);
+  }, [tone, toneParams, originalActions, active.atMs, active.endMs, tamePreview, beforeSlice]);
 
   // Shared viewport for the Before/After preview charts. Pan or zoom one
   // and the other follows, so "compare what changed" reads the same time
@@ -612,8 +660,42 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // range. This makes accept idempotent — if the user tweaks chapter 1's
   // tone and re-accepts, chapter 1's slice is re-toned from the original
   // (not from the previously-toned data), so transforms never compound.
-  const handleAcceptTone = () => {
+  const handleAcceptTone = async () => {
     if (active === EMPTY_CHAPTER) return;
+    const i = chapters.findIndex((c) => c.id === active.id);
+    const advance = () => {
+      if (i >= 0 && i < chapters.length - 1) setActiveId(chapters[i + 1].id);
+    };
+
+    // Tame runs the REAL backend transform over the chapter span and rolls
+    // the merged result into the working funscript (same path as the
+    // Phrases/Stanzas Apply), so the device-aware groove + cycle-drop are
+    // faithful and survive close/reopen. The six expressive tones still use
+    // the synchronous JS merge below.
+    if (tone.id === 'tame') {
+      if (!project?.path) return;
+      setBusy?.(true);
+      try {
+        const spans = [{ start_ms: active.atMs, end_ms: active.endMs }];
+        const res = await transformApplyActions(
+          project.path, 'tame',
+          { max_bpm: toneParams.max_bpm ?? 360, groove: toneParams.groove ?? 0.2 },
+          spans,
+        );
+        if (res && Array.isArray(res.actions)) {
+          onActionsPatch?.(res.actions);
+          await saveWorkingFunscript(project.path, res.actions);
+        }
+      } catch (e) {
+        setAppError?.(`Could not apply Tame: ${e?.message ?? e}`);
+      } finally {
+        setBusy?.(false);
+      }
+      setAcceptedChapterIds((prev) => new Set(prev).add(active.id));
+      advance();
+      return;
+    }
+
     const nextAccepted = new Set(acceptedChapterIds);
     nextAccepted.add(active.id);
     setAcceptedChapterIds(nextAccepted);
@@ -625,10 +707,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       params: paramsByChapter,
     });
     onActionsPatch?.(merged);
-    const i = chapters.findIndex((c) => c.id === active.id);
-    if (i >= 0 && i < chapters.length - 1) {
-      setActiveId(chapters[i + 1].id);
-    }
+    advance();
   };
 
   // Persist a mutated chapter list and re-extract the affected clips with
@@ -1014,13 +1093,19 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                 you're "not touching." */}
             {tone.id !== 'none' && (
               <>
-                <Slider
-                  label="Impact — how much of this tone to apply"
-                  value={toneParams.impact ?? 0.5}
-                  min={0} max={1} step={0.01}
-                  valueLabel={(toneParams.impact ?? 0.5).toFixed(2)}
-                  onChange={(v) => setParam('impact', v)}
-                />
+                {/* Impact is an expressive-tone concept (how much of the
+                    mood to blend in). Tame is corrective, not a blend —
+                    its strength lives entirely in Max BPM + Groove — so it
+                    skips Impact and shows just its two backend params. */}
+                {tone.id !== 'tame' && (
+                  <Slider
+                    label="Impact — how much of this tone to apply"
+                    value={toneParams.impact ?? 0.5}
+                    min={0} max={1} step={0.01}
+                    valueLabel={(toneParams.impact ?? 0.5).toFixed(2)}
+                    onChange={(v) => setParam('impact', v)}
+                  />
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 14 }}>
                   {tone.params.map((p) => {
                     const v = toneParams[p.id] ?? p.def;
@@ -1057,7 +1142,9 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                 subtitle={
                   tone.id === 'none'
                     ? 'passthrough — no transform applied'
-                    : `${tone.label} · impact ${Math.round((toneParams.impact ?? 0.5) * 100)}%`
+                    : tone.id === 'tame'
+                      ? `Tame · Max BPM ${toneParams.max_bpm ?? 360}${tameLoading ? ' · updating…' : ''}`
+                      : `${tone.label} · impact ${Math.round((toneParams.impact ?? 0.5) * 100)}%`
                 }
                 accent={tone.color}
               >
