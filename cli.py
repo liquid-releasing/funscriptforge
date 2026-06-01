@@ -496,11 +496,15 @@ def cmd_list_transforms(args):
         out = {}
         for key, spec in catalog.items():
             # Category is the UI grouping (Tone / Behavior / Structural).
-            # Derived, not stored: structural transforms carry the flag,
-            # tone_* are the mood-arc set, everything else is behavioral.
-            # Emitted here so the UI catalog is single-source — no hand
+            # Mostly derived: structural transforms carry the flag, tone_*
+            # are the mood-arc set, everything else is behavioral. A spec may
+            # also DECLARE its category explicitly (spec.category) to override
+            # the derivation — e.g. `tame` is non-structural but belongs under
+            # Tone. Emitted here so the UI catalog is single-source — no hand
             # mapping that can drift from the Python truth.
-            if spec.structural:
+            if spec.category:
+                category = spec.category
+            elif spec.structural:
                 category = "structural"
             elif key.startswith("tone_"):
                 category = "tone"

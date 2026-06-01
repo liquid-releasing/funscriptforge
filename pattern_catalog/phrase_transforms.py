@@ -699,59 +699,37 @@ class _HalveTempo(PhraseTransform):
 
 
 class _Tame(PhraseTransform):
-    """Tame runaway BPM to a playable ceiling, then humanize for feel.
+    """Device-aware softening — humanize a too-relentless section.
 
-    Two independent stages, matching the two sliders:
+    One stage, one slider: **Groove (humanize).** Adds velocity variation to
+    monotone sections via `forge.device_specs.apply_humanize` (target
+    CV = groove), so a wall of uniform fast strokes reads as device-aware
+    and less relentless WITHOUT dropping a single beat or reshaping
+    amplitude. `apply_humanize` preserves beat count and position values and
+    only nudges cycle timing in low-variance windows.
 
-    1. **Cycle-drop to the Max-BPM ceiling.** "BPM" in this app is a pure
-       *timing* metric — ``60000/(2·dt)`` between consecutive actions — so
-       the ONLY way to lower a 1200-BPM burst is to widen the interval, i.e.
-       drop actions closer together than ``min_dt = 60000/(2·max_bpm)``.
-       (Velocity/position clamping leaves timing untouched and so never
-       moves the BPM number; see [[project tame]] / device_specs.) This is
-       the same greedy drop DeviceTab's `applyBpmClamp` uses, ported to
-       Python so the catalog transform and the tab agree.
-    2. **Groove (humanize).** Adds velocity variation to monotone sections
-       via `forge.device_specs.apply_humanize` (target CV = groove). 0 = off.
-       Needs ≥~60s windows to bite, so on a short phrase slice it cleanly
-       no-ops; on a chapter-scoped slice it's the device-aware "feel" pass.
+    History: Tame once also had a Max-BPM "cycle-drop" stage that capped
+    stroke rate by *dropping* actions. That was removed 2026-06-01 — the
+    runaway BPM that motivated it was a metric bug (since fixed), and
+    dropping strokes kills the beat, which is never what you want. To
+    *reduce intensity* (not just soften feel) the right move is to CENTER
+    amplitude toward 50, which the recenter / amplitude-reduce transforms
+    already do with every beat intact. So Tame is purely the groove pass.
 
-    Structural — drops actions / changes count, so callers replace the slice.
+    Non-structural — preserves count + amplitude, only shifts timing.
     """
 
     def _transform(self, actions, p):
         if len(actions) < 2:
             return actions
-
-        max_bpm = max(1.0, float(p["max_bpm"]))
-        groove = float(p["groove"])
-
-        # Stage 1 — greedy cycle-drop. Keep the first action, then keep each
-        # later action only once it's at least min_dt past the last kept one.
-        min_dt = 60_000.0 / (2.0 * max_bpm)
-        kept = [actions[0]]
-        for a in actions[1:]:
-            if a["at"] - kept[-1]["at"] >= min_dt:
-                kept.append(a)
-        # Preserve the slice's end anchor (avoids a gap at the merge seam).
-        # If the final action lands closer than min_dt to the last kept one,
-        # REPLACE that penultimate rather than append — otherwise the anchor
-        # would re-introduce an over-ceiling gap right at the end (the very
-        # thing we're capping). Replacing keeps the min-gap invariant because
-        # the gap into the replaced slot only grows.
-        if kept[-1]["at"] != actions[-1]["at"]:
-            if actions[-1]["at"] - kept[-1]["at"] >= min_dt or len(kept) < 2:
-                kept.append(actions[-1])
-            else:
-                kept[-1] = actions[-1]
-
-        # Stage 2 — groove. Lazy import to avoid any load-order coupling with
-        # forge.device_specs (mirrors apply_device_awareness's inline imports).
-        if groove > 0 and len(kept) >= 2:
-            from forge.device_specs import apply_humanize
-            kept, _ = apply_humanize(kept, target_cv=groove)
-
-        return kept
+        groove = float(p.get("groove", 0.2))
+        if groove <= 0:
+            return actions
+        # Lazy import to avoid load-order coupling with forge.device_specs
+        # (mirrors apply_device_awareness's inline imports).
+        from forge.device_specs import apply_humanize
+        out, _ = apply_humanize(actions, target_cv=groove)
+        return out
 
 
 # ------------------------------------------------------------------
@@ -1471,18 +1449,17 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
         _Tame(
             key="tame",
             name="Tame",
-            description="Gentle corrective: only thins strokes that exceed the BPM ceiling, then lightly humanizes. No amplitude reshaping — a light touch, not a sledgehammer like the expressive tones. Does nothing to already-playable content.",
-            structural=True,
+            description="Device-aware softening: humanizes a relentless wall of fast strokes so it feels less mechanical — every beat kept, amplitude untouched. To reduce intensity (not just feel), center amplitude with Recenter / Amplitude Scale instead.",
+            structural=False,
+            # Grouped under Tone (not Behavior) in the picker: Tame is the
+            # one corrective tone, and it ships as a Tone card on the
+            # Chapters tab — keep the category consistent across surfaces.
+            category="tone",
             params={
-                "max_bpm": TransformParam(
-                    label="Max BPM", type="int", default=360,
-                    min_val=60, max_val=450, step=5,
-                    help="Ceiling for stroke rate. Only strokes FASTER than this are thinned — normal content passes through untouched. 360 ≈ estim (FOC) limit; lower for strokers.",
-                ),
                 "groove": TransformParam(
                     label="Groove", type="float", default=0.2,
                     min_val=0.0, max_val=1.0, step=0.05,
-                    help="Light humanize — subtle velocity variation in monotone sections (needs ~60s+ to bite). 0 = off. 0.2 = gentle; 0.35 ≈ natural.",
+                    help="Humanize strength — subtle velocity variation in monotone sections (needs ~60s+ to bite). 0 = off. 0.2 = gentle; 0.35 ≈ natural.",
                 ),
             },
         ),
@@ -2066,7 +2043,9 @@ def get_transforms_by_category() -> dict[str, list[tuple[str, str]]]:
             continue
         spec = TRANSFORM_CATALOG[k]
         pair = (k, spec.name)
-        if spec.structural:
+        if spec.category == "tone":
+            tone.append(pair)
+        elif spec.structural:
             structural.append(pair)
         else:
             behavior.append(pair)

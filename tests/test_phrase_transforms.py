@@ -1554,48 +1554,43 @@ class TestToneTransforms(unittest.TestCase):
 
 
 class TestTame(unittest.TestCase):
-    """Tame caps runaway BPM by dropping over-fast strokes (timing-based),
-    then optionally humanizes. BPM == 60000/(2·dt), so the guarantee is a
-    minimum inter-action gap of 60000/(2·max_bpm)."""
+    """Tame is device-aware softening: a humanize (groove) pass ONLY. It
+    keeps every beat and all amplitude — it does not drop strokes or cap
+    BPM. (The old Max-BPM cycle-drop stage was removed 2026-06-01: dropping
+    strokes kills the beat; to lower intensity you center amplitude with
+    Recenter / Amplitude Scale instead.) apply_humanize preserves count and
+    position values, only nudging cycle timing in low-variance windows."""
 
     @staticmethod
-    def _runaway(dur_ms=4000, step_ms=25):
-        # 25 ms apart → 1200 "BPM" full-range zig-zag (the Prisoner case).
-        return [{"at": at, "pos": 0 if (at // step_ms) % 2 == 0 else 100}
-                for at in range(0, dur_ms + 1, step_ms)]
+    def _monotone(n=200, step_ms=100):
+        # A uniform fast zig-zag — the "wall of red" Tame is meant to soften.
+        return [{"at": i * step_ms, "pos": 0 if i % 2 == 0 else 100}
+                for i in range(n)]
 
-    def _peak_bpm(self, actions):
-        gaps = [actions[i]["at"] - actions[i - 1]["at"]
-                for i in range(1, len(actions))]
-        return max(60000 / (2 * g) for g in gaps if g > 0)
+    def test_tame_preserves_beat_count(self):
+        acts = self._monotone()
+        out = TRANSFORM_CATALOG["tame"].apply(acts, {"groove": 0.35})
+        self.assertEqual(len(out), len(acts))  # no beats dropped
 
-    def test_tame_caps_peak_bpm(self):
-        acts = self._runaway()
-        self.assertGreater(self._peak_bpm(acts), 1000)  # starts runaway
-        out = TRANSFORM_CATALOG["tame"].apply(acts, {"max_bpm": 120, "groove": 0.0})
-        # No two kept actions closer than 60000/(2·120) = 250 ms → ≤ 120 BPM.
-        self.assertLessEqual(self._peak_bpm(out), 120 + 1e-6)
-        self.assertLess(len(out), len(acts))  # dropped over-fast strokes
+    def test_tame_preserves_amplitude(self):
+        acts = self._monotone()
+        out = TRANSFORM_CATALOG["tame"].apply(acts, {"groove": 0.35})
+        self.assertEqual([a["pos"] for a in out], [a["pos"] for a in acts])
 
-    def test_tame_invariant_holds_for_nondividing_ceiling(self):
-        # 180 BPM → min gap 166.67 ms, which the 25 ms grid doesn't divide —
-        # the end-anchor must NOT re-introduce an over-ceiling gap.
-        out = TRANSFORM_CATALOG["tame"].apply(self._runaway(), {"max_bpm": 180, "groove": 0.0})
-        self.assertLessEqual(self._peak_bpm(out), 180 + 1e-6)
+    def test_tame_groove_zero_is_noop(self):
+        acts = self._monotone()
+        out = TRANSFORM_CATALOG["tame"].apply(acts, {"groove": 0.0})
+        self.assertEqual([(a["at"], a["pos"]) for a in out],
+                         [(a["at"], a["pos"]) for a in acts])
 
-    def test_tame_keeps_end_anchor(self):
-        acts = self._runaway()
-        out = TRANSFORM_CATALOG["tame"].apply(acts, {"max_bpm": 90, "groove": 0.0})
-        self.assertEqual(out[-1]["at"], acts[-1]["at"])
+    def test_tame_default_groove_used_when_omitted(self):
+        # apply({}) fills the groove default — must not raise, beats kept.
+        acts = self._monotone()
+        out = TRANSFORM_CATALOG["tame"].apply(acts, {})
+        self.assertEqual(len(out), len(acts))
 
-    def test_tame_below_ceiling_is_noop_on_timing(self):
-        # A slow 60-BPM script is already under a 360 ceiling → no drops.
-        acts = [{"at": i * 500, "pos": 0 if i % 2 == 0 else 100} for i in range(20)]
-        out = TRANSFORM_CATALOG["tame"].apply(acts, {"max_bpm": 360, "groove": 0.0})
-        self.assertEqual([a["at"] for a in out], [a["at"] for a in acts])
-
-    def test_tame_is_structural(self):
-        self.assertTrue(TRANSFORM_CATALOG["tame"].structural)
+    def test_tame_is_not_structural(self):
+        self.assertFalse(TRANSFORM_CATALOG["tame"].structural)
 
 
 if __name__ == "__main__":

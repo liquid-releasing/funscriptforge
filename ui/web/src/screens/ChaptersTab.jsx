@@ -114,20 +114,21 @@ const TONES = [
       { id: 'recenter', label: 'Recenter', min: 0, max: 1, step: 0.05, def: 0.6,  fmt: (v) => v.toFixed(2) },
       { id: 'rhythm',   label: 'Rhythm',   min: 0, max: 1, step: 0.05, def: 0.55, fmt: (v) => v.toFixed(2) },
     ] },
-  // Tame (2026-06-01) — the one *corrective* tone. Unlike the six
-  // expressive tones above (synchronous JS preview math in applyTone),
-  // Tame runs the REAL backend `tame` transform (cycle-drop + device-aware
-  // humanize) over the chapter span: its before/after comes from
+  // Tame (2026-06-01) — the one *corrective* tone: device-aware softening.
+  // Unlike the six expressive tones above (synchronous JS preview math in
+  // applyTone), Tame runs the REAL backend `tame` transform (humanize /
+  // groove) over the chapter span: its before/after comes from
   // useTransformPreview and Accept rolls the result through
   // transform_apply_actions + the working funscript — the same path
-  // Phrases/Stanzas Apply uses. Param ids MUST match the backend
-  // transform's keys (max_bpm / groove). Gentle by default — Max BPM 360
-  // only thins content faster than a device can play. See [[project tame]].
+  // Phrases/Stanzas Apply uses. One param (groove), id matching the backend
+  // key. It softens a wall of fast strokes WITHOUT dropping a beat — there
+  // is no stroke-rate cap (the Max-BPM cycle-drop was removed: dropping
+  // strokes kills the beat; center amplitude to lower intensity instead).
+  // See [[project tame]].
   { id: 'tame', label: 'Tame', color: '#2dd4bf',
-    desc: 'Device-aware corrective. Caps runaway stroke rate to a playable ceiling, then lightly humanizes. Gentle by default — only thins content faster than the ceiling, never reshapes amplitude.',
+    desc: 'Device-aware softening. Humanizes a relentless wall of fast strokes so it feels less mechanical — every beat kept, amplitude untouched. To lower intensity, center amplitude with the Recenter / Amplitude transforms instead.',
     params: [
-      { id: 'max_bpm', label: 'Max BPM', min: 60, max: 450, step: 5,    def: 360, fmt: (v) => `${v}` },
-      { id: 'groove',  label: 'Groove',  min: 0,  max: 1,   step: 0.05, def: 0.2, fmt: (v) => v.toFixed(2) },
+      { id: 'groove', label: 'Groove', min: 0, max: 1, step: 0.05, def: 0.2, fmt: (v) => v.toFixed(2) },
     ] },
 ];
 
@@ -511,9 +512,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   const { previewBySpanStart: tamePreview, previewLoading: tameLoading } = useTransformPreview({
     funscriptPath: project?.path,
     transformId: tameActive ? 'tame' : null,
-    params: tameActive
-      ? { max_bpm: toneParams.max_bpm ?? 360, groove: toneParams.groove ?? 0.2 }
-      : {},
+    params: tameActive ? { groove: toneParams.groove ?? 0.2 } : {},
     spans: tameSpans,
   });
 
