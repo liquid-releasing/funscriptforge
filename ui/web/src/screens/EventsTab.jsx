@@ -95,12 +95,20 @@ export default function EventsTab({
     [events, selectedId],
   );
 
-  // When a timeline event is selected, sync the library cursor to its effect.
+  // Edit-mode: clicking a timeline event rehydrates the capture bar with its
+  // begin/end and arms its effect, so the config pane loads its settings and
+  // the commit button becomes "Update event". Deselecting (click again) clears
+  // the marks back to a clean new-event capture.
   useEffect(() => {
     if (selectedEvent) {
       setSelectedEffectId(selectedEvent.effectId);
+      setBeginMs(selectedEvent.beginMs);
+      setEndMs(selectedEvent.endMs);
+    } else {
+      setBeginMs(null);
+      setEndMs(null);
     }
-  }, [selectedEvent?.effectId]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const timelineEvents = useMemo(() => {
     if (scope === 'all') return events;
@@ -176,25 +184,40 @@ export default function EventsTab({
   // Commit the captured span as an event using the library's current effect
   // + device. Chain carries the end forward as the next begin (gapless);
   // otherwise the marks clear. Local-only until the .feel.yml wiring pass.
-  const handleAddEvent = (config = {}) => {
+  const handleCommit = (config = {}) => {
     if (beginMs == null || endMs == null) return;
     const b = Math.min(beginMs, endMs);
     const e = Math.max(beginMs, endMs);
     if (e - b < 50) return;
-    seqRef.current += 1;
-    const id = `e-cap-${seqRef.current}`;
-    const ev = {
-      id, beginMs: b, endMs: e,
+    const base = {
+      beginMs: b, endMs: e,
       effectId: selectedEffectId,
       devices: config.devices?.length ? config.devices : [libDevice],
       intensity: config.intensity != null ? config.intensity / 100 : 0.6,
       params: config.params || {},
       deviceCfg: config.deviceCfg || null,
     };
-    setEvents((prev) => [...prev, ev].sort((a, b2) => a.beginMs - b2.beginMs));
-    setSelectedId(id);
-    if (chain) { setBeginMs(e); setEndMs(null); }
-    else { setBeginMs(null); setEndMs(null); }
+    const editing = selectedId && events.some((ev) => ev.id === selectedId);
+    if (editing) {
+      // Update the selected event in place; stay in edit-mode on it.
+      setEvents((prev) => prev
+        .map((ev) => (ev.id === selectedId ? { ...ev, ...base } : ev))
+        .sort((a, b2) => a.beginMs - b2.beginMs));
+    } else {
+      seqRef.current += 1;
+      const id = `e-cap-${seqRef.current}`;
+      setEvents((prev) => [...prev, { id, ...base }].sort((a, b2) => a.beginMs - b2.beginMs));
+      // Stay in new-event mode (don't auto-select — that would flip us into
+      // edit-mode and fight the chain carry-forward). Chain carries the end
+      // forward as the next begin; otherwise clear the marks.
+      if (chain) { setBeginMs(e); setEndMs(null); }
+      else { setBeginMs(null); setEndMs(null); }
+    }
+  };
+
+  const handleDeleteEvent = (id) => {
+    setEvents((prev) => prev.filter((e) => e.id !== id));
+    setSelectedId((s) => (s === id ? null : s));
   };
 
   // Chapter clip for the monitor — same hook Chapters/Phrases use (stream-
@@ -421,7 +444,8 @@ export default function EventsTab({
           libDevice={libDevice}
           beginMs={beginMs}
           endMs={endMs}
-          onAddEvent={handleAddEvent}
+          editingEvent={selectedId ? selectedEvent : null}
+          onAddEvent={handleCommit}
         />
 
         <TimelinePane
@@ -431,6 +455,8 @@ export default function EventsTab({
           chapters={chapters}
           selectedId={selectedId}
           onSelect={setSelectedId}
+          onEdit={(id) => setSelectedId(id)}
+          onDelete={handleDeleteEvent}
         />
       </div>
 
@@ -833,25 +859,42 @@ function EffectLibrary({ libDevice, onDeviceChange, selectedEffectId, onSelectEf
 // CapturePane — step ③ effect config (intensity · tunables · devices)
 // + commit. Accent follows the armed effect's family color.
 // ──────────────────────────────────────────────────────────────
-function CapturePane({ effect, libDevice, beginMs, endMs, onAddEvent }) {
+function CapturePane({ effect, libDevice, beginMs, endMs, editingEvent, onAddEvent }) {
   const effId = effect?.id;
+  const editId = editingEvent?.id;
+  const isEditing = !!editingEvent;
   const [intensity, setIntensity] = useState(70);
   const [paramVals, setParamVals] = useState({});
   const [deviceCfg, setDeviceCfg] = useState({});
 
-  // Reset config to the armed effect's defaults whenever the effect changes.
+  // Load config: from the event being edited when one is selected (and its
+  // effect is armed), else the armed effect's defaults. Re-runs when the
+  // armed effect OR the edited event changes.
   useEffect(() => {
     if (!effect) return;
-    setIntensity(effect.baseline ? 100 : 70);
-    const pv = {};
-    paramsFor(effect).forEach((p) => { pv[p.key] = p.def; });
-    setParamVals(pv);
-    const dc = {};
-    EVENT_DEVICES.forEach((d) => {
-      if (effect.devices.includes(d.id)) dc[d.id] = { mode: 'broadcast', value: 100 };
-    });
-    setDeviceCfg(dc);
-  }, [effId]);  // eslint-disable-line react-hooks/exhaustive-deps
+    const defaultDevices = () => {
+      const dc = {};
+      EVENT_DEVICES.forEach((d) => {
+        if (effect.devices.includes(d.id)) dc[d.id] = { mode: 'broadcast', value: 100 };
+      });
+      return dc;
+    };
+    if (editingEvent && editingEvent.effectId === effect.id) {
+      setIntensity(Math.round((editingEvent.intensity ?? (effect.baseline ? 1 : 0.7)) * 100));
+      const pv = {};
+      paramsFor(effect).forEach((p) => {
+        pv[p.key] = editingEvent.params?.[p.key] != null ? editingEvent.params[p.key] : p.def;
+      });
+      setParamVals(pv);
+      setDeviceCfg(editingEvent.deviceCfg || defaultDevices());
+    } else {
+      setIntensity(effect.baseline ? 100 : 70);
+      const pv = {};
+      paramsFor(effect).forEach((p) => { pv[p.key] = p.def; });
+      setParamVals(pv);
+      setDeviceCfg(defaultDevices());
+    }
+  }, [effId, editId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!effect) return <div />;
 
@@ -900,7 +943,9 @@ function CapturePane({ effect, libDevice, beginMs, endMs, onAddEvent }) {
           {fam.label}
         </span>
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>armed</span>
+        <span style={{ fontSize: 11, color: isEditing ? color : 'var(--text-dim)' }}>
+          {isEditing ? 'editing' : 'armed'}
+        </span>
       </div>
 
       <div style={{ fontSize: 12, color: 'var(--text-soft)', lineHeight: 1.5, marginTop: -4 }}>
@@ -1048,7 +1093,9 @@ function CapturePane({ effect, libDevice, beginMs, endMs, onAddEvent }) {
         type="button"
         onClick={commit}
         disabled={!canAdd}
-        title={canAdd ? `Add ${effect.label} event` : 'Capture a begin and end first'}
+        title={canAdd
+          ? (isEditing ? `Update ${effect.label} event` : `Add ${effect.label} event`)
+          : 'Capture a begin and end first'}
         style={{
           padding: '13px 16px', borderRadius: 9, width: '100%',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -1059,7 +1106,7 @@ function CapturePane({ effect, libDevice, beginMs, endMs, onAddEvent }) {
           cursor: canAdd ? 'pointer' : 'default',
         }}
       >
-        <Icon name="plus" size={16} /> Add event
+        <Icon name={isEditing ? 'check' : 'plus'} size={16} /> {isEditing ? 'Update event' : 'Add event'}
       </button>
     </div>
   );
@@ -1068,7 +1115,7 @@ function CapturePane({ effect, libDevice, beginMs, endMs, onAddEvent }) {
 // ──────────────────────────────────────────────────────────────
 // TimelinePane — right
 // ──────────────────────────────────────────────────────────────
-function TimelinePane({ events, totalEvents, scope, chapters, selectedId, onSelect }) {
+function TimelinePane({ events, totalEvents, scope, chapters, selectedId, onSelect, onEdit, onDelete }) {
   const grouped = chapters.map((ch) => ({
     ch,
     items: events.filter((e) => e.beginMs >= ch.atMs && e.beginMs < ch.endMs),
@@ -1123,6 +1170,8 @@ function TimelinePane({ events, totalEvents, scope, chapters, selectedId, onSele
                 evt={evt}
                 selected={evt.id === selectedId}
                 onSelect={() => onSelect(evt.id === selectedId ? null : evt.id)}
+                onEdit={() => onEdit(evt.id)}
+                onDelete={() => onDelete(evt.id)}
               />
             ))}
           </div>
@@ -1132,16 +1181,22 @@ function TimelinePane({ events, totalEvents, scope, chapters, selectedId, onSele
   );
 }
 
-function TimelineRow({ evt, selected, onSelect }) {
+function TimelineRow({ evt, selected, onSelect, onEdit, onDelete }) {
   const eff = findEffect(evt.effectId);
   const fam = familyOf(eff);
   const dur = evt.endMs - evt.beginMs;
+  const rowBtn = {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: 24, height: 24, borderRadius: 5, padding: 0,
+    background: 'transparent', border: '1px solid transparent',
+    color: 'var(--text-dim)', cursor: 'pointer',
+  };
   return (
     <div
       onClick={onSelect}
       style={{
         display: 'grid',
-        gridTemplateColumns: '60px 1fr',
+        gridTemplateColumns: '60px 1fr auto',
         gap: 8, padding: '7px 12px', cursor: 'pointer',
         background: selected ? 'var(--surface-2)' : 'transparent',
         borderLeft: `3px solid ${selected && fam ? fam.color : 'transparent'}`,
@@ -1171,6 +1226,28 @@ function TimelineRow({ evt, selected, onSelect }) {
             }}>{d}</span>
           ))}
         </div>
+      </div>
+      {/* Row actions — edit (rehydrate into the capture bar + config) and
+          delete. stopPropagation so they don't also toggle row-select. */}
+      <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <button
+          type="button" title="Edit event"
+          onClick={(e) => { e.stopPropagation(); onEdit(); }}
+          style={rowBtn}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.borderColor = 'transparent'; }}
+        >
+          <Icon name="pencil" size={13} />
+        </button>
+        <button
+          type="button" title="Delete event"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          style={rowBtn}
+          onMouseEnter={(e) => { e.currentTarget.style.color = '#ff6b6b'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.borderColor = 'transparent'; }}
+        >
+          <Icon name="trash-2" size={13} />
+        </button>
       </div>
     </div>
   );
