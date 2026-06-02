@@ -22,45 +22,113 @@ export const EVENT_FAMILIES = {
 // Effect catalog — each effect lists which devices support it. Device-
 // specific parameter sets live in the wiring pass; for skeleton-mode the
 // UI just needs to know "edge supports estim+vibrator, not bhaptics".
+// `preview` = the haptic OUTPUT shape, normalized y in [0,1] (0 bottom,
+// 1 top), drawn as a filled ShapeGlyph in the library row (decision #6).
+// Detect↔synthesize share pictures: a "Swell" you detect and a "Surge"
+// you synthesize read alike.
 export const EVENT_EFFECTS = [
   // Buzz
   { id: 'surge',   label: 'Surge',   family: 'buzz',
     desc: 'Release crescendo — slow throb, wide pulse sweep.',
+    preview: [0.2, 0.45, 0.72, 0.9, 0.96, 0.85, 0.6, 0.32, 0.2],
     devices: ['estim', 'vibrator', 'bhaptics', 'shaker'] },
   { id: 'edge',    label: 'Edge',    family: 'buzz',
     desc: 'Tension build — pulse ramp with volume buzz.',
+    preview: [0.25, 0.32, 0.42, 0.5, 0.62, 0.7, 0.82, 0.9, 0.96],
     devices: ['estim', 'vibrator', 'bhaptics', 'shaker'] },
   { id: 'hold',    label: 'Hold',    family: 'buzz',
     desc: 'Locked high pulse with subtle hum.',
+    preview: [0.82, 0.86, 0.83, 0.86, 0.84, 0.86, 0.83, 0.85, 0.84],
     devices: ['estim', 'vibrator', 'bhaptics', 'shaker'] },
   // Stroke
   { id: 'slow',    label: 'Slow',    family: 'stroke',
     desc: 'Pull back — quarter-speed motion.',
+    preview: [0.35, 0.55, 0.62, 0.5, 0.32, 0.42, 0.58, 0.5, 0.36],
     devices: ['estim', 'vibrator', 'bhaptics', 'shaker'] },
   { id: 'steady',  label: 'Steady',  family: 'stroke',
     desc: 'Neutral — moderate motion, no intensity change.',
+    preview: [0.4, 0.62, 0.4, 0.62, 0.4, 0.62, 0.4, 0.62, 0.4],
     devices: ['estim', 'vibrator', 'bhaptics', 'shaker'] },
   { id: 'fast',    label: 'Fast',    family: 'stroke',
     desc: 'Speed up — fast motion with intensity push.',
+    preview: [0.3, 0.75, 0.35, 0.8, 0.4, 0.85, 0.45, 0.9, 0.5, 0.95, 0.55],
     devices: ['estim', 'vibrator', 'bhaptics', 'shaker'] },
   // Control
   { id: 'cut',     label: 'Cut',     family: 'control',
     desc: 'Kill — intensity to zero, slow recovery.',
+    preview: [0.85, 0.6, 0.12, 0.05, 0.05, 0.05, 0.18, 0.32, 0.45],
     devices: ['estim', 'vibrator', 'bhaptics', 'shaker'] },
   { id: 'breathe', label: 'Breathe', family: 'control',
     desc: 'Gentle breathing oscillation — calm, rhythmic.',
+    preview: [0.35, 0.55, 0.74, 0.6, 0.36, 0.55, 0.74, 0.58, 0.36],
     devices: ['estim', 'vibrator', 'bhaptics', 'shaker'] },
   // Shape
   { id: 'pulse',   label: 'Pulse',   family: 'shape',
     desc: 'Sharp blip — single tap or short burst.',
+    preview: [0.14, 0.14, 0.16, 0.95, 0.18, 0.14, 0.14, 0.14, 0.14],
     devices: ['vibrator', 'bhaptics', 'shaker'] },
   { id: 'sweep',   label: 'Sweep',   family: 'shape',
     desc: 'Frequency or zone sweep across the device.',
+    preview: [0.16, 0.3, 0.44, 0.58, 0.7, 0.8, 0.88, 0.94, 0.9],
     devices: ['estim', 'bhaptics'] },
 ];
 
+// "Normal" — the pre-armed baseline / opt-out (locked decision #5). Not a
+// real enhancement and NOT exported: it's the eraser/coverage primitive so
+// back-to-back chained captures keep continuous coverage with no gaps. Lives
+// pinned at the top of the library, above the family groups. compose:'replace'
+// so it overwrites rather than layers.
+export const NORMAL_COLOR = '#8a8a93';
+export const NORMAL_EFFECT = {
+  id: 'normal', label: 'Normal', family: null, baseline: true,
+  compose: 'replace', exported: false,
+  desc: 'Baseline — no enhancement. Chain captures to cover ground fast.',
+  preview: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+  devices: EVENT_DEVICES.map((d) => d.id),
+};
+
 export function findEffect(id) {
+  if (id === NORMAL_EFFECT.id) return NORMAL_EFFECT;
   return EVENT_EFFECTS.find((e) => e.id === id) || null;
+}
+
+// Resolve an effect's family swatch. Normal (baseline) has no family, so it
+// reports a neutral grey "Baseline" pseudo-family — keeps the timeline/strip
+// from dropping baseline spans on their `if (!fam) return null` guards.
+export function familyOf(eff) {
+  if (!eff) return null;
+  if (eff.baseline) return { label: 'Baseline', color: NORMAL_COLOR };
+  return EVENT_FAMILIES[eff.family] || null;
+}
+
+// Per-effect tunables (step ③ effect config). Skeleton schemas — the real
+// per-device parameter sets arrive with the .feel.yml wiring pass; for now
+// these give the config pane the right *shape* (sliders + units + defaults).
+export const EFFECT_PARAMS = {
+  surge:   [{ key: 'throb', label: 'Throb', min: 0.5, max: 4, step: 0.1, def: 1.2, unit: 'Hz' },
+            { key: 'width', label: 'Width', min: 0, max: 1, step: 0.05, def: 0.6 },
+            { key: 'tail',  label: 'Tail',  min: 0, max: 1500, step: 50, def: 600, unit: 'ms' }],
+  edge:    [{ key: 'tremor', label: 'Tremor', min: 4, max: 16, step: 0.5, def: 10, unit: 'Hz' },
+            { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.05, def: 0.30 },
+            { key: 'ramp',   label: 'Ramp up', min: 0, max: 1000, step: 50, def: 250, unit: 'ms' }],
+  hold:    [{ key: 'hum',   label: 'Hum',   min: 0.5, max: 6, step: 0.5, def: 2, unit: 'Hz' },
+            { key: 'floor', label: 'Floor', min: 0, max: 1, step: 0.05, def: 0.7 }],
+  slow:    [{ key: 'rate',  label: 'Rate',  min: 0.1, max: 1, step: 0.05, def: 0.25, unit: '×' },
+            { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.05, def: 0.5 }],
+  steady:  [{ key: 'rate',  label: 'Rate',  min: 0.5, max: 2, step: 0.1, def: 1, unit: '×' }],
+  fast:    [{ key: 'rate',  label: 'Rate',  min: 1, max: 4, step: 0.1, def: 2, unit: '×' },
+            { key: 'push',  label: 'Push',  min: 0, max: 1, step: 0.05, def: 0.4 }],
+  cut:     [{ key: 'recover', label: 'Recover', min: 0, max: 2000, step: 50, def: 800, unit: 'ms' }],
+  breathe: [{ key: 'period', label: 'Period', min: 1, max: 8, step: 0.5, def: 4, unit: 's' },
+            { key: 'depth',  label: 'Depth',  min: 0, max: 1, step: 0.05, def: 0.4 }],
+  pulse:   [{ key: 'width', label: 'Width', min: 50, max: 500, step: 10, def: 150, unit: 'ms' }],
+  sweep:   [{ key: 'span', label: 'Span', min: 0, max: 1, step: 0.05, def: 0.8 },
+            { key: 'time', label: 'Time', min: 100, max: 1500, step: 50, def: 600, unit: 'ms' }],
+};
+
+export function paramsFor(eff) {
+  if (!eff) return [];
+  return EFFECT_PARAMS[eff.id] || [];
 }
 
 // Sample events used while the .events.yml sidecar pipeline isn't wired.

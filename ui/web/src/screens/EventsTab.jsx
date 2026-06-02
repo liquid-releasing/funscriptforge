@@ -28,12 +28,15 @@
 // pass.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pill, Button, Icon, fmtTime, fmtTimeShort, TrackStack, MediaViewer, ChapterRibbon } from 'forgemoment';
+import { Pill, Button, Icon, fmtTime, fmtTimeShort, TrackStack, MediaViewer, ChapterRibbon, ShapeGlyph } from 'forgemoment';
 import {
   EVENT_DEVICES,
   EVENT_FAMILIES,
   EVENT_EFFECTS,
+  NORMAL_EFFECT,
   findEffect,
+  familyOf,
+  paramsFor,
   sampleEventsForProject,
 } from '../data/events.js';
 import { useChapterClip } from '../hooks/useChapterClip.js';
@@ -69,12 +72,23 @@ export default function EventsTab({
   // Collapse the hero (TrackStack + monitor) for more editing room below —
   // the reconciled design's "Collapse chart". Ribbon + identity row stay.
   const [collapsed, setCollapsed] = useState(false);
+  // Capture bar (step ① — mark begin/end from the playhead). Both null until
+  // captured; duration is derived. Chain carries this end → next begin so
+  // back-to-back captures stay gapless; Snap pulls the mark to the nearest
+  // beat (trackBeats.beatsMs) when within tolerance. Local-only for now.
+  const [beginMs, setBeginMs] = useState(null);
+  const [endMs, setEndMs] = useState(null);
+  const [chain, setChain] = useState(true);
+  const [snap, setSnap] = useState(true);
+  const seqRef = useRef(0);
   const [libDevice, setLibDevice] = useState(() => {
     const proj = selectedDevices?.[0];
     if (proj && EVENT_DEVICES.find((d) => d.id === proj)) return proj;
     return EVENT_DEVICES[0].id;
   });
-  const [selectedEffectId, setSelectedEffectId] = useState('edge');
+  // Pre-arm "Normal" (decision #5) — open Events ready to chain-capture
+  // baseline coverage without picking an effect first.
+  const [selectedEffectId, setSelectedEffectId] = useState(NORMAL_EFFECT.id);
 
   const selectedEvent = useMemo(
     () => events.find((e) => e.id === selectedId) || null,
@@ -123,7 +137,7 @@ export default function EventsTab({
       .filter((e) => e.beginMs < activeChapter.endMs && e.endMs > activeChapter.atMs)
       .map((e) => {
         const eff = findEffect(e.effectId);
-        const fam = eff ? EVENT_FAMILIES[eff.family] : null;
+        const fam = familyOf(eff);
         return {
           id: e.id,
           start: e.beginMs,
@@ -135,10 +149,53 @@ export default function EventsTab({
   }, [events, activeChapter]);
 
   // Snap the playhead to the active chapter's start when it changes, so the
-  // baton begins inside the visible window rather than at 0.
+  // baton begins inside the visible window rather than at 0. Also clear any
+  // in-progress capture — marks belong to the chapter they were taken in.
   useEffect(() => {
     if (activeChapter) { setCurrentMs(activeChapter.atMs); setIsPlaying(false); }
+    setBeginMs(null); setEndMs(null);
   }, [activeChapter?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Capture handlers ────────────────────────────────────────────────
+  // Snap a raw playhead ms to the nearest beat when Snap is on and a beat
+  // is within ~250 ms; otherwise leave it frame-precise.
+  const snapMs = (ms) => {
+    const beats = trackBeats?.beatsMs;
+    if (!snap || !beats?.length) return Math.round(ms);
+    let best = ms, bestD = Infinity;
+    for (const b of beats) {
+      const d = Math.abs(b - ms);
+      if (d < bestD) { bestD = d; best = b; }
+    }
+    return bestD <= 250 ? Math.round(best) : Math.round(ms);
+  };
+  const handleCaptureBegin = () => setBeginMs(snapMs(currentMs));
+  const handleCaptureEnd = () => setEndMs(snapMs(currentMs));
+  const handleResetCapture = () => { setBeginMs(null); setEndMs(null); };
+
+  // Commit the captured span as an event using the library's current effect
+  // + device. Chain carries the end forward as the next begin (gapless);
+  // otherwise the marks clear. Local-only until the .feel.yml wiring pass.
+  const handleAddEvent = (config = {}) => {
+    if (beginMs == null || endMs == null) return;
+    const b = Math.min(beginMs, endMs);
+    const e = Math.max(beginMs, endMs);
+    if (e - b < 50) return;
+    seqRef.current += 1;
+    const id = `e-cap-${seqRef.current}`;
+    const ev = {
+      id, beginMs: b, endMs: e,
+      effectId: selectedEffectId,
+      devices: config.devices?.length ? config.devices : [libDevice],
+      intensity: config.intensity != null ? config.intensity / 100 : 0.6,
+      params: config.params || {},
+      deviceCfg: config.deviceCfg || null,
+    };
+    setEvents((prev) => [...prev, ev].sort((a, b2) => a.beginMs - b2.beginMs));
+    setSelectedId(id);
+    if (chain) { setBeginMs(e); setEndMs(null); }
+    else { setBeginMs(null); setEndMs(null); }
+  };
 
   // Chapter clip for the monitor — same hook Chapters/Phrases use (stream-
   // copies the active chapter, blob/asset URL by size). Must run before the
@@ -246,16 +303,17 @@ export default function EventsTab({
           </div>
 
         {!collapsed && (
+        // Single box around the funscript view + monitor, same as
+        // Stanzas/Phrases (outer surface/border; no inner card border).
         <div style={{
-          marginTop: 10, display: 'grid',
+          marginTop: 10,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 10, padding: 12,
+          display: 'grid',
           gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 14, alignItems: 'start',
         }}>
-          {/* Left — TrackStack hero */}
-          <div style={{
-            padding: '10px 14px',
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 10,
-          }}>
+          {/* Left — TrackStack hero (no inner box) */}
+          <div style={{ minWidth: 0 }}>
             <div style={{
               display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
               marginBottom: 6,
@@ -272,6 +330,7 @@ export default function EventsTab({
               actions={actions}
               events={chapterEvents}
               lanes={['events', 'funscript']}
+              funscriptColorMode="velocity"
               currentMs={currentMs}
               selectedEventId={selectedId}
               onSeek={setCurrentMs}
@@ -284,7 +343,7 @@ export default function EventsTab({
               (chapter-start/end, ±1s, frame, play) + speed bar drive
               frame-precise begin/end landing. */}
           <MediaViewer
-            width={320}
+            width="100%"
             thumbnailAspect="16/9"
             videoSrc={
               chapterClip && chapterClip.chapterId === activeChapter.id
@@ -324,6 +383,20 @@ export default function EventsTab({
           />
         </div>
         )}
+
+        {/* Capture bar (step ① — mark begin/end from the playhead). */}
+        <CaptureBar
+          beginMs={beginMs}
+          endMs={endMs}
+          chain={chain}
+          snap={snap}
+          canSnap={!!trackBeats?.beatsMs?.length}
+          onCaptureBegin={handleCaptureBegin}
+          onCaptureEnd={handleCaptureEnd}
+          onToggleChain={() => setChain((v) => !v)}
+          onToggleSnap={() => setSnap((v) => !v)}
+          onReset={handleResetCapture}
+        />
         </>
       )}
 
@@ -346,6 +419,9 @@ export default function EventsTab({
         <CapturePane
           effect={findEffect(selectedEffectId)}
           libDevice={libDevice}
+          beginMs={beginMs}
+          endMs={endMs}
+          onAddEvent={handleAddEvent}
         />
 
         <TimelinePane
@@ -416,6 +492,189 @@ function Header({ eventCount, scopeCount, scope }) {
 }
 
 // ──────────────────────────────────────────────────────────────
+// CaptureBar — step ①: mark begin / end from the playhead
+// Neutral (grey) palette — no accent fills. Begin/End grab the current
+// playhead position (optionally snapped to beat); DURATION is derived;
+// Chain / Snap are sticky toggles; + Add event commits the span.
+// ──────────────────────────────────────────────────────────────
+function fmtClock(ms) {
+  if (ms == null || Number.isNaN(ms)) return '––:––.–––';
+  const total = Math.max(0, Math.round(ms));
+  const m = Math.floor(total / 60000);
+  const s = Math.floor((total % 60000) / 1000);
+  const f = total % 1000;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(f).padStart(3, '0')}`;
+}
+
+// Shared step badge — ① capture · ② library · ③ config. One look: red fill,
+// dark glyph, 22px (matches the config card's ③).
+const STEP_RED = '#ff5a5f';
+function StepBadge({ n }) {
+  return (
+    <span style={{
+      width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      background: STEP_RED, color: '#0d0d0d', fontSize: 12, fontWeight: 800,
+    }}>{n}</span>
+  );
+}
+
+function TargetDot({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" style={{ flexShrink: 0 }}>
+      <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="7" cy="7" r="1.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+function GreyCheck({ checked, disabled, label, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={disabled ? undefined : onToggle}
+      disabled={disabled}
+      title={disabled ? `${label} — needs beats` : label}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 7,
+        background: 'transparent', border: 'none', padding: 0,
+        cursor: disabled ? 'default' : 'pointer',
+        color: disabled ? 'var(--text-dim)' : 'var(--text-soft)',
+        fontFamily: 'inherit', fontSize: 12, fontWeight: 600,
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <span style={{
+        width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        background: checked ? 'var(--text-muted)' : 'transparent',
+        border: `1px solid ${checked ? 'var(--text-muted)' : 'var(--border)'}`,
+        color: 'var(--bg)', fontSize: 11, fontWeight: 800, lineHeight: 1,
+      }}>
+        {checked ? '✓' : ''}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+function CaptureButton({ label, set, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`${label} from playhead`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 7,
+        padding: '7px 13px', borderRadius: 7,
+        background: set ? 'var(--surface-2)' : 'var(--bg)',
+        border: `1px solid ${set ? 'var(--text-dim)' : 'var(--border)'}`,
+        color: set ? 'var(--text)' : 'var(--text-soft)',
+        fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+      }}
+    >
+      <TargetDot />
+      Capture
+    </button>
+  );
+}
+
+function ClockField({ ms }) {
+  const set = ms != null;
+  return (
+    <span className="mono" style={{
+      display: 'inline-flex', alignItems: 'center',
+      padding: '7px 12px', borderRadius: 7, minWidth: 96, justifyContent: 'center',
+      background: 'var(--bg)', border: '1px solid var(--border)',
+      color: set ? 'var(--text)' : 'var(--text-dim)',
+      fontSize: 14, fontWeight: 600, letterSpacing: '0.02em',
+    }}>
+      {fmtClock(ms)}
+    </span>
+  );
+}
+
+function CaptureBar({
+  beginMs, endMs, chain, snap, canSnap,
+  onCaptureBegin, onCaptureEnd, onToggleChain, onToggleSnap, onReset,
+}) {
+  const dur = (beginMs != null && endMs != null) ? Math.abs(endMs - beginMs) : null;
+
+  return (
+    <div style={{
+      marginTop: 12, padding: '14px 16px',
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderRadius: 10,
+    }}>
+      {/* Row 1 — mark begin / end */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <StepBadge n={1} />
+        <span style={{
+          fontSize: 11, fontWeight: 700, letterSpacing: '0.07em',
+          textTransform: 'uppercase', color: 'var(--text-muted)',
+        }}>
+          Mark begin / end from playhead
+        </span>
+
+        <span style={{ width: 8 }} />
+
+        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Begin</span>
+        <CaptureButton label="Begin" set={beginMs != null} onClick={onCaptureBegin} />
+        <ClockField ms={beginMs} />
+
+        <Icon name="arrow-right" size={14} style={{ color: 'var(--text-dim)' }} />
+
+        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>End</span>
+        <CaptureButton label="End" set={endMs != null} onClick={onCaptureEnd} />
+        <ClockField ms={endMs} />
+      </div>
+
+      {/* Row 2 — derived duration · toggles · reset · add */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 16, marginTop: 12,
+      }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+            textTransform: 'uppercase', color: 'var(--text-dim)',
+          }}>
+            Duration · derived
+          </div>
+          <div className="mono" style={{
+            fontSize: 18, fontWeight: 600, marginTop: 1,
+            color: dur != null ? 'var(--text)' : 'var(--text-dim)',
+          }}>
+            {dur != null ? fmtClock(dur) : '––:––.–––'}
+          </div>
+        </div>
+
+        <span style={{ flex: 1 }} />
+
+        <GreyCheck checked={chain} label="Chain" onToggle={onToggleChain} />
+        <GreyCheck checked={snap && canSnap} disabled={!canSnap} label="Snap to beat" onToggle={onToggleSnap} />
+
+        <button
+          type="button"
+          onClick={onReset}
+          disabled={beginMs == null && endMs == null}
+          title="Clear marks"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '6px 11px', borderRadius: 7,
+            background: 'transparent', border: '1px solid var(--border)',
+            color: 'var(--text-soft)', fontFamily: 'inherit', fontSize: 12, fontWeight: 600,
+            cursor: 'pointer',
+            opacity: (beginMs == null && endMs == null) ? 0.5 : 1,
+          }}
+        >
+          <Icon name="rotate-ccw" size={12} /> Reset
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
 // EffectLibrary — left pane
 // ──────────────────────────────────────────────────────────────
 function EffectLibrary({ libDevice, onDeviceChange, selectedEffectId, onSelectEffect }) {
@@ -432,9 +691,14 @@ function EffectLibrary({ libDevice, onDeviceChange, selectedEffectId, onSelectEf
       display: 'flex', flexDirection: 'column', maxHeight: 560,
     }}>
       <div style={{ padding: '10px 12px 8px', borderBottom: '1px solid var(--border)' }}>
-        <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{filtered.length}</span>}>
-          Effect library
-        </SectionLabel>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <StepBadge n={2} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{filtered.length}</span>}>
+              Effect library
+            </SectionLabel>
+          </div>
+        </div>
         <div style={{
           display: 'flex', gap: 2, padding: 2, marginTop: 6,
           background: 'var(--surface-2)', borderRadius: 6,
@@ -463,6 +727,48 @@ function EffectLibrary({ libDevice, onDeviceChange, selectedEffectId, onSelectEf
       </div>
 
       <div style={{ flex: 1, overflow: 'auto', padding: '4px 0' }}>
+        {/* Normal — pinned baseline (decision #5). Pre-armed; not exported.
+            The eraser/coverage primitive for chaining captures. */}
+        {(() => {
+          const sel = selectedEffectId === NORMAL_EFFECT.id;
+          const c = familyOf(NORMAL_EFFECT).color;
+          return (
+            <button
+              onClick={() => onSelectEffect(NORMAL_EFFECT.id)}
+              title={NORMAL_EFFECT.desc}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 12px', width: '100%', textAlign: 'left',
+                background: sel ? 'var(--surface-2)' : 'transparent',
+                border: 'none',
+                borderLeft: sel ? `3px solid ${c}` : '3px solid transparent',
+                borderBottom: '1px solid var(--border)',
+                color: 'var(--text)', fontFamily: 'inherit', cursor: 'pointer',
+              }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: c, flexShrink: 0 }} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700 }}>Normal</span>
+                  <span style={{
+                    fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em',
+                    textTransform: 'uppercase', color: 'var(--text-dim)',
+                    border: '1px solid var(--border)', borderRadius: 3, padding: '0 4px',
+                  }}>
+                    baseline
+                  </span>
+                </div>
+                <div style={{
+                  fontSize: 10.5, color: 'var(--text-dim)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {NORMAL_EFFECT.desc}
+                </div>
+              </div>
+              <ShapeGlyph points={NORMAL_EFFECT.preview} color={c} filled width={40} height={20} title="Normal" />
+            </button>
+          );
+        })()}
         {Object.keys(EVENT_FAMILIES).map((famKey) => {
           const items = byFamily[famKey];
           if (!items?.length) return null;
@@ -511,6 +817,7 @@ function EffectLibrary({ libDevice, onDeviceChange, selectedEffectId, onSelectEf
                         {e.desc}
                       </div>
                     </div>
+                    <ShapeGlyph points={e.preview} color={fam.color} filled width={40} height={20} title={e.label} />
                   </button>
                 );
               })}
@@ -523,79 +830,237 @@ function EffectLibrary({ libDevice, onDeviceChange, selectedEffectId, onSelectEf
 }
 
 // ──────────────────────────────────────────────────────────────
-// CapturePane — center placeholder for skeleton
+// CapturePane — step ③ effect config (intensity · tunables · devices)
+// + commit. Accent follows the armed effect's family color.
 // ──────────────────────────────────────────────────────────────
-function CapturePane({ effect, libDevice }) {
+function CapturePane({ effect, libDevice, beginMs, endMs, onAddEvent }) {
+  const effId = effect?.id;
+  const [intensity, setIntensity] = useState(70);
+  const [paramVals, setParamVals] = useState({});
+  const [deviceCfg, setDeviceCfg] = useState({});
+
+  // Reset config to the armed effect's defaults whenever the effect changes.
+  useEffect(() => {
+    if (!effect) return;
+    setIntensity(effect.baseline ? 100 : 70);
+    const pv = {};
+    paramsFor(effect).forEach((p) => { pv[p.key] = p.def; });
+    setParamVals(pv);
+    const dc = {};
+    EVENT_DEVICES.forEach((d) => {
+      if (effect.devices.includes(d.id)) dc[d.id] = { mode: 'broadcast', value: 100 };
+    });
+    setDeviceCfg(dc);
+  }, [effId]);  // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!effect) return <div />;
-  const fam = EVENT_FAMILIES[effect.family];
-  const supports = effect.devices.includes(libDevice);
+
+  const fam = familyOf(effect);
+  const color = fam.color;
+  const params = paramsFor(effect);
+  const dur = (beginMs != null && endMs != null) ? Math.abs(endMs - beginMs) : null;
+  const ready = beginMs != null && endMs != null && dur >= 50;
+  const targeted = EVENT_DEVICES.filter((d) => effect.devices.includes(d.id));
+  const canAdd = ready && targeted.length > 0;
+
+  const toggleMode = (id) => setDeviceCfg((prev) => {
+    const next = prev[id]?.mode === 'override' ? 'broadcast' : 'override';
+    return { ...prev, [id]: { mode: next, value: next === 'override' ? intensity : 100 } };
+  });
+
+  const commit = () => {
+    if (!canAdd) return;
+    onAddEvent({
+      intensity,
+      params: paramVals,
+      devices: targeted.map((d) => d.id),
+      deviceCfg,
+    });
+  };
+
+  const fmtParam = (p, v) => (p.step < 1 ? Number(v).toFixed(2) : String(v));
+
   return (
     <div style={{
-      background: 'var(--surface)', border: '1px solid var(--border)',
+      background: 'var(--surface)', border: `1px solid ${color}66`,
       borderRadius: 10, padding: 14,
-      display: 'flex', flexDirection: 'column', gap: 12,
+      display: 'flex', flexDirection: 'column', gap: 14,
       minHeight: 360,
     }}>
+      {/* ③ header — swatch · name · family tag · armed */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ width: 10, height: 10, borderRadius: 2, background: fam.color }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{effect.label}</div>
-          <div style={{ fontSize: 11.5, color: 'var(--text-dim)' }}>{effect.desc}</div>
-        </div>
-        <Pill tone="neutral">{fam.label}</Pill>
+        <StepBadge n={3} />
+        <span style={{ width: 12, height: 12, borderRadius: 3, background: color, flexShrink: 0 }} />
+        <span style={{ fontSize: 17, fontWeight: 700 }}>{effect.label}</span>
+        <span style={{
+          fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em',
+          textTransform: 'uppercase', color,
+          background: `${color}22`, borderRadius: 4, padding: '2px 7px',
+        }}>
+          {fam.label}
+        </span>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>armed</span>
       </div>
 
-      {!supports && (
-        <div style={{
-          padding: 10, background: 'var(--surface-2)', borderRadius: 6,
-          fontSize: 11.5, color: 'var(--text-dim)',
-        }}>
-          <Icon name="info" size={11} style={{ verticalAlign: '-1px', marginRight: 5 }} />
-          {EVENT_DEVICES.find((d) => d.id === libDevice)?.label} doesn't ship a {effect.label} mapping.
-          Pick another device tab to see this effect on a supported target.
+      <div style={{ fontSize: 12, color: 'var(--text-soft)', lineHeight: 1.5, marginTop: -4 }}>
+        {effect.desc}
+      </div>
+
+      <div style={{ height: 1, background: 'var(--border)' }} />
+
+      {/* Intensity */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{
+            fontSize: 10.5, fontWeight: 700, letterSpacing: '0.07em',
+            textTransform: 'uppercase', color: 'var(--text-muted)', width: 80, flexShrink: 0,
+          }}>
+            Intensity
+          </span>
+          <input
+            type="range" min={0} max={100} step={1} value={intensity}
+            onChange={(e) => setIntensity(parseInt(e.target.value, 10))}
+            style={{ flex: 1, accentColor: color, cursor: 'pointer' }}
+          />
+          <span className="mono" style={{ fontSize: 16, fontWeight: 700, width: 34, textAlign: 'right' }}>
+            {intensity}
+          </span>
+        </div>
+      </div>
+
+      {/* Per-effect tunables */}
+      {params.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {params.map((p) => (
+            <div key={p.key} style={{
+              flex: '1 1 150px', minWidth: 140,
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '7px 11px', borderRadius: 8,
+              background: 'var(--surface-2)', border: '1px solid var(--border)',
+            }}>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-soft)', flexShrink: 0 }}>
+                {p.label}
+              </span>
+              <input
+                type="range" min={p.min} max={p.max} step={p.step} value={paramVals[p.key] ?? p.def}
+                onChange={(e) => setParamVals((v) => ({ ...v, [p.key]: parseFloat(e.target.value) }))}
+                style={{ flex: 1, minWidth: 0, accentColor: color, cursor: 'pointer' }}
+              />
+              <span className="mono" style={{ fontSize: 11.5, fontWeight: 600, flexShrink: 0 }}>
+                {fmtParam(p, paramVals[p.key] ?? p.def)}
+                {p.unit && <span style={{ color: 'var(--text-dim)', fontSize: 9.5 }}>{p.unit}</span>}
+              </span>
+            </div>
+          ))}
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <SectionLabel>Supported devices</SectionLabel>
-      </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {/* Devices — broadcast / override */}
+      <div>
+        <div style={{
+          display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6,
+        }}>
+          <span style={{
+            fontSize: 10.5, fontWeight: 700, letterSpacing: '0.07em',
+            textTransform: 'uppercase', color: 'var(--text-muted)',
+          }}>
+            Devices
+          </span>
+          <span style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>
+            ○ broadcast · ● override
+          </span>
+        </div>
         {EVENT_DEVICES.map((d) => {
-          const on = effect.devices.includes(d.id);
+          const supported = effect.devices.includes(d.id);
+          const cfg = deviceCfg[d.id];
+          const override = cfg?.mode === 'override';
+          const value = supported ? (override ? (cfg.value ?? intensity) : intensity) : null;
           return (
-            <span key={d.id}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '3px 8px', borderRadius: 999,
-                background: on ? 'rgba(77,171,247,0.18)' : 'var(--surface-2)',
-                border: `1px solid ${on ? '#4dabf7' : 'var(--border)'}`,
-                color: on ? '#4dabf7' : 'var(--text-dim)',
-                fontSize: 10.5, fontWeight: 600,
-              }}>
+            <div key={d.id} style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '6px 2px', opacity: supported ? 1 : 0.5,
+            }}>
+              <button
+                type="button"
+                onClick={supported ? () => toggleMode(d.id) : undefined}
+                disabled={!supported}
+                title={supported ? (override ? 'Override — click for broadcast' : 'Broadcast — click for override') : undefined}
+                style={{
+                  width: 18, height: 18, borderRadius: '50%', flexShrink: 0, padding: 0,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  background: override ? color : 'transparent',
+                  border: `1.5px solid ${supported ? (override ? color : 'var(--text-dim)') : 'var(--border)'}`,
+                  cursor: supported ? 'pointer' : 'default',
+                }}
+              >
+                {override && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#0d0d0d' }} />}
+              </button>
               <span style={{
-                width: 5, height: 5, borderRadius: '50%',
-                background: on ? '#4dabf7' : 'var(--text-dim)',
-              }} />
-              {d.label}
-            </span>
+                fontSize: 13, fontWeight: 700, width: 96, flexShrink: 0,
+                color: supported ? 'var(--text)' : 'var(--text-dim)',
+              }}>
+                {d.label}
+              </span>
+              {supported && override ? (
+                <input
+                  type="range" min={0} max={100} step={1}
+                  value={cfg.value ?? intensity}
+                  onChange={(e) => setDeviceCfg((prev) => ({
+                    ...prev,
+                    [d.id]: { mode: 'override', value: parseInt(e.target.value, 10) },
+                  }))}
+                  style={{ flex: 1, minWidth: 0, accentColor: color, cursor: 'pointer' }}
+                />
+              ) : (
+                <span style={{
+                  fontSize: 12, flex: 1,
+                  color: supported ? 'var(--text-soft)' : 'var(--text-dim)',
+                  fontStyle: supported ? 'normal' : 'italic',
+                }}>
+                  {supported ? 'broadcast' : 'not on this effect'}
+                </span>
+              )}
+              <span className="mono" style={{
+                fontSize: 13, flexShrink: 0, width: 34, textAlign: 'right',
+                color: supported ? 'var(--text)' : 'var(--text-dim)',
+              }}>
+                {supported ? value : 'n/a'}
+              </span>
+            </div>
           );
         })}
       </div>
 
-      <div style={{
-        marginTop: 'auto', padding: 12, borderRadius: 6,
-        background: 'var(--surface-2)',
-        border: '1px dashed var(--border)',
-        fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5,
-      }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>
-          <Icon name="cog" size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />
-          Capture lands in the wiring pass
+      <span style={{ flex: 1 }} />
+
+      {/* Commit — captured span hint + full-width Add event */}
+      {ready ? (
+        <div className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
+          {fmtClock(Math.min(beginMs, endMs))} → {fmtClock(Math.max(beginMs, endMs))} · {fmtClock(dur)}
         </div>
-        Begin/End capture from the playhead, device targeting, intensity scrub, and per-device
-        parameter forms attach here once the MediaViewer is synced through the chapter strip
-        and the <span className="mono">.events.yml</span> sidecar pipeline is plumbed.
-      </div>
+      ) : (
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
+          Capture a begin and end above to enable.
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={commit}
+        disabled={!canAdd}
+        title={canAdd ? `Add ${effect.label} event` : 'Capture a begin and end first'}
+        style={{
+          padding: '13px 16px', borderRadius: 9, width: '100%',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          background: canAdd ? color : 'var(--surface-2)',
+          border: 'none',
+          color: canAdd ? '#fff' : 'var(--text-dim)',
+          fontFamily: 'inherit', fontSize: 15, fontWeight: 800,
+          cursor: canAdd ? 'pointer' : 'default',
+        }}
+      >
+        <Icon name="plus" size={16} /> Add event
+      </button>
     </div>
   );
 }
@@ -669,7 +1134,7 @@ function TimelinePane({ events, totalEvents, scope, chapters, selectedId, onSele
 
 function TimelineRow({ evt, selected, onSelect }) {
   const eff = findEffect(evt.effectId);
-  const fam = eff ? EVENT_FAMILIES[eff.family] : null;
+  const fam = familyOf(eff);
   const dur = evt.endMs - evt.beginMs;
   return (
     <div
@@ -850,7 +1315,7 @@ function EventsTimelineStrip({
         {/* Per-event tints on funscript band */}
         {placed.map((evt) => {
           const eff = findEffect(evt.effectId);
-          const fam = eff ? EVENT_FAMILIES[eff.family] : null;
+          const fam = familyOf(eff);
           if (!fam) return null;
           const x0 = xFor(evt.beginMs);
           const x1 = xFor(evt.endMs);
@@ -873,7 +1338,7 @@ function EventsTimelineStrip({
         {/* Event brackets */}
         {placed.map((evt) => {
           const eff = findEffect(evt.effectId);
-          const fam = eff ? EVENT_FAMILIES[eff.family] : null;
+          const fam = familyOf(eff);
           if (!fam) return null;
           const x0 = xFor(evt.beginMs);
           const x1 = xFor(evt.endMs);
