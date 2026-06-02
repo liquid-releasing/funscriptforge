@@ -383,11 +383,22 @@ class TestCliListTransforms(unittest.TestCase):
         for key in ("amplitude_scale", "normalize", "smooth", "halve_tempo", "blend_seams"):
             self.assertIn(key, stdout)
 
-    def test_user_only_shows_user_transforms(self):
-        """example_center_lift is loaded from user_transforms/example_recipe.json."""
+    def test_user_only_empty_by_default(self):
+        """No user transforms ship in the default scan path now — the example
+        recipes moved to user_transforms/examples/ (kept as seeds for the
+        future custom-behavior builder, but out of the shipped picker)."""
         _, stdout, _ = run("list-transforms", "--user-only")
-        self.assertIn("example_center_lift", stdout)
+        self.assertNotIn("example_center_lift", stdout)
         self.assertNotIn("amplitude_scale", stdout)
+
+    def test_example_recipes_still_load_from_examples_dir(self):
+        """The moved examples still parse + load (loader coverage)."""
+        from pattern_catalog.phrase_transforms import load_user_transforms
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        ex_dir = os.path.join(root, "user_transforms", "examples")
+        loaded = load_user_transforms(recipes_dir=ex_dir, plugins_dir=ex_dir)
+        self.assertIn("example_center_lift", loaded)
+        self.assertIn("example_tame_frantic", loaded)
 
     def test_user_only_empty_when_no_user_transforms(self):
         """--user-only in a temp dir with no user_transforms/ or plugins/ prints nothing."""
@@ -415,7 +426,8 @@ class TestCliListTransforms(unittest.TestCase):
         _, stdout, _ = run("list-transforms", "--format", "json")
         data = json.loads(stdout)
         self.assertEqual(data["amplitude_scale"]["source"], "builtin")
-        self.assertEqual(data["example_center_lift"]["source"], "user")
+        # No user-source transforms ship by default (examples moved out).
+        self.assertNotIn("example_center_lift", data)
 
     def test_format_json_verbose_includes_params(self):
         _, stdout, _ = run("list-transforms", "--format", "json", "--verbose")

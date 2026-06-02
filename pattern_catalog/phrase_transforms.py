@@ -1356,10 +1356,15 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
             name="Invert",
             description="Mirror positions around 50 — flips the stroke direction.",
         ),
+        # Consolidated into `amplitude_scale` (2026-06-01). Despite the
+        # "push to extremes" framing, the math is exactly a linear scale
+        # around 50 by (1 + strength) — i.e. amplitude_scale with scale > 1.
+        # Hidden alias so recipes still resolve; use Amplitude Scale instead.
         _BoostEnds(
             key="boost_contrast",
             name="Boost Contrast",
             description="Push positions toward 0 and 100 to increase the dynamic range.",
+            hidden=True,
             params={
                 "strength": TransformParam(
                     label="Strength", type="float", default=0.5,
@@ -1396,10 +1401,15 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
                 ),
             },
         ),
+        # Consolidated (2026-06-01): Break is just amplitude_scale(scale =
+        # 1 − reduce) followed by smooth — a two-step preset, expressible as
+        # a recipe. Hidden so the picker stays lean; the behavior persists for
+        # any recipe that references it.
         _Break(
             key="break",
             name="Break",
             description="Pull positions toward centre (reduce amplitude) then smooth — for rest or recovery sections.",
+            hidden=True,
             params={
                 "reduce": TransformParam(
                     label="Amplitude reduce", type="float", default=0.40,
@@ -1787,18 +1797,19 @@ TRANSFORM_ORDER: List[str] = [
     # Passthrough
     "passthrough",
     # Amplitude Shaping
-    "amplitude_scale", "range", "boost_contrast",
+    "amplitude_scale", "range",
     # Position Adjustment
     "recenter", "invert", "funnel",
     # Consolidated aliases (hidden from the picker; kept resolvable). Listed
     # last so they don't reorder the visible groups above.
-    "normalize", "clamp_upper", "clamp_lower", "shift", "final_smooth", "three_one",
+    "normalize", "clamp_upper", "clamp_lower", "shift", "final_smooth",
+    "three_one", "boost_contrast", "break",
     # Smoothing & Filtering
     "smooth", "blend_seams",
     # Structural — Tempo
     "halve_tempo",
     # Break / Recovery
-    "break", "waiting",
+    "waiting",
     # Performance / Device Realism
     "performance", "tame",
     # Rhythmic Patterns

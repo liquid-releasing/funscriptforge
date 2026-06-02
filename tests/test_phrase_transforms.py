@@ -1638,7 +1638,8 @@ class TestConsolidatedAliasesHidden(unittest.TestCase):
     suggest_transform) but are omitted from the picker (get_transforms_by_
     category + the list-transforms JSON the UI builds from)."""
 
-    _HIDDEN = {"normalize", "clamp_upper", "clamp_lower", "shift", "final_smooth", "three_one"}
+    _HIDDEN = {"normalize", "clamp_upper", "clamp_lower", "shift", "final_smooth",
+               "three_one", "boost_contrast", "break"}
 
     def test_aliases_still_in_catalog(self):
         for k in self._HIDDEN:
