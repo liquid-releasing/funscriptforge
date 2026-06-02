@@ -369,6 +369,15 @@ export function revertWorkingFunscript(funscriptPath) {
   );
 }
 
+/** The Events effect catalog (all 32 Edger events), projected from the
+ *  vendored event_definitions + SFW/NSFW map. `{groups, recipes:[]}` —
+ *  each recipe has labels, params, and the step stack. Browser-mode mock
+ *  returns empty so the UI degrades gracefully. */
+export function listEventRecipes() {
+  return dedupedCall('list_event_recipes', () =>
+    call('list_event_recipes', {}, () => Promise.resolve({ groups: [], recipes: [] })));
+}
+
 /** Read the Events tab's events from the canonical `<stem>.feel.yml`
  *  sidecar, in the EventsTab JS shape. Returns {version, events:[]}.
  *  Empty events when the sidecar is missing. Browser mode → empty. */

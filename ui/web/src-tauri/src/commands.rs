@@ -1707,6 +1707,15 @@ pub async fn revert_working_funscript(
     Ok(serde_json::json!({ "reverted": existed }))
 }
 
+/// Project the Edger event_definitions + SFW/NSFW map into the Events
+/// catalog: `{ groups, recipes[] }` (all 32 events, grouped, with labels,
+/// real params, and the step stack). Backend-sourced; no args.
+#[tauri::command]
+pub async fn list_event_recipes() -> Result<serde_json::Value, String> {
+    let out = run_cli(&["list-event-recipes"]).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse list-event-recipes output: {}", e))
+}
+
 /// Read the Events tab's `<stem>.feel.yml` events (canonical middle file)
 /// in the EventsTab JS shape. The `.feel.yml` path is computed Python-side
 /// (forge_dir), so no path mirroring is needed here. Returns
