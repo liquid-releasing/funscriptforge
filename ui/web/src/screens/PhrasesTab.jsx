@@ -41,7 +41,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChapterRibbon, ChapterContextStrip, MediaViewer, Segmented, TransformPanel,
-  Icon, fmtTimeShort, fmtDurationMs,
+  Icon, ShapeGlyph, fmtTimeShort, fmtDurationMs,
 } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { useChapterClip } from '../hooks/useChapterClip.js';
@@ -1019,7 +1019,15 @@ function ShapeRail({ shapesWithCount, activeShapeId, onSelect }) {
               textAlign: 'left', fontFamily: 'inherit',
             }}
           >
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: s.color, flexShrink: 0 }} />
+            {/* Shape glyph — the shape's own motion silhouette, the same
+                renderer the Events recipe library uses. Dimmed when the
+                shape is absent from this chapter. */}
+            <ShapeGlyph
+              points={s.preview}
+              color={has ? s.color : 'var(--text-dim)'}
+              width={28} height={17}
+              title={s.label}
+            />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
                 fontSize: 12.5, fontWeight: sel ? 700 : 500,
