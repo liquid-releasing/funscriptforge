@@ -846,6 +846,9 @@ export default function App() {
           <EventsTab
             project={typeof openedProject === 'object' ? openedProject : null}
             selectedDevices={selectedDevices}
+            trackPeaks={trackPeaks}
+            trackSpectrogram={trackSpectrogram}
+            trackBeats={trackBeats}
           />
         )}
         {tab === 'stim' && (

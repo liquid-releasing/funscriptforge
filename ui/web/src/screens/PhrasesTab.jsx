@@ -744,6 +744,7 @@ export default function PhrasesTab({
               }}
               onPrev={onPrev}
               onNext={onNext}
+              controls={['chapter-start', 'back1', 'frame-back', 'play', 'frame-forward', 'forward1', 'chapter-end']}
               modeToggleAlign="start"
               modeToggleSize="sm"
               showModeLabel={false}

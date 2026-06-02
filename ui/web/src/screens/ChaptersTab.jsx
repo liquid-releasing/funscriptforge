@@ -1013,6 +1013,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
               else if (ms < active.atMs) setCurrentMs(active.atMs);
               else setCurrentMs(ms);
             }}
+            controls={['chapter-start', 'back1', 'frame-back', 'play', 'frame-forward', 'forward1', 'chapter-end']}
             modeToggleAlign="start"
             modeToggleSize="sm"
             showModeLabel={false}

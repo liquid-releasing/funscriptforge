@@ -28,7 +28,7 @@
 // pass.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pill, Button, Icon, fmtTime, TrackStack, MediaViewer } from 'forgemoment';
+import { Pill, Button, Icon, fmtTime, fmtTimeShort, TrackStack, MediaViewer, ChapterRibbon } from 'forgemoment';
 import {
   EVENT_DEVICES,
   EVENT_FAMILIES,
@@ -66,6 +66,9 @@ export default function EventsTab({
   // the TrackStack and the transport buttons also drive currentMs.
   const [currentMs, setCurrentMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  // Collapse the hero (TrackStack + monitor) for more editing room below —
+  // the reconciled design's "Collapse chart". Ribbon + identity row stay.
+  const [collapsed, setCollapsed] = useState(false);
   const [libDevice, setLibDevice] = useState(() => {
     const proj = selectedDevices?.[0];
     if (proj && EVENT_DEVICES.find((d) => d.id === proj)) return proj;
@@ -172,8 +175,79 @@ export default function EventsTab({
       />
 
       {activeChapter && (
+        <>
+          {/* CHAPTERS scope row — the shared ChapterRibbon (waveform bands,
+              active outline), same as Chapters/Phrases/Stanzas. The single
+              scope control for the work area (region 1 of the reconciled
+              design): pick a band → the hero + monitor re-scope to it. */}
+          <div style={{
+            marginTop: 12, display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            <span style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: 'var(--text-dim)',
+              flexShrink: 0, width: 64,
+            }}>
+              Chapters
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <ChapterRibbon
+                bands={chapters.map((c) => ({
+                  id: c.id,
+                  at_ms: c.atMs,
+                  end_ms: c.endMs,
+                  name: c.name,
+                  color: c.color,
+                }))}
+                actions={actions}
+                selectedId={activeChapter.id}
+                onSelect={(band) => setScope(band.id)}
+                showAxes={false}
+                zoomable={false}
+                height={36}
+              />
+            </div>
+          </div>
+
+          {/* Chapter identity + Collapse — the design's title row. */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 12, marginTop: 10,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: activeChapter.color || '#888', flexShrink: 0 }} />
+              <span style={{ fontSize: 15, fontWeight: 700 }}>{activeChapter.name || activeChapter.id}</span>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                {fmtTimeShort(activeChapter.atMs)}–{fmtTimeShort(activeChapter.endMs)}
+                {' · '}{fmtTimeShort(activeChapter.endMs - activeChapter.atMs)}
+                {' · '}{chapterEvents.length} event{chapterEvents.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            {/* Subtle Collapse — matches the Stanzas/Phrases title-row
+                button (transparent, thin border, dim), not the bolder
+                secondary Button. */}
+            <button
+              onClick={() => setCollapsed((v) => !v)}
+              title={collapsed ? 'Expand' : 'Collapse'}
+              aria-label={collapsed ? 'Expand' : 'Collapse'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '4px 8px', borderRadius: 5,
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                color: 'var(--text-dim)',
+                cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+                flexShrink: 0,
+              }}
+            >
+              <Icon name={collapsed ? 'chevron-down' : 'chevron-up'} size={12} />
+              {collapsed ? 'Expand' : 'Collapse'}
+            </button>
+          </div>
+
+        {!collapsed && (
         <div style={{
-          marginTop: 12, display: 'grid',
+          marginTop: 10, display: 'grid',
           gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 14, alignItems: 'start',
         }}>
           {/* Left — TrackStack hero */}
@@ -186,16 +260,8 @@ export default function EventsTab({
               display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
               marginBottom: 6,
             }}>
-              <span style={{ fontSize: 12.5, fontWeight: 700 }}>
-                <span style={{
-                  display: 'inline-block', width: 8, height: 8, borderRadius: 2,
-                  background: activeChapter.color || '#888', marginRight: 7,
-                  verticalAlign: '0px',
-                }} />
-                {activeChapter.name || activeChapter.id}
-                <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--text-dim)', marginLeft: 8 }}>
-                  click to move the playhead · click an event to select
-                </span>
+              <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                click to move the playhead · click an event to select
               </span>
               <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>
                 {fmtTime(currentMs)}
@@ -257,6 +323,8 @@ export default function EventsTab({
             modeToggleSize="sm"
           />
         </div>
+        )}
+        </>
       )}
 
       <div

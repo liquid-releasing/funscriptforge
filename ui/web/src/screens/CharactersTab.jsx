@@ -422,6 +422,7 @@ export default function CharactersTab({
                   else if (ms < activeChapter.atMs) setCurrentMs(activeChapter.atMs);
                   else setCurrentMs(ms);
                 }}
+                controls={['chapter-start', 'back1', 'frame-back', 'play', 'frame-forward', 'forward1', 'chapter-end']}
                 modeToggleAlign="start"
                 modeToggleSize="sm"
                 showModeLabel={false}
