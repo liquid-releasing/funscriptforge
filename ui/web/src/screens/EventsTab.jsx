@@ -437,6 +437,7 @@ export default function EventsTab({
             // the chapter-edge jumps. (1s is a bigger move than 1 frame.)
             controls={['chapter-start', 'back1', 'frame-back', 'play', 'frame-forward', 'forward1', 'chapter-end']}
             showSpeed
+            showMark={false}
             modeToggleAlign="start"
             modeToggleSize="sm"
           />
