@@ -5,12 +5,38 @@
 // the right *shape* — library / capture / timeline / strip — driven by
 // this static catalog.
 
+// The three axes an Edger event can drive (from event_definitions steps).
+// `volume` is the UNIVERSAL intensity envelope every device renders; the
+// other two are estim-only texture.
+export const EVENT_AXES = {
+  volume: 'intensity',
+  pulse_frequency: 'pulse rate',
+  pulse_width: 'pulse width',
+};
+export const UNIVERSAL_AXIS = 'volume';
+
+// Device profiles (volume-as-intensity model, locked 2026-06-02). Each
+// device declares which event axes it can actually render. An event is
+// authored ONCE (estim-native, multi-axis); the profile transfers it:
+// estim gets full texture, everyone else gets the intensity envelope.
+// `gets` is the human one-liner shown in the config Devices block.
 export const EVENT_DEVICES = [
-  { id: 'estim',    label: 'E-stim',   desc: 'Electrostim — alpha/beta/volume/pulse.' },
-  { id: 'vibrator', label: 'Vibrator', desc: 'Single-axis vibration intensity.' },
-  { id: 'bhaptics', label: 'bHaptics', desc: 'Tactile zones across vest/arms/hands.' },
-  { id: 'shaker',   label: 'Shaker',   desc: 'Sub-bass / transducer rumble.' },
+  { id: 'estim',    label: 'E-stim',   axes: ['pulse_frequency', 'pulse_width', 'volume'],
+    gets: 'full texture + intensity', desc: 'Electrostim — pulse rate, pulse width, volume.' },
+  { id: 'vibrator', label: 'Vibrator', axes: ['volume'],
+    gets: 'intensity envelope', desc: 'Single-axis vibration — the volume envelope.' },
+  { id: 'bhaptics', label: 'bHaptics', axes: ['volume'],
+    gets: 'per-zone intensity', desc: 'Tactile zones — the volume envelope per zone.' },
+  { id: 'shaker',   label: 'Shaker',   axes: ['volume'],
+    gets: 'sub-bass intensity', desc: 'Sub-bass / transducer rumble — the volume envelope.' },
 ];
+
+// Which of an event's axes a device actually renders (intersection).
+export function axesForDevice(deviceId, eventAxes) {
+  const dev = EVENT_DEVICES.find((d) => d.id === deviceId);
+  if (!dev) return [];
+  return (eventAxes || []).filter((a) => dev.axes.includes(a));
+}
 
 export const EVENT_FAMILIES = {
   buzz:    { label: 'Buzz',    color: '#ff7b7b', desc: 'Intensity & pulse character' },
