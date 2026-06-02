@@ -27,19 +27,74 @@
 // selected/edited event id stay tab-local session state.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pill, Button, Icon, fmtTime, fmtTimeShort, TrackStack, MediaViewer, ChapterRibbon, ShapeGlyph } from 'forgemoment';
-import {
-  EVENT_DEVICES,
-  EVENT_FAMILIES,
-  EVENT_EFFECTS,
-  NORMAL_EFFECT,
-  findEffect,
-  familyOf,
-  paramsFor,
-} from '../data/events.js';
-import { readFeelEvents, saveFeelEvents } from '../api/forge.js';
+import { Pill, Button, Icon, fmtTime, fmtTimeShort, TrackStack, MediaViewer, ChapterRibbon } from 'forgemoment';
+import { EVENT_DEVICES } from '../data/events.js';
+import { readFeelEvents, saveFeelEvents, listEventRecipes } from '../api/forge.js';
 import { useChapterClip } from '../hooks/useChapterClip.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
+
+// ── Catalog vocabulary (backend-sourced via list-event-recipes) ──────────
+// Recipes are the 32 Edger events; group is general/mcb/clutch/test. Colors
+// are by source group. "Normal" is a synthetic baseline (not an Edger event,
+// not exported) pinned in Featured for chain-coverage.
+const GROUP_COLORS = {
+  featured: '#c77dff', general: '#4dabf7', mcb: '#ff7b7b', clutch: '#ffb547', test: '#8a8a93',
+};
+const GROUP_NAMES = {
+  featured: 'Featured', general: 'General', mcb: 'MCB', clutch: 'Clutch', test: 'Test',
+};
+const NORMAL_RECIPE = {
+  id: 'normal', name: 'normal', group: 'featured', baseline: true, branded: true,
+  label: 'Normal', sfwLabel: 'Normal', nsfwLabel: 'Normal',
+  desc: 'Baseline — no enhancement. Chain captures to cover ground fast.',
+  params: [], steps: [], defaultParams: {},
+};
+function recipeColor(recipe) {
+  if (!recipe) return 'var(--text-dim)';
+  if (recipe.baseline) return '#8a8a93';
+  return GROUP_COLORS[recipe.group] || '#4dabf7';
+}
+
+// Resolve a step param's `$ref` against the live param values (else defaults).
+function _resolveParam(v, paramVals, defaults) {
+  if (typeof v === 'string' && v.startsWith('$')) {
+    const k = v.slice(1);
+    const r = paramVals?.[k] ?? defaults?.[k];
+    return r != null ? r : v;
+  }
+  return v;
+}
+const AXIS_LABEL = {
+  pulse_frequency: 'pulse rate', pulse_width: 'pulse width',
+  volume: 'volume', 'volume,volume-prostate': 'volume',
+};
+// Humanize a recipe's step stack into "what this produces" lines, with the
+// current params substituted (matches funscript-tools' update_steps_preview,
+// friendlier). Each line = one operation.
+function humanizeSteps(steps, paramVals, defaults) {
+  const lines = [];
+  for (const s of (steps || [])) {
+    const p = s.params || {};
+    const axis = AXIS_LABEL[s.axis] || (s.axis || '').split(',')[0] || s.axis || 'output';
+    const r = (v) => _resolveParam(v, paramVals, defaults);
+    const dur = r(p.duration_ms);
+    const ramp = r(p.ramp_in_ms);
+    const durTxt = typeof dur === 'number' ? ` over ${(dur / 1000).toFixed(1)}s` : '';
+    const rampTxt = typeof ramp === 'number' && ramp > 0 ? `, ramp ${(ramp / 1000).toFixed(2)}s` : '';
+    if (s.op === 'apply_linear_change') {
+      lines.push(`Sweep ${axis} ${r(p.start_value)}→${r(p.end_value)}${durTxt}${rampTxt}`);
+    } else if (s.op === 'apply_modulation') {
+      const freq = r(p.frequency);
+      const amp = r(p.amplitude);
+      const freqTxt = typeof freq === 'number' ? ` @${freq}Hz` : '';
+      const ampTxt = amp != null ? ` ±${amp}` : '';
+      lines.push(`Modulate ${axis} ${r(p.waveform) || 'sin'}${freqTxt}${ampTxt}${durTxt}`);
+    } else {
+      lines.push(`${(s.op || 'op').replace(/_/g, ' ')} on ${axis}${durTxt}`);
+    }
+  }
+  return lines;
+}
 
 export default function EventsTab({
   project, selectedDevices = [],
@@ -91,6 +146,27 @@ export default function EventsTab({
     saveFeelEvents(path, nextEvents).catch((e) => console.error('save .feel.yml failed', e));
   };
 
+  // Effect catalog — the 32 Edger events, backend-sourced (list-event-recipes).
+  // Fetched once; a synthetic "Normal" baseline is prepended for chaining.
+  const [catalog, setCatalog] = useState({ groups: [], recipes: [] });
+  useEffect(() => {
+    let cancelled = false;
+    listEventRecipes()
+      .then((res) => { if (!cancelled) setCatalog(res || { groups: [], recipes: [] }); })
+      .catch((e) => { console.error('list-event-recipes failed', e); });
+    return () => { cancelled = true; };
+  }, []);
+  const recipes = useMemo(
+    () => [NORMAL_RECIPE, ...(catalog.recipes ?? [])],
+    [catalog],
+  );
+  const recipeMap = useMemo(() => {
+    const m = new Map();
+    recipes.forEach((r) => m.set(r.id, r));
+    return m;
+  }, [recipes]);
+  const recipeById = (id) => recipeMap.get(id) || null;
+
   const [scope, setScope] = useState('all'); // 'all' | chapter id
   const [selectedId, setSelectedId] = useState(null);
   // Playhead + transport for the chapter-scoped hero. The MediaViewer is
@@ -110,14 +186,9 @@ export default function EventsTab({
   const [chain, setChain] = useState(true);
   const [snap, setSnap] = useState(true);
   const seqRef = useRef(0);
-  const [libDevice, setLibDevice] = useState(() => {
-    const proj = selectedDevices?.[0];
-    if (proj && EVENT_DEVICES.find((d) => d.id === proj)) return proj;
-    return EVENT_DEVICES[0].id;
-  });
   // Pre-arm "Normal" (decision #5) — open Events ready to chain-capture
   // baseline coverage without picking an effect first.
-  const [selectedEffectId, setSelectedEffectId] = useState(NORMAL_EFFECT.id);
+  const [selectedEffectId, setSelectedEffectId] = useState('normal');
 
   const selectedEvent = useMemo(
     () => events.find((e) => e.id === selectedId) || null,
@@ -161,17 +232,16 @@ export default function EventsTab({
     return events
       .filter((e) => e.beginMs < activeChapter.endMs && e.endMs > activeChapter.atMs)
       .map((e) => {
-        const eff = findEffect(e.effectId);
-        const fam = familyOf(eff);
+        const r = recipeMap.get(e.effectId);
         return {
           id: e.id,
           start: e.beginMs,
           end: e.endMs,
-          color: fam?.color,
-          label: eff?.label || e.effectId,
+          color: recipeColor(r),
+          label: r?.sfwLabel || r?.label || e.effectId,
         };
       });
-  }, [events, activeChapter]);
+  }, [events, activeChapter, recipeMap]);
 
   // Snap the playhead to the active chapter's start when it changes, so the
   // baton begins inside the visible window rather than at 0. Also clear any
@@ -209,7 +279,7 @@ export default function EventsTab({
     const base = {
       beginMs: b, endMs: e,
       effectId: selectedEffectId,
-      devices: config.devices?.length ? config.devices : [libDevice],
+      devices: config.devices?.length ? config.devices : EVENT_DEVICES.map((d) => d.id),
       intensity: config.intensity != null ? config.intensity / 100 : 0.6,
       params: config.params || {},
       deviceCfg: config.deviceCfg || null,
@@ -460,15 +530,14 @@ export default function EventsTab({
         }}
       >
         <EffectLibrary
-          libDevice={libDevice}
-          onDeviceChange={setLibDevice}
+          recipes={recipes}
+          groups={catalog.groups ?? []}
           selectedEffectId={selectedEffectId}
           onSelectEffect={setSelectedEffectId}
         />
 
         <CapturePane
-          effect={findEffect(selectedEffectId)}
-          libDevice={libDevice}
+          recipe={recipeById(selectedEffectId)}
           beginMs={beginMs}
           endMs={endMs}
           editingEvent={selectedId ? selectedEvent : null}
@@ -480,6 +549,7 @@ export default function EventsTab({
           totalEvents={events.length}
           scope={scope}
           chapters={chapters}
+          recipeFor={recipeById}
           selectedId={selectedId}
           onSelect={setSelectedId}
           onEdit={(id) => setSelectedId(id)}
@@ -797,14 +867,72 @@ function CaptureBar({
 }
 
 // ──────────────────────────────────────────────────────────────
-// EffectLibrary — left pane
+// EffectLibrary — step ②: search + collapsible source groups
+// (Featured · General · MCB · Clutch · Test) over the 32 Edger events.
 // ──────────────────────────────────────────────────────────────
-function EffectLibrary({ libDevice, onDeviceChange, selectedEffectId, onSelectEffect }) {
-  const filtered = EVENT_EFFECTS.filter((e) => e.devices.includes(libDevice));
-  const byFamily = {};
-  filtered.forEach((e) => {
-    (byFamily[e.family] = byFamily[e.family] || []).push(e);
+function RecipeRow({ recipe, selected, onSelect }) {
+  const c = recipeColor(recipe);
+  return (
+    <button
+      onClick={() => onSelect(recipe.id)}
+      title={recipe.desc || recipe.name}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '7px 12px', width: '100%', textAlign: 'left',
+        background: selected ? 'var(--surface-2)' : 'transparent',
+        border: 'none',
+        borderLeft: selected ? `3px solid ${c}` : '3px solid transparent',
+        color: 'var(--text)', fontFamily: 'inherit', cursor: 'pointer',
+      }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c, flexShrink: 0 }} />
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: selected ? 'var(--text)' : 'var(--text-soft)' }}>
+            {recipe.sfwLabel || recipe.label}
+          </span>
+          {recipe.baseline && (
+            <span style={{
+              fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 3, padding: '0 4px',
+            }}>baseline</span>
+          )}
+        </div>
+        <div className="mono" style={{
+          fontSize: 9.5, color: 'var(--text-dim)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {recipe.name}{recipe.steps?.length ? ` · ${recipe.steps.length} step${recipe.steps.length === 1 ? '' : 's'}` : ''}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function EffectLibrary({ recipes, groups, selectedEffectId, onSelectEffect }) {
+  const [query, setQuery] = useState('');
+  const [collapsed, setCollapsed] = useState(() => new Set(['mcb', 'clutch', 'test']));
+  const toggle = (key) => setCollapsed((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
   });
+
+  const q = query.trim().toLowerCase();
+  const matches = (r) => !q
+    || (r.sfwLabel || r.label || '').toLowerCase().includes(q)
+    || (r.name || '').toLowerCase().includes(q)
+    || (r.nsfwLabel || '').toLowerCase().includes(q)
+    || (r.desc || '').toLowerCase().includes(q);
+
+  // Section list: Featured (branded) first, then each catalog group in order.
+  const sections = [
+    { key: 'featured', name: 'Featured', items: recipes.filter((r) => r.branded && matches(r)) },
+    ...(groups || []).map((g) => ({
+      key: g.key, name: GROUP_NAMES[g.key] || g.name,
+      items: recipes.filter((r) => r.group === g.key && matches(r)),
+    })),
+  ].filter((s) => s.items.length > 0);
 
   return (
     <div style={{
@@ -816,191 +944,145 @@ function EffectLibrary({ libDevice, onDeviceChange, selectedEffectId, onSelectEf
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <StepBadge n={2} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{filtered.length}</span>}>
+            <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{recipes.length - 1}</span>}>
               Effect library
             </SectionLabel>
           </div>
         </div>
-        <div style={{
-          display: 'flex', gap: 2, padding: 2, marginTop: 6,
-          background: 'var(--surface-2)', borderRadius: 6,
-          border: '1px solid var(--border)',
-        }}>
-          {EVENT_DEVICES.map((d) => {
-            const isSel = d.id === libDevice;
-            return (
-              <button
-                key={d.id}
-                onClick={() => onDeviceChange(d.id)}
-                title={d.desc}
-                style={{
-                  flex: 1, padding: '5px 6px', border: 'none', borderRadius: 4,
-                  background: isSel ? 'var(--accent)' : 'transparent',
-                  color: isSel ? '#fff' : 'var(--text-muted)',
-                  fontFamily: 'inherit', fontSize: 10.5, fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                {d.label}
-              </button>
-            );
-          })}
+        <div style={{ position: 'relative', marginTop: 6 }}>
+          <Icon name="search" size={12} style={{ position: 'absolute', left: 8, top: 7, color: 'var(--text-dim)' }} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search events…"
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: '5px 8px 5px 26px',
+              borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--border)',
+              color: 'var(--text)', fontFamily: 'inherit', fontSize: 11.5, outline: 'none',
+            }}
+          />
         </div>
       </div>
 
       <div style={{ flex: 1, overflow: 'auto', padding: '4px 0' }}>
-        {/* Normal — pinned baseline (decision #5). Pre-armed; not exported.
-            The eraser/coverage primitive for chaining captures. */}
-        {(() => {
-          const sel = selectedEffectId === NORMAL_EFFECT.id;
-          const c = familyOf(NORMAL_EFFECT).color;
+        {sections.map((s) => {
+          const isCollapsed = !q && collapsed.has(s.key);
+          const c = GROUP_COLORS[s.key] || 'var(--text-muted)';
           return (
-            <button
-              onClick={() => onSelectEffect(NORMAL_EFFECT.id)}
-              title={NORMAL_EFFECT.desc}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '8px 12px', width: '100%', textAlign: 'left',
-                background: sel ? 'var(--surface-2)' : 'transparent',
-                border: 'none',
-                borderLeft: sel ? `3px solid ${c}` : '3px solid transparent',
-                borderBottom: '1px solid var(--border)',
-                color: 'var(--text)', fontFamily: 'inherit', cursor: 'pointer',
-              }}
-            >
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: c, flexShrink: 0 }} />
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700 }}>Normal</span>
-                  <span style={{
-                    fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em',
-                    textTransform: 'uppercase', color: 'var(--text-dim)',
-                    border: '1px solid var(--border)', borderRadius: 3, padding: '0 4px',
-                  }}>
-                    baseline
-                  </span>
-                </div>
-                <div style={{
-                  fontSize: 10.5, color: 'var(--text-dim)',
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                  {NORMAL_EFFECT.desc}
-                </div>
-              </div>
-              <ShapeGlyph points={NORMAL_EFFECT.preview} color={c} filled width={40} height={20} title="Normal" />
-            </button>
-          );
-        })()}
-        {Object.keys(EVENT_FAMILIES).map((famKey) => {
-          const items = byFamily[famKey];
-          if (!items?.length) return null;
-          const fam = EVENT_FAMILIES[famKey];
-          return (
-            <div key={famKey}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '8px 12px 4px',
-                fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
-                textTransform: 'uppercase', color: fam.color,
-              }}>
-                <span style={{ width: 6, height: 6, borderRadius: 1, background: fam.color }} />
-                {fam.label}
-              </div>
-              {items.map((e) => {
-                const sel = e.id === selectedEffectId;
-                return (
-                  <button
-                    key={e.id}
-                    onClick={() => onSelectEffect(e.id)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '7px 12px', width: '100%', textAlign: 'left',
-                      background: sel ? 'var(--surface-2)' : 'transparent',
-                      border: 'none',
-                      borderLeft: sel ? `3px solid ${fam.color}` : '3px solid transparent',
-                      color: 'var(--text)', fontFamily: 'inherit', cursor: 'pointer',
-                    }}
-                  >
-                    <span style={{
-                      width: 6, height: 6, borderRadius: '50%',
-                      background: fam.color, flexShrink: 0,
-                    }} />
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{
-                        fontSize: 12.5, fontWeight: 600,
-                        color: sel ? 'var(--text)' : 'var(--text-soft)',
-                      }}>
-                        {e.label}
-                      </div>
-                      <div style={{
-                        fontSize: 10.5, color: 'var(--text-dim)',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>
-                        {e.desc}
-                      </div>
-                    </div>
-                    <ShapeGlyph points={e.preview} color={fam.color} filled width={40} height={20} title={e.label} />
-                  </button>
-                );
-              })}
+            <div key={s.key}>
+              <button
+                onClick={() => toggle(s.key)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+                  padding: '8px 12px 4px', background: 'transparent', border: 'none',
+                  cursor: q ? 'default' : 'pointer', textAlign: 'left',
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+                  textTransform: 'uppercase', color: c, fontFamily: 'inherit',
+                }}
+              >
+                {!q && <Icon name={isCollapsed ? 'chevron-right' : 'chevron-down'} size={11} />}
+                <span style={{ width: 6, height: 6, borderRadius: 1, background: c }} />
+                {s.name}
+                <span className="mono" style={{ marginLeft: 'auto', color: 'var(--text-dim)', fontWeight: 600 }}>
+                  {s.items.length}
+                </span>
+              </button>
+              {!isCollapsed && s.items.map((r) => (
+                <RecipeRow key={`${s.key}-${r.id}`} recipe={r} selected={r.id === selectedEffectId} onSelect={onSelectEffect} />
+              ))}
             </div>
           );
         })}
+        {sections.length === 0 && (
+          <div style={{ padding: 20, textAlign: 'center', fontSize: 11.5, color: 'var(--text-dim)' }}>
+            No events match “{query}”.
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 // ──────────────────────────────────────────────────────────────
-// CapturePane — step ③ effect config (intensity · tunables · devices)
-// + commit. Accent follows the armed effect's family color.
+// CapturePane — step ③ effect config. Top (full-width): name · section ·
+// description. Two columns: LEFT = "what this produces" (humanized step
+// stack); RIGHT = stacked sliders (intensity + real params). Below: device
+// profiles (broadcast/override) + Add event. Accent = source-group color.
 // ──────────────────────────────────────────────────────────────
-function CapturePane({ effect, libDevice, beginMs, endMs, editingEvent, onAddEvent }) {
-  const effId = effect?.id;
+function SliderRow({ label, value, min, max, step, unit, color, onChange, fmt }) {
+  return (
+    <div style={{ marginBottom: 9 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 1 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-soft)' }}>{label}</span>
+        <span className="mono" style={{ fontSize: 11.5, fontWeight: 600 }}>
+          {fmt ? fmt(value) : value}
+          {unit ? <span style={{ color: 'var(--text-dim)', fontSize: 9.5 }}>{unit}</span> : null}
+        </span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step} value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        style={{ width: '100%', accentColor: color, cursor: 'pointer' }}
+      />
+    </div>
+  );
+}
+
+function CapturePane({ recipe, beginMs, endMs, editingEvent, onAddEvent }) {
+  const recId = recipe?.id;
   const editId = editingEvent?.id;
   const isEditing = !!editingEvent;
   const [intensity, setIntensity] = useState(70);
   const [paramVals, setParamVals] = useState({});
   const [deviceCfg, setDeviceCfg] = useState({});
 
-  // Load config: from the event being edited when one is selected (and its
-  // effect is armed), else the armed effect's defaults. Re-runs when the
-  // armed effect OR the edited event changes.
+  // Load config from the edited event (when its recipe is armed) else the
+  // recipe defaults. Re-runs when the armed recipe OR the edited event changes.
   useEffect(() => {
-    if (!effect) return;
+    if (!recipe) return;
     const defaultDevices = () => {
       const dc = {};
-      EVENT_DEVICES.forEach((d) => {
-        if (effect.devices.includes(d.id)) dc[d.id] = { mode: 'broadcast', value: 100 };
-      });
+      EVENT_DEVICES.forEach((d) => { dc[d.id] = { mode: 'broadcast', value: 100 }; });
       return dc;
     };
-    if (editingEvent && editingEvent.effectId === effect.id) {
-      setIntensity(Math.round((editingEvent.intensity ?? (effect.baseline ? 1 : 0.7)) * 100));
+    const params = recipe.params || [];
+    if (editingEvent && editingEvent.effectId === recipe.id) {
+      setIntensity(Math.round((editingEvent.intensity ?? (recipe.baseline ? 1 : 0.7)) * 100));
       const pv = {};
-      paramsFor(effect).forEach((p) => {
-        pv[p.key] = editingEvent.params?.[p.key] != null ? editingEvent.params[p.key] : p.def;
-      });
+      params.forEach((p) => { pv[p.key] = editingEvent.params?.[p.key] != null ? editingEvent.params[p.key] : p.def; });
       setParamVals(pv);
       setDeviceCfg(editingEvent.deviceCfg || defaultDevices());
     } else {
-      setIntensity(effect.baseline ? 100 : 70);
+      setIntensity(recipe.baseline ? 100 : 70);
       const pv = {};
-      paramsFor(effect).forEach((p) => { pv[p.key] = p.def; });
+      params.forEach((p) => { pv[p.key] = p.def; });
       setParamVals(pv);
       setDeviceCfg(defaultDevices());
     }
-  }, [effId, editId]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [recId, editId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!effect) return <div />;
+  if (!recipe) {
+    return (
+      <div style={{
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 10, padding: 14, minHeight: 360,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 12, color: 'var(--text-dim)',
+      }}>
+        Loading effects…
+      </div>
+    );
+  }
 
-  const fam = familyOf(effect);
-  const color = fam.color;
-  const params = paramsFor(effect);
+  const color = recipeColor(recipe);
+  const section = GROUP_NAMES[recipe.group] || recipe.group;
+  const params = recipe.params || [];
+  const stepLines = recipe.baseline
+    ? ['Baseline — no enhancement. Erases/holds coverage so chained captures stay gapless.']
+    : humanizeSteps(recipe.steps, paramVals, recipe.defaultParams);
   const dur = (beginMs != null && endMs != null) ? Math.abs(endMs - beginMs) : null;
   const ready = beginMs != null && endMs != null && dur >= 50;
-  const targeted = EVENT_DEVICES.filter((d) => effect.devices.includes(d.id));
-  const canAdd = ready && targeted.length > 0;
+  const canAdd = ready;
 
   const toggleMode = (id) => setDeviceCfg((prev) => {
     const next = prev[id]?.mode === 'override' ? 'broadcast' : 'override';
@@ -1012,7 +1094,7 @@ function CapturePane({ effect, libDevice, beginMs, endMs, editingEvent, onAddEve
     onAddEvent({
       intensity,
       params: paramVals,
-      devices: targeted.map((d) => d.id),
+      devices: EVENT_DEVICES.map((d) => d.id),
       deviceCfg,
     });
   };
@@ -1023,150 +1105,126 @@ function CapturePane({ effect, libDevice, beginMs, endMs, editingEvent, onAddEve
     <div style={{
       background: 'var(--surface)', border: `1px solid ${color}66`,
       borderRadius: 10, padding: 14,
-      display: 'flex', flexDirection: 'column', gap: 14,
+      display: 'flex', flexDirection: 'column', gap: 12,
       minHeight: 360,
     }}>
-      {/* ③ header — swatch · name · family tag · armed */}
+      {/* TOP (full width) — ③ · name · section · description */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <StepBadge n={3} />
         <span style={{ width: 12, height: 12, borderRadius: 3, background: color, flexShrink: 0 }} />
-        <span style={{ fontSize: 17, fontWeight: 700 }}>{effect.label}</span>
+        <span style={{ fontSize: 17, fontWeight: 700 }}>{recipe.sfwLabel || recipe.label}</span>
         <span style={{
-          fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em',
-          textTransform: 'uppercase', color,
-          background: `${color}22`, borderRadius: 4, padding: '2px 7px',
+          fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
+          color, background: `${color}22`, borderRadius: 4, padding: '2px 7px',
         }}>
-          {fam.label}
+          {section}
         </span>
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: isEditing ? color : 'var(--text-dim)' }}>
           {isEditing ? 'editing' : 'armed'}
         </span>
       </div>
+      {recipe.desc && (
+        <div style={{ fontSize: 12, color: 'var(--text-soft)', lineHeight: 1.5, marginTop: -4 }}>
+          {recipe.desc}
+        </div>
+      )}
 
-      <div style={{ fontSize: 12, color: 'var(--text-soft)', lineHeight: 1.5, marginTop: -4 }}>
-        {effect.desc}
+      <div style={{ height: 1, background: 'var(--border)' }} />
+
+      {/* TWO COLUMNS — left: what this produces · right: stacked sliders */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, alignItems: 'start' }}>
+        {/* LEFT — what this produces (the step stack) */}
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+            textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6,
+          }}>
+            What this produces
+          </div>
+          <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {stepLines.map((line, i) => (
+              <li key={i} style={{
+                fontSize: 11.5, color: 'var(--text-soft)', lineHeight: 1.4,
+                display: 'flex', gap: 6,
+              }}>
+                {!recipe.baseline && (
+                  <span className="mono" style={{ color, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+                )}
+                <span>{line}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {/* RIGHT — stacked sliders (intensity + params) */}
+        <div style={{ minWidth: 0 }}>
+          <SliderRow
+            label="Intensity" value={intensity} min={0} max={100} step={1}
+            color={color} onChange={(v) => setIntensity(Math.round(v))}
+          />
+          {params.map((p) => (
+            <SliderRow
+              key={p.key}
+              label={p.label} value={paramVals[p.key] ?? p.def}
+              min={p.min} max={p.max} step={p.step} unit={p.unit} color={color}
+              fmt={(v) => fmtParam(p, v)}
+              onChange={(v) => setParamVals((vals) => ({ ...vals, [p.key]: v }))}
+            />
+          ))}
+        </div>
       </div>
 
       <div style={{ height: 1, background: 'var(--border)' }} />
 
-      {/* Intensity */}
+      {/* Devices — broadcast / override + per-device `gets` (volume-as-intensity) */}
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{
-            fontSize: 10.5, fontWeight: 700, letterSpacing: '0.07em',
-            textTransform: 'uppercase', color: 'var(--text-muted)', width: 80, flexShrink: 0,
-          }}>
-            Intensity
-          </span>
-          <input
-            type="range" min={0} max={100} step={1} value={intensity}
-            onChange={(e) => setIntensity(parseInt(e.target.value, 10))}
-            style={{ flex: 1, accentColor: color, cursor: 'pointer' }}
-          />
-          <span className="mono" style={{ fontSize: 16, fontWeight: 700, width: 34, textAlign: 'right' }}>
-            {intensity}
-          </span>
-        </div>
-      </div>
-
-      {/* Per-effect tunables */}
-      {params.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {params.map((p) => (
-            <div key={p.key} style={{
-              flex: '1 1 150px', minWidth: 140,
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '7px 11px', borderRadius: 8,
-              background: 'var(--surface-2)', border: '1px solid var(--border)',
-            }}>
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-soft)', flexShrink: 0 }}>
-                {p.label}
-              </span>
-              <input
-                type="range" min={p.min} max={p.max} step={p.step} value={paramVals[p.key] ?? p.def}
-                onChange={(e) => setParamVals((v) => ({ ...v, [p.key]: parseFloat(e.target.value) }))}
-                style={{ flex: 1, minWidth: 0, accentColor: color, cursor: 'pointer' }}
-              />
-              <span className="mono" style={{ fontSize: 11.5, fontWeight: 600, flexShrink: 0 }}>
-                {fmtParam(p, paramVals[p.key] ?? p.def)}
-                {p.unit && <span style={{ color: 'var(--text-dim)', fontSize: 9.5 }}>{p.unit}</span>}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Devices — broadcast / override */}
-      <div>
-        <div style={{
-          display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6,
-        }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
           <span style={{
             fontSize: 10.5, fontWeight: 700, letterSpacing: '0.07em',
             textTransform: 'uppercase', color: 'var(--text-muted)',
           }}>
             Devices
           </span>
-          <span style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>
-            ○ broadcast · ● override
-          </span>
+          <span style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>○ broadcast · ● override</span>
         </div>
         {EVENT_DEVICES.map((d) => {
-          const supported = effect.devices.includes(d.id);
           const cfg = deviceCfg[d.id];
           const override = cfg?.mode === 'override';
-          const value = supported ? (override ? (cfg.value ?? intensity) : intensity) : null;
+          const value = override ? (cfg.value ?? intensity) : intensity;
           return (
-            <div key={d.id} style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '6px 2px', opacity: supported ? 1 : 0.5,
-            }}>
+            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '5px 2px' }}>
               <button
                 type="button"
-                onClick={supported ? () => toggleMode(d.id) : undefined}
-                disabled={!supported}
-                title={supported ? (override ? 'Override — click for broadcast' : 'Broadcast — click for override') : undefined}
+                onClick={() => toggleMode(d.id)}
+                title={override ? 'Override — click for broadcast' : 'Broadcast — click for override'}
                 style={{
                   width: 18, height: 18, borderRadius: '50%', flexShrink: 0, padding: 0,
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   background: override ? color : 'transparent',
-                  border: `1.5px solid ${supported ? (override ? color : 'var(--text-dim)') : 'var(--border)'}`,
-                  cursor: supported ? 'pointer' : 'default',
+                  border: `1.5px solid ${override ? color : 'var(--text-dim)'}`,
+                  cursor: 'pointer',
                 }}
               >
                 {override && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#0d0d0d' }} />}
               </button>
-              <span style={{
-                fontSize: 13, fontWeight: 700, width: 96, flexShrink: 0,
-                color: supported ? 'var(--text)' : 'var(--text-dim)',
-              }}>
-                {d.label}
-              </span>
-              {supported && override ? (
+              <div style={{ width: 130, flexShrink: 0, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700 }}>{d.label}</div>
+                <div style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>{d.gets}</div>
+              </div>
+              {override ? (
                 <input
-                  type="range" min={0} max={100} step={1}
-                  value={cfg.value ?? intensity}
+                  type="range" min={0} max={100} step={1} value={cfg.value ?? intensity}
                   onChange={(e) => setDeviceCfg((prev) => ({
-                    ...prev,
-                    [d.id]: { mode: 'override', value: parseInt(e.target.value, 10) },
+                    ...prev, [d.id]: { mode: 'override', value: parseInt(e.target.value, 10) },
                   }))}
                   style={{ flex: 1, minWidth: 0, accentColor: color, cursor: 'pointer' }}
                 />
               ) : (
-                <span style={{
-                  fontSize: 12, flex: 1,
-                  color: supported ? 'var(--text-soft)' : 'var(--text-dim)',
-                  fontStyle: supported ? 'normal' : 'italic',
-                }}>
-                  {supported ? 'broadcast' : 'not on this effect'}
-                </span>
+                <span style={{ fontSize: 12, flex: 1, color: 'var(--text-soft)' }}>broadcast</span>
               )}
-              <span className="mono" style={{
-                fontSize: 13, flexShrink: 0, width: 34, textAlign: 'right',
-                color: supported ? 'var(--text)' : 'var(--text-dim)',
-              }}>
-                {supported ? value : 'n/a'}
+              <span className="mono" style={{ fontSize: 13, flexShrink: 0, width: 34, textAlign: 'right' }}>
+                {value}
               </span>
             </div>
           );
@@ -1175,7 +1233,7 @@ function CapturePane({ effect, libDevice, beginMs, endMs, editingEvent, onAddEve
 
       <span style={{ flex: 1 }} />
 
-      {/* Commit — captured span hint + full-width Add event */}
+      {/* Commit */}
       {ready ? (
         <div className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
           {fmtClock(Math.min(beginMs, endMs))} → {fmtClock(Math.max(beginMs, endMs))} · {fmtClock(dur)}
@@ -1190,13 +1248,12 @@ function CapturePane({ effect, libDevice, beginMs, endMs, editingEvent, onAddEve
         onClick={commit}
         disabled={!canAdd}
         title={canAdd
-          ? (isEditing ? `Update ${effect.label} event` : `Add ${effect.label} event`)
+          ? (isEditing ? `Update ${recipe.sfwLabel || recipe.label} event` : `Add ${recipe.sfwLabel || recipe.label} event`)
           : 'Capture a begin and end first'}
         style={{
           padding: '13px 16px', borderRadius: 9, width: '100%',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          background: canAdd ? color : 'var(--surface-2)',
-          border: 'none',
+          background: canAdd ? color : 'var(--surface-2)', border: 'none',
           color: canAdd ? '#fff' : 'var(--text-dim)',
           fontFamily: 'inherit', fontSize: 15, fontWeight: 800,
           cursor: canAdd ? 'pointer' : 'default',
@@ -1211,7 +1268,7 @@ function CapturePane({ effect, libDevice, beginMs, endMs, editingEvent, onAddEve
 // ──────────────────────────────────────────────────────────────
 // TimelinePane — right
 // ──────────────────────────────────────────────────────────────
-function TimelinePane({ events, totalEvents, scope, chapters, selectedId, onSelect, onEdit, onDelete }) {
+function TimelinePane({ events, totalEvents, scope, chapters, recipeFor, selectedId, onSelect, onEdit, onDelete }) {
   const grouped = chapters.map((ch) => ({
     ch,
     items: events.filter((e) => e.beginMs >= ch.atMs && e.beginMs < ch.endMs),
@@ -1264,6 +1321,7 @@ function TimelinePane({ events, totalEvents, scope, chapters, selectedId, onSele
               <TimelineRow
                 key={evt.id}
                 evt={evt}
+                recipe={recipeFor?.(evt.effectId)}
                 selected={evt.id === selectedId}
                 onSelect={() => onSelect(evt.id === selectedId ? null : evt.id)}
                 onEdit={() => onEdit(evt.id)}
@@ -1277,9 +1335,9 @@ function TimelinePane({ events, totalEvents, scope, chapters, selectedId, onSele
   );
 }
 
-function TimelineRow({ evt, selected, onSelect, onEdit, onDelete }) {
-  const eff = findEffect(evt.effectId);
-  const fam = familyOf(eff);
+function TimelineRow({ evt, recipe, selected, onSelect, onEdit, onDelete }) {
+  const color = recipeColor(recipe);
+  const label = recipe?.sfwLabel || recipe?.label || evt.effectId;
   const dur = evt.endMs - evt.beginMs;
   const rowBtn = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -1295,7 +1353,7 @@ function TimelineRow({ evt, selected, onSelect, onEdit, onDelete }) {
         gridTemplateColumns: '60px 1fr auto',
         gap: 8, padding: '7px 12px', cursor: 'pointer',
         background: selected ? 'var(--surface-2)' : 'transparent',
-        borderLeft: `3px solid ${selected && fam ? fam.color : 'transparent'}`,
+        borderLeft: `3px solid ${selected ? color : 'transparent'}`,
         borderBottom: '1px solid var(--border)',
         alignItems: 'center',
       }}
@@ -1306,9 +1364,9 @@ function TimelineRow({ evt, selected, onSelect, onEdit, onDelete }) {
       <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{
-            width: 6, height: 6, borderRadius: 1, background: fam?.color || '#888',
+            width: 6, height: 6, borderRadius: 1, background: color,
           }} />
-          <span style={{ fontSize: 12.5, fontWeight: 600 }}>{eff?.label || evt.effectId}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 600 }}>{label}</span>
           <span className="mono" style={{ fontSize: 10, color: 'var(--text-dim)' }}>
             +{(dur / 1000).toFixed(1)}s
           </span>
