@@ -1742,9 +1742,9 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
             },
         ),
         _Ramp(
-            key         = "funnel",
-            name        = "Funnel",
-            description = "Funnel-shaped energy ramp — progressively shifts the center and scales stroke amplitude from start to end, creating a visually ordered ramp-up or ramp-down.",
+            key         = "funnel",   # key kept for back-compat (recipes / suggest)
+            name        = "Ramp",
+            description = "One-direction ramp across the phrase — progressively shifts the center and scales stroke amplitude from a start setting to an end setting. Start below end = rise (build); start above end = fall (descend).",
             structural  = False,
             params      = {
                 "start_center": TransformParam(

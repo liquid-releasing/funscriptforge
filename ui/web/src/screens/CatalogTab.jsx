@@ -16,15 +16,16 @@
 
 import { useMemo, useState } from 'react';
 import { Pill, Icon, Button, TextInput } from 'forgemoment';
-import { TRANSFORMS, BEHAVIOR_TAGS } from '../data/transforms.js';
+import { BEHAVIOR_TAGS } from '../data/transforms.js';
+import { useTransformCatalog } from '../data/useTransformCatalog.js';
 
 const CATEGORY_META = {
   tone:       { label: 'Tones',                color: '#ff5470', icon: 'zap',
-                desc: 'Set chapter mood. Six presets: Tender / Build / Tease / Edge / Climax / Dominant.' },
+                desc: 'Set the feel. Six expressive moods (Tender / Build / Tease / Edge / Climax / Dominant) plus Tame, a device-aware softener.' },
   behavior:   { label: 'Behaviors',            color: '#4dabf7', icon: 'sliders',
-                desc: 'Non-destructive shape edits. Beat-preserving — safe to chain.' },
+                desc: 'Beat-preserving shape edits — amplitude, range, smoothing. Safe to chain.' },
   structural: { label: 'Structurals',          color: '#ffb547', icon: 'shapes',
-                desc: 'Destructive structure rewrites. Replace the beat. Use sparingly.' },
+                desc: 'Structure-level shaping — tempo, replacement, and rhythmic patterning (e.g. Hero Beat). Some rewrite the beat; use with intent.' },
 };
 const ALL_CARD = {
   id: 'all', label: 'All entries', color: '#94a3b8', icon: 'library',
@@ -33,23 +34,29 @@ const ALL_CARD = {
 const CATEGORY_ORDER = ['tone', 'behavior', 'structural'];
 
 export default function CatalogTab() {
+  // Source the catalog from the live backend (same hook the TransformPanel
+  // uses) instead of the static hand-port — so the reference stays in sync
+  // with the Python truth (consolidated set, Range/Hero Beat, hidden aliases
+  // excluded) with zero drift. Falls back to the static catalog in browser
+  // dev where there's no desktop runtime.
+  const catalog = useTransformCatalog();
   const [category, setCategory] = useState('all');
   const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState(TRANSFORMS[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState(null);
 
   const counts = useMemo(() => {
-    const c = { all: TRANSFORMS.length };
+    const c = { all: catalog.length };
     CATEGORY_ORDER.forEach((k) => {
-      c[k] = TRANSFORMS.filter((t) => t.category === k).length;
+      c[k] = catalog.filter((t) => t.category === k).length;
     });
     return c;
-  }, []);
+  }, [catalog]);
 
   // Filter + group for the left pane.
   const groups = useMemo(() => {
     const byCat = {};
     const q = search.trim().toLowerCase();
-    TRANSFORMS.forEach((t) => {
+    catalog.forEach((t) => {
       if (category !== 'all' && t.category !== category) return;
       if (q && !t.label.toLowerCase().includes(q) && !(t.summary || '').toLowerCase().includes(q)) return;
       (byCat[t.category] = byCat[t.category] || []).push(t);
@@ -57,9 +64,10 @@ export default function CatalogTab() {
     return CATEGORY_ORDER
       .map((id) => ({ id, label: CATEGORY_META[id].label, items: byCat[id] || [] }))
       .filter((g) => g.items.length > 0);
-  }, [category, search]);
+  }, [catalog, category, search]);
 
-  const selected = TRANSFORMS.find((t) => t.id === selectedId) || null;
+  // Default the right pane to the first entry until the user picks one.
+  const selected = catalog.find((t) => t.id === selectedId) || catalog[0] || null;
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
