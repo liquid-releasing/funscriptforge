@@ -57,10 +57,11 @@ _EXPECTED_KEYS = {
     "break",
     "waiting",
     "performance",
-    "three_one",
+    "three_one",     # hidden alias (superseded by hero_beat)
     "blend_seams",
     "final_smooth",
     "beat_accent",
+    "hero_beat",
     "halve_tempo",
     "tame",
     # Timing / Sync
@@ -1588,12 +1589,56 @@ class TestRange(unittest.TestCase):
         self.assertFalse(TRANSFORM_CATALOG["range"].structural)
 
 
+class TestHeroBeat(unittest.TestCase):
+    """hero_beat: an 8-step depth sequencer over the script's own beats
+    (stroke reversals). Each step scales that beat's stroke depth (distance
+    from 50). All-100 is identity; pulling steps down carves a groove."""
+
+    @staticmethod
+    def _wall(n=64):
+        # Even full-range zig-zag — the "wall of red".
+        return [{"at": i * 100, "pos": 0 if i % 2 == 0 else 100} for i in range(n)]
+
+    @staticmethod
+    def _all(**over):
+        p = {f"beat{i}": 100 for i in range(1, 9)}
+        p.update(over)
+        return p
+
+    def test_all_100_is_identity(self):
+        acts = self._wall()
+        out = TRANSFORM_CATALOG["hero_beat"].apply(acts, self._all())
+        self.assertEqual([a["pos"] for a in out], [a["pos"] for a in acts])
+
+    def test_preserves_count_and_timing(self):
+        acts = self._wall()
+        out = TRANSFORM_CATALOG["hero_beat"].apply(acts, self._all(beat2=0, beat4=40))
+        self.assertEqual(len(out), len(acts))
+        self.assertEqual([a["at"] for a in out], [a["at"] for a in acts])
+
+    def test_pulling_steps_down_reduces_overall_depth(self):
+        acts = self._wall()
+        before = sum(abs(a["pos"] - 50) for a in acts)
+        out = TRANSFORM_CATALOG["hero_beat"].apply(
+            acts, self._all(beat2=0, beat4=0, beat6=0, beat8=0))
+        after = sum(abs(a["pos"] - 50) for a in out)
+        self.assertLess(after, before)  # deemphasised beats eased toward centre
+
+    def test_positions_stay_in_range(self):
+        acts = self._wall()
+        out = TRANSFORM_CATALOG["hero_beat"].apply(acts, self._all(beat1=0, beat5=20))
+        self.assertTrue(all(0 <= a["pos"] <= 100 for a in out))
+
+    def test_not_structural(self):
+        self.assertFalse(TRANSFORM_CATALOG["hero_beat"].structural)
+
+
 class TestConsolidatedAliasesHidden(unittest.TestCase):
     """The consolidated transforms stay resolvable in the catalog (recipes /
     suggest_transform) but are omitted from the picker (get_transforms_by_
     category + the list-transforms JSON the UI builds from)."""
 
-    _HIDDEN = {"normalize", "clamp_upper", "clamp_lower", "shift", "final_smooth"}
+    _HIDDEN = {"normalize", "clamp_upper", "clamp_lower", "shift", "final_smooth", "three_one"}
 
     def test_aliases_still_in_catalog(self):
         for k in self._HIDDEN:

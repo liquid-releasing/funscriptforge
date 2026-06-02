@@ -679,6 +679,64 @@ class _BeatAccent(PhraseTransform):
         return actions
 
 
+class _HeroBeat(PhraseTransform):
+    """8-step groove sequencer over the funscript's OWN beats.
+
+    Detects stroke reversals (extrema) as beats, assigns each to one of eight
+    repeating steps, and scales that beat's stroke DEPTH (distance from the
+    midpoint 50) by the step's emphasis percent:
+
+        100 = full depth (kept)   ·   0 = flat to centre   ·   50 = half depth
+
+    Set the hero beats to 100 and the rest lower to carve a groove out of an
+    even wall of strokes (your "wall of red, 100% emphasised, smaller for
+    deemphasised"). All-100 (the default) is identity, so simply selecting
+    the transform changes nothing until you pull steps down.
+
+    Self-contained by design: it sequences the script's own reversals, not an
+    external beat grid — editing uses the beats a script already has
+    (generation is where you align to the music). v1 "shape existing": it
+    scales existing strokes; it does not synthesise new ones.
+
+    Each action is scaled by the emphasis of the nearest beat in time, so a
+    whole stroke shrinks or stays with its beat. Depth scales around 50 (like
+    Amplitude Scale), so peaks and troughs both ease toward centre as their
+    step's emphasis drops.
+    """
+
+    def _transform(self, actions, p):
+        if len(actions) < 2:
+            return actions
+
+        steps = [
+            max(0.0, min(1.0, float(p.get(f"beat{i}", 100)) / 100.0))
+            for i in range(1, 9)
+        ]
+        if all(s == 1.0 for s in steps):
+            return actions  # identity — nothing pulled down
+
+        extrema_idx = _find_extrema(actions, min_prominence=5)
+        beat_times = [actions[i]["at"] for i in extrema_idx]
+        if len(beat_times) < 1:
+            return actions
+
+        import bisect
+        for a in actions:
+            t = a["at"]
+            # Nearest beat (in time) owns this action.
+            j = bisect.bisect_left(beat_times, t)
+            if j <= 0:
+                nb = 0
+            elif j >= len(beat_times):
+                nb = len(beat_times) - 1
+            else:
+                nb = j if (beat_times[j] - t) < (t - beat_times[j - 1]) else j - 1
+            scale = steps[nb % 8]
+            a["pos"] = max(0, min(100, int(round(50 + (a["pos"] - 50) * scale))))
+
+        return actions
+
+
 class _HalveTempo(PhraseTransform):
     """Halve the BPM by keeping every other stroke cycle.
 
@@ -1420,9 +1478,13 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
                 ),
             },
         ),
+        # Superseded by `hero_beat` (2026-06-01): a 3+1 pulse is just the
+        # 8-step pattern [100,100,100,0,100,100,100,0]. Hidden so recipes
+        # still resolve; dropped from the picker to trim the Behavior list.
         _ThreeOne(
             key="three_one",
             name="Three-One Pulse",
+            hidden=True,
             description="Three strokes then one flat hold at the group centre, repeating — creates a 3+1 pulse pattern at the original beat timing.",
             params={
                 "amplitude_scale": TransformParam(
@@ -1505,6 +1567,20 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
                     min_val=0, max_val=999, step=1,
                     help="Stop after this many accented beats. 0 = no limit (accent until phrase ends).",
                 ),
+            },
+        ),
+        _HeroBeat(
+            key="hero_beat",
+            name="Hero Beat",
+            description="8-step groove sequencer over the script's own beats. Each slider sets how much depth that beat keeps (100 = full, 0 = flat). Set the hero beats high and the rest lower to carve a groove out of an even wall of strokes. All-100 = no change.",
+            params={
+                f"beat{i}": TransformParam(
+                    label=f"Beat {i}", type="int", default=100,
+                    min_val=0, max_val=100, step=5,
+                    help=(f"Emphasis for step {i} of the repeating 8-beat cycle. "
+                          "100 = full depth (kept), 0 = flat to centre."),
+                )
+                for i in range(1, 9)
             },
         ),
         _HalveTempo(
@@ -1710,7 +1786,7 @@ TRANSFORM_ORDER: List[str] = [
     "recenter", "invert", "funnel",
     # Consolidated aliases (hidden from the picker; kept resolvable). Listed
     # last so they don't reorder the visible groups above.
-    "normalize", "clamp_upper", "clamp_lower", "shift", "final_smooth",
+    "normalize", "clamp_upper", "clamp_lower", "shift", "final_smooth", "three_one",
     # Smoothing & Filtering
     "smooth", "blend_seams",
     # Structural — Tempo
@@ -1720,7 +1796,7 @@ TRANSFORM_ORDER: List[str] = [
     # Performance / Device Realism
     "performance", "tame",
     # Rhythmic Patterns
-    "beat_accent", "three_one",
+    "beat_accent", "hero_beat",
     # Timing / Sync
     "nudge",
     # Replacement

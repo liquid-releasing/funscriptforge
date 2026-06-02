@@ -500,15 +500,17 @@ def cmd_list_transforms(args):
             # the picker catalog the UI builds from this output.
             if getattr(spec, "hidden", False):
                 continue
-            # Category is the UI grouping (Tone / Behavior / Structural).
-            # Mostly derived: structural transforms carry the flag, tone_*
-            # are the mood-arc set, everything else is behavioral. A spec may
-            # also DECLARE its category explicitly (spec.category) to override
-            # the derivation — e.g. `tame` is non-structural but belongs under
-            # Tone. Emitted here so the UI catalog is single-source — no hand
-            # mapping that can drift from the Python truth.
-            if spec.category:
-                category = spec.category
+            # Category is the UI grouping the picker tabs key on: exactly
+            # tone / behavior / structural. Mostly derived (structural flag,
+            # tone_* prefix, else behavioral). A spec may DECLARE its category
+            # to override — e.g. `tame` is non-structural but belongs under
+            # Tone — but ONLY if it names one of the known picker buckets.
+            # Other dormant labels some specs carry (e.g. "Tone"/"Replacement"/
+            # "Timing" used by older grouping code) must NOT leak through as
+            # new categories, or the UI silently drops those transforms.
+            declared = (spec.category or "").strip().lower()
+            if declared in ("tone", "behavior", "structural"):
+                category = declared
             elif spec.structural:
                 category = "structural"
             elif key.startswith("tone_"):
