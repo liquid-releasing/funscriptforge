@@ -35,6 +35,8 @@ pub fn run() {
             commands::transform_apply_actions,
             commands::save_working_funscript,
             commands::revert_working_funscript,
+            commands::read_feel_events,
+            commands::save_feel_events,
             commands::attach_media,
             commands::analyze_audio_peaks,
             commands::load_audio_peaks,

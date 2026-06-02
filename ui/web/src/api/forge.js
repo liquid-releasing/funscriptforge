@@ -369,6 +369,28 @@ export function revertWorkingFunscript(funscriptPath) {
   );
 }
 
+/** Read the Events tab's events from the canonical `<stem>.feel.yml`
+ *  sidecar, in the EventsTab JS shape. Returns {version, events:[]}.
+ *  Empty events when the sidecar is missing. Browser mode → empty. */
+export function readFeelEvents(funscriptPath) {
+  return call(
+    'read_feel_events',
+    { funscriptPath },
+    () => Promise.resolve({ version: 1, events: [] }),
+  );
+}
+
+/** Write the Events tab's events to `<stem>.feel.yml` (write-through on
+ *  every discrete event mutation — add / edit / delete). The funscript is
+ *  never touched; events layer on the output channels. Returns {saved, count}. */
+export function saveFeelEvents(funscriptPath, events) {
+  return call(
+    'save_feel_events',
+    { funscriptPath, events },
+    () => Promise.resolve(null),
+  );
+}
+
 /** Apply one transform over `spans`, writing the merged funscript to
  *  `outputPath`. Returns {saved, transform, spans}. */
 export function transformApply(funscriptPath, transform, params, spans, outputPath) {

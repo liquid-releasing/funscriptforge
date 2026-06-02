@@ -22,10 +22,11 @@
 //   │  Footer — counts + "wiring later" disabled actions    │
 //   └────────────────────────────────────────────────────────┘
 //
-// State is local to this tab (events array seeded from sampleEventsForProject,
-// chapter scope, selected event id). No persistence; tab unmount drops state.
-// Lifting to App.jsx and writing to <stem>.events.yml comes with the wiring
-// pass.
+// Events are DURABLE: seeded from the canonical <stem>.feel.yml on project
+// load (readFeelEvents) and written through on every discrete mutation —
+// add / edit / delete (saveFeelEvents, fire-and-forget). The funscript is
+// never touched; events layer on the output channels. Chapter scope + the
+// selected/edited event id stay tab-local session state.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Button, Icon, fmtTime, fmtTimeShort, TrackStack, MediaViewer, ChapterRibbon, ShapeGlyph } from 'forgemoment';
@@ -37,8 +38,8 @@ import {
   findEffect,
   familyOf,
   paramsFor,
-  sampleEventsForProject,
 } from '../data/events.js';
+import { readFeelEvents, saveFeelEvents } from '../api/forge.js';
 import { useChapterClip } from '../hooks/useChapterClip.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 
@@ -53,14 +54,44 @@ export default function EventsTab({
   // beat ticks + dashboard). Same guard ChaptersTab uses.
   const audioWaveform = trackPeaks?.peaks?.length ? trackPeaks : null;
 
-  // Seed sample events whenever the project changes. Local-only —
-  // persistence comes with the wiring pass.
-  const [events, setEvents] = useState(() => sampleEventsForProject(chapters));
+  // Load events from the canonical <stem>.feel.yml whenever the project
+  // changes. Durable — every add/edit/delete writes back (see persist()).
+  const [events, setEvents] = useState([]);
   useEffect(() => {
-    setEvents(sampleEventsForProject(chapters));
     setSelectedId(null);
     setScope('all');
+    const path = project?.path;
+    if (!path) { setEvents([]); return undefined; }
+    let cancelled = false;
+    readFeelEvents(path)
+      .then((res) => {
+        if (cancelled) return;
+        const loaded = res?.events ?? [];
+        setEvents(loaded);
+        // Seed the id counter past any e-cap-N already on disk so new
+        // captures can't collide with persisted ids after a reload.
+        let maxSeq = 0;
+        for (const e of loaded) {
+          const m = /^e-cap-(\d+)$/.exec(e.id || '');
+          if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+        }
+        seqRef.current = maxSeq;
+      })
+      .catch((e) => {
+        console.error('read .feel.yml failed', e);
+        if (!cancelled) setEvents([]);
+      });
+    return () => { cancelled = true; };
   }, [project?.path]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Write-through: persist the full events list to <stem>.feel.yml after a
+  // discrete mutation (add / edit / delete). Fire-and-forget so the UI stays
+  // instant; the funscript is never touched (events layer on output).
+  const persist = (nextEvents) => {
+    const path = project?.path;
+    if (!path) return;
+    saveFeelEvents(path, nextEvents).catch((e) => console.error('save .feel.yml failed', e));
+  };
 
   const [scope, setScope] = useState('all'); // 'all' | chapter id
   const [selectedId, setSelectedId] = useState(null);
@@ -198,26 +229,31 @@ export default function EventsTab({
       deviceCfg: config.deviceCfg || null,
     };
     const editing = selectedId && events.some((ev) => ev.id === selectedId);
+    let next;
     if (editing) {
       // Update the selected event in place; stay in edit-mode on it.
-      setEvents((prev) => prev
+      next = events
         .map((ev) => (ev.id === selectedId ? { ...ev, ...base } : ev))
-        .sort((a, b2) => a.beginMs - b2.beginMs));
+        .sort((a, b2) => a.beginMs - b2.beginMs);
     } else {
       seqRef.current += 1;
       const id = `e-cap-${seqRef.current}`;
-      setEvents((prev) => [...prev, { id, ...base }].sort((a, b2) => a.beginMs - b2.beginMs));
+      next = [...events, { id, ...base }].sort((a, b2) => a.beginMs - b2.beginMs);
       // Stay in new-event mode (don't auto-select — that would flip us into
       // edit-mode and fight the chain carry-forward). Chain carries the end
       // forward as the next begin; otherwise clear the marks.
       if (chain) { setBeginMs(e); setEndMs(null); }
       else { setBeginMs(null); setEndMs(null); }
     }
+    setEvents(next);
+    persist(next);
   };
 
   const handleDeleteEvent = (id) => {
-    setEvents((prev) => prev.filter((e) => e.id !== id));
+    const next = events.filter((e) => e.id !== id);
+    setEvents(next);
     setSelectedId((s) => (s === id ? null : s));
+    persist(next);
   };
 
   // Chapter clip for the monitor — same hook Chapters/Phrases use (stream-

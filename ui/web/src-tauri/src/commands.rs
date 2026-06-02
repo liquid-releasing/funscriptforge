@@ -1707,6 +1707,41 @@ pub async fn revert_working_funscript(
     Ok(serde_json::json!({ "reverted": existed }))
 }
 
+/// Read the Events tab's `<stem>.feel.yml` events (canonical middle file)
+/// in the EventsTab JS shape. The `.feel.yml` path is computed Python-side
+/// (forge_dir), so no path mirroring is needed here. Returns
+/// `{ version, events: [] }` when the sidecar is missing.
+#[tauri::command]
+pub async fn read_feel_events(funscript_path: String) -> Result<serde_json::Value, String> {
+    let out = run_cli(&["feel-read", &funscript_path]).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse feel-read output: {}", e))
+}
+
+/// Write the Events tab's events to `<stem>.feel.yml`. `run_cli` has no
+/// stdin, so the events JSON is staged to a temp file and passed via
+/// --events-json; the temp file is removed afterward.
+#[tauri::command]
+pub async fn save_feel_events(
+    funscript_path: String,
+    events: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let body = serde_json::to_string(&events).map_err(|e| format!("serialize events: {}", e))?;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let mut tmp = std::env::temp_dir();
+    tmp.push(format!("ff_feel_{}.json", nanos));
+    tokio::fs::write(&tmp, body)
+        .await
+        .map_err(|e| format!("write temp events: {}", e))?;
+    let tmp_str = tmp.to_string_lossy().into_owned();
+    let res = run_cli(&["feel-write", &funscript_path, "--events-json", &tmp_str]).await;
+    let _ = tokio::fs::remove_file(&tmp).await;
+    let out = res?;
+    serde_json::from_str(&out).map_err(|e| format!("parse feel-write output: {}", e))
+}
+
 // Deterministic chapter color cycle. Matches the prototype's ChapterBands
 // where each chapter has a stable swatch independent of tone selection.
 const CHAPTER_PALETTE: &[&str] = &[

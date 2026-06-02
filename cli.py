@@ -1728,6 +1728,99 @@ def cmd_read_stanzas(args):
     print(json.dumps({"phrases": out, "clusters": clusters}))
 
 
+def _feel_path(target) -> Path:
+    """Resolve `<dir>/.<stem>.forge/<stem>.feel.yml` for a funscript or media
+    path. The `.feel.yml` is the canonical middle file holding all haptic
+    metadata (events today; devices / compose later). Edger yml is a derived
+    export, NOT this file."""
+    from videoflow.sidecar import forge_dir
+    stem = Path(target).stem
+    return forge_dir(target) / f"{stem}.feel.yml"
+
+
+def _js_event_to_canonical(e: dict) -> dict:
+    """Map the EventsTab JS event shape → canonical snake_case for the
+    sidecar. Keeps the UI dumb (it sends its own shape); Python owns
+    canonicalization (and the future Edger mapping)."""
+    return {
+        "id": e.get("id"),
+        "begin_ms": int(e.get("beginMs", 0)),
+        "end_ms": int(e.get("endMs", 0)),
+        "effect": e.get("effectId"),
+        "intensity": float(e.get("intensity", 0.0)),
+        "params": e.get("params") or {},
+        "devices": e.get("devices") or [],
+        "overrides": e.get("deviceCfg") or {},
+    }
+
+
+def _canonical_to_js(e: dict) -> dict:
+    """Inverse of _js_event_to_canonical — feel-read returns the JS shape so
+    EventsTab seeds with zero client-side mapping."""
+    return {
+        "id": e.get("id"),
+        "beginMs": int(e.get("begin_ms", 0)),
+        "endMs": int(e.get("end_ms", 0)),
+        "effectId": e.get("effect"),
+        "intensity": float(e.get("intensity", 0.0)),
+        "params": e.get("params") or {},
+        "devices": e.get("devices") or [],
+        "deviceCfg": e.get("overrides") or {},
+    }
+
+
+def cmd_feel_write(args):
+    """Write the events list to `<stem>.feel.yml`, preserving any other
+    top-level keys already in the file. Events arrive as JSON (the EventsTab
+    shape) from --events-json (a path, or '-' for stdin)."""
+    import yaml
+    target = Path(args.input)
+    raw = sys.stdin.read() if args.events_json == "-" \
+        else Path(args.events_json).read_text(encoding="utf-8")
+    payload = json.loads(raw)
+    events = payload if isinstance(payload, list) else (payload.get("events") or [])
+    canonical = [_js_event_to_canonical(e) for e in events]
+
+    path = _feel_path(target)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = {}
+    if path.exists():
+        try:
+            doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            doc = {}
+    if not isinstance(doc, dict):
+        doc = {}
+    doc["version"] = 1
+    doc["events"] = canonical
+    path.write_text(yaml.safe_dump(doc, sort_keys=False, allow_unicode=True),
+                    encoding="utf-8")
+    print(json.dumps({"saved": str(path), "count": len(canonical)}))
+
+
+def cmd_feel_read(args):
+    """Read `<stem>.feel.yml` and emit its events in the EventsTab JS shape.
+    Returns `{"version": 1, "events": []}` when the file is missing."""
+    import yaml
+    target = Path(args.input)
+    path = _feel_path(target)
+    if not path.exists():
+        print(json.dumps({"version": 1, "events": []}))
+        return
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        print(f"Error reading {path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(doc, dict):
+        doc = {}
+    events = doc.get("events") or []
+    print(json.dumps({
+        "version": doc.get("version", 1),
+        "events": [_canonical_to_js(e) for e in events],
+    }))
+
+
 def cmd_auto_chapter(args):
     """Run videoflow.structural.auto_chapter on a media file.
 
@@ -2183,6 +2276,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_rs.add_argument("path", help="Path to funscript or media file (sidecar lives next to it)")
 
+    # --- feel-write / feel-read (events <-> .feel.yml) ---
+    p_fw = sub.add_parser(
+        "feel-write",
+        help="Write events to the canonical <stem>.feel.yml sidecar",
+    )
+    p_fw.add_argument("input", help="funscript or media path (sidecar lives next to it)")
+    p_fw.add_argument("--events-json", required=True,
+                      help="Path to a JSON events array (EventsTab shape), or - for stdin")
+
+    p_fr = sub.add_parser(
+        "feel-read",
+        help="Read events from the <stem>.feel.yml sidecar (JS shape)",
+    )
+    p_fr.add_argument("input", help="funscript or media path (sidecar lives next to it)")
+
     # --- parse-captions ---
     p_caps = sub.add_parser(
         "parse-captions",
@@ -2637,6 +2745,8 @@ def main():
         "chapters":         cmd_chapters,
         "auto-chapter":     cmd_auto_chapter,
         "read-stanzas":     cmd_read_stanzas,
+        "feel-write":       cmd_feel_write,
+        "feel-read":        cmd_feel_read,
         "parse-captions":   cmd_parse_captions,
         "device-aware":     cmd_device_aware,
         "stim-config":      cmd_stim_config,
