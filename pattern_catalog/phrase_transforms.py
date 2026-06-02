@@ -100,6 +100,9 @@ class PhraseTransform:
     params: Dict[str, TransformParam] = field(default_factory=dict)
     structural: bool = False
     category: str = ""          # Optional grouping label for the dropdown (user transforms)
+    hidden: bool = False        # Kept in the catalog (recipes / suggest_transform
+                                # still resolve the key) but omitted from the
+                                # picker UI — used for consolidated aliases.
 
     def apply(self, actions: list, param_values: Optional[Dict[str, Any]] = None) -> list:
         """Return a new action list with the transform applied.
@@ -179,6 +182,40 @@ class _ClampRange(PhraseTransform):
         span = hi - lo
         for a in actions:
             a["pos"] = max(0, min(100, int(lo + a["pos"] / 100.0 * span)))
+        return actions
+
+
+class _RangeRemap(PhraseTransform):
+    """Remap positions into a target band [target_lo, target_hi].
+
+    Unifies the old Normalize Range + Clamp Upper/Lower Half — all three are
+    linear range remaps that differ only in the SOURCE span:
+
+    - ``fit_to_content`` True  → source is the phrase's actual min..max, so
+      the existing motion is *stretched* to fill the band (the old
+      Normalize: expand/amplify narrow content).
+    - ``fit_to_content`` False → source is the nominal 0..100, so the full
+      scale is *compressed* into the band (the old Clamp: e.g. [50,100] =
+      upper half, [0,50] = lower half).
+
+    When content already spans 0..100 the two modes coincide.
+    """
+    def _transform(self, actions, p):
+        if not actions:
+            return actions
+        lo = p["target_lo"]
+        hi = p["target_hi"]
+        if bool(p.get("fit_to_content", True)):
+            s_lo = min(a["pos"] for a in actions)
+            s_hi = max(a["pos"] for a in actions)
+        else:
+            s_lo, s_hi = 0, 100
+        src_span = s_hi - s_lo
+        if src_span == 0:
+            return actions
+        tgt_span = hi - lo
+        for a in actions:
+            a["pos"] = max(0, min(100, int(lo + (a["pos"] - s_lo) / src_span * tgt_span)))
         return actions
 
 
@@ -1182,10 +1219,34 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
                 ),
             },
         ),
+        _RangeRemap(
+            key="range",
+            name="Range",
+            description="Remap stroke positions into a target band [low, high]. Fit-to-content stretches the existing motion to fill the band (amplify); off compresses the full 0–100 scale into it (e.g. upper/lower half).",
+            params={
+                "fit_to_content": TransformParam(
+                    label="Fit to content", type="bool", default=True,
+                    help="On: stretch the phrase's actual range to fill the band (the old Normalize). Off: compress the full 0–100 scale into the band (the old Clamp Upper/Lower).",
+                ),
+                "target_lo": TransformParam(
+                    label="Low", type="int", default=0,
+                    min_val=0, max_val=100, step=5,
+                    help="Bottom of the target band.",
+                ),
+                "target_hi": TransformParam(
+                    label="High", type="int", default=100,
+                    min_val=0, max_val=100, step=5,
+                    help="Top of the target band.",
+                ),
+            },
+        ),
+        # Consolidated into `range` (2026-06-01). Kept as a hidden alias so
+        # suggest_transform output + saved recipes still resolve.
         _Normalize(
             key="normalize",
             name="Normalize Range",
             description="Expand positions to fill a target range (default: full 0–100).",
+            hidden=True,
             params={
                 "target_lo": TransformParam(
                     label="Target low", type="int", default=0,
@@ -1209,10 +1270,14 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
                 ),
             },
         ),
+        # clamp_upper / clamp_lower consolidated into `range` (fit_to_content
+        # off, target band = [50,100] / [0,50]). Hidden aliases so recipes
+        # still resolve.
         _ClampRange(
             key="clamp_upper",
             name="Clamp Upper Half",
             description="Compress positions into the upper half (50–100) — keeps motion in the intense zone.",
+            hidden=True,
             params={
                 "range_lo": TransformParam(label="Range low",  type="int", default=50, min_val=0,  max_val=60),
                 "range_hi": TransformParam(label="Range high", type="int", default=100, min_val=70, max_val=100),
@@ -1222,6 +1287,7 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
             key="clamp_lower",
             name="Clamp Lower Half",
             description="Compress positions into the lower half (0–50) — for gentler or break-style sections.",
+            hidden=True,
             params={
                 "range_lo": TransformParam(label="Range low",  type="int", default=0, min_val=0,  max_val=30),
                 "range_hi": TransformParam(label="Range high", type="int", default=50, min_val=40, max_val=70),
@@ -1244,10 +1310,14 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
                 ),
             },
         ),
+        # Consolidated into `recenter` (2026-06-01) — both are pure
+        # translations; recenter is the friendlier "land the midpoint here"
+        # form. Hidden alias so recipes using a raw offset still resolve.
         _Shift(
             key="shift",
             name="Shift",
             description="Translate all positions by a fixed offset — moves the center up or down while keeping amplitude.",
+            hidden=True,
             params={
                 "offset": TransformParam(
                     label="Offset", type="int", default=0,
@@ -1259,7 +1329,7 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
         _Recenter(
             key="recenter",
             name="Recenter",
-            description="Shift all positions so the phrase midpoint lands at a target value — preserves amplitude span.",
+            description="Move the whole phrase up or down so its midpoint lands at a target value — preserves amplitude span. (Use this to shift/lift motion; it replaces the separate Shift.)",
             params={
                 "target_center": TransformParam(
                     label="Target center", type="int", default=50,
@@ -1389,10 +1459,14 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
                 ),
             },
         ),
+        # Same uniform LPF as `smooth`, just a lighter default — consolidated
+        # into `smooth` (2026-06-01). Hidden alias so the `finalize` command
+        # (which applies it as a global finishing pass) still resolves.
         _Smooth(
             key="final_smooth",
             name="Final Smooth",
             description="Light global LPF finishing pass — takes off residual harsh edges after all phrase transforms have been applied.",
+            hidden=True,
             params={
                 "strength": TransformParam(
                     label="Smoothing strength", type="float", default=0.10,
@@ -1631,11 +1705,14 @@ TRANSFORM_ORDER: List[str] = [
     # Passthrough
     "passthrough",
     # Amplitude Shaping
-    "amplitude_scale", "normalize", "boost_contrast",
+    "amplitude_scale", "range", "boost_contrast",
     # Position Adjustment
-    "shift", "recenter", "clamp_upper", "clamp_lower", "invert", "funnel",
+    "recenter", "invert", "funnel",
+    # Consolidated aliases (hidden from the picker; kept resolvable). Listed
+    # last so they don't reorder the visible groups above.
+    "normalize", "clamp_upper", "clamp_lower", "shift", "final_smooth",
     # Smoothing & Filtering
-    "smooth", "blend_seams", "final_smooth",
+    "smooth", "blend_seams",
     # Structural — Tempo
     "halve_tempo",
     # Break / Recovery
@@ -1743,7 +1820,9 @@ def suggest_transform(phrase: dict, bpm_threshold: float = 120.0):
 
     amp_span = phrase.get("amplitude_span", 100)  # 0-100; default assumes full range
     if amp_span < 40:
-        return ("normalize", {})
+        # `range` with fit_to_content (default) == the old normalize:
+        # stretch the narrow span to fill 0–100.
+        return ("range", {})
 
     return ("amplitude_scale", {})
 
@@ -2042,6 +2121,8 @@ def get_transforms_by_category() -> dict[str, list[tuple[str, str]]]:
         if k not in TRANSFORM_CATALOG:
             continue
         spec = TRANSFORM_CATALOG[k]
+        if spec.hidden:
+            continue  # consolidated alias — resolvable but not shown
         pair = (k, spec.name)
         if spec.category == "tone":
             tone.append(pair)

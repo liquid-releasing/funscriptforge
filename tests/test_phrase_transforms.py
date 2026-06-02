@@ -45,10 +45,11 @@ def _timed_actions(positions, start_ms=0, step_ms=100):
 _EXPECTED_KEYS = {
     "passthrough",
     "amplitude_scale",
-    "normalize",
+    "range",         # unified rescale (normalize + clamp_* consolidated here)
+    "normalize",     # hidden alias, still in the catalog
     "smooth",
-    "clamp_upper",
-    "clamp_lower",
+    "clamp_upper",   # hidden alias
+    "clamp_lower",   # hidden alias
     "invert",
     "boost_contrast",
     "shift",
@@ -360,9 +361,11 @@ class TestSuggestTransform(unittest.TestCase):
         key, params = suggest_transform(_PHRASE_HIGH_BPM, 120.0)
         self.assertEqual(key, "amplitude_scale")
 
-    def test_high_bpm_narrow_amp_suggests_normalize(self):
+    def test_high_bpm_narrow_amp_suggests_range(self):
+        # Was "normalize" — consolidated into "range" (fit_to_content default
+        # stretches the narrow span to fill, same behavior).
         key, params = suggest_transform(_PHRASE_NARROW, 120.0)
-        self.assertEqual(key, "normalize")
+        self.assertEqual(key, "range")
 
     def test_bpm_exactly_at_threshold_is_high(self):
         phrase = {"bpm": 120.0, "pattern_label": "", "amplitude_span": 80}
@@ -589,8 +592,8 @@ class TestReadmeExamples(unittest.TestCase):
         self.assertEqual(suggest_transform(_PHRASE_TRANS, 120.0)[0], "smooth")
 
     def test_suggest_narrow_amp(self):
-        """README: --suggest  (high BPM, narrow amp → normalize)"""
-        self.assertEqual(suggest_transform(_PHRASE_NARROW, 120.0)[0], "normalize")
+        """README: --suggest  (high BPM, narrow amp → range, fit-to-content)"""
+        self.assertEqual(suggest_transform(_PHRASE_NARROW, 120.0)[0], "range")
 
     # ------------------------------------------------------------------
     # clamp_upper / clamp_lower (documented in catalog table)
@@ -1551,6 +1554,68 @@ class TestToneTransforms(unittest.TestCase):
                 self.assertIn(key, tone_keys)
         # Tone should be the first category
         self.assertEqual(list(cats.keys())[0], "Tone")
+
+
+class TestRange(unittest.TestCase):
+    """`range` unifies the old normalize + clamp_upper/lower: a linear remap
+    into [target_lo, target_hi] whose SOURCE span is the data's actual range
+    (fit_to_content=True, the old normalize) or nominal 0–100 (False, the old
+    clamp)."""
+
+    def test_fit_to_content_stretches_narrow_span_to_fill(self):
+        # 40..60 (span 20) → fill 0..100 == old normalize behavior.
+        acts = _actions([40, 50, 60])
+        out = TRANSFORM_CATALOG["range"].apply(
+            acts, {"fit_to_content": True, "target_lo": 0, "target_hi": 100})
+        self.assertEqual([a["pos"] for a in out], [0, 50, 100])
+
+    def test_nominal_source_compresses_full_scale(self):
+        # fit_to_content False, band [50,100] → old clamp_upper: 0→50,
+        # 50→75, 100→100 (maps nominal 0..100 into the upper half).
+        acts = _actions([0, 50, 100])
+        out = TRANSFORM_CATALOG["range"].apply(
+            acts, {"fit_to_content": False, "target_lo": 50, "target_hi": 100})
+        self.assertEqual([a["pos"] for a in out], [50, 75, 100])
+
+    def test_matches_legacy_normalize_default(self):
+        # range (fit-to-content default) == the hidden `normalize` alias.
+        acts = _actions([30, 40, 50, 60, 70])
+        r = TRANSFORM_CATALOG["range"].apply(list(acts), {})
+        n = TRANSFORM_CATALOG["normalize"].apply(list(acts), {})
+        self.assertEqual([a["pos"] for a in r], [a["pos"] for a in n])
+
+    def test_not_structural(self):
+        self.assertFalse(TRANSFORM_CATALOG["range"].structural)
+
+
+class TestConsolidatedAliasesHidden(unittest.TestCase):
+    """The consolidated transforms stay resolvable in the catalog (recipes /
+    suggest_transform) but are omitted from the picker (get_transforms_by_
+    category + the list-transforms JSON the UI builds from)."""
+
+    _HIDDEN = {"normalize", "clamp_upper", "clamp_lower", "shift", "final_smooth"}
+
+    def test_aliases_still_in_catalog(self):
+        for k in self._HIDDEN:
+            with self.subTest(key=k):
+                self.assertIn(k, TRANSFORM_CATALOG)
+                self.assertTrue(TRANSFORM_CATALOG[k].hidden)
+
+    def test_aliases_absent_from_picker_categories(self):
+        from pattern_catalog.phrase_transforms import get_transforms_by_category
+        shown = {k for pairs in get_transforms_by_category().values()
+                 for k, _ in pairs}
+        for k in self._HIDDEN:
+            with self.subTest(key=k):
+                self.assertNotIn(k, shown)
+
+    def test_replacements_are_shown(self):
+        from pattern_catalog.phrase_transforms import get_transforms_by_category
+        shown = {k for pairs in get_transforms_by_category().values()
+                 for k, _ in pairs}
+        self.assertIn("range", shown)
+        self.assertIn("recenter", shown)
+        self.assertIn("smooth", shown)
 
 
 class TestTame(unittest.TestCase):

@@ -495,6 +495,11 @@ def cmd_list_transforms(args):
     if args.format == "json":
         out = {}
         for key, spec in catalog.items():
+            # Hidden transforms (consolidated aliases) stay in the catalog so
+            # recipes / suggest_transform resolve them, but are omitted from
+            # the picker catalog the UI builds from this output.
+            if getattr(spec, "hidden", False):
+                continue
             # Category is the UI grouping (Tone / Behavior / Structural).
             # Mostly derived: structural transforms carry the flag, tone_*
             # are the mood-arc set, everything else is behavioral. A spec may
