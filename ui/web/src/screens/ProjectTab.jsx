@@ -55,10 +55,6 @@ export default function ProjectTab({
   isLoadingProject,
 }) {
   const [search, setSearch] = useState('');
-  // Inline two-step confirm for the destructive "Revert to original"
-  // action — matches AnalysisTab's Re-analyze confirm rather than a
-  // browser confirm() dialog.
-  const [confirmingRevert, setConfirmingRevert] = useState(false);
   // On-disk inventory for the currently active project — drives the
   // "Files in this project" list with real readdir data instead of
   // hardcoded placeholders. Stays null in browser mode (no Tauri readdir).
@@ -175,6 +171,7 @@ export default function ProjectTab({
             projectFiles={projectFiles}
             onAddOrReplace={handleAddOrReplace}
             onOpenScript={onOpenScript}
+            onRevertToOriginal={onRevertToOriginal}
           />
         ) : (
           <EmptyProject onOpen={handleOpen} />
@@ -351,7 +348,9 @@ function ProjectRow({ project, active, onClick }) {
   );
 }
 
-function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript }) {
+function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, onRevertToOriginal }) {
+  // Inline two-step confirm for the destructive "Revert to original" action.
+  const [confirmingRevert, setConfirmingRevert] = useState(false);
   // Real funscripts loaded via the Rust bridge populate `project.actions`
   // (downsampled to ~1200 points by load_project). Recents and mock projects
   // get a deterministic synthesised curve from the preview generator.
