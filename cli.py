@@ -142,6 +142,7 @@ from models import AssessmentResult
 from pattern_catalog.config import TransformerConfig
 from pattern_catalog.phrase_transforms import (
     TRANSFORM_CATALOG, _BUILTIN_KEYS, _validate_recipe_entry, suggest_transform,
+    derive_picker_category,
 )
 from pattern_catalog.transformer import FunscriptTransformer
 from user_customization.config import CustomizerConfig
@@ -501,22 +502,9 @@ def cmd_list_transforms(args):
             if getattr(spec, "hidden", False):
                 continue
             # Category is the UI grouping the picker tabs key on: exactly
-            # tone / behavior / structural. Mostly derived (structural flag,
-            # tone_* prefix, else behavioral). A spec may DECLARE its category
-            # to override — e.g. `tame` is non-structural but belongs under
-            # Tone — but ONLY if it names one of the known picker buckets.
-            # Other dormant labels some specs carry (e.g. "Tone"/"Replacement"/
-            # "Timing" used by older grouping code) must NOT leak through as
-            # new categories, or the UI silently drops those transforms.
-            declared = (spec.category or "").strip().lower()
-            if declared in ("tone", "behavior", "structural"):
-                category = declared
-            elif spec.structural:
-                category = "structural"
-            elif key.startswith("tone_"):
-                category = "tone"
-            else:
-                category = "behavior"
+            # tone / behavior / structural. Shared helper so this and the
+            # streamlit get_transforms_by_category can't disagree.
+            category = derive_picker_category(key, spec)
             entry = {
                 "name": spec.name,
                 "description": spec.description,

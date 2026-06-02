@@ -1573,6 +1573,12 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
             key="hero_beat",
             name="Hero Beat",
             description="8-step groove sequencer over the script's own beats. Each slider sets how much depth that beat keeps (100 = full, 0 = flat). Set the hero beats high and the rest lower to carve a groove out of an even wall of strokes. All-100 = no change.",
+            # Picker grouping only: Hero Beat reshapes rhythmic structure, so
+            # it lives under Structural in the UI. It is NOT structural in the
+            # data sense (structural flag stays False) — it preserves beat
+            # count + timing and only scales depth, so consumers patch it like
+            # any position transform.
+            category="structural",
             params={
                 f"beat{i}": TransformParam(
                     label=f"Beat {i}", type="int", default=100,
@@ -2174,6 +2180,34 @@ def get_transform_options() -> tuple[list[str], list[str]]:
     return all_keys, all_labels
 
 
+_PICKER_CATEGORIES = ("tone", "behavior", "structural")
+
+
+def derive_picker_category(key: str, spec: "PhraseTransform") -> str:
+    """The picker bucket — exactly one of tone / behavior / structural.
+
+    An explicit ``spec.category`` overrides the derivation, but ONLY when it
+    names a known bucket (case-insensitive). This lets a transform declare
+    its UI group independently of the ``structural`` data flag — e.g. Tame
+    is non-structural but grouped under Tone; Hero Beat is non-structural
+    (preserves count + timing) but grouped under Structural. Dormant labels
+    some specs carry ("Tone"/"Replacement"/"Timing" from older grouping
+    code) are NOT known buckets, so they fall through to the derivation
+    rather than leaking as phantom categories that the UI would drop.
+
+    Single source of truth shared by cmd_list_transforms (JSON catalog the
+    desktop UI reads) and get_transforms_by_category (streamlit picker).
+    """
+    declared = (spec.category or "").strip().lower()
+    if declared in _PICKER_CATEGORIES:
+        return declared
+    if spec.structural:
+        return "structural"
+    if key.startswith("tone_"):
+        return "tone"
+    return "behavior"
+
+
 def get_transforms_by_category() -> dict[str, list[tuple[str, str]]]:
     """Return {category_name: [(key, label), ...]} for the two-step picker.
 
@@ -2200,9 +2234,10 @@ def get_transforms_by_category() -> dict[str, list[tuple[str, str]]]:
         if spec.hidden:
             continue  # consolidated alias — resolvable but not shown
         pair = (k, spec.name)
-        if spec.category == "tone":
+        cat = derive_picker_category(k, spec)
+        if cat == "tone":
             tone.append(pair)
-        elif spec.structural:
+        elif cat == "structural":
             structural.append(pair)
         else:
             behavior.append(pair)
