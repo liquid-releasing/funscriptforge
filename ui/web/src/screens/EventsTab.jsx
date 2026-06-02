@@ -437,8 +437,12 @@ export default function EventsTab({
           chain={chain}
           snap={snap}
           canSnap={!!trackBeats?.beatsMs?.length}
+          scopeStart={activeChapter.atMs}
+          scopeEnd={activeChapter.endMs}
           onCaptureBegin={handleCaptureBegin}
           onCaptureEnd={handleCaptureEnd}
+          onBeginChange={setBeginMs}
+          onEndChange={setEndMs}
           onToggleChain={() => setChain((v) => !v)}
           onToggleSnap={() => setSnap((v) => !v)}
           onReset={handleResetCapture}
@@ -543,6 +547,29 @@ function fmtClock(ms) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(f).padStart(3, '0')}`;
 }
 
+// Parse a typed time → ms. Accepts h:mm:ss.mmm, mm:ss.mmm, m:ss.mmm,
+// ss.mmm, or a plain seconds value. Returns null on anything unparseable.
+function parseClock(str) {
+  const s = String(str).trim();
+  if (!s || !/^[\d:.]+$/.test(s)) return null;
+  const parts = s.split(':');
+  if (parts.length > 3) return null;
+  const sec = parseFloat(parts[parts.length - 1]);
+  if (Number.isNaN(sec)) return null;
+  let ms = sec * 1000;
+  if (parts.length >= 2) {
+    const mins = parseInt(parts[parts.length - 2], 10);
+    if (Number.isNaN(mins)) return null;
+    ms += mins * 60000;
+  }
+  if (parts.length === 3) {
+    const hrs = parseInt(parts[0], 10);
+    if (Number.isNaN(hrs)) return null;
+    ms += hrs * 3600000;
+  }
+  return Math.round(ms);
+}
+
 // Shared step badge — ① capture · ② library · ③ config. One look: red fill,
 // dark glyph, 22px (matches the config card's ③).
 const STEP_RED = '#ff5a5f';
@@ -616,24 +643,82 @@ function CaptureButton({ label, set, onClick }) {
   );
 }
 
-function ClockField({ ms }) {
+// Editable time field. Click to type mm:ss.mmm (Enter/blur commits + clamps
+// to [min,max]; Esc reverts; ↑/↓ nudge ±100ms, Shift ±1s). Read-only display
+// otherwise. onCommit gets a clamped, rounded ms.
+function ClockField({ ms, onCommit, min, max }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef(null);
   const set = ms != null;
+
+  useEffect(() => {
+    if (editing && inputRef.current) { inputRef.current.focus(); inputRef.current.select(); }
+  }, [editing]);
+
+  const clamp = (v) => {
+    let x = v;
+    if (min != null) x = Math.max(min, x);
+    if (max != null) x = Math.min(max, x);
+    return Math.round(x);
+  };
+  const commit = () => {
+    const parsed = parseClock(draft);
+    if (parsed != null) onCommit?.(clamp(parsed));
+    setEditing(false);
+  };
+  const nudge = (delta) => {
+    const v = clamp((set ? ms : (min ?? 0)) + delta);
+    onCommit?.(v);
+    setDraft(fmtClock(v));
+  };
+
+  const box = {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    padding: '7px 12px', borderRadius: 7, minWidth: 96, width: 96,
+    background: 'var(--bg)', border: '1px solid var(--border)',
+    fontSize: 14, fontWeight: 600, letterSpacing: '0.02em',
+    fontFamily: 'var(--font-mono)',
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          else if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); nudge(e.shiftKey ? 1000 : 100); }
+          else if (e.key === 'ArrowDown') { e.preventDefault(); nudge(e.shiftKey ? -1000 : -100); }
+        }}
+        style={{ ...box, color: 'var(--text)', outline: 'none', textAlign: 'center', boxShadow: '0 0 0 1px var(--text-dim) inset' }}
+      />
+    );
+  }
   return (
-    <span className="mono" style={{
-      display: 'inline-flex', alignItems: 'center',
-      padding: '7px 12px', borderRadius: 7, minWidth: 96, justifyContent: 'center',
-      background: 'var(--bg)', border: '1px solid var(--border)',
-      color: set ? 'var(--text)' : 'var(--text-dim)',
-      fontSize: 14, fontWeight: 600, letterSpacing: '0.02em',
-    }}>
+    <span
+      role="button" tabIndex={0}
+      title="Click to type a time (mm:ss.mmm) · ↑/↓ nudge, Shift ±1s"
+      onClick={() => { setDraft(set ? fmtClock(ms) : ''); setEditing(true); }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDraft(set ? fmtClock(ms) : ''); setEditing(true); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); nudge(e.shiftKey ? 1000 : 100); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); nudge(e.shiftKey ? -1000 : -100); }
+      }}
+      style={{ ...box, color: set ? 'var(--text)' : 'var(--text-dim)', cursor: 'text' }}
+    >
       {fmtClock(ms)}
     </span>
   );
 }
 
 function CaptureBar({
-  beginMs, endMs, chain, snap, canSnap,
-  onCaptureBegin, onCaptureEnd, onToggleChain, onToggleSnap, onReset,
+  beginMs, endMs, chain, snap, canSnap, scopeStart, scopeEnd,
+  onCaptureBegin, onCaptureEnd, onBeginChange, onEndChange,
+  onToggleChain, onToggleSnap, onReset,
 }) {
   const dur = (beginMs != null && endMs != null) ? Math.abs(endMs - beginMs) : null;
 
@@ -657,13 +742,13 @@ function CaptureBar({
 
         <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Begin</span>
         <CaptureButton label="Begin" set={beginMs != null} onClick={onCaptureBegin} />
-        <ClockField ms={beginMs} />
+        <ClockField ms={beginMs} onCommit={onBeginChange} min={scopeStart} max={scopeEnd} />
 
         <Icon name="arrow-right" size={14} style={{ color: 'var(--text-dim)' }} />
 
         <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>End</span>
         <CaptureButton label="End" set={endMs != null} onClick={onCaptureEnd} />
-        <ClockField ms={endMs} />
+        <ClockField ms={endMs} onCommit={onEndChange} min={scopeStart} max={scopeEnd} />
       </div>
 
       {/* Row 2 — derived duration · toggles · reset · add */}
