@@ -28,7 +28,7 @@
 // pass.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pill, Button, Icon, fmtTime } from 'forgemoment';
+import { Pill, Button, Icon, fmtTime, TrackStack } from 'forgemoment';
 import {
   EVENT_DEVICES,
   EVENT_FAMILIES,
@@ -53,6 +53,9 @@ export default function EventsTab({ project, selectedDevices = [] }) {
 
   const [scope, setScope] = useState('all'); // 'all' | chapter id
   const [selectedId, setSelectedId] = useState(null);
+  // Playhead for the chapter-scoped TrackStack hero. No MediaViewer wired
+  // yet (Stage 2), so click-to-seek on the stack drives this directly.
+  const [currentMs, setCurrentMs] = useState(0);
   const [libDevice, setLibDevice] = useState(() => {
     const proj = selectedDevices?.[0];
     if (proj && EVENT_DEVICES.find((d) => d.id === proj)) return proj;
@@ -91,6 +94,39 @@ export default function EventsTab({ project, selectedDevices = [] }) {
 
   const filterChapter = (id) => setScope((s) => (s === id ? 'all' : id));
 
+  // ── Chapter-scoped hero (Stage 1a: TrackStack) ──────────────────────
+  // The hero shows ONE chapter at a time: the scoped chapter when the user
+  // has picked one, else the first chapter. Events overlapping that window
+  // map to TrackStack's generic span shape (vocabulary stays here, not in
+  // forgemoment — same pattern as ShapeGlyph).
+  const activeChapter = useMemo(() => {
+    if (scope !== 'all') return chapters.find((c) => c.id === scope) ?? chapters[0];
+    return chapters[0];
+  }, [scope, chapters]);
+
+  const chapterEvents = useMemo(() => {
+    if (!activeChapter) return [];
+    return events
+      .filter((e) => e.beginMs < activeChapter.endMs && e.endMs > activeChapter.atMs)
+      .map((e) => {
+        const eff = findEffect(e.effectId);
+        const fam = eff ? EVENT_FAMILIES[eff.family] : null;
+        return {
+          id: e.id,
+          start: e.beginMs,
+          end: e.endMs,
+          color: fam?.color,
+          label: eff?.label || e.effectId,
+        };
+      });
+  }, [events, activeChapter]);
+
+  // Snap the playhead to the active chapter's start when it changes, so the
+  // baton begins inside the visible window rather than at 0.
+  useEffect(() => {
+    if (activeChapter) setCurrentMs(activeChapter.atMs);
+  }, [activeChapter?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!project?.path) {
     return (
       <section className="ff-placeholder" style={{ padding: 24 }}>
@@ -116,6 +152,44 @@ export default function EventsTab({ project, selectedDevices = [] }) {
         scopeCount={timelineEvents.length}
         scope={scope}
       />
+
+      {activeChapter && (
+        <div style={{
+          marginTop: 12, padding: '10px 14px',
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 10,
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+            marginBottom: 6,
+          }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700 }}>
+              <span style={{
+                display: 'inline-block', width: 8, height: 8, borderRadius: 2,
+                background: activeChapter.color || '#888', marginRight: 7,
+                verticalAlign: '0px',
+              }} />
+              {activeChapter.name || activeChapter.id}
+              <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--text-dim)', marginLeft: 8 }}>
+                chapter-scoped · click to move the playhead · click an event to select
+              </span>
+            </span>
+            <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>
+              {fmtTime(currentMs)}
+            </span>
+          </div>
+          <TrackStack
+            scope={{ start: activeChapter.atMs, end: activeChapter.endMs }}
+            actions={actions}
+            events={chapterEvents}
+            lanes={['events', 'funscript']}
+            currentMs={currentMs}
+            selectedEventId={selectedId}
+            onSeek={setCurrentMs}
+            onSelectEvent={(id) => setSelectedId((s) => (s === id ? null : id))}
+          />
+        </div>
+      )}
 
       <div
         style={{
