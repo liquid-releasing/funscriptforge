@@ -55,6 +55,30 @@ function recipeColor(recipe) {
   return GROUP_COLORS[recipe.group] || '#4dabf7';
 }
 
+// SFW is the default presentation (store positioning); NSFW reveals the raw
+// intent label. Most events are unbranded → both labels resolve the same.
+function pickLabel(recipe, mode) {
+  if (!recipe) return '';
+  if (mode === 'nsfw') return recipe.nsfwLabel || recipe.label || recipe.name;
+  return recipe.sfwLabel || recipe.label || recipe.name;
+}
+
+// Blend = how an event combines with whatever is already on the channel.
+// Derived from each step's `mode`: additive layers ON TOP (safe to stack),
+// overwrite REPLACES the channel for the window. Matters because events stack.
+function recipeBlend(recipe) {
+  const modes = (recipe?.steps || []).map((s) => s.params?.mode || 'additive');
+  if (!modes.length) return null; // baseline / Normal
+  if (modes.every((m) => m === 'additive')) return 'additive';
+  if (modes.every((m) => m === 'overwrite')) return 'overwrite';
+  return 'mixed';
+}
+const BLEND_META = {
+  additive: { label: 'Adds on top', color: '#5dc98a', tip: 'Layers on existing motion — safe to stack with other events.' },
+  overwrite: { label: 'Replaces', color: '#ffb547', tip: 'Takes over the channel for its window — overrides anything underneath.' },
+  mixed: { label: 'Mixed', color: '#9aa0ad', tip: 'Some steps add on top, some replace the channel.' },
+};
+
 // Resolve a step param's `$ref` against the live param values (else defaults).
 function _resolveParam(v, paramVals, defaults) {
   if (typeof v === 'string' && v.startsWith('$')) {
@@ -70,30 +94,102 @@ const AXIS_LABEL = {
 };
 // Humanize a recipe's step stack into "what this produces" lines, with the
 // current params substituted (matches funscript-tools' update_steps_preview,
-// friendlier). Each line = one operation.
+// friendlier). Each entry = one operation: { text, mode } (mode = additive |
+// overwrite, surfaced so the user sees which steps layer vs replace).
 function humanizeSteps(steps, paramVals, defaults) {
   const lines = [];
   for (const s of (steps || [])) {
     const p = s.params || {};
+    const mode = p.mode || 'additive';
     const axis = AXIS_LABEL[s.axis] || (s.axis || '').split(',')[0] || s.axis || 'output';
     const r = (v) => _resolveParam(v, paramVals, defaults);
     const dur = r(p.duration_ms);
     const ramp = r(p.ramp_in_ms);
     const durTxt = typeof dur === 'number' ? ` over ${(dur / 1000).toFixed(1)}s` : '';
     const rampTxt = typeof ramp === 'number' && ramp > 0 ? `, ramp ${(ramp / 1000).toFixed(2)}s` : '';
+    let text;
     if (s.op === 'apply_linear_change') {
-      lines.push(`Sweep ${axis} ${r(p.start_value)}→${r(p.end_value)}${durTxt}${rampTxt}`);
+      text = `Sweep ${axis} ${r(p.start_value)}→${r(p.end_value)}${durTxt}${rampTxt}`;
     } else if (s.op === 'apply_modulation') {
       const freq = r(p.frequency);
       const amp = r(p.amplitude);
       const freqTxt = typeof freq === 'number' ? ` @${freq}Hz` : '';
       const ampTxt = amp != null ? ` ±${amp}` : '';
-      lines.push(`Modulate ${axis} ${r(p.waveform) || 'sin'}${freqTxt}${ampTxt}${durTxt}`);
+      text = `Modulate ${axis} ${r(p.waveform) || 'sin'}${freqTxt}${ampTxt}${durTxt}`;
     } else {
-      lines.push(`${(s.op || 'op').replace(/_/g, ' ')} on ${axis}${durTxt}`);
+      text = `${(s.op || 'op').replace(/_/g, ' ')} on ${axis}${durTxt}`;
     }
+    lines.push({ text, mode });
   }
   return lines;
+}
+
+// ── RecipeGlyph — a filled sparkline synthesized from the actual step stack
+// (the "shape icon"). Modulation → its waveform; a single linear change →
+// ramp up/down/steady; baseline → a flat dim line. Grounded in real data,
+// not a generic shape table.
+function recipeGlyphKind(recipe) {
+  const steps = recipe?.steps || [];
+  if (!steps.length) return { kind: 'flat' };
+  const mod = steps.find((s) => s.op === 'apply_modulation');
+  if (mod) return { kind: 'wave', waveform: mod.params?.waveform || 'sin' };
+  // Linear-only: compare the first step's start to the last step's end.
+  const first = steps[0].params || {};
+  const last = steps[steps.length - 1].params || {};
+  const sv = _resolveParam(first.start_value, null, recipe.defaultParams);
+  const ev = _resolveParam(last.end_value ?? last.start_value, null, recipe.defaultParams);
+  const a = Number(sv); const b = Number(ev);
+  if (Number.isFinite(a) && Number.isFinite(b)) {
+    if (b > a * 1.001) return { kind: 'ramp-up' };
+    if (b < a * 0.999) return { kind: 'ramp-down' };
+  }
+  return { kind: 'steady' };
+}
+function glyphPoints(spec, w, h) {
+  const pad = 2;
+  const x0 = pad; const x1 = w - pad;
+  const yLo = h - pad; const yHi = pad;
+  const mid = (yLo + yHi) / 2;
+  const amp = (yLo - yHi) * 0.4;
+  const pts = [];
+  if (spec.kind === 'wave') {
+    const cycles = 2.4; const n = 36;
+    for (let i = 0; i <= n; i += 1) {
+      const t = i / n;
+      const x = x0 + (x1 - x0) * t;
+      const ph = 2 * Math.PI * cycles * t;
+      let s;
+      switch (spec.waveform) {
+        case 'square': s = (ph % (2 * Math.PI)) < Math.PI ? 1 : -1; break;
+        case 'sawtooth': s = 2 * ((cycles * t) % 1) - 1; break;
+        case 'triangle': { const f = (cycles * t) % 1; s = f < 0.5 ? 4 * f - 1 : 3 - 4 * f; break; }
+        default: s = Math.sin(ph);
+      }
+      pts.push([x, mid - amp * s]);
+    }
+  } else if (spec.kind === 'ramp-up') {
+    pts.push([x0, yLo], [x1, yHi]);
+  } else if (spec.kind === 'ramp-down') {
+    pts.push([x0, yHi], [x1, yLo]);
+  } else if (spec.kind === 'steady') {
+    pts.push([x0, mid - amp * 0.5], [x1, mid - amp * 0.5]);
+  } else { // flat / baseline
+    pts.push([x0, mid], [x1, mid]);
+  }
+  return pts;
+}
+function RecipeGlyph({ recipe, color, w = 34, h = 18 }) {
+  const spec = recipeGlyphKind(recipe);
+  const pts = glyphPoints(spec, w, h);
+  const line = pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const fill = `${pts[0][0].toFixed(1)},${(h - 2).toFixed(1)} ${line} ${pts[pts.length - 1][0].toFixed(1)},${(h - 2).toFixed(1)}`;
+  const dim = spec.kind === 'flat';
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ flexShrink: 0, display: 'block' }}>
+      <polygon points={fill} fill={dim ? 'var(--text-dim)' : color} opacity={dim ? 0.1 : 0.18} />
+      <polyline points={line} fill="none" stroke={dim ? 'var(--text-dim)' : color} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 export default function EventsTab({
@@ -189,6 +285,8 @@ export default function EventsTab({
   // Pre-arm "Normal" (decision #5) — open Events ready to chain-capture
   // baseline coverage without picking an effect first.
   const [selectedEffectId, setSelectedEffectId] = useState('normal');
+  // Label presentation — SFW (default, store positioning) vs NSFW (raw intent).
+  const [labelMode, setLabelMode] = useState('sfw');
 
   const selectedEvent = useMemo(
     () => events.find((e) => e.id === selectedId) || null,
@@ -238,10 +336,10 @@ export default function EventsTab({
           start: e.beginMs,
           end: e.endMs,
           color: recipeColor(r),
-          label: r?.sfwLabel || r?.label || e.effectId,
+          label: pickLabel(r, labelMode) || e.effectId,
         };
       });
-  }, [events, activeChapter, recipeMap]);
+  }, [events, activeChapter, recipeMap, labelMode]);
 
   // Snap the playhead to the active chapter's start when it changes, so the
   // baton begins inside the visible window rather than at 0. Also clear any
@@ -534,6 +632,8 @@ export default function EventsTab({
           groups={catalog.groups ?? []}
           selectedEffectId={selectedEffectId}
           onSelectEffect={setSelectedEffectId}
+          labelMode={labelMode}
+          onLabelMode={setLabelMode}
         />
 
         <CapturePane
@@ -541,6 +641,7 @@ export default function EventsTab({
           beginMs={beginMs}
           endMs={endMs}
           editingEvent={selectedId ? selectedEvent : null}
+          labelMode={labelMode}
           onAddEvent={handleCommit}
         />
 
@@ -550,6 +651,7 @@ export default function EventsTab({
           scope={scope}
           chapters={chapters}
           recipeFor={recipeById}
+          labelMode={labelMode}
           selectedId={selectedId}
           onSelect={setSelectedId}
           onEdit={(id) => setSelectedId(id)}
@@ -870,14 +972,15 @@ function CaptureBar({
 // EffectLibrary — step ②: search + collapsible source groups
 // (Featured · General · MCB · Clutch · Test) over the 32 Edger events.
 // ──────────────────────────────────────────────────────────────
-function RecipeRow({ recipe, selected, onSelect }) {
+function RecipeRow({ recipe, selected, labelMode, onSelect }) {
   const c = recipeColor(recipe);
+  const blend = recipeBlend(recipe);
   return (
     <button
       onClick={() => onSelect(recipe.id)}
       title={recipe.desc || recipe.name}
       style={{
-        display: 'flex', alignItems: 'center', gap: 8,
+        display: 'flex', alignItems: 'center', gap: 9,
         padding: '7px 12px', width: '100%', textAlign: 'left',
         background: selected ? 'var(--surface-2)' : 'transparent',
         border: 'none',
@@ -885,17 +988,23 @@ function RecipeRow({ recipe, selected, onSelect }) {
         color: 'var(--text)', fontFamily: 'inherit', cursor: 'pointer',
       }}
     >
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c, flexShrink: 0 }} />
+      <RecipeGlyph recipe={recipe} color={c} />
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: selected ? 'var(--text)' : 'var(--text-soft)' }}>
-            {recipe.sfwLabel || recipe.label}
+            {pickLabel(recipe, labelMode)}
           </span>
           {recipe.baseline && (
             <span style={{
               fontSize: 8.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
               color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 3, padding: '0 4px',
             }}>baseline</span>
+          )}
+          {blend === 'overwrite' && (
+            <span title={BLEND_META.overwrite.tip} style={{
+              fontSize: 8.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+              color: BLEND_META.overwrite.color, flexShrink: 0,
+            }}>replaces</span>
           )}
         </div>
         <div className="mono" style={{
@@ -909,7 +1018,7 @@ function RecipeRow({ recipe, selected, onSelect }) {
   );
 }
 
-function EffectLibrary({ recipes, groups, selectedEffectId, onSelectEffect }) {
+function EffectLibrary({ recipes, groups, selectedEffectId, labelMode, onLabelMode, onSelectEffect }) {
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState(() => new Set(['mcb', 'clutch', 'test']));
   const toggle = (key) => setCollapsed((prev) => {
@@ -925,14 +1034,25 @@ function EffectLibrary({ recipes, groups, selectedEffectId, onSelectEffect }) {
     || (r.nsfwLabel || '').toLowerCase().includes(q)
     || (r.desc || '').toLowerCase().includes(q);
 
-  // Section list: Featured (branded) first, then each catalog group in order.
+  // Normal is pinned ABOVE the sections as a permanent baseline anchor (it's a
+  // navigation tool, not an effect) — hidden only while searching.
+  const normal = recipes.find((r) => r.baseline) || null;
+  // Section list: Featured (branded, non-baseline) first, then catalog groups.
   const sections = [
-    { key: 'featured', name: 'Featured', items: recipes.filter((r) => r.branded && matches(r)) },
+    { key: 'featured', name: 'Featured', items: recipes.filter((r) => r.branded && !r.baseline && matches(r)) },
     ...(groups || []).map((g) => ({
       key: g.key, name: GROUP_NAMES[g.key] || g.name,
-      items: recipes.filter((r) => r.group === g.key && matches(r)),
+      items: recipes.filter((r) => r.group === g.key && !r.baseline && matches(r)),
     })),
   ].filter((s) => s.items.length > 0);
+
+  const modeBtn = (m) => ({
+    padding: '2px 9px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
+    fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+    background: labelMode === m ? 'var(--text-muted)' : 'transparent',
+    color: labelMode === m ? 'var(--bg)' : 'var(--text-dim)',
+    border: 'none',
+  });
 
   return (
     <div style={{
@@ -944,9 +1064,12 @@ function EffectLibrary({ recipes, groups, selectedEffectId, onSelectEffect }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <StepBadge n={2} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{recipes.length - 1}</span>}>
-              Effect library
-            </SectionLabel>
+            <SectionLabel>Effect library</SectionLabel>
+          </div>
+          {/* SFW / NSFW label toggle — SFW default (store positioning). */}
+          <div style={{ display: 'inline-flex', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 6, padding: 1 }}>
+            <button type="button" onClick={() => onLabelMode('sfw')} style={modeBtn('sfw')} title="Friendly labels">SFW</button>
+            <button type="button" onClick={() => onLabelMode('nsfw')} style={modeBtn('nsfw')} title="Raw intent labels">NSFW</button>
           </div>
         </div>
         <div style={{ position: 'relative', marginTop: 6 }}>
@@ -963,6 +1086,13 @@ function EffectLibrary({ recipes, groups, selectedEffectId, onSelectEffect }) {
           />
         </div>
       </div>
+
+      {/* Pinned baseline — always reachable above the source groups. */}
+      {normal && !q && (
+        <div style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
+          <RecipeRow recipe={normal} selected={normal.id === selectedEffectId} labelMode={labelMode} onSelect={onSelectEffect} />
+        </div>
+      )}
 
       <div style={{ flex: 1, overflow: 'auto', padding: '4px 0' }}>
         {sections.map((s) => {
@@ -988,7 +1118,7 @@ function EffectLibrary({ recipes, groups, selectedEffectId, onSelectEffect }) {
                 </span>
               </button>
               {!isCollapsed && s.items.map((r) => (
-                <RecipeRow key={`${s.key}-${r.id}`} recipe={r} selected={r.id === selectedEffectId} onSelect={onSelectEffect} />
+                <RecipeRow key={`${s.key}-${r.id}`} recipe={r} selected={r.id === selectedEffectId} labelMode={labelMode} onSelect={onSelectEffect} />
               ))}
             </div>
           );
@@ -1028,7 +1158,7 @@ function SliderRow({ label, value, min, max, step, unit, color, onChange, fmt })
   );
 }
 
-function CapturePane({ recipe, beginMs, endMs, editingEvent, onAddEvent }) {
+function CapturePane({ recipe, beginMs, endMs, editingEvent, labelMode, onAddEvent }) {
   const recId = recipe?.id;
   const editId = editingEvent?.id;
   const isEditing = !!editingEvent;
@@ -1077,8 +1207,10 @@ function CapturePane({ recipe, beginMs, endMs, editingEvent, onAddEvent }) {
   const color = recipeColor(recipe);
   const section = GROUP_NAMES[recipe.group] || recipe.group;
   const params = recipe.params || [];
+  const title = pickLabel(recipe, labelMode);
+  const blend = recipeBlend(recipe);
   const stepLines = recipe.baseline
-    ? ['Baseline — no enhancement. Erases/holds coverage so chained captures stay gapless.']
+    ? [{ text: 'Baseline — no enhancement. Holds coverage so chained captures stay gapless.', mode: null }]
     : humanizeSteps(recipe.steps, paramVals, recipe.defaultParams);
   const dur = (beginMs != null && endMs != null) ? Math.abs(endMs - beginMs) : null;
   const ready = beginMs != null && endMs != null && dur >= 50;
@@ -1111,8 +1243,8 @@ function CapturePane({ recipe, beginMs, endMs, editingEvent, onAddEvent }) {
       {/* TOP (full width) — ③ · name · section · description */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <StepBadge n={3} />
-        <span style={{ width: 12, height: 12, borderRadius: 3, background: color, flexShrink: 0 }} />
-        <span style={{ fontSize: 17, fontWeight: 700 }}>{recipe.sfwLabel || recipe.label}</span>
+        <RecipeGlyph recipe={recipe} color={color} w={30} h={16} />
+        <span style={{ fontSize: 17, fontWeight: 700 }}>{title}</span>
         <span style={{
           fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
           color, background: `${color}22`, borderRadius: 4, padding: '2px 7px',
@@ -1134,13 +1266,27 @@ function CapturePane({ recipe, beginMs, endMs, editingEvent, onAddEvent }) {
 
       {/* TWO COLUMNS — left: what this produces · right: stacked sliders */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, alignItems: 'start' }}>
-        {/* LEFT — what this produces (the step stack) */}
+        {/* LEFT — what this produces (the step stack) + blend badge */}
         <div style={{ minWidth: 0 }}>
           <div style={{
-            fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
-            textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 8, marginBottom: 6,
           }}>
-            What this produces
+            <span style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+              textTransform: 'uppercase', color: 'var(--text-muted)',
+            }}>
+              What this produces
+            </span>
+            {blend && (
+              <span title={BLEND_META[blend].tip} style={{
+                fontSize: 9, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase',
+                color: BLEND_META[blend].color, background: `${BLEND_META[blend].color}1f`,
+                borderRadius: 4, padding: '2px 6px', flexShrink: 0,
+              }}>
+                {BLEND_META[blend].label}
+              </span>
+            )}
           </div>
           <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
             {stepLines.map((line, i) => (
@@ -1151,7 +1297,12 @@ function CapturePane({ recipe, beginMs, endMs, editingEvent, onAddEvent }) {
                 {!recipe.baseline && (
                   <span className="mono" style={{ color, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
                 )}
-                <span>{line}</span>
+                <span>
+                  {line.text}
+                  {line.mode === 'overwrite' && (
+                    <span style={{ color: BLEND_META.overwrite.color, fontSize: 10, fontWeight: 700 }}> · replaces</span>
+                  )}
+                </span>
               </li>
             ))}
           </ol>
@@ -1174,6 +1325,36 @@ function CapturePane({ recipe, beginMs, endMs, editingEvent, onAddEvent }) {
           ))}
         </div>
       </div>
+
+      {/* Commit — directly under the parameters so it's the obvious next move.
+          Device overrides live below as a secondary refinement. */}
+      {ready ? (
+        <div className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
+          {fmtClock(Math.min(beginMs, endMs))} → {fmtClock(Math.max(beginMs, endMs))} · {fmtClock(dur)}
+        </div>
+      ) : (
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
+          Capture a begin and end above to enable.
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={commit}
+        disabled={!canAdd}
+        title={canAdd
+          ? (isEditing ? `Update ${title} event` : `Add ${title} event`)
+          : 'Capture a begin and end first'}
+        style={{
+          padding: '13px 16px', borderRadius: 9, width: '100%',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          background: canAdd ? color : 'var(--surface-2)', border: 'none',
+          color: canAdd ? '#fff' : 'var(--text-dim)',
+          fontFamily: 'inherit', fontSize: 15, fontWeight: 800,
+          cursor: canAdd ? 'pointer' : 'default',
+        }}
+      >
+        <Icon name={isEditing ? 'check' : 'plus'} size={16} /> {isEditing ? 'Update event' : 'Add event'}
+      </button>
 
       <div style={{ height: 1, background: 'var(--border)' }} />
 
@@ -1230,37 +1411,6 @@ function CapturePane({ recipe, beginMs, endMs, editingEvent, onAddEvent }) {
           );
         })}
       </div>
-
-      <span style={{ flex: 1 }} />
-
-      {/* Commit */}
-      {ready ? (
-        <div className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
-          {fmtClock(Math.min(beginMs, endMs))} → {fmtClock(Math.max(beginMs, endMs))} · {fmtClock(dur)}
-        </div>
-      ) : (
-        <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
-          Capture a begin and end above to enable.
-        </div>
-      )}
-      <button
-        type="button"
-        onClick={commit}
-        disabled={!canAdd}
-        title={canAdd
-          ? (isEditing ? `Update ${recipe.sfwLabel || recipe.label} event` : `Add ${recipe.sfwLabel || recipe.label} event`)
-          : 'Capture a begin and end first'}
-        style={{
-          padding: '13px 16px', borderRadius: 9, width: '100%',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          background: canAdd ? color : 'var(--surface-2)', border: 'none',
-          color: canAdd ? '#fff' : 'var(--text-dim)',
-          fontFamily: 'inherit', fontSize: 15, fontWeight: 800,
-          cursor: canAdd ? 'pointer' : 'default',
-        }}
-      >
-        <Icon name={isEditing ? 'check' : 'plus'} size={16} /> {isEditing ? 'Update event' : 'Add event'}
-      </button>
     </div>
   );
 }
@@ -1268,7 +1418,7 @@ function CapturePane({ recipe, beginMs, endMs, editingEvent, onAddEvent }) {
 // ──────────────────────────────────────────────────────────────
 // TimelinePane — right
 // ──────────────────────────────────────────────────────────────
-function TimelinePane({ events, totalEvents, scope, chapters, recipeFor, selectedId, onSelect, onEdit, onDelete }) {
+function TimelinePane({ events, totalEvents, scope, chapters, recipeFor, labelMode, selectedId, onSelect, onEdit, onDelete }) {
   const grouped = chapters.map((ch) => ({
     ch,
     items: events.filter((e) => e.beginMs >= ch.atMs && e.beginMs < ch.endMs),
@@ -1322,6 +1472,7 @@ function TimelinePane({ events, totalEvents, scope, chapters, recipeFor, selecte
                 key={evt.id}
                 evt={evt}
                 recipe={recipeFor?.(evt.effectId)}
+                labelMode={labelMode}
                 selected={evt.id === selectedId}
                 onSelect={() => onSelect(evt.id === selectedId ? null : evt.id)}
                 onEdit={() => onEdit(evt.id)}
@@ -1335,9 +1486,9 @@ function TimelinePane({ events, totalEvents, scope, chapters, recipeFor, selecte
   );
 }
 
-function TimelineRow({ evt, recipe, selected, onSelect, onEdit, onDelete }) {
+function TimelineRow({ evt, recipe, labelMode, selected, onSelect, onEdit, onDelete }) {
   const color = recipeColor(recipe);
-  const label = recipe?.sfwLabel || recipe?.label || evt.effectId;
+  const label = pickLabel(recipe, labelMode) || evt.effectId;
   const dur = evt.endMs - evt.beginMs;
   const rowBtn = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -1363,9 +1514,7 @@ function TimelineRow({ evt, recipe, selected, onSelect, onEdit, onDelete }) {
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{
-            width: 6, height: 6, borderRadius: 1, background: color,
-          }} />
+          <RecipeGlyph recipe={recipe} color={color} w={22} h={12} />
           <span style={{ fontSize: 12.5, fontWeight: 600 }}>{label}</span>
           <span className="mono" style={{ fontSize: 10, color: 'var(--text-dim)' }}>
             +{(dur / 1000).toFixed(1)}s
