@@ -730,13 +730,17 @@ export default function PhrasesTab({
                 setCurrentMs(Math.max(sliceScope.start, Math.min(sliceScope.end, ms)));
               }}
               onTimeChange={(ms) => {
-                // Video-driven time updates (throttled 4Hz). Loop back
-                // to sliceScope.start on overshoot so playback stays
-                // inside the focused slice even though the chapter
-                // clip extends past it.
-                if (ms >= sliceScope.end) setCurrentMs(sliceScope.start);
-                else if (ms < sliceScope.start) setCurrentMs(sliceScope.start);
-                else setCurrentMs(ms);
+                // Video-driven time updates (throttled 4Hz). Phrases are a
+                // REVIEW surface (detection-only), not an edit scope — so
+                // playback runs straight through; NO loop-back at the slice
+                // boundary (that's chapters' job: there the loop keeps you
+                // inside the thing you're editing). The highlighted phrase
+                // stays put as the playhead crosses into the next one;
+                // replay is one click on the prev transport. User-decided
+                // 2026-06-01 — also fixes the old inconsistency where an
+                // unfocused first phrase played through but focused ones
+                // looped. See internal/beta_test_bugs.md #9.
+                setCurrentMs(ms);
               }}
               onPrev={onPrev}
               onNext={onNext}

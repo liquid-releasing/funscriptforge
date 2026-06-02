@@ -592,12 +592,13 @@ export default function StanzasTab({
             setCurrentMs(Math.max(sliceScope.start, Math.min(sliceScope.end, ms)));
           }}
           onTimeChange={(ms) => {
-            // Video-driven time updates (throttled 4Hz). Loop back to
-            // sliceScope.start on overshoot so playback stays inside
-            // the focused slice.
-            if (ms >= sliceScope.end) setCurrentMs(sliceScope.start);
-            else if (ms < sliceScope.start) setCurrentMs(sliceScope.start);
-            else setCurrentMs(ms);
+            // Video-driven time updates (throttled 4Hz). Stanzas are a
+            // REVIEW surface, not an edit scope — playback runs straight
+            // through; NO loop-back at the slice boundary (that's chapters'
+            // job). The highlighted stanza stays put as the playhead crosses
+            // into the next; replay is one click on the prev transport.
+            // User-decided 2026-06-01. See internal/beta_test_bugs.md #9.
+            setCurrentMs(ms);
           }}
           onPrev={onPrev}
           onNext={onNext}

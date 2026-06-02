@@ -11,7 +11,7 @@
 // pipeline picks it up); fall back to the media path for raw projects.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Pill, Icon } from 'forgemoment';
+import { Pill, Icon, Button } from 'forgemoment';
 import {
   getConfigPath,
   loadConfig,
@@ -50,13 +50,24 @@ export default function LibraryScreen({ onOpen, onAppError }) {
   const [activeRootPath, setActiveRootPath] = useState(null);
 
   // ── Load config on mount ───────────────────────────────────────────
+  // Reusable so the error state below can offer a Retry (a stuck config
+  // load — e.g. the library_config_path / fs invoke starved behind heavy
+  // ffmpeg clip extraction, or the WebView IPC orphaned by an HMR reload —
+  // would otherwise strand the user on "Loading library…" forever, with
+  // the error invisible because config===null gates out the Header).
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    setError(null);
     loadConfig()
       .then((c) => { if (!cancelled) setConfig(c); })
-      .catch((e) => { if (!cancelled) setError(String(e?.message ?? e)); });
+      .catch((e) => {
+        if (cancelled) return;
+        console.error('LibraryScreen: loadConfig failed', e);
+        setError(String(e?.message ?? e));
+      });
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadKey]);
 
   // ── Scan each configured root when the config changes ──────────────
   useEffect(() => {
@@ -201,6 +212,25 @@ export default function LibraryScreen({ onOpen, onAppError }) {
 
   // ── Render ─────────────────────────────────────────────────────────
   if (config === null) {
+    if (error) {
+      return (
+        <CenteredMessage>
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            textAlign: 'center', gap: 12,
+          }}>
+            <div>Couldn’t load the library.</div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', maxWidth: 420 }}>
+              {error}
+            </div>
+            <Button kind="secondary" size="sm" icon="refresh-ccw"
+                    onClick={() => setReloadKey((k) => k + 1)}>
+              Retry
+            </Button>
+          </div>
+        </CenteredMessage>
+      );
+    }
     return <CenteredMessage>Loading library…</CenteredMessage>;
   }
 

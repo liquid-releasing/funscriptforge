@@ -663,7 +663,26 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     if (active === EMPTY_CHAPTER) return;
     const i = chapters.findIndex((c) => c.id === active.id);
     const advance = () => {
-      if (i >= 0 && i < chapters.length - 1) setActiveId(chapters[i + 1].id);
+      if (i < 0 || i >= chapters.length - 1) return;
+      const nextId = chapters[i + 1].id;
+      // Carry the just-accepted tone (and its tuned params) forward to the
+      // next chapter, so applying one tone down the timeline is fast — pick
+      // it once, Accept-Accept-Accept. The user overrides per chapter as
+      // needed. We don't clobber a chapter the user already accepted (it's
+      // signed off), but an un-accepted next chapter inherits regardless of
+      // its analyzer seed — that's the point of carry-forward.
+      const carriedToneId = tonesByChapter[active.id] ?? tone.id;
+      const carriedParams = paramsByChapter[active.id]?.[carriedToneId];
+      if (!acceptedChapterIds.has(nextId)) {
+        setTonesByChapter((s) => ({ ...s, [nextId]: carriedToneId }));
+        if (carriedParams) {
+          setParamsByChapter((s) => ({
+            ...s,
+            [nextId]: { ...(s[nextId] ?? {}), [carriedToneId]: { ...carriedParams } },
+          }));
+        }
+      }
+      setActiveId(nextId);
     };
 
     // Tame runs the REAL backend transform over the chapter span and rolls

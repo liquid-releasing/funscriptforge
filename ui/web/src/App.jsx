@@ -403,10 +403,26 @@ export default function App() {
   // is purely an in-memory roll-forward of the working funscript.
   const handleActionsPatch = (nextActions) => {
     if (!Array.isArray(nextActions)) return;
-    setOpenedProject((prev) => {
+    const activeId =
+      typeof openedProject === 'object' ? openedProject?.id : null;
+    const patch = (prev) => {
       if (!prev || typeof prev !== 'object') return prev;
-      return { ...prev, actions: nextActions };
-    });
+      // Roll the edited actions forward AND flag the project dirty.
+      // hasWorkingEdits drives the Project tab's "Edited — working copy"
+      // pill + Revert-to-original button. Patching loadedProjects too is
+      // load-bearing: ProjectTab renders the *loadedProjects* entry, not
+      // openedProject — without this, the Project funscript chart shows
+      // the pre-edit shape after the user navigates back to it (the edit
+      // was visible in Chapters/Stanzas, which read openedProject, but
+      // not in Project).
+      return { ...prev, actions: nextActions, hasWorkingEdits: true };
+    };
+    setOpenedProject(patch);
+    if (activeId != null) {
+      setLoadedProjects((prev) =>
+        prev.map((p) => (p.id === activeId ? patch(p) : p)),
+      );
+    }
   };
 
   // Pop the OS file picker and run the chosen funscript through the
