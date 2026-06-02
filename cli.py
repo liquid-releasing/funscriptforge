@@ -1821,6 +1821,134 @@ def cmd_feel_read(args):
     }))
 
 
+def _catalog_dir() -> Path:
+    return Path(__file__).resolve().parent / "catalog"
+
+
+def _load_edger_definitions() -> dict:
+    """Load the vendored Edger event_definitions.yml (snapshot of
+    funscript-tools/config.event_definitions.yml)."""
+    import yaml
+    p = _catalog_dir() / "edger_event_definitions.yml"
+    return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+
+
+def _load_edger_map() -> dict:
+    """Load our SFW/NSFW label + param map, keyed by edger event name."""
+    import yaml
+    p = _catalog_dir() / "edger_event_map.yml"
+    if not p.exists():
+        return {}
+    doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    by_edger = {}
+    for m in (doc.get("mappings") or []):
+        if m.get("edger"):
+            by_edger[m["edger"]] = m
+    return by_edger
+
+
+def _group_for(name: str, groups: list) -> dict:
+    """Pick the group whose prefix the event name starts with (longest
+    non-empty prefix wins; '' = General fallback)."""
+    best = {"key": "general", "name": "General", "prefix": "", "description": ""}
+    best_len = -1
+    for g in groups:
+        pre = g.get("prefix", "") or ""
+        if (pre == "" and best_len < 0) or (pre and name.startswith(pre) and len(pre) > best_len):
+            best = {"key": (pre.rstrip("_") or "general"),
+                    "name": g.get("name", "General").split("(")[0].strip(),
+                    "prefix": pre, "description": g.get("description", "")}
+            best_len = len(pre)
+    return best
+
+
+def _pretty_label(name: str, prefix: str) -> str:
+    stem = name[len(prefix):] if prefix and name.startswith(prefix) else name
+    return stem.replace("_", " ").strip().title() or name
+
+
+def _param_spec(key: str, default):
+    """Heuristic UI range for an event default_param, by name."""
+    k = key.lower()
+    try:
+        d = float(default)
+    except (TypeError, ValueError):
+        d = 0.0
+    if "duration" in k:
+        return {"min": 0, "max": 60000, "step": 500, "unit": "ms"}
+    if "ramp" in k:
+        return {"min": 0, "max": 3000, "step": 50, "unit": "ms"}
+    if "pulse_rate" in k or "pulse_freq" in k or k in ("frequency", "buzz_freq", "osc_freq") or "freq" in k:
+        return {"min": 0, "max": 120, "step": 0.5, "unit": "Hz"}
+    if "width" in k:
+        return {"min": 0, "max": 100, "step": 1, "unit": "%"}
+    if "intensity" in k or "amplitude" in k:
+        return {"min": 0, "max": 1, "step": 0.05, "unit": ""}
+    if "volume" in k or "boost" in k or "offset" in k or "level" in k:
+        return {"min": -1, "max": 1, "step": 0.05, "unit": ""}
+    # fallback: bracket the default
+    hi = max(1.0, d * 2) if d > 0 else 1.0
+    return {"min": 0, "max": hi, "step": 0.05, "unit": ""}
+
+
+def cmd_list_event_recipes(args):
+    """Project the vendored Edger event_definitions.yml (+ our SFW/NSFW map)
+    into the catalog the Events tab consumes: all 32 events grouped by source
+    (General / MCB / Clutch / Test), each with labels, real default_params as
+    tunables, and the step stack (the 'what this produces' call list). Backend-
+    sourced so it never drifts from funscript-tools."""
+    defs_doc = _load_edger_definitions()
+    groups_cfg = defs_doc.get("groups", [])
+    definitions = defs_doc.get("definitions", {})
+    emap = _load_edger_map()
+
+    out_groups, seen = [], set()
+    for g in groups_cfg:
+        nm = g.get("name", "General").split("(")[0].strip()
+        key = (g.get("prefix", "") or "").rstrip("_") or "general"
+        if key not in seen:
+            seen.add(key)
+            out_groups.append({"key": key, "name": nm, "desc": g.get("description", "")})
+
+    recipes = []
+    for name, definition in definitions.items():
+        grp = _group_for(name, groups_cfg)
+        m = emap.get(name, {})
+        dparams = definition.get("default_params", {}) or {}
+        params = []
+        for pk, pv in dparams.items():
+            if pk == "duration_ms":
+                continue  # duration is derived from the event span, not a tunable
+            spec = _param_spec(pk, pv)
+            params.append({
+                "key": pk,
+                "label": pk.replace("_", " ").title(),
+                "def": pv, **spec,
+            })
+        steps = []
+        for s in definition.get("steps", []):
+            steps.append({
+                "op": s.get("operation", ""),
+                "axis": s.get("axis", ""),
+                "params": s.get("params", {}) or {},
+            })
+        recipes.append({
+            "id": name,
+            "name": name,
+            "group": grp["key"],
+            "label": m.get("sfw_label") or _pretty_label(name, grp["prefix"]),
+            "sfwLabel": m.get("sfw_label") or _pretty_label(name, grp["prefix"]),
+            "nsfwLabel": m.get("nsfw_label") or _pretty_label(name, grp["prefix"]),
+            "branded": bool(m.get("sfw_label")),
+            "desc": m.get("desc", ""),
+            "defaultParams": dparams,
+            "params": params,
+            "steps": steps,
+        })
+
+    print(json.dumps({"groups": out_groups, "recipes": recipes}))
+
+
 def cmd_auto_chapter(args):
     """Run videoflow.structural.auto_chapter on a media file.
 
@@ -2291,6 +2419,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_fr.add_argument("input", help="funscript or media path (sidecar lives next to it)")
 
+    # --- list-event-recipes (Edger catalog → Events tab) ---
+    sub.add_parser(
+        "list-event-recipes",
+        help="Project the Edger event_definitions + SFW/NSFW map into the Events catalog",
+    )
+
     # --- parse-captions ---
     p_caps = sub.add_parser(
         "parse-captions",
@@ -2747,6 +2881,7 @@ def main():
         "read-stanzas":     cmd_read_stanzas,
         "feel-write":       cmd_feel_write,
         "feel-read":        cmd_feel_read,
+        "list-event-recipes": cmd_list_event_recipes,
         "parse-captions":   cmd_parse_captions,
         "device-aware":     cmd_device_aware,
         "stim-config":      cmd_stim_config,

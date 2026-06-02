@@ -1,0 +1,62 @@
+# FunscriptForge ⇄ Edger event mapping  —  DRAFT, review the correspondences.
+#
+# Bridges OUR sfw effect ids (ui/web/src/data/events.js) and the Edger event
+# names (funscript_tools config.event_definitions.yml). Carries the NSFW label
+# so the same row can drive an NSFW description toggle later. Used by
+# `cli.py edger-export` / `edger-import`.
+#
+# Both catalogs will grow (Edger adds events; we add more, esp. for multi-
+# device) — add rows here. An effect/name with no row passes through verbatim
+# (the export/import notes which ones were unmapped).
+#
+# `param_map` renames OUR per-effect params → Edger params on export (and back
+# on import). duration is always derived from the span (begin→end), never a
+# param here.
+version: 1
+mappings:
+  # --- exact overlaps (Edger has the same name) ---
+  - ff: edge
+    edger: edge
+    sfw_label: Edge
+    nsfw_label: Edge
+    param_map: { tremor: buzz_freq, amount: buzz_intensity, ramp: ramp_up_ms }
+  - ff: slow
+    edger: slow
+    sfw_label: Slow
+    nsfw_label: Slow
+  - ff: fast
+    edger: fast
+    sfw_label: Fast
+    nsfw_label: Fast
+  # --- best-effort guesses (REVIEW these) ---
+  - ff: steady
+    edger: medium
+    sfw_label: Steady
+    nsfw_label: Medium
+  - ff: hold
+    edger: stay
+    sfw_label: Hold
+    nsfw_label: Stay
+  - ff: surge
+    edger: cum
+    sfw_label: Surge
+    nsfw_label: Cum
+  - ff: cut
+    edger: stop
+    sfw_label: Cut
+    nsfw_label: Stop
+  - ff: breathe
+    edger: tranquil
+    sfw_label: Breathe
+    nsfw_label: Tranquil
+    param_map: { period: osc_freq, depth: osc_amplitude }
+  - ff: pulse
+    edger: mcb_throb
+    sfw_label: Pulse
+    nsfw_label: Throb
+  - ff: sweep
+    edger: clutch_freq_shift_up
+    sfw_label: Sweep
+    nsfw_label: Freq shift up
+  # 'normal' is our baseline eraser (compose:replace) — intentionally NOT
+  # exported and has no Edger equivalent.
