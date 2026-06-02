@@ -28,7 +28,7 @@
 // pass.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pill, Button, Icon, fmtTime, TrackStack } from 'forgemoment';
+import { Pill, Button, Icon, fmtTime, TrackStack, MediaViewer } from 'forgemoment';
 import {
   EVENT_DEVICES,
   EVENT_FAMILIES,
@@ -36,11 +36,19 @@ import {
   findEffect,
   sampleEventsForProject,
 } from '../data/events.js';
+import { useChapterClip } from '../hooks/useChapterClip.js';
+import { toMediaUrl } from '../lib/mediaUrl.js';
 
-export default function EventsTab({ project, selectedDevices = [] }) {
+export default function EventsTab({
+  project, selectedDevices = [],
+  trackPeaks = null, trackSpectrogram = null, trackBeats = null,
+}) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
   const totalMs = project?.durationMs ?? 0;
+  // Real audio peaks for the monitor's Audio mode (the "wiry" waveform +
+  // beat ticks + dashboard). Same guard ChaptersTab uses.
+  const audioWaveform = trackPeaks?.peaks?.length ? trackPeaks : null;
 
   // Seed sample events whenever the project changes. Local-only —
   // persistence comes with the wiring pass.
@@ -53,9 +61,11 @@ export default function EventsTab({ project, selectedDevices = [] }) {
 
   const [scope, setScope] = useState('all'); // 'all' | chapter id
   const [selectedId, setSelectedId] = useState(null);
-  // Playhead for the chapter-scoped TrackStack hero. No MediaViewer wired
-  // yet (Stage 2), so click-to-seek on the stack drives this directly.
+  // Playhead + transport for the chapter-scoped hero. The MediaViewer is
+  // the time backbone (emits onTimeChange while playing); click-to-seek on
+  // the TrackStack and the transport buttons also drive currentMs.
   const [currentMs, setCurrentMs] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [libDevice, setLibDevice] = useState(() => {
     const proj = selectedDevices?.[0];
     if (proj && EVENT_DEVICES.find((d) => d.id === proj)) return proj;
@@ -124,8 +134,16 @@ export default function EventsTab({ project, selectedDevices = [] }) {
   // Snap the playhead to the active chapter's start when it changes, so the
   // baton begins inside the visible window rather than at 0.
   useEffect(() => {
-    if (activeChapter) setCurrentMs(activeChapter.atMs);
+    if (activeChapter) { setCurrentMs(activeChapter.atMs); setIsPlaying(false); }
   }, [activeChapter?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Chapter clip for the monitor — same hook Chapters/Phrases use (stream-
+  // copies the active chapter, blob/asset URL by size). Must run before the
+  // early returns below (hook order). Null chapter → hook no-ops.
+  const { clip: chapterClip, loading: chapterLoading } = useChapterClip(
+    project?.mediaPath,
+    activeChapter ?? null,
+  );
 
   if (!project?.path) {
     return (
@@ -155,38 +173,88 @@ export default function EventsTab({ project, selectedDevices = [] }) {
 
       {activeChapter && (
         <div style={{
-          marginTop: 12, padding: '10px 14px',
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 10,
+          marginTop: 12, display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 14, alignItems: 'start',
         }}>
+          {/* Left — TrackStack hero */}
           <div style={{
-            display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-            marginBottom: 6,
+            padding: '10px 14px',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 10,
           }}>
-            <span style={{ fontSize: 12.5, fontWeight: 700 }}>
-              <span style={{
-                display: 'inline-block', width: 8, height: 8, borderRadius: 2,
-                background: activeChapter.color || '#888', marginRight: 7,
-                verticalAlign: '0px',
-              }} />
-              {activeChapter.name || activeChapter.id}
-              <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--text-dim)', marginLeft: 8 }}>
-                chapter-scoped · click to move the playhead · click an event to select
+            <div style={{
+              display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+              marginBottom: 6,
+            }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700 }}>
+                <span style={{
+                  display: 'inline-block', width: 8, height: 8, borderRadius: 2,
+                  background: activeChapter.color || '#888', marginRight: 7,
+                  verticalAlign: '0px',
+                }} />
+                {activeChapter.name || activeChapter.id}
+                <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--text-dim)', marginLeft: 8 }}>
+                  click to move the playhead · click an event to select
+                </span>
               </span>
-            </span>
-            <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>
-              {fmtTime(currentMs)}
-            </span>
+              <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>
+                {fmtTime(currentMs)}
+              </span>
+            </div>
+            <TrackStack
+              scope={{ start: activeChapter.atMs, end: activeChapter.endMs }}
+              actions={actions}
+              events={chapterEvents}
+              lanes={['events', 'funscript']}
+              currentMs={currentMs}
+              selectedEventId={selectedId}
+              onSeek={setCurrentMs}
+              onSelectEvent={(id) => setSelectedId((s) => (s === id ? null : id))}
+            />
           </div>
-          <TrackStack
-            scope={{ start: activeChapter.atMs, end: activeChapter.endMs }}
-            actions={actions}
-            events={chapterEvents}
-            lanes={['events', 'funscript']}
+
+          {/* Right — reference monitor. Shares currentMs with the stack:
+              video timeupdate drives the baton; the Events transport
+              (chapter-start/end, ±1s, frame, play) + speed bar drive
+              frame-precise begin/end landing. */}
+          <MediaViewer
+            width={320}
+            thumbnailAspect="16/9"
+            videoSrc={
+              chapterClip && chapterClip.chapterId === activeChapter.id
+                ? chapterClip.url
+                : (chapterLoading ? undefined : toMediaUrl(project?.mediaPath))
+            }
+            videoSrcOffsetMs={
+              chapterClip && chapterClip.chapterId === activeChapter.id
+                ? chapterClip.offsetMs
+                : 0
+            }
+            media={{ kind: project?.mediaKind ?? 'video', title: activeChapter.name || activeChapter.id }}
+            loadingLabel={chapterLoading ? 'Loading chapter…' : null}
+            chapter={{
+              id: activeChapter.id,
+              title: activeChapter.name || activeChapter.id,
+              color: activeChapter.color,
+              start: activeChapter.atMs,
+              end: activeChapter.endMs,
+            }}
+            funscript={{ actions }}
+            audioWaveform={audioWaveform}
+            spectrogram={trackSpectrogram}
+            beats={trackBeats}
             currentMs={currentMs}
-            selectedEventId={selectedId}
-            onSeek={setCurrentMs}
-            onSelectEvent={(id) => setSelectedId((s) => (s === id ? null : id))}
+            totalMs={totalMs}
+            isPlaying={isPlaying}
+            onPlayPause={() => setIsPlaying((p) => !p)}
+            onSeek={(ms) => setCurrentMs(Math.max(activeChapter.atMs, Math.min(activeChapter.endMs, ms)))}
+            onTimeChange={(ms) => setCurrentMs(Math.max(activeChapter.atMs, Math.min(activeChapter.endMs, ms)))}
+            // Steps grow outward from play: frame hugs play, then ±1s, then
+            // the chapter-edge jumps. (1s is a bigger move than 1 frame.)
+            controls={['chapter-start', 'back1', 'frame-back', 'play', 'frame-forward', 'forward1', 'chapter-end']}
+            showSpeed
+            modeToggleAlign="start"
+            modeToggleSize="sm"
           />
         </div>
       )}
