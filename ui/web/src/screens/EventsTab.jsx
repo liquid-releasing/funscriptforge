@@ -8,18 +8,16 @@
 //
 // Layout:
 //
+//   ChapterRibbon (scope) · identity + Collapse · hero
+//   (TrackStack funscript/events + monitor) · capture bar ①
 //   ┌──────────────┬───────────────────────────┬──────────────┐
-//   │  Library     │  Capture                  │  Timeline    │
-//   │  (devices +  │  (selected effect +       │  (events by  │
-//   │   effect     │   placeholder "wiring     │   chapter,   │
-//   │   list)      │   later")                 │   read-only) │
+//   │ ② Library    │ ③ Effect config           │  Timeline    │
+//   │  (Normal +   │  (intensity · tunables ·  │  (events by  │
+//   │   effects,   │   broadcast/override) +   │   chapter,   │
+//   │   glyphs)    │   Add/Update event        │   edit/del)  │
 //   └──────────────┴───────────────────────────┴──────────────┘
 //   ┌────────────────────────────────────────────────────────┐
-//   │  EventsTimelineStrip — full-width SVG                 │
-//   │   lanes of event brackets · chapter band · funscript  │
-//   └────────────────────────────────────────────────────────┘
-//   ┌────────────────────────────────────────────────────────┐
-//   │  Footer — counts + "wiring later" disabled actions    │
+//   │  Footer — counts + IO (starter packs / Edger — stubs)  │
 //   └────────────────────────────────────────────────────────┘
 //
 // Events are DURABLE: seeded from the canonical <stem>.feel.yml on project
@@ -147,18 +145,6 @@ export default function EventsTab({
     if (!ch) return events;
     return events.filter((e) => e.beginMs >= ch.atMs && e.beginMs < ch.endMs);
   }, [events, scope, chapters]);
-
-  const densityByChapter = useMemo(() => {
-    const map = {};
-    chapters.forEach((c) => { map[c.id] = 0; });
-    events.forEach((e) => {
-      const ch = chapters.find((c) => e.beginMs >= c.atMs && e.beginMs < c.endMs);
-      if (ch) map[ch.id] += 1;
-    });
-    return map;
-  }, [events, chapters]);
-
-  const filterChapter = (id) => setScope((s) => (s === id ? 'all' : id));
 
   // ── Chapter-scoped hero (Stage 1a: TrackStack) ──────────────────────
   // The hero shows ONE chapter at a time: the scoped chapter when the user
@@ -496,18 +482,6 @@ export default function EventsTab({
           onDelete={handleDeleteEvent}
         />
       </div>
-
-      <EventsTimelineStrip
-        events={events}
-        scope={scope}
-        chapters={chapters}
-        density={densityByChapter}
-        actions={actions}
-        totalMs={totalMs}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-        onFilterChapter={filterChapter}
-      />
 
       <FooterBar
         eventCount={events.length}
@@ -1291,227 +1265,6 @@ function TimelineRow({ evt, selected, onSelect, onEdit, onDelete }) {
 }
 
 // ──────────────────────────────────────────────────────────────
-// EventsTimelineStrip — full-width SVG bottom panel
-// (project-scoped; complement to forgemoment's chapter-scoped
-// ChapterContextStrip)
-// ──────────────────────────────────────────────────────────────
-const STRIP_LANES = 4;
-const STRIP_LANE_H = 18;
-const STRIP_FUN_H = 60;
-const STRIP_CHAP_H = 18;
-const STRIP_PAD_TOP = 6;
-const STRIP_PAD_BOT = 6;
-const STRIP_TOTAL_H =
-  STRIP_PAD_TOP + STRIP_LANES * STRIP_LANE_H + 4 + STRIP_CHAP_H + 4 + STRIP_FUN_H + STRIP_PAD_BOT;
-
-function EventsTimelineStrip({
-  events, scope, chapters, density, actions, totalMs,
-  selectedId, onSelect, onFilterChapter,
-}) {
-  const wrapRef = useRef(null);
-  const [width, setWidth] = useState(1200);
-  useEffect(() => {
-    if (!wrapRef.current) return undefined;
-    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
-    ro.observe(wrapRef.current);
-    return () => ro.disconnect();
-  }, []);
-
-  const safeTotal = Math.max(1, totalMs);
-  const innerW = Math.max(1, width - 28); // 14px L+R padding (inside the wrapper's own padding)
-  const xFor = (ms) => (ms / safeTotal) * innerW;
-
-  // Greedy lane stacking.
-  const placed = useMemo(() => {
-    const sorted = [...events].sort((a, b) => a.beginMs - b.beginMs);
-    const lanes = Array.from({ length: STRIP_LANES }, () => []);
-    const out = [];
-    for (const e of sorted) {
-      let lane = -1;
-      for (let i = 0; i < STRIP_LANES; i += 1) {
-        const last = lanes[i][lanes[i].length - 1];
-        if (!last || last.end <= e.beginMs) { lane = i; break; }
-      }
-      if (lane === -1) lane = STRIP_LANES - 1;
-      lanes[lane].push({ start: e.beginMs, end: e.endMs });
-      out.push({ ...e, lane });
-    }
-    return out;
-  }, [events]);
-
-  const funPath = useMemo(() => {
-    if (!actions?.length) return '';
-    const targetPts = Math.min(innerW, 1500);
-    const stride = Math.max(1, Math.floor(actions.length / targetPts));
-    const pts = [];
-    for (let i = 0; i < actions.length; i += stride) {
-      const a = actions[i];
-      pts.push([xFor(a.at), (1 - a.pos / 100) * STRIP_FUN_H]);
-    }
-    const last = actions[actions.length - 1];
-    pts.push([xFor(last.at), (1 - last.pos / 100) * STRIP_FUN_H]);
-    let d = '';
-    pts.forEach(([x, y], i) => {
-      d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
-    });
-    return d;
-  }, [actions, innerW]);  // eslint-disable-line react-hooks/exhaustive-deps
-
-  const funBandY = STRIP_PAD_TOP + STRIP_LANES * STRIP_LANE_H + 4 + STRIP_CHAP_H + 4;
-
-  return (
-    <div ref={wrapRef} style={{
-      marginTop: 16, padding: '10px 14px',
-      background: 'var(--surface)', border: '1px solid var(--border)',
-      borderRadius: 10, overflow: 'hidden',
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'baseline',
-        justifyContent: 'space-between', marginBottom: 6,
-      }}>
-        <span style={{ fontSize: 12.5, fontWeight: 700 }}>
-          Funscript timeline
-          <span style={{
-            fontWeight: 400, fontSize: 11, color: 'var(--text-dim)', marginLeft: 8,
-          }}>
-            click a bracket to select · click a chapter to scope
-          </span>
-        </span>
-        <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>
-          {actions?.length ?? 0} actions · {events.length} events
-        </span>
-      </div>
-
-      <svg width={innerW} height={STRIP_TOTAL_H}
-           style={{ display: 'block', borderRadius: 6, background: 'var(--bg)' }}>
-        <rect x={0} y={funBandY} width={innerW} height={STRIP_FUN_H}
-              fill="rgba(255,255,255,0.02)" />
-
-        {/* Chapter band — click to scope */}
-        {chapters.map((c) => {
-          const x0 = xFor(c.atMs);
-          const x1 = xFor(c.endMs);
-          const w = x1 - x0;
-          const isScoped = scope === c.id;
-          const dimmed = scope !== 'all' && !isScoped;
-          const cy = STRIP_PAD_TOP + STRIP_LANES * STRIP_LANE_H + 4;
-          const count = density?.[c.id] ?? 0;
-          return (
-            <g key={c.id}
-               onClick={(e) => { e.stopPropagation(); onFilterChapter?.(c.id); }}
-               style={{ cursor: 'pointer' }}>
-              <rect x={x0} y={cy} width={w} height={STRIP_CHAP_H}
-                    fill={c.color || '#888'}
-                    fillOpacity={isScoped ? 0.55 : (dimmed ? 0.10 : 0.22)}
-                    stroke={c.color || '#888'}
-                    strokeOpacity={isScoped ? 1 : 0.55}
-                    strokeWidth={isScoped ? 1.5 : 0.5} />
-              {w > 70 && (
-                <text x={x0 + 6} y={cy + STRIP_CHAP_H - 5}
-                      fontSize={9} fontWeight={700}
-                      fill={isScoped ? '#fff' : (dimmed ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.65)')}
-                      style={{ pointerEvents: 'none', letterSpacing: '0.04em' }}>
-                  {(c.name || c.id).toUpperCase()}
-                </text>
-              )}
-              {w > 130 && (
-                <text x={x1 - 6} y={cy + STRIP_CHAP_H - 5}
-                      fontSize={9} fontWeight={700} textAnchor="end"
-                      fill={isScoped ? '#fff' : 'rgba(255,255,255,0.45)'}
-                      style={{ pointerEvents: 'none', fontFamily: 'var(--font-mono)' }}>
-                  {count}
-                </text>
-              )}
-            </g>
-          );
-        })}
-
-        {/* Per-event tints on funscript band */}
-        {placed.map((evt) => {
-          const eff = findEffect(evt.effectId);
-          const fam = familyOf(eff);
-          if (!fam) return null;
-          const x0 = xFor(evt.beginMs);
-          const x1 = xFor(evt.endMs);
-          const w = Math.max(1.5, x1 - x0);
-          const sel = evt.id === selectedId;
-          return (
-            <rect key={`tint-${evt.id}`}
-                  x={x0} y={funBandY} width={w} height={STRIP_FUN_H}
-                  fill={fam.color}
-                  fillOpacity={sel ? 0.42 : 0.20}
-                  style={{ pointerEvents: 'none' }} />
-          );
-        })}
-
-        {/* Funscript polyline */}
-        <path d={funPath} fill="none"
-              stroke="rgba(255,255,255,0.78)" strokeWidth={1} strokeLinejoin="round"
-              style={{ pointerEvents: 'none' }} />
-
-        {/* Event brackets */}
-        {placed.map((evt) => {
-          const eff = findEffect(evt.effectId);
-          const fam = familyOf(eff);
-          if (!fam) return null;
-          const x0 = xFor(evt.beginMs);
-          const x1 = xFor(evt.endMs);
-          const w = Math.max(2, x1 - x0);
-          const y = STRIP_PAD_TOP + evt.lane * STRIP_LANE_H;
-          const sel = evt.id === selectedId;
-          const label = eff?.label || evt.effectId;
-          const showLabel = w > 32;
-          return (
-            <g key={`br-${evt.id}`}
-               onClick={(e) => {
-                 e.stopPropagation();
-                 onSelect?.(evt.id === selectedId ? null : evt.id);
-               }}
-               style={{ cursor: 'pointer' }}>
-              <rect x={x0} y={y + 4} width={w} height={STRIP_LANE_H - 8}
-                    rx={2} ry={2}
-                    fill={fam.color} fillOpacity={sel ? 0.95 : 0.70}
-                    stroke={sel ? '#fff' : 'transparent'} strokeWidth={sel ? 1 : 0} />
-              <line x1={x0 + 0.5} x2={x0 + 0.5} y1={y + 1} y2={y + STRIP_LANE_H - 1}
-                    stroke={fam.color} strokeWidth={1.5} pointerEvents="none" />
-              <line x1={x1 - 0.5} x2={x1 - 0.5} y1={y + 1} y2={y + STRIP_LANE_H - 1}
-                    stroke={fam.color} strokeWidth={1.5} pointerEvents="none" />
-              {showLabel && (
-                <text x={x0 + 4} y={y + STRIP_LANE_H - 6}
-                      fontSize={9.5} fontWeight={700} fill="#0d0d0d"
-                      style={{ pointerEvents: 'none', letterSpacing: '0.02em' }}>
-                  {label}
-                </text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-
-      <div style={{
-        display: 'flex', gap: 12, marginTop: 8,
-        fontSize: 10, color: 'var(--text-dim)',
-      }}>
-        {Object.keys(EVENT_FAMILIES).map((k) => {
-          const f = EVENT_FAMILIES[k];
-          return (
-            <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 9, height: 9, borderRadius: 2, background: f.color }} />
-              {f.label}
-            </span>
-          );
-        })}
-        <span style={{ flex: 1 }} />
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 9, height: 1, background: 'rgba(255,255,255,0.78)' }} />
-          funscript position
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────
 // FooterBar
 // ──────────────────────────────────────────────────────────────
 function FooterBar({ eventCount, scopeLabel }) {
@@ -1533,7 +1286,7 @@ function FooterBar({ eventCount, scopeLabel }) {
       </Button>
       <span style={{ flex: 1 }} />
       <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-        {eventCount} sample events · scope: <span style={{ color: 'var(--text)' }}>{scopeLabel}</span>
+        {eventCount} event{eventCount === 1 ? '' : 's'} · scope: <span style={{ color: 'var(--text)' }}>{scopeLabel}</span>
       </span>
     </div>
   );

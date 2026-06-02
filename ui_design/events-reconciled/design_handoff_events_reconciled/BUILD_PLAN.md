@@ -117,6 +117,29 @@ Build **shared, lane-by-lane**:
   wiring on top.
 - Each stage is independently testable; commit per stage.
 
+## Pre-beta — next pass (Events authoring loop SHIPPED + durable 2026-06-02)
+The core loop is done and persists to `.feel.yml`: capture ① → library ②
+(Normal pre-armed + glyphs) → config ③ (intensity · tunables ·
+broadcast/override w/ per-device slider) → Add/Update → edit-mode + row
+edit/trash. Bottom `EventsTimelineStrip` REMOVED (redundant w/ ChapterRibbon
+scoping; whole-script overview to be rebuilt on TrackStack later). Remaining
+for beta, in rough priority:
+1. **Edger import/export** (Stage 0 interop) — derive Edger yml at Export;
+   ingest uploaded Edger yml → `.feel.yml`. The only way to get events OUT.
+2. **"What this produces" summary** (Update-5) — live read-only sentence under
+   Add event: recipe + intensity + resolved params + per-device output.
+3. **Undo/redo** on `events[]` mutations (delete is currently permanent).
+4. **FooterBar IO** — wire the disabled stubs (Starter packs · Load Edger yml…
+   · Preview events.yml) or hide until real.
+5. **Stage 1b lanes** — audio / spectro / thumbs in the hero TrackStack
+   (sidecars already exist; wiring not analysis).
+6. **Stage 0b** — Accept stamps ffmeta (`accepted_tabs`/`edited_at`) + Reset
+   restores from `.feel.yml`. Coupled to the deferred GLOBAL Reset semantics;
+   NOT needed for durability (write-through already covers that).
+7. **Whole-script event overview** — rebuild the removed strip on TrackStack
+   (all events, click-to-seek/scope) once §5 lands. Stage 5 polish.
+8. **pytest** for the `feel-write`/`feel-read` round-trip.
+
 ## Deferred / open
 - Audio-waveform + thumbnail chart backgrounds (Stage 1 makes them swappable).
 - Zoom/pan on the hero chart (explicitly out for v1).
