@@ -66,7 +66,7 @@ FunscriptForge suggests transforms for every phrase you have not manually edited
 | --- | --- |
 | Pattern label contains "transition" | Smooth |
 | BPM below the BPM threshold | Passthrough (no change) |
-| BPM at or above threshold, amplitude span < 40 | Normalize Range |
+| BPM at or above threshold, amplitude span < 40 | Range (fit to content) |
 | BPM at or above threshold | Amplitude Scale |
 
 You can accept all recommendations at once, or review each one. Clicking **✏ Edit** on a recommendation opens that phrase in the Phrase Editor so you can choose something different.

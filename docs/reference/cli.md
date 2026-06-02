@@ -219,9 +219,10 @@ python cli.py list-transforms --format json
 ```text
 passthrough          Passthrough — no change
 amplitude_scale      Amplitude Scale — stretch/compress stroke depth
-normalize            Normalize Range — expand to fill target range
+range                Range — remap into a target band (fit or compress)
 smooth               Smooth — low-pass filter
 halve_tempo          Halve Tempo — keep every other cycle
+hero_beat            Hero Beat — 8-step per-beat depth sequencer
 nudge                Nudge — shift phrase forward/backward in time
 ...
 ```
@@ -305,27 +306,24 @@ Use these keys with `--transform` in `phrase-transform`:
 | --- | --- |
 | `passthrough` | Passthrough |
 | `amplitude_scale` | Amplitude Scale |
-| `normalize` | Normalize Range |
-| `smooth` | Smooth |
-| `clamp_upper` | Clamp Upper Half |
-| `clamp_lower` | Clamp Lower Half |
-| `invert` | Invert |
-| `boost_contrast` | Boost Contrast |
-| `shift` | Shift |
+| `range` | Range |
 | `recenter` | Recenter |
-| `break` | Break |
-| `performance` | Performance |
-| `three_one` | Three-One Pulse |
-| `beat_accent` | Beat Accent |
+| `invert` | Invert |
+| `smooth` | Smooth |
 | `blend_seams` | Blend Seams |
-| `final_smooth` | Final Smooth |
+| `beat_accent` | Beat Accent |
+| `funnel` | Ramp |
+| `performance` | Performance |
 | `halve_tempo` | Halve Tempo |
+| `hero_beat` | Hero Beat |
 | `nudge` | Nudge |
 | `stroke` | Stroke |
 | `waiting` | Waiting |
 | `tide` | Tide |
 | `drift` | Drift |
-| `funnel` | Funnel |
+| `tame` | Tame |
+
+**Consolidated aliases** — still accepted by `--transform` (so older scripts and saved recipes keep working) but no longer shown in the picker: `normalize`, `clamp_upper`, `clamp_lower` → use `range`; `boost_contrast` → `amplitude_scale`; `shift` → `recenter`; `final_smooth` → `smooth`; `break` → `amplitude_scale` + `smooth`; `three_one` → `hero_beat`.
 
 ---
 

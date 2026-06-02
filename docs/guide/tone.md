@@ -6,9 +6,9 @@ For most users, this is the most important tab. Choose a tone, accept, export. D
 
 ---
 
-## The six tones
+## The six expressive tones
 
-Six tones, ordered from softest to most intense. Each one changes how transforms are applied globally.
+Six expressive tones, ordered from softest to most intense — each changes how transforms are applied globally. A seventh card, **[Tame](#tame)**, is a *corrective* rather than a mood (covered below).
 
 | Tone | Tagline | What it does |
 |------|---------|-------------|
@@ -22,7 +22,7 @@ Six tones, ordered from softest to most intense. Each one changes how transforms
 ![Six tone cards with suggestion bubbles](media/screenshots/05-tone-cards.png)
 *Six tones from Tender to Dominant. Suggestion bubbles highlight the best match and most variety.*
 
-> **Looking to calm something down, not reshape it?** The six tones above all *reshape the feel* of your script. If instead you just need to remove motion that's too fast for your device to play cleanly, that's a job for the **Tame** transform — a gentle corrective applied per phrase or stanza, not a global tone. See [Tame →](transforms.md#tame). This is an edge case; most scripts never need it.
+> **Looking to calm something down, not reshape it?** The six tones above *reshape the feel* of your script. The seventh card, **[Tame](#tame)**, instead gently *humanizes* a relentless wall of fast strokes so it feels less mechanical — every beat kept, amplitude untouched. It's a light, device-aware softener, not a mood and not a speed cap.
 
 ---
 
@@ -113,6 +113,22 @@ Tone transforms are **re-clamped to your device limits** after application. If y
 7. Click **Accept** to apply the tone globally
 
 After Accept, move to Phrases (for per-phrase editing) or skip straight to Export.
+
+---
+
+## Tame
+
+**Tame** is the seventh tone card — but it's a *corrective*, not a mood. Where the six expressive tones reshape the feel of your script, Tame does one gentle thing: it **humanizes** a relentless wall of fast strokes so it reads as device-aware and less mechanical. It keeps every beat and never reshapes amplitude — already-comfortable content passes through untouched.
+
+**What it does:** Adds subtle velocity variation to long monotone runs (a light *groove* / humanize pass). It does **not** drop strokes or cap the stroke rate — removing beats kills the rhythm. If a section is genuinely too intense, *center* its amplitude with **Recenter** or **Amplitude Scale** instead; if it's genuinely too fast to feel meaningful, use **Halve Tempo**.
+
+**Parameter:**
+
+| Parameter | Default | Range | Description |
+|---|---|---|---|
+| Groove | 0.2 | 0.0 – 1.0 | Humanize strength — subtle velocity variation in monotone sections (needs ~60s+ of motion to take effect). 0 = off; 0.2 = gentle; 0.35 ≈ natural. |
+
+**Where to use it:** Tame applies like a tone — pick it at the chapter level on the Chapters tab, or per phrase/stanza from the transform picker (it's grouped under Tones there too). Most scripts never need it; reach for it when a section feels like an unbroken, machine-like wall.
 
 ---
 

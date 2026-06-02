@@ -45,9 +45,9 @@ A phrase can have more than one tag. The tags are not mutually exclusive.
 
 **The problem:** The motion is technically present but imperceptible. The device shakes rather than strokes.
 
-**Fix:** **Normalize Range** expands the span to fill the target range while preserving the centering and tempo. For very fast giggle phrases, **Amplitude Scale** with scale > 2.0 may be needed.
+**Fix:** **Range** expands the span to fill the target range while preserving the centering and tempo. For very fast giggle phrases, **Amplitude Scale** with scale > 2.0 may be needed.
 
-<!-- CAPTION: Chart — a giggle phrase. Small oscillations clustered tightly around position 50. Caption: "Giggle: the device trembles but doesn't stroke. Normalize Range fixes this in one step." -->
+<!-- CAPTION: Chart — a giggle phrase. Small oscillations clustered tightly around position 50. Caption: "Giggle: the device trembles but doesn't stroke. Range fixes this in one step." -->
 
 ---
 
@@ -59,7 +59,7 @@ A phrase can have more than one tag. The tags are not mutually exclusive.
 
 **The problem:** The phrase is correctly centered but the strokes are shallow. It feels like the device is half-committing.
 
-**Fix:** **Amplitude Scale** (scale up to 1.4–1.8) or **Normalize Range** to expand the span to full range.
+**Fix:** **Amplitude Scale** (scale up to 1.4–1.8) or **Range** to expand the span to full range.
 
 ---
 
@@ -97,9 +97,9 @@ A phrase can have more than one tag. The tags are not mutually exclusive.
 
 **The problem:** A monotone section that fatigues quickly. Machine-like regularity with no dynamics.
 
-**Fix:** **Beat Accent** adds periodic emphasis without changing the tempo. **Boost Contrast** increases the amplitude at peaks and troughs. **Three-One Pulse** introduces a rhythmic rest beat every four cycles.
+**Fix:** **Beat Accent** adds periodic emphasis without changing the tempo. **Amplitude Scale** (scale > 1) increases the amplitude at peaks and troughs. **Hero Beat** can author a rhythmic rest pattern (e.g. drop every fourth beat).
 
-<!-- CAPTION: Chart — a drone phrase. Very regular, high-density oscillations across several minutes with no visible variation. Caption: "Drone: the phrase is structurally correct but behaviorally flat. Beat Accent or Boost Contrast adds dynamics." -->
+<!-- CAPTION: Chart — a drone phrase. Very regular, high-density oscillations across several minutes with no visible variation. Caption: "Drone: the phrase is structurally correct but behaviorally flat. Beat Accent or Amplitude Scale adds dynamics." -->
 
 ---
 
@@ -111,7 +111,7 @@ A phrase can have more than one tag. The tags are not mutually exclusive.
 
 **The problem:** The motion is both slow and shallow — doubly understated. Either it reflects genuinely quiet content (fine, mark it as Passthrough) or it needs energy added.
 
-**Fix:** **Amplitude Scale** to increase stroke depth. **Normalize Range** if the span is very compressed. If the content is genuinely quiet, **Passthrough** is appropriate.
+**Fix:** **Amplitude Scale** to increase stroke depth. **Range** if the span is very compressed. If the content is genuinely quiet, **Passthrough** is appropriate.
 
 ---
 
@@ -137,7 +137,7 @@ A phrase can have more than one tag. The tags are not mutually exclusive.
 
 **The problem:** The progression is there but may be uneven — a rough escalation rather than a shaped arc.
 
-**Fix:** **Funnel** shapes the energy arc from start to end position, making the build smooth and visually ordered.
+**Fix:** **Ramp** shapes the energy arc from start to end position, making the build smooth and visually ordered.
 
 ---
 
@@ -166,14 +166,14 @@ The Export tab still suggests a transform for untagged phrases (usually **Amplit
 | Tag | Amplitude | Position | BPM | Duration | Primary fix |
 | --- | --- | --- | --- | --- | --- |
 | stingy | > 75 | any | > 120 | any | Amplitude Scale ↓ or Performance |
-| giggle | < 20 | 35–65 | any | any | Normalize Range |
+| giggle | < 20 | 35–65 | any | any | Range |
 | plateau | 20–40 | 35–65 | any | any | Amplitude Scale ↑ |
 | drift | > 15 | < 30 or > 70 | any | any | Recenter |
 | half_stroke | > 30 | < 38 or > 62 | any | any | Recenter |
-| drone | any | any | any | > 90 s, low variation | Beat Accent or Boost Contrast |
+| drone | any | any | any | > 90 s, low variation | Beat Accent or Amplitude Scale |
 | lazy | < 50 | any | < 60 | any | Amplitude Scale ↑ |
 | frantic | any | any | > 200 | any | Halve Tempo |
-| ramp | > 15 | shifts > 20 across phrase | any | > 3 s | Funnel |
+| ramp | > 15 | shifts > 20 across phrase | any | > 3 s | Ramp |
 | ambient | < 25 | any | < 40 | > 5 s | Waiting or Drift |
 
 ---

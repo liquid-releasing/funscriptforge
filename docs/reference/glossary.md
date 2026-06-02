@@ -244,7 +244,7 @@ The naming convention for multi-axis funscript files. L0 = stroke, L1 = surge, L
 One of six emotional presets that shape the overall feel of your output. Applied globally on the Tone tab. The six tones: Tender, Build, Tease, Edge, Climax, Dominant. Each changes how transforms are suggested and applied without altering the underlying phrase structure.
 
 **Transform**
-An operation applied to a phrase that changes how it feels — stroke depth, velocity profile, centering, smoothing, or tempo. Does not change action timestamps. 25 built-in transforms are available.
+An operation applied to a phrase that changes how it feels — stroke depth, velocity profile, centering, smoothing, rhythm, or tempo. Behaviors preserve action timestamps; structurals may change them. 17 built-in transforms are available, plus 7 tones.
 
 ---
 

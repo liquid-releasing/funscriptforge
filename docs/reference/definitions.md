@@ -163,7 +163,7 @@ A behavioral tag. Assigned to phrases with full amplitude span, high velocity, a
 ## T
 
 **Transform**
-An operation applied to a phrase that changes how it feels — stroke depth, velocity profile, centering, smoothing, or tempo. Does not change action timestamps. 25 built-in transforms are available.
+An operation applied to a phrase that changes how it feels — stroke depth, velocity profile, centering, smoothing, rhythm, or tempo. Behaviors preserve action timestamps; structurals may change them. 17 built-in transforms are available, plus 7 tones.
 
 ---
 
