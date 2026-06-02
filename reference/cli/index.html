@@ -1901,11 +1901,12 @@
 <p><strong>Example brief output:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>passthrough          Passthrough — no change
 <a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>amplitude_scale      Amplitude Scale — stretch/compress stroke depth
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>normalize            Normalize Range — expand to fill target range
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>range                Range — remap into a target band (fit or compress)
 <a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>smooth               Smooth — low-pass filter
 <a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>halve_tempo          Halve Tempo — keep every other cycle
-<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>nudge                Nudge — shift phrase forward/backward in time
-<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>...
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>hero_beat            Hero Beat — 8-step per-beat depth sequencer
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>nudge                Nudge — shift phrase forward/backward in time
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>...
 </code></pre></div>
 <hr />
 <h3 id="config"><code>config</code><a class="headerlink" href="#config" title="Permanent link">&para;</a></h3>
@@ -1971,64 +1972,44 @@
 <td>Amplitude Scale</td>
 </tr>
 <tr>
-<td><code>normalize</code></td>
-<td>Normalize Range</td>
-</tr>
-<tr>
-<td><code>smooth</code></td>
-<td>Smooth</td>
-</tr>
-<tr>
-<td><code>clamp_upper</code></td>
-<td>Clamp Upper Half</td>
-</tr>
-<tr>
-<td><code>clamp_lower</code></td>
-<td>Clamp Lower Half</td>
-</tr>
-<tr>
-<td><code>invert</code></td>
-<td>Invert</td>
-</tr>
-<tr>
-<td><code>boost_contrast</code></td>
-<td>Boost Contrast</td>
-</tr>
-<tr>
-<td><code>shift</code></td>
-<td>Shift</td>
+<td><code>range</code></td>
+<td>Range</td>
 </tr>
 <tr>
 <td><code>recenter</code></td>
 <td>Recenter</td>
 </tr>
 <tr>
-<td><code>break</code></td>
-<td>Break</td>
+<td><code>invert</code></td>
+<td>Invert</td>
 </tr>
 <tr>
-<td><code>performance</code></td>
-<td>Performance</td>
-</tr>
-<tr>
-<td><code>three_one</code></td>
-<td>Three-One Pulse</td>
-</tr>
-<tr>
-<td><code>beat_accent</code></td>
-<td>Beat Accent</td>
+<td><code>smooth</code></td>
+<td>Smooth</td>
 </tr>
 <tr>
 <td><code>blend_seams</code></td>
 <td>Blend Seams</td>
 </tr>
 <tr>
-<td><code>final_smooth</code></td>
-<td>Final Smooth</td>
+<td><code>beat_accent</code></td>
+<td>Beat Accent</td>
+</tr>
+<tr>
+<td><code>funnel</code></td>
+<td>Ramp</td>
+</tr>
+<tr>
+<td><code>performance</code></td>
+<td>Performance</td>
 </tr>
 <tr>
 <td><code>halve_tempo</code></td>
 <td>Halve Tempo</td>
+</tr>
+<tr>
+<td><code>hero_beat</code></td>
+<td>Hero Beat</td>
 </tr>
 <tr>
 <td><code>nudge</code></td>
@@ -2051,11 +2032,12 @@
 <td>Drift</td>
 </tr>
 <tr>
-<td><code>funnel</code></td>
-<td>Funnel</td>
+<td><code>tame</code></td>
+<td>Tame</td>
 </tr>
 </tbody>
 </table>
+<p><strong>Consolidated aliases</strong> — still accepted by <code>--transform</code> (so older scripts and saved recipes keep working) but no longer shown in the picker: <code>normalize</code>, <code>clamp_upper</code>, <code>clamp_lower</code> → use <code>range</code>; <code>boost_contrast</code> → <code>amplitude_scale</code>; <code>shift</code> → <code>recenter</code>; <code>final_smooth</code> → <code>smooth</code>; <code>break</code> → <code>amplitude_scale</code> + <code>smooth</code>; <code>three_one</code> → <code>hero_beat</code>.</p>
 <hr />
 <h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
 <ul>

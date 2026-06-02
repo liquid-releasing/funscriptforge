@@ -1225,10 +1225,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-six-tones" class="md-nav__link">
+  <a href="#the-six-expressive-tones" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The six tones
+        The six expressive tones
       
     </span>
   </a>
@@ -1313,6 +1313,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tame
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#related" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1347,8 +1358,8 @@
 <p>The Tone tab is the easy button. Pick a mood, and FunscriptForge shapes your entire funscript to match — without touching the underlying structure.</p>
 <p>For most users, this is the most important tab. Choose a tone, accept, export. Done.</p>
 <hr />
-<h2 id="the-six-tones">The six tones<a class="headerlink" href="#the-six-tones" title="Permanent link">&para;</a></h2>
-<p>Six tones, ordered from softest to most intense. Each one changes how transforms are applied globally.</p>
+<h2 id="the-six-expressive-tones">The six expressive tones<a class="headerlink" href="#the-six-expressive-tones" title="Permanent link">&para;</a></h2>
+<p>Six expressive tones, ordered from softest to most intense — each changes how transforms are applied globally. A seventh card, <strong><a href="#tame">Tame</a></strong>, is a <em>corrective</em> rather than a mood (covered below).</p>
 <table>
 <thead>
 <tr>
@@ -1393,7 +1404,7 @@
 <p><img alt="Six tone cards with suggestion bubbles" src="../media/screenshots/05-tone-cards.png" />
 <em>Six tones from Tender to Dominant. Suggestion bubbles highlight the best match and most variety.</em></p>
 <blockquote>
-<p><strong>Looking to calm something down, not reshape it?</strong> The six tones above all <em>reshape the feel</em> of your script. If instead you just need to remove motion that's too fast for your device to play cleanly, that's a job for the <strong>Tame</strong> transform — a gentle corrective applied per phrase or stanza, not a global tone. See <a href="../transforms/#tame">Tame →</a>. This is an edge case; most scripts never need it.</p>
+<p><strong>Looking to calm something down, not reshape it?</strong> The six tones above <em>reshape the feel</em> of your script. The seventh card, <strong><a href="#tame">Tame</a></strong>, instead gently <em>humanizes</em> a relentless wall of fast strokes so it feels less mechanical — every beat kept, amplitude untouched. It's a light, device-aware softener, not a mood and not a speed cap.</p>
 </blockquote>
 <hr />
 <h2 id="card-interaction">Card interaction<a class="headerlink" href="#card-interaction" title="Permanent link">&para;</a></h2>
@@ -1486,6 +1497,30 @@
 <li>Click <strong>Accept</strong> to apply the tone globally</li>
 </ol>
 <p>After Accept, move to Phrases (for per-phrase editing) or skip straight to Export.</p>
+<hr />
+<h2 id="tame">Tame<a class="headerlink" href="#tame" title="Permanent link">&para;</a></h2>
+<p><strong>Tame</strong> is the seventh tone card — but it's a <em>corrective</em>, not a mood. Where the six expressive tones reshape the feel of your script, Tame does one gentle thing: it <strong>humanizes</strong> a relentless wall of fast strokes so it reads as device-aware and less mechanical. It keeps every beat and never reshapes amplitude — already-comfortable content passes through untouched.</p>
+<p><strong>What it does:</strong> Adds subtle velocity variation to long monotone runs (a light <em>groove</em> / humanize pass). It does <strong>not</strong> drop strokes or cap the stroke rate — removing beats kills the rhythm. If a section is genuinely too intense, <em>center</em> its amplitude with <strong>Recenter</strong> or <strong>Amplitude Scale</strong> instead; if it's genuinely too fast to feel meaningful, use <strong>Halve Tempo</strong>.</p>
+<p><strong>Parameter:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Range</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Groove</td>
+<td>0.2</td>
+<td>0.0 – 1.0</td>
+<td>Humanize strength — subtle velocity variation in monotone sections (needs ~60s+ of motion to take effect). 0 = off; 0.2 = gentle; 0.35 ≈ natural.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Where to use it:</strong> Tame applies like a tone — pick it at the chapter level on the Chapters tab, or per phrase/stanza from the transform picker (it's grouped under Tones there too). Most scripts never need it; reach for it when a section feels like an unbroken, machine-like wall.</p>
 <hr />
 <h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
 <ul>

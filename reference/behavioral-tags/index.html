@@ -1671,15 +1671,15 @@
 <p><strong>What it is:</strong> Tiny oscillations centered around the midpoint. The device barely moves.</p>
 <p><strong>Detection:</strong> Amplitude span &lt; 20, mean position between 35 and 65.</p>
 <p><strong>The problem:</strong> The motion is technically present but imperceptible. The device shakes rather than strokes.</p>
-<p><strong>Fix:</strong> <strong>Normalize Range</strong> expands the span to fill the target range while preserving the centering and tempo. For very fast giggle phrases, <strong>Amplitude Scale</strong> with scale &gt; 2.0 may be needed.</p>
-<!-- CAPTION: Chart — a giggle phrase. Small oscillations clustered tightly around position 50. Caption: "Giggle: the device trembles but doesn't stroke. Normalize Range fixes this in one step." -->
+<p><strong>Fix:</strong> <strong>Range</strong> expands the span to fill the target range while preserving the centering and tempo. For very fast giggle phrases, <strong>Amplitude Scale</strong> with scale &gt; 2.0 may be needed.</p>
+<!-- CAPTION: Chart — a giggle phrase. Small oscillations clustered tightly around position 50. Caption: "Giggle: the device trembles but doesn't stroke. Range fixes this in one step." -->
 
 <hr />
 <h3 id="plateau">plateau<a class="headerlink" href="#plateau" title="Permanent link">&para;</a></h3>
 <p><strong>What it is:</strong> Moderate oscillations centered in the middle of the range. Some motion, but not enough range to be engaging.</p>
 <p><strong>Detection:</strong> Amplitude span between 20 and 40, mean position between 35 and 65.</p>
 <p><strong>The problem:</strong> The phrase is correctly centered but the strokes are shallow. It feels like the device is half-committing.</p>
-<p><strong>Fix:</strong> <strong>Amplitude Scale</strong> (scale up to 1.4–1.8) or <strong>Normalize Range</strong> to expand the span to full range.</p>
+<p><strong>Fix:</strong> <strong>Amplitude Scale</strong> (scale up to 1.4–1.8) or <strong>Range</strong> to expand the span to full range.</p>
 <hr />
 <h3 id="drift">drift<a class="headerlink" href="#drift" title="Permanent link">&para;</a></h3>
 <p><strong>What it is:</strong> Motion displaced into the top or bottom third of the range. The center of the oscillation is far from 50.</p>
@@ -1699,15 +1699,15 @@
 <p><strong>What it is:</strong> Long, sustained, highly uniform motion. No tempo variation, no amplitude variation.</p>
 <p><strong>Detection:</strong> Duration &gt; 90 seconds, BPM coefficient of variation &lt; 10%.</p>
 <p><strong>The problem:</strong> A monotone section that fatigues quickly. Machine-like regularity with no dynamics.</p>
-<p><strong>Fix:</strong> <strong>Beat Accent</strong> adds periodic emphasis without changing the tempo. <strong>Boost Contrast</strong> increases the amplitude at peaks and troughs. <strong>Three-One Pulse</strong> introduces a rhythmic rest beat every four cycles.</p>
-<!-- CAPTION: Chart — a drone phrase. Very regular, high-density oscillations across several minutes with no visible variation. Caption: "Drone: the phrase is structurally correct but behaviorally flat. Beat Accent or Boost Contrast adds dynamics." -->
+<p><strong>Fix:</strong> <strong>Beat Accent</strong> adds periodic emphasis without changing the tempo. <strong>Amplitude Scale</strong> (scale &gt; 1) increases the amplitude at peaks and troughs. <strong>Hero Beat</strong> can author a rhythmic rest pattern (e.g. drop every fourth beat).</p>
+<!-- CAPTION: Chart — a drone phrase. Very regular, high-density oscillations across several minutes with no visible variation. Caption: "Drone: the phrase is structurally correct but behaviorally flat. Beat Accent or Amplitude Scale adds dynamics." -->
 
 <hr />
 <h3 id="lazy">lazy<a class="headerlink" href="#lazy" title="Permanent link">&para;</a></h3>
 <p><strong>What it is:</strong> Slow and shallow. Low BPM, narrow amplitude.</p>
 <p><strong>Detection:</strong> BPM &lt; 60, amplitude span &lt; 50.</p>
 <p><strong>The problem:</strong> The motion is both slow and shallow — doubly understated. Either it reflects genuinely quiet content (fine, mark it as Passthrough) or it needs energy added.</p>
-<p><strong>Fix:</strong> <strong>Amplitude Scale</strong> to increase stroke depth. <strong>Normalize Range</strong> if the span is very compressed. If the content is genuinely quiet, <strong>Passthrough</strong> is appropriate.</p>
+<p><strong>Fix:</strong> <strong>Amplitude Scale</strong> to increase stroke depth. <strong>Range</strong> if the span is very compressed. If the content is genuinely quiet, <strong>Passthrough</strong> is appropriate.</p>
 <hr />
 <h3 id="frantic">frantic<a class="headerlink" href="#frantic" title="Permanent link">&para;</a></h3>
 <p><strong>What it is:</strong> BPM above 200 — near or above the mechanical limits of most devices.</p>
@@ -1721,7 +1721,7 @@
 <p><strong>What it is:</strong> The center of gravity shifts significantly across the phrase — motion builds from low-to-high or winds down from high-to-low intensity.</p>
 <p><strong>Detection:</strong> Absolute center-of-gravity delta &gt; 20 position units, amplitude span &gt; 15, duration &gt; 3 s.</p>
 <p><strong>The problem:</strong> The progression is there but may be uneven — a rough escalation rather than a shaped arc.</p>
-<p><strong>Fix:</strong> <strong>Funnel</strong> shapes the energy arc from start to end position, making the build smooth and visually ordered.</p>
+<p><strong>Fix:</strong> <strong>Ramp</strong> shapes the energy arc from start to end position, making the build smooth and visually ordered.</p>
 <hr />
 <h3 id="ambient">ambient<a class="headerlink" href="#ambient" title="Permanent link">&para;</a></h3>
 <p><strong>What it is:</strong> Very low BPM and minimal amplitude over a longer span — a transition or filler section between active phrases.</p>
@@ -1760,7 +1760,7 @@
 <td>35–65</td>
 <td>any</td>
 <td>any</td>
-<td>Normalize Range</td>
+<td>Range</td>
 </tr>
 <tr>
 <td>plateau</td>
@@ -1792,7 +1792,7 @@
 <td>any</td>
 <td>any</td>
 <td>&gt; 90 s, low variation</td>
-<td>Beat Accent or Boost Contrast</td>
+<td>Beat Accent or Amplitude Scale</td>
 </tr>
 <tr>
 <td>lazy</td>
@@ -1816,7 +1816,7 @@
 <td>shifts &gt; 20 across phrase</td>
 <td>any</td>
 <td>&gt; 3 s</td>
-<td>Funnel</td>
+<td>Ramp</td>
 </tr>
 <tr>
 <td>ambient</td>
