@@ -30,154 +30,27 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Button, Icon, fmtTime, fmtTimeShort, TrackStack, MediaViewer, ChapterRibbon } from 'forgemoment';
 import { EVENT_DEVICES } from '../data/events.js';
 import { readFeelEvents, saveFeelEvents, listEventRecipes } from '../api/forge.js';
+import {
+  GROUP_COLORS, GROUP_NAMES, recipeColor, pickLabel, recipeBlend, BLEND_META,
+  humanizeSteps, recipeGlyphKind, glyphPoints,
+} from '../lib/eventCatalog.js';
 import { useChapterClip } from '../hooks/useChapterClip.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 
-// ── Catalog vocabulary (backend-sourced via list-event-recipes) ──────────
-// Recipes are the 32 Edger events; group is general/mcb/clutch/test. Colors
-// are by source group. "Normal" is a synthetic baseline (not an Edger event,
-// not exported) pinned in Featured for chain-coverage.
-const GROUP_COLORS = {
-  featured: '#c77dff', general: '#4dabf7', mcb: '#ff7b7b', clutch: '#ffb547', test: '#8a8a93',
-};
-const GROUP_NAMES = {
-  featured: 'Featured', general: 'General', mcb: 'MCB', clutch: 'Clutch', test: 'Test',
-};
+// ── Catalog vocabulary lives in lib/eventCatalog.js (testable, shared). The
+// component-local pieces stay here: the synthetic "Normal" baseline (not an
+// Edger event, not exported) and the RecipeGlyph SVG that renders the glyph
+// kind/points derived there.
 const NORMAL_RECIPE = {
   id: 'normal', name: 'normal', group: 'featured', baseline: true, branded: true,
   label: 'Normal', sfwLabel: 'Normal', nsfwLabel: 'Normal',
   desc: 'Baseline — no enhancement. Chain captures to cover ground fast.',
   params: [], steps: [], defaultParams: {},
 };
-function recipeColor(recipe) {
-  if (!recipe) return 'var(--text-dim)';
-  if (recipe.baseline) return '#8a8a93';
-  return GROUP_COLORS[recipe.group] || '#4dabf7';
-}
 
-// SFW is the default presentation (store positioning); NSFW reveals the raw
-// intent label. Most events are unbranded → both labels resolve the same.
-function pickLabel(recipe, mode) {
-  if (!recipe) return '';
-  if (mode === 'nsfw') return recipe.nsfwLabel || recipe.label || recipe.name;
-  return recipe.sfwLabel || recipe.label || recipe.name;
-}
-
-// Blend = how an event combines with whatever is already on the channel.
-// Derived from each step's `mode`: additive layers ON TOP (safe to stack),
-// overwrite REPLACES the channel for the window. Matters because events stack.
-function recipeBlend(recipe) {
-  const modes = (recipe?.steps || []).map((s) => s.params?.mode || 'additive');
-  if (!modes.length) return null; // baseline / Normal
-  if (modes.every((m) => m === 'additive')) return 'additive';
-  if (modes.every((m) => m === 'overwrite')) return 'overwrite';
-  return 'mixed';
-}
-const BLEND_META = {
-  additive: { label: 'Adds on top', color: '#5dc98a', tip: 'Layers on existing motion — safe to stack with other events.' },
-  overwrite: { label: 'Replaces', color: '#ffb547', tip: 'Takes over the channel for its window — overrides anything underneath.' },
-  mixed: { label: 'Mixed', color: '#9aa0ad', tip: 'Some steps add on top, some replace the channel.' },
-};
-
-// Resolve a step param's `$ref` against the live param values (else defaults).
-function _resolveParam(v, paramVals, defaults) {
-  if (typeof v === 'string' && v.startsWith('$')) {
-    const k = v.slice(1);
-    const r = paramVals?.[k] ?? defaults?.[k];
-    return r != null ? r : v;
-  }
-  return v;
-}
-const AXIS_LABEL = {
-  pulse_frequency: 'pulse rate', pulse_width: 'pulse width',
-  volume: 'volume', 'volume,volume-prostate': 'volume',
-};
-// Humanize a recipe's step stack into "what this produces" lines, with the
-// current params substituted (matches funscript-tools' update_steps_preview,
-// friendlier). Each entry = one operation: { text, mode } (mode = additive |
-// overwrite, surfaced so the user sees which steps layer vs replace).
-function humanizeSteps(steps, paramVals, defaults) {
-  const lines = [];
-  for (const s of (steps || [])) {
-    const p = s.params || {};
-    const mode = p.mode || 'additive';
-    const axis = AXIS_LABEL[s.axis] || (s.axis || '').split(',')[0] || s.axis || 'output';
-    const r = (v) => _resolveParam(v, paramVals, defaults);
-    const dur = r(p.duration_ms);
-    const ramp = r(p.ramp_in_ms);
-    const durTxt = typeof dur === 'number' ? ` over ${(dur / 1000).toFixed(1)}s` : '';
-    const rampTxt = typeof ramp === 'number' && ramp > 0 ? `, ramp ${(ramp / 1000).toFixed(2)}s` : '';
-    let text;
-    if (s.op === 'apply_linear_change') {
-      text = `Sweep ${axis} ${r(p.start_value)}→${r(p.end_value)}${durTxt}${rampTxt}`;
-    } else if (s.op === 'apply_modulation') {
-      const freq = r(p.frequency);
-      const amp = r(p.amplitude);
-      const freqTxt = typeof freq === 'number' ? ` @${freq}Hz` : '';
-      const ampTxt = amp != null ? ` ±${amp}` : '';
-      text = `Modulate ${axis} ${r(p.waveform) || 'sin'}${freqTxt}${ampTxt}${durTxt}`;
-    } else {
-      text = `${(s.op || 'op').replace(/_/g, ' ')} on ${axis}${durTxt}`;
-    }
-    lines.push({ text, mode });
-  }
-  return lines;
-}
-
-// ── RecipeGlyph — a filled sparkline synthesized from the actual step stack
-// (the "shape icon"). Modulation → its waveform; a single linear change →
-// ramp up/down/steady; baseline → a flat dim line. Grounded in real data,
-// not a generic shape table.
-function recipeGlyphKind(recipe) {
-  const steps = recipe?.steps || [];
-  if (!steps.length) return { kind: 'flat' };
-  const mod = steps.find((s) => s.op === 'apply_modulation');
-  if (mod) return { kind: 'wave', waveform: mod.params?.waveform || 'sin' };
-  // Linear-only: compare the first step's start to the last step's end.
-  const first = steps[0].params || {};
-  const last = steps[steps.length - 1].params || {};
-  const sv = _resolveParam(first.start_value, null, recipe.defaultParams);
-  const ev = _resolveParam(last.end_value ?? last.start_value, null, recipe.defaultParams);
-  const a = Number(sv); const b = Number(ev);
-  if (Number.isFinite(a) && Number.isFinite(b)) {
-    if (b > a * 1.001) return { kind: 'ramp-up' };
-    if (b < a * 0.999) return { kind: 'ramp-down' };
-  }
-  return { kind: 'steady' };
-}
-function glyphPoints(spec, w, h) {
-  const pad = 2;
-  const x0 = pad; const x1 = w - pad;
-  const yLo = h - pad; const yHi = pad;
-  const mid = (yLo + yHi) / 2;
-  const amp = (yLo - yHi) * 0.4;
-  const pts = [];
-  if (spec.kind === 'wave') {
-    const cycles = 2.4; const n = 36;
-    for (let i = 0; i <= n; i += 1) {
-      const t = i / n;
-      const x = x0 + (x1 - x0) * t;
-      const ph = 2 * Math.PI * cycles * t;
-      let s;
-      switch (spec.waveform) {
-        case 'square': s = (ph % (2 * Math.PI)) < Math.PI ? 1 : -1; break;
-        case 'sawtooth': s = 2 * ((cycles * t) % 1) - 1; break;
-        case 'triangle': { const f = (cycles * t) % 1; s = f < 0.5 ? 4 * f - 1 : 3 - 4 * f; break; }
-        default: s = Math.sin(ph);
-      }
-      pts.push([x, mid - amp * s]);
-    }
-  } else if (spec.kind === 'ramp-up') {
-    pts.push([x0, yLo], [x1, yHi]);
-  } else if (spec.kind === 'ramp-down') {
-    pts.push([x0, yHi], [x1, yLo]);
-  } else if (spec.kind === 'steady') {
-    pts.push([x0, mid - amp * 0.5], [x1, mid - amp * 0.5]);
-  } else { // flat / baseline
-    pts.push([x0, mid], [x1, mid]);
-  }
-  return pts;
-}
+// RecipeGlyph — a filled sparkline synthesized from the actual step stack (the
+// "shape icon"): modulation → its waveform; a single linear change → ramp
+// up/down/steady; baseline → a flat dim line. Grounded in real data.
 function RecipeGlyph({ recipe, color, w = 34, h = 18 }) {
   const spec = recipeGlyphKind(recipe);
   const pts = glyphPoints(spec, w, h);
