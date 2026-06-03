@@ -1751,6 +1751,92 @@ pub async fn save_feel_events(
     serde_json::from_str(&out).map_err(|e| format!("parse feel-write output: {}", e))
 }
 
+/// Read the Channels tab's per-chapter character assignments from
+/// `<stem>.characters.json`. Returns `{ version, characters: {} }` when the
+/// sidecar is missing. The path is computed Python-side (forge_dir).
+#[tauri::command]
+pub async fn read_characters(funscript_path: String) -> Result<serde_json::Value, String> {
+    let out = run_cli(&["characters-read", &funscript_path]).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse characters-read output: {}", e))
+}
+
+/// Write the Channels tab's per-chapter character assignments to
+/// `<stem>.characters.json`. The map is staged to a temp file (run_cli has no
+/// stdin) and passed via --characters-json; the temp file is removed after.
+#[tauri::command]
+pub async fn save_characters(
+    funscript_path: String,
+    characters: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let body = serde_json::to_string(&characters)
+        .map_err(|e| format!("serialize characters: {}", e))?;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let mut tmp = std::env::temp_dir();
+    tmp.push(format!("ff_characters_{}.json", nanos));
+    tokio::fs::write(&tmp, body)
+        .await
+        .map_err(|e| format!("write temp characters: {}", e))?;
+    let tmp_str = tmp.to_string_lossy().into_owned();
+    let res = run_cli(&["characters-write", &funscript_path, "--characters-json", &tmp_str]).await;
+    let _ = tokio::fs::remove_file(&tmp).await;
+    let out = res?;
+    serde_json::from_str(&out).map_err(|e| format!("parse characters-write output: {}", e))
+}
+
+/// Generate e-stim channel funscripts for a window (a chapter) via the
+/// funscript-tools pipeline — the React bridge to the same `process()` the
+/// Streamlit stim tab used. `mode` is "2d" (alpha+beta, fast) or "3phase"
+/// (10 channels, slow). The slider overrides are staged to a temp file.
+/// Returns `{ available, mode, channels: { suffix: { actions[] } } }`.
+#[tauri::command]
+pub async fn stim_process(
+    funscript_path: String,
+    character: String,
+    sliders: serde_json::Value,
+    mode: String,
+    start_ms: Option<i64>,
+    end_ms: Option<i64>,
+) -> Result<serde_json::Value, String> {
+    let body = serde_json::to_string(&sliders).map_err(|e| format!("serialize sliders: {}", e))?;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let mut tmp = std::env::temp_dir();
+    tmp.push(format!("ff_sliders_{}.json", nanos));
+    tokio::fs::write(&tmp, body)
+        .await
+        .map_err(|e| format!("write temp sliders: {}", e))?;
+    let tmp_str = tmp.to_string_lossy().into_owned();
+
+    let mut args: Vec<String> = vec![
+        "stim-process".into(),
+        funscript_path,
+        "--character".into(),
+        character,
+        "--sliders-json".into(),
+        tmp_str.clone(),
+        "--mode".into(),
+        mode,
+    ];
+    if let Some(s) = start_ms {
+        args.push("--start-ms".into());
+        args.push(s.to_string());
+    }
+    if let Some(e) = end_ms {
+        args.push("--end-ms".into());
+        args.push(e.to_string());
+    }
+    let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let res = run_cli(&argv).await;
+    let _ = tokio::fs::remove_file(&tmp).await;
+    let out = res?;
+    serde_json::from_str(&out).map_err(|e| format!("parse stim-process output: {}", e))
+}
+
 /// Export `<stem>.feel.yml` to a playable Edger `<stem>.events.yml`. With
 /// `write=false` nothing is written — the rendered YAML is still returned
 /// (Preview). Returns `{ path, count, skipped[], yaml }`.

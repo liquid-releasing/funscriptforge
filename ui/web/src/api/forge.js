@@ -400,6 +400,42 @@ export function saveFeelEvents(funscriptPath, events) {
   );
 }
 
+/** Read the Channels tab's per-chapter character assignments from
+ *  `<stem>.characters.json`. Returns {version, characters:{chapterId:{...}}}.
+ *  Empty map when the sidecar is missing. Browser mode → empty. */
+export function readCharacters(funscriptPath) {
+  return call(
+    'read_characters',
+    { funscriptPath },
+    () => Promise.resolve({ version: 1, characters: {} }),
+  );
+}
+
+/** Write the Channels tab's per-chapter character assignments to
+ *  `<stem>.characters.json` (write-through on Accept / style change). The
+ *  funscript is never touched. Returns {saved, count}. Browser mode → no-op. */
+export function saveCharacters(funscriptPath, characters) {
+  return call(
+    'save_characters',
+    { funscriptPath, characters },
+    () => Promise.resolve(null),
+  );
+}
+
+/** Generate e-stim channels for a chapter window via the funscript-tools
+ *  pipeline (the same proven `process()` the Streamlit stim tab used).
+ *  `mode` = '2d' (alpha+beta, fast) | '3phase' (10 channels, slow). Pass the
+ *  character's preset LABEL (not the slug), the cv-slider overrides, and the
+ *  chapter's [startMs,endMs] window. Returns
+ *  {available, mode, channels:{suffix:{actions:[{at,pos}]}}}. Browser → empty. */
+export function stimProcess(funscriptPath, { character, sliders = {}, mode = '2d', startMs = null, endMs = null } = {}) {
+  return call(
+    'stim_process',
+    { funscriptPath, character, sliders, mode, startMs, endMs },
+    () => Promise.resolve({ available: false, mode, channels: {} }),
+  );
+}
+
 /** Export the canonical `<stem>.feel.yml` to a playable Edger
  *  `<stem>.events.yml`. With `write:false` nothing is written and the
  *  rendered YAML is returned anyway (Preview). Returns

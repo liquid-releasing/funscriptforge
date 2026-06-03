@@ -25,10 +25,10 @@
 // persistence to a chain file, real preset list from cli.py
 // list-characters, and the 9-channel output from cli.py stim-process.
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Pill, Icon, fmtTimeShort,
-  MediaViewer, ChapterRibbon, Slider,
+  MediaViewer, ChapterRibbon, Slider, Sparkline,
 } from 'forgemoment';
 import {
   CHARACTERS as STYLE_CATALOG,
@@ -36,14 +36,44 @@ import {
   seedCharacterAssignments,
   defaultParamsFor,
 } from '../data/characters.js';
-import { listCharacters } from '../api/forge.js';
+import {
+  listCharacters, readCharacters, saveCharacters, stimProcess,
+} from '../api/forge.js';
 import { useChapterClip } from '../hooks/useChapterClip.js';
+import MechanicalPanel from './MechanicalPanel.jsx';
+import { activeAxes, DEFAULT_STYLE } from '../data/multiaxis.js';
 
 // Merge the canonical Python catalog (id / label / description / sliders)
 // with the JS-side UI overlay (color / tagline / devices) by id. Same
 // pattern as the iter-10 Streamlit panel's `_CARD_STYLE` lookup. If a
 // custom character lives in the user's stim_presets.json that we don't
 // have UI metadata for, fall back to neutral defaults so it still renders.
+// The Python catalog ships sliders in its own schema —
+// `{ cv, label, hint, from_, to_, min_label, max_label }` (cv is the
+// control-value param key). The slider UI expects
+// `{ id, label, leftHint, rightHint, min, max, step, def, unit }`, so
+// translate. Python carries no step/default/unit, so derive a sensible
+// step from the range and default to the midpoint. Without this the
+// sliders render with `key={undefined}` (React key warning) and NaN
+// ranges/blank hints.
+function normalizeSlider(s) {
+  if (!s || s.id !== undefined) return s; // already UI-shaped (JS fallback)
+  const min = s.from_ ?? 0;
+  const max = s.to_ ?? 1;
+  const span = max - min;
+  const step = span <= 2 ? 0.01 : span <= 20 ? 0.1 : 1;
+  return {
+    id: s.cv,
+    label: s.label,
+    leftHint: s.min_label ?? '',
+    rightHint: s.max_label ?? '',
+    hint: s.hint,
+    min, max, step,
+    def: min + span / 2,
+    unit: '',
+  };
+}
+
 function mergeCatalogs(canonical) {
   const styleById = Object.fromEntries(STYLE_CATALOG.map((c) => [c.id, c]));
   if (!canonical || canonical.length === 0) return STYLE_CATALOG;
@@ -53,10 +83,13 @@ function mergeCatalogs(canonical) {
       id: c.id,
       label: c.label || style?.label || c.id,
       description: c.description || style?.desc || style?.description || '',
-      // Sliders: prefer Python's catalog when it ships them; fall
-      // back to the JS-side defs so the slider UI lights up even
-      // before the canonical Python catalog grows sliders.
-      sliders: (c.sliders && c.sliders.length > 0) ? c.sliders : (style?.sliders || []),
+      // Sliders: prefer Python's catalog when it ships them (normalized
+      // from its cv/from_/to_ schema to the UI shape); fall back to the
+      // JS-side defs so the slider UI lights up even before the canonical
+      // Python catalog grows sliders.
+      sliders: (c.sliders && c.sliders.length > 0)
+        ? c.sliders.map(normalizeSlider)
+        : (style?.sliders || []),
       color: style?.color || '#9ca3af',
       icon: style?.icon || 'circle',
       tagline: style?.tagline || '',
@@ -101,14 +134,33 @@ export default function CharactersTab({
   // show; subsequent visits reuse whatever the user picked. Real
   // persistence (chain file) lands with the wiring pass.
   const applied = (path && charactersByPath[path]) || null;
+  // Hydrate per-chapter assignments: read the `<stem>.characters.json`
+  // sidecar first (durable authoring), and only fall back to the seed when
+  // the sidecar is empty/missing. Once loaded into the App-level cache for
+  // this path we never re-read (the cache is the working copy).
   useEffect(() => {
     if (!path) return;
     if (charactersByPath[path]) return;
     if (chapters.length === 0) return;
-    setCharactersByPath((prev) => ({
-      ...prev,
-      [path]: seedCharacterAssignments(chapters),
-    }));
+    let cancelled = false;
+    const fallback = () => {
+      if (cancelled) return;
+      setCharactersByPath((prev) => (prev[path]
+        ? prev
+        : { ...prev, [path]: seedCharacterAssignments(chapters) }));
+    };
+    readCharacters(path)
+      .then((res) => {
+        if (cancelled) return;
+        const disk = res?.characters;
+        if (disk && Object.keys(disk).length > 0) {
+          setCharactersByPath((prev) => (prev[path] ? prev : { ...prev, [path]: disk }));
+        } else {
+          fallback();
+        }
+      })
+      .catch(fallback);
+    return () => { cancelled = true; };
   }, [path, chapters, charactersByPath, setCharactersByPath]);
 
   const setApplied = (updater) => {
@@ -118,6 +170,15 @@ export default function CharactersTab({
       const next = typeof updater === 'function' ? updater(current) : updater;
       return { ...prev, [path]: next };
     });
+  };
+
+  // Commit a full per-chapter assignment map AND write it through to the
+  // `<stem>.characters.json` sidecar (no Accept-to-save step — durable on
+  // every mutation, mirroring the Events feel.yml write-through). Export
+  // reads this sidecar to run the real channel generation.
+  const commitApplied = (nextMap) => {
+    setApplied(nextMap);
+    if (path) saveCharacters(path, nextMap).catch(() => {});
   };
 
   const [activeChapterId, setActiveChapterId] = useState(() => chapters[0]?.id ?? null);
@@ -250,18 +311,77 @@ export default function CharactersTab({
   // button calls this. Last chapter: commit, no advance.
   const acceptChange = () => {
     if (!activeChapterId) return;
-    setApplied((a) => ({
-      ...a,
+    // Preserve any sibling slice (e.g. the Mechanical mechStyle) on this
+    // chapter — Accept commits the character, not the whole entry.
+    const prevEntry = applied?.[activeChapterId] || {};
+    commitApplied({
+      ...(applied || {}),
       [activeChapterId]: {
+        ...prevEntry,
         characterId: staged.characterId,
         params: { ...staged.params },
       },
-    }));
+    });
     const i = chapters.findIndex((c) => c.id === activeChapterId);
     if (i >= 0 && i < chapters.length - 1) {
       setActiveChapterId(chapters[i + 1].id);
     }
   };
+
+  // ── Editor mode — which channel editor is on the strip below the
+  // viewer. Character = the stim sensation gestalt (cards + sliders);
+  // Mechanical = the multi-axis position style; Body = haptic regions
+  // (coming soon). The chapter scope is shared across all of them.
+  const [editorMode, setEditorMode] = useState('character');
+
+  // Mechanical: per-chapter position style, written through to applied
+  // immediately on pick (no Accept step — mirrors the Events write-through
+  // the user preferred). Rides in the same per-chapter applied object as
+  // the character, so it persists the same way.
+  const mechStyle = appliedForActive?.mechStyle ?? DEFAULT_STYLE;
+  const setMechStyle = (style) => {
+    if (!activeChapterId) return;
+    const prevEntry = applied?.[activeChapterId] || { characterId: undefined, params: {} };
+    commitApplied({
+      ...(applied || {}),
+      [activeChapterId]: { ...prevEntry, mechStyle: style },
+    });
+  };
+  const mechAxisCount = activeAxes(mechStyle).length;
+
+  // ── Real per-chapter 2D channel draw ──────────────────────────────
+  // For the active chapter's character, generate alpha+beta via the
+  // funscript-tools pipeline (the proven Streamlit path) over just this
+  // chapter's window — short slice → fast (the reason chapters exist).
+  // The 9-channel grid draws these real curves where present; the rest
+  // (3-phase / prostate) stay previews until export. Debounced; the
+  // latest request wins.
+  const [channelData, setChannelData] = useState(null);
+  const [channelsLoading, setChannelsLoading] = useState(false);
+  const appliedParamsKey = JSON.stringify(appliedForActive?.params || {});
+  useEffect(() => {
+    setChannelData(null);
+    if (editorMode !== 'character' || !path || !activeChapter || !appliedChar) {
+      setChannelsLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setChannelsLoading(true);
+    const timer = setTimeout(() => {
+      stimProcess(path, {
+        character: appliedChar.label,
+        sliders: appliedForActive?.params || {},
+        mode: '2d',
+        startMs: activeChapter.atMs,
+        endMs: activeChapter.endMs,
+      })
+        .then((res) => { if (!cancelled) setChannelData(res?.channels || {}); })
+        .catch(() => { if (!cancelled) setChannelData({}); })
+        .finally(() => { setChannelsLoading(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, activeChapterId, appliedChar?.id, editorMode, appliedParamsKey]);
 
   if (!project?.path) {
     return (
@@ -391,6 +511,10 @@ export default function CharactersTab({
                 onSelect={(band) => setActiveChapterId(band.id)}
                 onSeek={(ms) => setCurrentMs(Math.max(activeChapter.atMs, Math.min(activeChapter.endMs, ms)))}
                 currentMs={currentMs}
+                waveform={audioWaveform}
+                spectrogram={trackSpectrogram}
+                beats={trackBeats}
+                fill
                 height={180}
               />
 
@@ -435,11 +559,20 @@ export default function CharactersTab({
         </>
       )}
 
+      {/* Editor strip — picks which channel editor runs below. The
+          chapter selected above is the shared scope for all of them. */}
+      <EditorStrip
+        mode={editorMode}
+        onMode={setEditorMode}
+        characterLabel={appliedChar?.label || (isNothingApplied ? NOTHING.label : null)}
+        mechCount={mechAxisCount}
+      />
+
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'minmax(280px, 1fr) minmax(420px, 1.4fr)',
-          gap: 16, marginTop: 16, alignItems: 'start',
+          gap: 16, marginTop: 8, alignItems: 'start',
         }}
       >
         <ChapterList
@@ -450,23 +583,102 @@ export default function CharactersTab({
           onSelect={setActiveChapterId}
         />
 
-        <CharacterPanel
-          catalog={catalog}
-          stagedChar={stagedChar}
-          isNothingStaged={isNothingStaged}
-          stagedParams={staged.params}
-          onSelectCharacter={setStagedCharacter}
-          onParamChange={setStagedParam}
-          onAccept={acceptChange}
-          onReset={resetStaged}
-          dirty={dirty}
-          isLastChapter={chapters.findIndex((c) => c.id === activeChapterId) >= chapters.length - 1}
-          estimSelected={estimSelected}
-          catalogWarning={catalogWarning}
-        />
+        {editorMode === 'mechanical' ? (
+          <MechanicalPanel styleId={mechStyle} onSelectStyle={setMechStyle} />
+        ) : (
+          <CharacterPanel
+            catalog={catalog}
+            stagedChar={stagedChar}
+            isNothingStaged={isNothingStaged}
+            stagedParams={staged.params}
+            onSelectCharacter={setStagedCharacter}
+            onParamChange={setStagedParam}
+            onAccept={acceptChange}
+            onReset={resetStaged}
+            dirty={dirty}
+            isLastChapter={chapters.findIndex((c) => c.id === activeChapterId) >= chapters.length - 1}
+            estimSelected={estimSelected}
+            catalogWarning={catalogWarning}
+          />
+        )}
       </div>
 
-      <ChannelGrid character={appliedChar} estimSelected={estimSelected} />
+      {editorMode === 'character' && (
+        <ChannelGrid
+          character={appliedChar}
+          estimSelected={estimSelected}
+          channelData={channelData}
+          loading={channelsLoading}
+          chapter={activeChapter}
+        />
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// EditorStrip — the under-viewer toggle that picks which channel
+// editor runs. Character shows the chosen character's NAME (it's one
+// pick per chapter, computed downstream into the e-stim gestalt);
+// Mechanical shows an active-axis COUNT (it's authored routing). A
+// hairline divider sets Body — the future anatomy editor — apart. The
+// intent line restates what the active editor authors. (See
+// project_channels_character_merge memory for the why.)
+// ──────────────────────────────────────────────────────────────
+function EditorStrip({ mode, onMode, characterLabel, mechCount }) {
+  const items = [
+    { id: 'character', label: 'Character', meta: characterLabel || '—' },
+    {
+      id: 'mechanical', label: 'Mechanical',
+      meta: mechCount === 0 ? 'stroke only' : `${mechCount} ax${mechCount === 1 ? 'is' : 'es'}`,
+    },
+    { id: 'body', label: 'Body', meta: 'soon', disabled: true },
+  ];
+  const intent = mode === 'character'
+    ? 'Sensation — how the e-stim feels'
+    : mode === 'mechanical'
+      ? 'Geometric — the toy moves in these directions'
+      : 'Anatomical — which body regions fire';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 16 }}>
+      <div style={{
+        display: 'inline-flex', gap: 4, padding: 4,
+        background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10,
+      }}>
+        {items.map((it) => {
+          const active = it.id === mode;
+          return (
+            <Fragment key={it.id}>
+              {it.id === 'body' && (
+                <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', margin: '2px 2px' }} />
+              )}
+              <button
+                disabled={it.disabled}
+                onClick={() => { if (!it.disabled) onMode(it.id); }}
+                title={it.disabled ? 'Coming soon' : undefined}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '7px 12px', borderRadius: 7,
+                  border: `1px solid ${active ? '#ff8c42' : 'transparent'}`,
+                  background: active ? 'rgba(255,140,66,0.12)' : 'transparent',
+                  color: it.disabled ? 'var(--text-dim)' : 'var(--text)',
+                  cursor: it.disabled ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit', opacity: it.disabled ? 0.55 : 1,
+                }}
+              >
+                <span style={{ fontSize: 12.5, fontWeight: active ? 700 : 600 }}>{it.label}</span>
+                <span className="mono" style={{
+                  fontSize: 9.5, color: 'var(--text-dim)',
+                  padding: '1px 6px', borderRadius: 999, background: 'var(--surface)',
+                }}>{it.meta}</span>
+              </button>
+            </Fragment>
+          );
+        })}
+      </div>
+      <span className="mono" style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.04em' }}>
+        {intent}
+      </span>
     </div>
   );
 }
@@ -863,17 +1075,40 @@ function ActionRow({ stagedChar, isNothingStaged, dirty, isLastChapter, onAccept
 }
 
 // ──────────────────────────────────────────────────────────────
-// ChannelGrid — 9 labeled cells in a 3×3 layout
+// ChannelGrid — the output set this editor produces, as a grid of
+// mini-previews (the "set of funscripts we end up with"). For Character
+// that's the 9 e-stim channels. alpha + beta draw the REAL per-chapter
+// 2D output (generated live via funscript-tools); the remaining 3-phase /
+// prostate channels stay previews until export generates them. Same
+// component will serve Mechanical's axis set later (set-driven).
 // ──────────────────────────────────────────────────────────────
-function ChannelGrid({ character, estimSelected }) {
+
+// Grid channel id → funscript-tools output suffix.
+const _CHANNEL_SUFFIX = {
+  alpha: 'alpha',
+  beta: 'beta',
+  pfreq: 'pulse_frequency',
+  freq: 'frequency',
+  volume: 'volume',
+  prise: 'pulse_rise_time',
+  aprost: 'alpha-prostate',
+  bprost: 'beta-prostate',
+  vprost: 'volume-prostate',
+};
+
+function ChannelGrid({ character, estimSelected, channelData = null, loading = false, chapter = null }) {
+  const liveCount = channelData
+    ? Object.values(channelData).filter((c) => c?.actions?.length).length
+    : 0;
+  const rightLabel = loading
+    ? 'generating 2D…'
+    : (liveCount > 0
+      ? `2D live · alpha + beta · others at export`
+      : 'static preview');
   return (
     <div style={{ marginTop: 18 }}>
       <SectionLabel
-        right={
-          <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>
-            wiring-later · static preview
-          </span>
-        }
+        right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{rightLabel}</span>}
       >
         9-channel preview
       </SectionLabel>
@@ -883,29 +1118,46 @@ function ChannelGrid({ character, estimSelected }) {
         gridTemplateColumns: 'repeat(3, 1fr)',
         gap: 10,
       }}>
-        {ESTIM_CHANNELS.map((ch) => (
-          <div key={ch.id} style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            padding: 12,
-            display: 'flex', flexDirection: 'column', gap: 8,
-            minHeight: 88,
-            opacity: estimSelected ? 1 : 0.55,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{
-                width: 8, height: 8, borderRadius: 2,
-                background: character ? character.color : ch.color,
-              }} />
-              <span style={{ fontSize: 11.5, fontWeight: 600 }}>{ch.label}</span>
-              <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-dim)', marginLeft: 'auto' }}>
-                {ch.id}
-              </span>
+        {ESTIM_CHANNELS.map((ch) => {
+          const accent = character ? character.color : ch.color;
+          const data = channelData?.[_CHANNEL_SUFFIX[ch.id]];
+          const live = !!(data?.actions?.length);
+          return (
+            <div key={ch.id} style={{
+              background: 'var(--surface)',
+              border: `1px solid ${live ? accent + '55' : 'var(--border)'}`,
+              borderRadius: 8,
+              padding: 12,
+              display: 'flex', flexDirection: 'column', gap: 8,
+              minHeight: 88,
+              opacity: estimSelected ? 1 : 0.55,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: 2, background: accent,
+                }} />
+                <span style={{ fontSize: 11.5, fontWeight: 600 }}>{ch.label}</span>
+                <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-dim)', marginLeft: 'auto' }}>
+                  {live ? 'live' : ch.id}
+                </span>
+              </div>
+              {live ? (
+                <div style={{ height: 36 }}>
+                  <Sparkline
+                    actions={data.actions}
+                    start={chapter?.atMs ?? data.actions[0].at}
+                    end={chapter?.endMs ?? data.actions[data.actions.length - 1].at}
+                    colorMode="velocity"
+                    height="100%"
+                    filled
+                  />
+                </div>
+              ) : (
+                <PlaceholderEnvelope color={accent} />
+              )}
             </div>
-            <PlaceholderEnvelope color={character ? character.color : ch.color} />
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

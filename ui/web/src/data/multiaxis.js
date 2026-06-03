@@ -1,0 +1,82 @@
+// Multi-axis (Mechanical) position styles — UI mirror of the backend
+// catalog in `forge/multiaxis_presets.py`. KEEP IN SYNC with that file:
+// the style names + per-axis amplitudes here must match the Python
+// presets, because the Mechanical editor only *authors* a per-chapter
+// style assignment — the actual secondary-axis funscripts are generated
+// by `forge.multiaxis.generate_multiaxis()` at Polish/export time from
+// these same presets. (See project_channels_character_merge memory.)
+//
+// Engine axes: roll / pitch / twist / surge / sway, derived from the
+// primary L0 stroke. Each style maps a subset of axes to an amplitude
+// (0..1); the amplitude drives the axis diagram's glow intensity.
+
+export const MULTIAXIS_STYLES = [
+  {
+    id: 'None',
+    label: 'None',
+    desc: 'Stroke only — no secondary motion. The device moves on L0 alone.',
+    axes: {},
+  },
+  {
+    id: 'Cowgirl',
+    label: 'Cowgirl',
+    desc: 'Rocking motion — pitch follows the stroke, with a gentle roll sway.',
+    axes: { roll: 0.3, pitch: 0.6, twist: 0.15 },
+  },
+  {
+    id: 'Missionary',
+    label: 'Missionary',
+    desc: 'Side-to-side emphasis — roll is dominant, driven by stroke speed.',
+    axes: { roll: 0.7, pitch: 0.2 },
+  },
+  {
+    id: 'Doggy',
+    label: 'Doggy',
+    desc: 'Forward-thrust emphasis — pitch dominant with a forward bias.',
+    axes: { pitch: 0.8 },
+  },
+  {
+    id: 'Riding',
+    label: 'Riding',
+    desc: 'Full circular motion — every axis active, wide amplitude.',
+    axes: { roll: 0.6, pitch: 0.6, twist: 0.4, surge: 0.3, sway: 0.3 },
+  },
+  {
+    id: 'Random',
+    label: 'Random',
+    desc: 'Each axis gets an independent random walk. Surprise me.',
+    axes: { roll: 0.5, pitch: 0.5, twist: 0.3, surge: 0.2, sway: 0.2 },
+  },
+];
+
+// Engine-axis → T-code identity + display. L0 (stroke) is the *input*
+// (inherited from the main funscript), shown for context but never
+// authored here. The five secondary axes are what styles drive.
+export const AXIS_META = {
+  stroke: { tcode: 'L0', label: 'Stroke', kind: 'linear', inherited: true },
+  surge:  { tcode: 'L1', label: 'Surge',  kind: 'linear' },
+  sway:   { tcode: 'L2', label: 'Sway',   kind: 'linear' },
+  twist:  { tcode: 'R0', label: 'Twist',  kind: 'rotary' },
+  roll:   { tcode: 'R1', label: 'Roll',   kind: 'rotary' },
+  pitch:  { tcode: 'R2', label: 'Pitch',  kind: 'rotary' },
+};
+
+// Display order for the secondary axes (rotational first — they're the
+// visually dominant motion — then the two linear translations).
+export const SECONDARY_AXES = ['twist', 'roll', 'pitch', 'surge', 'sway'];
+
+export const DEFAULT_STYLE = 'None';
+
+export function styleById(id) {
+  return MULTIAXIS_STYLES.find((s) => s.id === id) || MULTIAXIS_STYLES[0];
+}
+
+// Names of the axes a style actually drives (non-empty amplitude).
+export function activeAxes(styleId) {
+  return Object.keys(styleById(styleId).axes || {});
+}
+
+// Amplitude (0..1) a style assigns to one axis, or 0 if inactive.
+export function axisAmplitude(styleId, axis) {
+  return styleById(styleId).axes?.[axis] ?? 0;
+}

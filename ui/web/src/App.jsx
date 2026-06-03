@@ -63,12 +63,14 @@ const TABS = [
   // wiring pass (Begin/End capture, parameter forms, YAML persistence)
   // is queued for before FF beta.
   { id: 'events',    label: 'Events' },
-  // 'stim' (label: 'Characters', 2026-05-18) — first tab that *generates*
-  // multiple output funscripts (one per e-stim channel, 9 today). Label
-  // catches up to the design's internal vocabulary (character cards).
-  // Tab id stays 'stim' so TAB_CHAIN / chain filenames / tabGate keep
-  // working without churn. See memory `project_characters_tab.md`.
-  { id: 'stim',      label: 'Characters' },
+  // 'stim' (label: 'Channels', 2026-06-03 — was 'Characters') — first tab
+  // that *generates* output. Now a multi-editor channels tab: Character
+  // (the e-stim sensation gestalt, 9 channels) + Mechanical (multi-axis
+  // position style, roll/pitch/twist/surge/sway) + Body (haptic regions,
+  // coming soon), all sharing one chapter scope. Tab id stays 'stim' so
+  // TAB_CHAIN / chain filenames / tabGate keep working without churn. See
+  // memory `project_channels_character_merge.md`.
+  { id: 'stim',      label: 'Channels' },
   // 'device' moved here 2026-05-25 — was between Analysis and Chapters.
   // Targeting belongs at the end of the editing journey (the *where*),
   // after chapters/patterns/phrases/stanzas/events/characters define

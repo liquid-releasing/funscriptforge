@@ -1821,6 +1821,131 @@ def cmd_feel_read(args):
     }))
 
 
+def _characters_path(target) -> Path:
+    """Resolve `<dir>/.<stem>.forge/<stem>.characters.json` — the per-chapter
+    character + slider assignments the Channels tab authors. Export reads
+    this to run the e-stim channel generation (the Streamlit stim pipeline,
+    ported)."""
+    from videoflow.sidecar import forge_dir
+    stem = Path(target).stem
+    return forge_dir(target) / f"{stem}.characters.json"
+
+
+def cmd_characters_read(args):
+    """Read `<stem>.characters.json` → `{version, characters:{chapterId: {...}}}`.
+    Returns an empty map when the sidecar is missing."""
+    path = _characters_path(Path(args.input))
+    if not path.exists():
+        print(json.dumps({"version": 1, "characters": {}}))
+        return
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Error reading {path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(doc, dict):
+        doc = {}
+    print(json.dumps({
+        "version": doc.get("version", 1),
+        "characters": doc.get("characters") or {},
+    }))
+
+
+def cmd_characters_write(args):
+    """Write per-chapter character assignments to `<stem>.characters.json`.
+    The map arrives as JSON (`{characters:{...}}` or a bare map) via
+    --characters-json (a path, or '-' for stdin)."""
+    raw = sys.stdin.read() if args.characters_json == "-" \
+        else Path(args.characters_json).read_text(encoding="utf-8")
+    payload = json.loads(raw)
+    if isinstance(payload, dict) and "characters" in payload:
+        characters = payload.get("characters") or {}
+    else:
+        characters = payload if isinstance(payload, dict) else {}
+
+    path = _characters_path(Path(args.input))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"version": 1, "characters": characters}, indent=2),
+        encoding="utf-8",
+    )
+    print(json.dumps({"saved": str(path), "count": len(characters)}))
+
+
+def cmd_stim_process(args):
+    """Generate e-stim channel funscripts for a window (a chapter) via the
+    proven funscript-tools pipeline, and emit them as JSON channel actions.
+
+    This is the React bridge to the same `process()` the Streamlit stim tab
+    used. The window (--start-ms/--end-ms) keeps the 2D draw fast by slicing
+    to the active chapter — the whole reason long scripts became chapters.
+    Full 3-phase generation runs at export, not here."""
+    from forge.funscript_tools import AVAILABLE, build_config, process
+    if not AVAILABLE:
+        print(json.dumps({"available": False, "channels": {},
+                          "error": "funscript-tools not found"}))
+        return
+
+    from forge.funscript import load_funscript, parse_actions
+    times, pos = parse_actions(load_funscript(args.input))
+    pairs = list(zip(times, pos))
+    if args.start_ms is not None or args.end_ms is not None:
+        lo = args.start_ms if args.start_ms is not None else (times[0] if times else 0)
+        hi = args.end_ms if args.end_ms is not None else (times[-1] if times else 0)
+        pairs = [(t, p) for t, p in pairs if lo <= t <= hi]
+    if len(pairs) < 2:
+        print(json.dumps({"available": True, "channels": {},
+                          "error": "no actions in window"}))
+        return
+
+    sliders = {}
+    if args.sliders_json:
+        raw = sys.stdin.read() if args.sliders_json == "-" \
+            else Path(args.sliders_json).read_text(encoding="utf-8")
+        sliders = json.loads(raw) or {}
+
+    import tempfile
+    import shutil
+    tmp = Path(tempfile.mkdtemp(prefix="ff_stim_"))
+    try:
+        in_path = tmp / f"{Path(args.input).stem}.funscript"
+        in_path.write_text(json.dumps({
+            "actions": [{"at": int(t), "pos": int(round(p))} for t, p in pairs],
+        }), encoding="utf-8")
+
+        config = build_config(args.character, sliders, output_dir=str(tmp))
+        if args.mode == "2d":
+            config.setdefault("prostate_generation", {})["generate_prostate_files"] = False
+        # funscript-tools' process() logs progress to stdout ("Generated e1
+        # axis…"); redirect it to stderr so stdout carries ONLY our JSON
+        # (run_cli on the Rust side parses stdout).
+        import contextlib
+        with contextlib.redirect_stdout(sys.stderr):
+            result = process(str(in_path), config, None)
+        if not result.get("success"):
+            print(json.dumps({"available": True, "channels": {},
+                              "error": result.get("error") or "process failed"}))
+            return
+
+        wanted = (["alpha", "beta"] if args.mode == "2d" else
+                  ["alpha", "beta", "pulse_frequency", "frequency", "volume",
+                   "pulse_rise_time", "alpha-prostate", "beta-prostate",
+                   "volume-prostate"])
+        stem = in_path.stem
+        channels = {}
+        for suf in wanted:
+            cp = tmp / f"{stem}.{suf}.funscript"
+            if not cp.exists():
+                continue
+            cd = json.loads(cp.read_text(encoding="utf-8"))
+            channels[suf] = {"actions": [
+                {"at": a["at"], "pos": a["pos"]} for a in cd.get("actions", [])
+            ]}
+        print(json.dumps({"available": True, "mode": args.mode, "channels": channels}))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def _catalog_dir() -> Path:
     return Path(__file__).resolve().parent / "catalog"
 
@@ -2602,6 +2727,35 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_fr.add_argument("input", help="funscript or media path (sidecar lives next to it)")
 
+    # --- characters-write / characters-read (per-chapter Channels assignments) ---
+    p_chw = sub.add_parser(
+        "characters-write",
+        help="Write per-chapter character assignments to <stem>.characters.json",
+    )
+    p_chw.add_argument("input", help="funscript or media path (sidecar lives next to it)")
+    p_chw.add_argument("--characters-json", required=True,
+                       help="Path to a JSON {characters:{chapterId:{...}}} map, or - for stdin")
+
+    p_chr = sub.add_parser(
+        "characters-read",
+        help="Read per-chapter character assignments from <stem>.characters.json",
+    )
+    p_chr.add_argument("input", help="funscript or media path (sidecar lives next to it)")
+
+    # --- stim-process (React bridge to the funscript-tools channel pipeline) ---
+    p_stp = sub.add_parser(
+        "stim-process",
+        help="Generate e-stim channel funscripts for a (chapter) window via funscript-tools",
+    )
+    p_stp.add_argument("input", help="Path to the input funscript")
+    p_stp.add_argument("--character", required=True, help="Character/preset name (the preset LABEL)")
+    p_stp.add_argument("--sliders-json", default=None,
+                       help="Path to a JSON {cv_key: value} overrides map, or - for stdin")
+    p_stp.add_argument("--mode", choices=["2d", "3phase"], default="2d",
+                       help="2d = alpha+beta (fast); 3phase = all 10 channels (slow, prostate)")
+    p_stp.add_argument("--start-ms", type=int, default=None, help="Window start (chapter atMs)")
+    p_stp.add_argument("--end-ms", type=int, default=None, help="Window end (chapter endMs)")
+
     # --- list-event-recipes (Edger catalog → Events tab) ---
     sub.add_parser(
         "list-event-recipes",
@@ -3081,6 +3235,9 @@ def main():
         "read-stanzas":     cmd_read_stanzas,
         "feel-write":       cmd_feel_write,
         "feel-read":        cmd_feel_read,
+        "characters-write": cmd_characters_write,
+        "characters-read":  cmd_characters_read,
+        "stim-process":     cmd_stim_process,
         "list-event-recipes": cmd_list_event_recipes,
         "edger-export":     cmd_edger_export,
         "edger-import":     cmd_edger_import,
