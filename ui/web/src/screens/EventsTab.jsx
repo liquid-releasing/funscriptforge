@@ -1037,9 +1037,11 @@ function EffectLibrary({ recipes, groups, selectedEffectId, labelMode, onLabelMo
   // Normal is pinned ABOVE the sections as a permanent baseline anchor (it's a
   // navigation tool, not an effect) — hidden only while searching.
   const normal = recipes.find((r) => r.baseline) || null;
-  // Section list: Featured (branded, non-baseline) first, then catalog groups.
+  // Section list: Featured (curated quick-access set) first, then catalog
+  // groups. Featured is the `featured` flag (a ~10-event curation), distinct
+  // from `branded` (now all 32 carry an SFW label).
   const sections = [
-    { key: 'featured', name: 'Featured', items: recipes.filter((r) => r.branded && !r.baseline && matches(r)) },
+    { key: 'featured', name: 'Featured', items: recipes.filter((r) => r.featured && !r.baseline && matches(r)) },
     ...(groups || []).map((g) => ({
       key: g.key, name: GROUP_NAMES[g.key] || g.name,
       items: recipes.filter((r) => r.group === g.key && !r.baseline && matches(r)),

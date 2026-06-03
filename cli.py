@@ -1940,6 +1940,7 @@ def cmd_list_event_recipes(args):
             "sfwLabel": m.get("sfw_label") or _pretty_label(name, grp["prefix"]),
             "nsfwLabel": m.get("nsfw_label") or _pretty_label(name, grp["prefix"]),
             "branded": bool(m.get("sfw_label")),
+            "featured": bool(m.get("featured")),
             "desc": m.get("desc", ""),
             "defaultParams": dparams,
             "params": params,

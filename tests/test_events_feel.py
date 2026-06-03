@@ -183,14 +183,39 @@ class TestListEventRecipes(unittest.TestCase):
                     saw_mode = True
         self.assertTrue(saw_mode, "no step carried a mode — blend surfacing would be blind")
 
-    def test_branded_events_have_distinct_sfw_label(self):
-        # The SFW/NSFW map brands a curated subset; edge is the canonical one.
-        edge = self.by_id.get("edge")
-        self.assertIsNotNone(edge)
-        self.assertTrue(edge["branded"])
-        self.assertEqual(edge["sfwLabel"], "Edge")
-        branded = [r for r in self.recipes if r["branded"]]
-        self.assertGreaterEqual(len(branded), 1)
+    def test_every_event_is_branded_with_an_sfw_label(self):
+        # The map now covers all 32 (locked 2026-06-02) — no raw name leaks
+        # into the UI as a label.
+        for r in self.recipes:
+            self.assertTrue(r["branded"], f"{r['id']} has no SFW label")
+            self.assertTrue(r["sfwLabel"], f"{r['id']} sfwLabel empty")
+            self.assertTrue(r["nsfwLabel"], f"{r['id']} nsfwLabel empty")
+
+    def test_featured_is_a_curated_subset_distinct_from_branded(self):
+        featured = [r for r in self.recipes if r.get("featured")]
+        # A handful of quick-access events, not all 32.
+        self.assertGreater(len(featured), 0)
+        self.assertLess(len(featured), len(self.recipes))
+        # edge is featured; lube/ruin are branded but not featured.
+        self.assertTrue(self.by_id["edge"]["featured"])
+        self.assertFalse(self.by_id["lube"].get("featured"))
+        self.assertFalse(self.by_id["ruin"].get("featured"))
+
+    def test_sensitive_names_get_neutral_sfw_labels(self):
+        # Locked direction: raw explicit/BDSM names show a neutral motion SFW
+        # label; the NSFW label preserves the original intent.
+        expected = {
+            "ruin": ("Drop", "Ruin"),
+            "mcb_obey": ("Drive", "Obey"),
+            "mcb_submit": ("Yield", "Submit"),
+            "mcb_denial": ("Withhold", "Denial"),
+            "clutch_good_slave": ("Praise", "Good Slave"),
+            "test_slaps": ("Taps", "Slaps"),
+        }
+        for name, (sfw, nsfw) in expected.items():
+            r = self.by_id[name]
+            self.assertEqual(r["sfwLabel"], sfw, f"{name} sfw drifted")
+            self.assertEqual(r["nsfwLabel"], nsfw, f"{name} nsfw drifted")
 
 
 class TestEdgerRoundTrip(unittest.TestCase):

@@ -1,62 +1,165 @@
-# FunscriptForge ⇄ Edger event mapping  —  DRAFT, review the correspondences.
+# FunscriptForge SFW/NSFW label map for the Edger event catalog.
 #
-# Bridges OUR sfw effect ids (ui/web/src/data/events.js) and the Edger event
-# names (funscript_tools config.event_definitions.yml). Carries the NSFW label
-# so the same row can drive an NSFW description toggle later. Used by
-# `cli.py edger-export` / `edger-import`.
+# Brands every Edger event (funscript_tools config.event_definitions.yml) with:
+#   sfw_label  — neutral, motion-descriptive (the default shown in the tab;
+#                Microsoft Store / SFW positioning).
+#   nsfw_label — the raw Edger intent, surfaced by the Events tab's NSFW toggle.
+#   featured   — true for the curated quick-access set (the Featured section
+#                atop the library); the rest live only in their source groups.
 #
-# Both catalogs will grow (Edger adds events; we add more, esp. for multi-
-# device) — add rows here. An effect/name with no row passes through verbatim
-# (the export/import notes which ones were unmapped).
+# Keyed by `edger` (the event name = our effectId). `ff` is the historical
+# prototype id where one existed, else the Edger name — informational only.
+# Used by the Events catalog (list-event-recipes -> branded/featured labels) and
+# by `cli.py edger-export` / `edger-import`. duration is always derived from the
+# captured span (begin->end), never a param here.
 #
-# `param_map` renames OUR per-effect params → Edger params on export (and back
-# on import). duration is always derived from the span (begin→end), never a
-# param here.
+# Reviewed + locked 2026-06-02: the sensitive raw names (ruin, denial, obey,
+# submit, good_slave, slaps, edge_ce) get neutral motion SFW labels; the NSFW
+# toggle still reveals the original term.
 version: 1
 mappings:
-  # --- exact overlaps (Edger has the same name) ---
+  # ── GENERAL ──────────────────────────────────────────────────────────
   - ff: edge
     edger: edge
     sfw_label: Edge
     nsfw_label: Edge
-    param_map: { tremor: buzz_freq, amount: buzz_intensity, ramp: ramp_up_ms }
-  - ff: slow
-    edger: slow
-    sfw_label: Slow
-    nsfw_label: Slow
-  - ff: fast
-    edger: fast
-    sfw_label: Fast
-    nsfw_label: Fast
-  # --- best-effort guesses (REVIEW these) ---
-  - ff: steady
-    edger: medium
-    sfw_label: Steady
-    nsfw_label: Medium
-  - ff: hold
-    edger: stay
-    sfw_label: Hold
-    nsfw_label: Stay
+    featured: true
   - ff: surge
     edger: cum
     sfw_label: Surge
     nsfw_label: Cum
+    featured: true
+  - ff: fast
+    edger: fast
+    sfw_label: Fast
+    nsfw_label: Fast
+    featured: true
+  - ff: steady
+    edger: medium
+    sfw_label: Steady
+    nsfw_label: Medium
+    featured: true
+  - ff: slow
+    edger: slow
+    sfw_label: Slow
+    nsfw_label: Slow
+    featured: true
+  - ff: hold
+    edger: stay
+    sfw_label: Hold
+    nsfw_label: Stay
+    featured: true
   - ff: cut
     edger: stop
     sfw_label: Cut
     nsfw_label: Stop
+    featured: true
   - ff: breathe
     edger: tranquil
     sfw_label: Breathe
     nsfw_label: Tranquil
-    param_map: { period: osc_freq, depth: osc_amplitude }
+    featured: true
+  - ff: glide          # ease/ramp transition
+    edger: lube
+    sfw_label: Glide
+    nsfw_label: Lube
+  - ff: rest
+    edger: rest
+    sfw_label: Rest
+    nsfw_label: Rest
+  - ff: drop           # volume drop (ruined-orgasm intent)
+    edger: ruin
+    sfw_label: Drop
+    nsfw_label: Ruin
+
+  # ── MCB ──────────────────────────────────────────────────────────────
   - ff: pulse
     edger: mcb_throb
     sfw_label: Pulse
     nsfw_label: Throb
+    featured: true
+  - ff: calm
+    edger: mcb_calm
+    sfw_label: Calm
+    nsfw_label: Calm
+  - ff: tease
+    edger: mcb_tease
+    sfw_label: Tease
+    nsfw_label: Tease
+  - ff: release
+    edger: mcb_release
+    sfw_label: Release
+    nsfw_label: Release
+  - ff: build
+    edger: mcb_intensity_build
+    sfw_label: Build
+    nsfw_label: Intensity Build
+  - ff: mcb_edge
+    edger: mcb_edge
+    sfw_label: Edge
+    nsfw_label: Edge
+  - ff: deep_edge
+    edger: mcb_edge_ce
+    sfw_label: Deep Edge
+    nsfw_label: Edge CE
+  - ff: withhold       # back off / deny
+    edger: mcb_denial
+    sfw_label: Withhold
+    nsfw_label: Denial
+  - ff: drive          # drive intensity up (command)
+    edger: mcb_obey
+    sfw_label: Drive
+    nsfw_label: Obey
+  - ff: yield          # settle down (command)
+    edger: mcb_submit
+    sfw_label: Yield
+    nsfw_label: Submit
+
+  # ── CLUTCH ───────────────────────────────────────────────────────────
   - ff: sweep
     edger: clutch_freq_shift_up
-    sfw_label: Sweep
-    nsfw_label: Freq shift up
-  # 'normal' is our baseline eraser (compose:replace) — intentionally NOT
-  # exported and has no Edger equivalent.
+    sfw_label: Sweep Up
+    nsfw_label: Freq Shift Up
+    featured: true
+  - ff: sweep_down
+    edger: clutch_freq_shift_down
+    sfw_label: Sweep Down
+    nsfw_label: Freq Shift Down
+  - ff: clutch_edge
+    edger: clutch_edge
+    sfw_label: Edge
+    nsfw_label: Edge
+  - ff: spike
+    edger: clutch_spike
+    sfw_label: Spike
+    nsfw_label: Spike
+  - ff: reward
+    edger: clutch_reward
+    sfw_label: Reward
+    nsfw_label: Reward
+  - ff: tantalize
+    edger: clutch_tantalize
+    sfw_label: Tantalize
+    nsfw_label: Tantalize
+  - ff: wobble
+    edger: clutch_pulse_wobble
+    sfw_label: Wobble
+    nsfw_label: Pulse Wobble
+  - ff: accelerate
+    edger: clutch_higher_rate
+    sfw_label: Accelerate
+    nsfw_label: Higher Rate
+  - ff: clutch_breathe
+    edger: clutch_tranquil
+    sfw_label: Breathe
+    nsfw_label: Tranquil
+  - ff: praise         # steady reward pattern
+    edger: clutch_good_slave
+    sfw_label: Praise
+    nsfw_label: Good Slave
+
+  # ── TEST ─────────────────────────────────────────────────────────────
+  - ff: taps           # volume percussion (test event)
+    edger: test_slaps
+    sfw_label: Taps
+    nsfw_label: Slaps
