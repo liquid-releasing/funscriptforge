@@ -101,6 +101,17 @@ describe('humanizeSteps', () => {
     expect(humanizeSteps([], {}, {})).toEqual([]);
     expect(humanizeSteps(undefined, {}, {})).toEqual([]);
   });
+  it('says "the selected duration" when the step scales to the span ($duration_ms)', () => {
+    // Real recipes always use the token — the length is the captured span, not
+    // the recipe default, so we must not print a fixed number.
+    const spanRecipe = {
+      defaultParams: { duration_ms: 15000 },
+      steps: [{ op: 'apply_linear_change', axis: 'pulse_frequency', params: { start_value: 90, end_value: 80, duration_ms: '$duration_ms', mode: 'additive' } }],
+    };
+    const lines = humanizeSteps(spanRecipe.steps, {}, spanRecipe.defaultParams);
+    expect(lines[0].text).toContain('over the selected duration');
+    expect(lines[0].text).not.toContain('15.0s');
+  });
 });
 
 describe('recipeGlyphKind', () => {

@@ -67,9 +67,17 @@ export function humanizeSteps(steps, paramVals, defaults) {
     const mode = p.mode || 'additive';
     const axis = AXIS_LABEL[s.axis] || (s.axis || '').split(',')[0] || s.axis || 'output';
     const r = (v) => resolveParam(v, paramVals, defaults);
-    const dur = r(p.duration_ms);
+    // A step's duration is almost always the `$duration_ms` token, which the
+    // engine replaces with the captured span — so say so, rather than printing
+    // the recipe default (which the user isn't actually getting). Only a literal
+    // duration is a genuine fixed sub-length worth showing in seconds.
+    const rawDur = p.duration_ms;
+    const scalesToSpan = typeof rawDur === 'string' && rawDur.replace(/^\$/, '').startsWith('duration');
+    const dur = r(rawDur);
     const ramp = r(p.ramp_in_ms);
-    const durTxt = typeof dur === 'number' ? ` over ${(dur / 1000).toFixed(1)}s` : '';
+    const durTxt = scalesToSpan
+      ? ' over the selected duration'
+      : (typeof dur === 'number' ? ` over ${(dur / 1000).toFixed(1)}s` : '');
     const rampTxt = typeof ramp === 'number' && ramp > 0 ? `, ramp ${(ramp / 1000).toFixed(2)}s` : '';
     let text;
     if (s.op === 'apply_linear_change') {
