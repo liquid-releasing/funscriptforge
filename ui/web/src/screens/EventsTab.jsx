@@ -485,7 +485,10 @@ export default function EventsTab({
               scope={{ start: activeChapter.atMs, end: activeChapter.endMs }}
               actions={actions}
               events={chapterEvents}
-              lanes={['events', 'funscript']}
+              waveform={audioWaveform}
+              spectrogram={trackSpectrogram}
+              beats={trackBeats}
+              lanes={['events', 'funscript', 'audio', 'spectro']}
               funscriptColorMode="velocity"
               currentMs={currentMs}
               selectedEventId={selectedId}
