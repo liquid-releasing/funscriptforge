@@ -29,7 +29,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Button, Icon, fmtTime, fmtTimeShort, TrackStack, MediaViewer, ChapterRibbon } from 'forgemoment';
 import { EVENT_DEVICES } from '../data/events.js';
-import { readFeelEvents, saveFeelEvents, listEventRecipes } from '../api/forge.js';
+import {
+  readFeelEvents, saveFeelEvents, listEventRecipes,
+  edgerExport, edgerImport, pickEventsYmlFile,
+} from '../api/forge.js';
 import {
   GROUP_COLORS, GROUP_NAMES, recipeColor, pickLabel, recipeBlend, BLEND_META,
   humanizeSteps, recipeGlyphKind, glyphPoints,
@@ -281,6 +284,73 @@ export default function EventsTab({
     setEvents(next);
     setSelectedId((s) => (s === id ? null : s));
     persist(next);
+  };
+
+  // ── Edger IO (FooterBar) ────────────────────────────────────────────
+  // Export projects .feel.yml → playable <stem>.events.yml; Preview renders
+  // the same YAML without writing; Import loads an Edger events.yml back into
+  // the tab (replacing the working set) and writes it through to .feel.yml.
+  const [ioBusy, setIoBusy] = useState(false);
+  const [previewYaml, setPreviewYaml] = useState(null); // null | string (modal)
+  const [ioNote, setIoNote] = useState(null); // null | { tone, text }
+
+  const handleExport = async () => {
+    if (!project?.path) return;
+    setIoBusy(true);
+    try {
+      const res = await edgerExport(project.path, { write: true });
+      let text = `Exported ${res.count} event${res.count === 1 ? '' : 's'} → ${res.path || 'events.yml'}`;
+      if (res.skipped?.length) text += ` · skipped ${res.skipped.length} baseline`;
+      setIoNote({ tone: 'ok', text });
+    } catch (e) {
+      setIoNote({ tone: 'err', text: `Export failed: ${e}` });
+    } finally { setIoBusy(false); }
+  };
+
+  const handlePreview = async () => {
+    if (!project?.path) return;
+    setIoBusy(true);
+    try {
+      const res = await edgerExport(project.path, { write: false });
+      setPreviewYaml(res?.yaml ?? 'events: []\n');
+    } catch (e) {
+      setIoNote({ tone: 'err', text: `Preview failed: ${e}` });
+    } finally { setIoBusy(false); }
+  };
+
+  const handleImport = async () => {
+    if (!project?.path) return;
+    const picked = await pickEventsYmlFile(project.path);
+    if (!picked) return;
+    if (events.length > 0
+      && !window.confirm(`Replace the ${events.length} current event${events.length === 1 ? '' : 's'} with the imported set?`)) {
+      return;
+    }
+    setIoBusy(true);
+    try {
+      const res = await edgerImport(picked);
+      const imported = (res?.events ?? []).map((e) => ({
+        ...e,
+        devices: e.devices?.length ? e.devices : EVENT_DEVICES.map((d) => d.id),
+      }));
+      setEvents(imported);
+      persist(imported);
+      setSelectedId(null);
+      let maxSeq = 0;
+      for (const e of imported) {
+        const m = /^e-cap-(\d+)$/.exec(e.id || '');
+        if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+      }
+      seqRef.current = maxSeq;
+      let text = `Imported ${res.imported} event${res.imported === 1 ? '' : 's'}`;
+      if (res.skipped?.length) {
+        const head = res.skipped.slice(0, 3).join(', ');
+        text += ` · skipped ${res.skipped.length} unknown (${head}${res.skipped.length > 3 ? '…' : ''})`;
+      }
+      setIoNote({ tone: res.skipped?.length ? 'warn' : 'ok', text });
+    } catch (e) {
+      setIoNote({ tone: 'err', text: `Import failed: ${e}` });
+    } finally { setIoBusy(false); }
   };
 
   // Chapter clip for the monitor — same hook Chapters/Phrases use (stream-
@@ -537,7 +607,64 @@ export default function EventsTab({
         scopeLabel={scope === 'all'
           ? 'All chapters'
           : (chapters.find((c) => c.id === scope)?.name ?? 'chapter')}
+        busy={ioBusy}
+        note={ioNote}
+        onExport={handleExport}
+        onPreview={handlePreview}
+        onImport={handleImport}
       />
+
+      {previewYaml != null && (
+        <YamlPreviewModal yaml={previewYaml} onClose={() => setPreviewYaml(null)} />
+      )}
+    </div>
+  );
+}
+
+// Lightweight read-only preview of the rendered events.yml — what `edger-export`
+// would write. Click the backdrop or Close to dismiss; Copy puts it on the
+// clipboard.
+function YamlPreviewModal({ yaml, onClose }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 50,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 12, width: 'min(680px, 92vw)', maxHeight: '82vh',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          boxShadow: '0 12px 48px rgba(0,0,0,0.5)',
+        }}
+      >
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '12px 16px', borderBottom: '1px solid var(--border)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="file-text" size={15} style={{ color: 'var(--text-dim)' }} />
+            <span style={{ fontSize: 13.5, fontWeight: 700 }}>events.yml — preview</span>
+            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>(not written)</span>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Button kind="ghost" size="sm" icon="copy" onClick={() => navigator.clipboard?.writeText(yaml)}>Copy</Button>
+            <Button kind="secondary" size="sm" icon="x" onClick={onClose}>Close</Button>
+          </div>
+        </div>
+        <pre style={{
+          margin: 0, padding: 16, overflow: 'auto', flex: 1,
+          fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.55,
+          color: 'var(--text-soft)', whiteSpace: 'pre',
+        }}>
+          {yaml}
+        </pre>
+      </div>
     </div>
   );
 }
@@ -1432,24 +1559,40 @@ function TimelineRow({ evt, recipe, labelMode, selected, onSelect, onEdit, onDel
 // ──────────────────────────────────────────────────────────────
 // FooterBar
 // ──────────────────────────────────────────────────────────────
-function FooterBar({ eventCount, scopeLabel }) {
+function FooterBar({ eventCount, scopeLabel, busy, note, onExport, onPreview, onImport }) {
+  const noEvents = eventCount === 0;
+  const noteColor = note?.tone === 'err' ? '#ff6b6b'
+    : note?.tone === 'warn' ? '#ffb547'
+      : note?.tone === 'ok' ? '#5dc98a' : 'var(--text-dim)';
   return (
     <div style={{
       marginTop: 16, padding: 14,
       background: 'var(--surface)', border: '1px solid var(--border)',
       borderRadius: 10,
-      display: 'flex', alignItems: 'center', gap: 10,
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
     }}>
-      <Button kind="secondary" size="sm" icon="box" disabled>
-        Starter packs
+      {/* Export is the headline action — write the playable Edger events.yml. */}
+      <Button kind="primary" size="sm" icon="download" onClick={onExport} disabled={busy || noEvents}>
+        Export events.yml
       </Button>
-      <Button kind="secondary" size="sm" icon="upload" disabled>
-        Load YAML…
+      <Button kind="secondary" size="sm" icon="upload" onClick={onImport} disabled={busy}>
+        Load Edger yml…
       </Button>
-      <Button kind="ghost" size="sm" icon="file-text" disabled>
+      <Button kind="ghost" size="sm" icon="file-text" onClick={onPreview} disabled={busy || noEvents}>
         Preview events.yml
       </Button>
-      <span style={{ flex: 1 }} />
+      <span style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+      <Button kind="ghost" size="sm" icon="box" disabled title="Bundled example packs — coming soon">
+        Starter packs
+      </Button>
+
+      <span style={{ flex: 1, minWidth: 12 }} />
+
+      {note && (
+        <span style={{ fontSize: 11, color: noteColor, maxWidth: 420, textAlign: 'right' }}>
+          {note.text}
+        </span>
+      )}
       <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
         {eventCount} event{eventCount === 1 ? '' : 's'} · scope: <span style={{ color: 'var(--text)' }}>{scopeLabel}</span>
       </span>

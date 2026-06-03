@@ -193,5 +193,111 @@ class TestListEventRecipes(unittest.TestCase):
         self.assertGreaterEqual(len(branded), 1)
 
 
+class TestEdgerRoundTrip(unittest.TestCase):
+    """feel.yml ↔ playable Edger events.yml. effectId IS the Edger name, so
+    begin/end/effect/params round-trip losslessly; intensity/devices are FF-only
+    and reset to defaults across an Edger round-trip (documented boundary)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.target = os.path.join(self.tmp, "clip.funscript")
+        self.events_json = os.path.join(self.tmp, "events.json")
+
+    def _seed_feel(self, events):
+        with open(self.events_json, "w", encoding="utf-8") as f:
+            json.dump(events, f)
+        rc, _, err = run("feel-write", self.target, "--events-json", self.events_json)
+        self.assertEqual(rc, 0, err)
+
+    def test_export_writes_sibling_events_yml_and_skips_baseline(self):
+        self._seed_feel([
+            SAMPLE_EVENT,
+            {"id": "e-cap-2", "beginMs": 1000, "endMs": 3000, "effectId": "normal",
+             "intensity": 1.0, "params": {}, "devices": [], "deviceCfg": {}},
+        ])
+        rc, out, err = run("edger-export", self.target)
+        self.assertEqual(rc, 0, err)
+        res = json.loads(out)
+        # Sibling of the source, named <stem>.events.yml (funscript-tools rule).
+        self.assertEqual(res["path"], os.path.join(self.tmp, "clip.events.yml"))
+        self.assertTrue(os.path.exists(res["path"]))
+        self.assertEqual(res["count"], 1)            # edge kept, normal skipped
+        self.assertEqual(res["skipped"], ["normal"])  # baseline never exported
+
+    def test_export_puts_span_in_duration_ms(self):
+        self._seed_feel([SAMPLE_EVENT])  # 5000 → 12000
+        rc, out, _ = run("edger-export", self.target, "--no-write")
+        ev = json.loads(out)
+        import yaml
+        doc = yaml.safe_load(ev["yaml"])
+        e = doc["events"][0]
+        self.assertEqual(e["time"], 5000)
+        self.assertEqual(e["name"], "edge")
+        self.assertEqual(e["params"]["duration_ms"], 7000)
+        self.assertEqual(e["params"]["buzz_freq"], 11)
+
+    def test_export_no_write_leaves_no_file(self):
+        self._seed_feel([SAMPLE_EVENT])
+        rc, out, _ = run("edger-export", self.target, "--no-write")
+        res = json.loads(out)
+        self.assertIsNone(res["path"])
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "clip.events.yml")))
+        self.assertIn("events:", res["yaml"])  # rendered anyway (Preview)
+
+    def test_import_restores_span_effect_and_params(self):
+        self._seed_feel([SAMPLE_EVENT])
+        rc, out, _ = run("edger-export", self.target)
+        yml = json.loads(out)["path"]
+        rc, out, err = run("edger-import", yml)
+        self.assertEqual(rc, 0, err)
+        res = json.loads(out)
+        self.assertEqual(res["imported"], 1)
+        e = res["events"][0]
+        self.assertEqual(e["beginMs"], 5000)
+        self.assertEqual(e["endMs"], 12000)   # span reconstructed from duration_ms
+        self.assertEqual(e["effectId"], "edge")
+        self.assertEqual(e["params"], {"buzz_freq": 11})  # duration_ms stripped back out
+        # FF-only fields reset to UI defaults across the Edger boundary.
+        self.assertEqual(e["intensity"], 0.7)
+        self.assertEqual(e["devices"], [])
+
+    def test_import_skips_unknown_event_names(self):
+        bad = os.path.join(self.tmp, "bad.events.yml")
+        with open(bad, "w", encoding="utf-8") as f:
+            f.write("events:\n- time: 1000\n  name: not_a_real_event\n  params: {duration_ms: 2000}\n"
+                    "- time: 5000\n  name: edge\n  params: {duration_ms: 3000}\n")
+        rc, out, err = run("edger-import", bad)
+        self.assertEqual(rc, 0, err)
+        res = json.loads(out)
+        self.assertEqual(res["imported"], 1)
+        self.assertEqual(res["skipped"], ["not_a_real_event"])
+        self.assertEqual(res["events"][0]["effectId"], "edge")
+
+    def test_import_uses_definition_default_duration_when_missing(self):
+        nodur = os.path.join(self.tmp, "nodur.events.yml")
+        with open(nodur, "w", encoding="utf-8") as f:
+            f.write("events:\n- time: 2000\n  name: edge\n")
+        rc, out, err = run("edger-import", nodur)
+        self.assertEqual(rc, 0, err)
+        e = json.loads(out)["events"][0]
+        # endMs = time + (edge's default_params.duration_ms); just assert it
+        # advanced past the start by a positive, definition-sourced amount.
+        self.assertGreater(e["endMs"], e["beginMs"])
+
+    def test_full_round_trip_preserves_playable_fields(self):
+        seed = [
+            SAMPLE_EVENT,
+            {"id": "e-cap-2", "beginMs": 20000, "endMs": 24000, "effectId": "slow",
+             "intensity": 0.6, "params": {}, "devices": ["estim"], "deviceCfg": {}},
+        ]
+        self._seed_feel(seed)
+        rc, out, _ = run("edger-export", self.target)
+        yml = json.loads(out)["path"]
+        rc, out, _ = run("edger-import", yml)
+        got = json.loads(out)["events"]
+        playable = [(e["beginMs"], e["endMs"], e["effectId"]) for e in got]
+        self.assertEqual(playable, [(5000, 12000, "edge"), (20000, 24000, "slow")])
+
+
 if __name__ == "__main__":
     unittest.main()

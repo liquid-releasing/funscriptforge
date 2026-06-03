@@ -1751,6 +1751,37 @@ pub async fn save_feel_events(
     serde_json::from_str(&out).map_err(|e| format!("parse feel-write output: {}", e))
 }
 
+/// Export `<stem>.feel.yml` to a playable Edger `<stem>.events.yml`. With
+/// `write=false` nothing is written — the rendered YAML is still returned
+/// (Preview). Returns `{ path, count, skipped[], yaml }`.
+#[tauri::command]
+pub async fn edger_export(
+    funscript_path: String,
+    out: Option<String>,
+    write: bool,
+) -> Result<serde_json::Value, String> {
+    let mut args: Vec<String> = vec!["edger-export".into(), funscript_path];
+    if !write {
+        args.push("--no-write".into());
+    }
+    if let Some(o) = out {
+        args.push("--out".into());
+        args.push(o);
+    }
+    let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let stdout = run_cli(&argv).await?;
+    serde_json::from_str(&stdout).map_err(|e| format!("parse edger-export output: {}", e))
+}
+
+/// Import an Edger `events.yml` into the EventsTab JS shape (the UI persists
+/// them via save_feel_events). Returns `{ events[], imported, skipped[] }`;
+/// events whose name isn't in our vendored definitions are skipped, not dropped.
+#[tauri::command]
+pub async fn edger_import(events_yml_path: String) -> Result<serde_json::Value, String> {
+    let stdout = run_cli(&["edger-import", &events_yml_path]).await?;
+    serde_json::from_str(&stdout).map_err(|e| format!("parse edger-import output: {}", e))
+}
+
 // Deterministic chapter color cycle. Matches the prototype's ChapterBands
 // where each chapter has a stable swatch independent of tone selection.
 const CHAPTER_PALETTE: &[&str] = &[

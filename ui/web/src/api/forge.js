@@ -400,6 +400,29 @@ export function saveFeelEvents(funscriptPath, events) {
   );
 }
 
+/** Export the canonical `<stem>.feel.yml` to a playable Edger
+ *  `<stem>.events.yml`. With `write:false` nothing is written and the
+ *  rendered YAML is returned anyway (Preview). Returns
+ *  {path, count, skipped:[], yaml}. Browser mode → empty preview. */
+export function edgerExport(funscriptPath, { out = null, write = true } = {}) {
+  return call(
+    'edger_export',
+    { funscriptPath, out, write },
+    () => Promise.resolve({ path: null, count: 0, skipped: [], yaml: 'events: []\n' }),
+  );
+}
+
+/** Import an Edger `events.yml`, returning events in the EventsTab JS shape
+ *  (the caller persists them via saveFeelEvents). Returns
+ *  {events:[], imported, skipped:[]}. Browser mode → empty. */
+export function edgerImport(eventsYmlPath) {
+  return call(
+    'edger_import',
+    { eventsYmlPath },
+    () => Promise.resolve({ events: [], imported: 0, skipped: [] }),
+  );
+}
+
 /** Apply one transform over `spans`, writing the merged funscript to
  *  `outputPath`. Returns {saved, transform, spans}. */
 export function transformApply(funscriptPath, transform, params, spans, outputPath) {
@@ -798,6 +821,25 @@ export async function pickFunscriptFile() {
     return selected ?? null;
   }
   // Browser mode: caller should render an <input type="file"> instead.
+  return null;
+}
+
+/** Open an Edger events.yml picker (Events tab > Load Edger yml…). Returns the
+ *  absolute path on desktop or null if cancelled. */
+export async function pickEventsYmlFile(defaultPath) {
+  if (isTauri()) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      defaultPath: defaultPath || undefined,
+      filters: [
+        { name: 'Edger events', extensions: ['yml', 'yaml'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+    return selected ?? null;
+  }
   return null;
 }
 

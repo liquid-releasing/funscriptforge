@@ -1949,6 +1949,161 @@ def cmd_list_event_recipes(args):
     print(json.dumps({"groups": out_groups, "recipes": recipes}))
 
 
+# ── Edger export / import (.feel.yml ↔ playable <stem>.events.yml) ──────────
+# The .feel.yml is the canonical authoring file; the Edger events.yml is a
+# derived, playable projection (funscript-tools format). effectId IS the Edger
+# event name, so the effect/name round-trip is lossless; FF-only fields
+# (intensity / devices / overrides) have no Edger representation and live only
+# in .feel.yml.
+def _events_yml_path(target, out=None) -> Path:
+    """Edger events file path. Default: `<dir>/<stem>.events.yml` SIBLING of
+    the source — funscript-tools resolves `<stem>.<axis>.funscript` next to the
+    events file, and its base name MUST be exactly `<stem>.events.yml`."""
+    if out:
+        return Path(out)
+    p = Path(target)
+    return p.resolve().parent / f"{p.stem}.events.yml"
+
+
+def _canonical_to_edger(e: dict) -> dict:
+    """One canonical .feel.yml event → an Edger user event `{time, name,
+    params}`. The captured span becomes `params.duration_ms` (how Edger
+    controls effect length)."""
+    begin = int(e.get("begin_ms", 0))
+    end = int(e.get("end_ms", begin))
+    params = dict(e.get("params") or {})
+    params["duration_ms"] = max(0, end - begin)
+    return {"time": begin, "name": e.get("effect"), "params": params}
+
+
+def _edger_to_canonical(ev: dict, idx: int, definitions: dict) -> dict:
+    """One Edger user event → canonical .feel.yml event. `duration_ms` (from
+    params, else the definition default) sets the span; FF-only fields get
+    defaults the UI fills in on first edit."""
+    name = ev.get("name")
+    time = int(ev.get("time", 0))
+    params = dict(ev.get("params") or {})
+    dur = params.pop("duration_ms", None)
+    if dur is None:
+        dur = (definitions.get(name, {}).get("default_params", {}) or {}).get("duration_ms", 5000)
+    return {
+        "id": f"e-cap-{idx}",
+        "begin_ms": time,
+        "end_ms": time + int(dur),
+        "effect": name,
+        "intensity": 0.7,
+        "params": params,
+        "devices": [],
+        "overrides": {},
+    }
+
+
+def _fmt_clock_ms(ms) -> str:
+    """ms → mm:ss.mmm — the clock the Events timeline shows, so an exported
+    event's raw `time:` (ms) can be eyeballed against the tab."""
+    total = max(0, int(ms))
+    m, rem = divmod(total, 60000)
+    s, f = divmod(rem, 1000)
+    return f"{m:02d}:{s:02d}.{f:03d}"
+
+
+def cmd_edger_export(args):
+    """Project the canonical `<stem>.feel.yml` into a playable Edger
+    `<stem>.events.yml`. The synthetic Normal baseline is skipped (not an Edger
+    event). Each event is annotated with a comment (clock · duration · friendly
+    label) so the raw Edger name/ms reconciles to what the tab shows — comments
+    are ignored by funscript-tools' parser. Writes the file unless --no-write;
+    always echoes the rendered YAML so the UI can preview without writing."""
+    import yaml
+    target = Path(args.input)
+    feel = _feel_path(target)
+    events = []
+    if feel.exists():
+        try:
+            doc = yaml.safe_load(feel.read_text(encoding="utf-8")) or {}
+            events = (doc.get("events") or []) if isinstance(doc, dict) else []
+        except yaml.YAMLError:
+            events = []
+
+    edger, skipped = [], []
+    for e in events:
+        name = e.get("effect")
+        if not name or name == "normal":
+            if name:
+                skipped.append(name)
+            continue
+        edger.append(_canonical_to_edger(e))
+    edger.sort(key=lambda x: x["time"])
+
+    # Render with a reconciliation comment above each event. The map gives the
+    # SFW label for the raw Edger name; clock + duration mirror the timeline.
+    emap = _load_edger_map()
+
+    def _sfw(nm):
+        return (emap.get(nm, {}) or {}).get("sfw_label") or nm
+
+    header = [
+        "# FunscriptForge -> Edger events.yml",
+        f"# {Path(target).stem} · {len(edger)} event(s)",
+        "# Comments below map each raw Edger name to the clock time + friendly",
+        "# label shown in the Events tab. They're ignored when the file is played.",
+    ]
+    if not edger:
+        text = "\n".join(header) + "\nevents: []\n"
+    else:
+        lines = list(header)
+        lines.append("events:")
+        for e in edger:
+            dur_ms = (e.get("params") or {}).get("duration_ms", 0)
+            lines.append(f"# {_fmt_clock_ms(e['time'])}  +{int(dur_ms) / 1000:.1f}s  {_sfw(e['name'])}")
+            block = yaml.safe_dump([e], sort_keys=False, allow_unicode=True).rstrip("\n")
+            lines.extend(block.splitlines())
+        text = "\n".join(lines) + "\n"
+    written = None
+    if not args.no_write:
+        out_path = _events_yml_path(target, args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(text, encoding="utf-8")
+        written = str(out_path)
+    print(json.dumps({
+        "path": written, "count": len(edger),
+        "skipped": skipped, "yaml": text,
+    }))
+
+
+def cmd_edger_import(args):
+    """Read an Edger `events.yml` and emit events in the EventsTab JS shape
+    (the UI persists them via feel-write). Events whose name isn't in our
+    vendored definitions are skipped and reported, not silently dropped."""
+    import yaml
+    src = Path(args.events_yml)
+    try:
+        doc = yaml.safe_load(src.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        print(f"Error reading {src}: {exc}", file=sys.stderr)
+        sys.exit(1)
+    raw = (doc.get("events") or []) if isinstance(doc, dict) else []
+    definitions = _load_edger_definitions().get("definitions", {})
+
+    canonical, skipped, idx = [], [], 0
+    for ev in raw:
+        if not isinstance(ev, dict) or "time" not in ev or "name" not in ev:
+            skipped.append(ev.get("name") if isinstance(ev, dict) else "?")
+            continue
+        if ev["name"] not in definitions:
+            skipped.append(ev["name"])
+            continue
+        idx += 1
+        canonical.append(_edger_to_canonical(ev, idx, definitions))
+    canonical.sort(key=lambda c: c["begin_ms"])
+
+    print(json.dumps({
+        "events": [_canonical_to_js(c) for c in canonical],
+        "imported": len(canonical),
+        "skipped": skipped,
+    }))
+
+
 def cmd_auto_chapter(args):
     """Run videoflow.structural.auto_chapter on a media file.
 
@@ -2425,6 +2580,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Project the Edger event_definitions + SFW/NSFW map into the Events catalog",
     )
 
+    # --- edger-export / edger-import (.feel.yml ↔ playable events.yml) ---
+    p_ee = sub.add_parser(
+        "edger-export",
+        help="Export <stem>.feel.yml to a playable Edger <stem>.events.yml",
+    )
+    p_ee.add_argument("input", help="funscript or media path (sidecar lives next to it)")
+    p_ee.add_argument("--out", default=None,
+                      help="Output path (default: <dir>/<stem>.events.yml, sibling of source)")
+    p_ee.add_argument("--no-write", action="store_true",
+                      help="Don't write the file; just echo the rendered YAML (preview)")
+
+    p_ei = sub.add_parser(
+        "edger-import",
+        help="Import an Edger events.yml into the EventsTab JS shape (UI persists via feel-write)",
+    )
+    p_ei.add_argument("events_yml", help="Path to the Edger events.yml to import")
+
     # --- parse-captions ---
     p_caps = sub.add_parser(
         "parse-captions",
@@ -2882,6 +3054,8 @@ def main():
         "feel-write":       cmd_feel_write,
         "feel-read":        cmd_feel_read,
         "list-event-recipes": cmd_list_event_recipes,
+        "edger-export":     cmd_edger_export,
+        "edger-import":     cmd_edger_import,
         "parse-captions":   cmd_parse_captions,
         "device-aware":     cmd_device_aware,
         "stim-config":      cmd_stim_config,

@@ -38,6 +38,8 @@ pub fn run() {
             commands::read_feel_events,
             commands::save_feel_events,
             commands::list_event_recipes,
+            commands::edger_export,
+            commands::edger_import,
             commands::attach_media,
             commands::analyze_audio_peaks,
             commands::load_audio_peaks,
