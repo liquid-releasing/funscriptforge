@@ -666,12 +666,16 @@ export default function PhrasesTab({
         borderRadius: 8,
         padding: 12,
         display: 'grid', gridTemplateColumns: '1fr 320px',
-        gap: 'var(--s-5)', alignItems: 'start',
+        gap: 'var(--s-5)', alignItems: 'stretch',
       }}>
         <ChapterContextStrip
           chapter={{ at_ms: activeChapter.atMs, end_ms: activeChapter.endMs }}
           actions={actions}
           bands={phraseBands}
+          waveform={audioWaveform}
+          spectrogram={trackSpectrogram}
+          beats={trackBeats}
+          fill
           onSelectBand={(pid, clickedMs) => {
             // Two-stage click semantics:
             //   1st click on a band  → focus + land at phrase start

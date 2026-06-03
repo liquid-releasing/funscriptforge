@@ -538,12 +538,16 @@ export default function StanzasTab({
         borderRadius: 8,
         padding: 12,
         display: 'grid', gridTemplateColumns: '1fr 320px',
-        gap: 'var(--s-5)', alignItems: 'start',
+        gap: 'var(--s-5)', alignItems: 'stretch',
       }}>
         <ChapterContextStrip
           chapter={{ at_ms: activeChapter.atMs, end_ms: activeChapter.endMs }}
           actions={actions}
           bands={stanzaBands}
+          waveform={audioWaveform}
+          spectrogram={trackSpectrogram}
+          beats={trackBeats}
+          fill
           onSelectBand={(sid, clickedMs) => {
             // Two-stage click semantics — same as PhrasesTab.
             //   1st click on a band   → focus + land at stanza start
