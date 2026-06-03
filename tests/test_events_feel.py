@@ -168,6 +168,27 @@ class TestListEventRecipes(unittest.TestCase):
                 for key in ("key", "label", "def", "min", "max", "step"):
                     self.assertIn(key, p, f"{r['id']} param {p.get('key')} missing {key}")
 
+    def test_every_param_default_is_within_its_slider_range(self):
+        # The core invariant: a slider's default must be a reachable value. The
+        # old heuristic violated this (ramp_in_ms=10000 vs max 3000; freq_shift
+        # -50 vs min 0). Lock it so range edits can't reintroduce the bug.
+        for r in self.recipes:
+            for p in r["params"]:
+                try:
+                    d = float(p["def"])
+                except (TypeError, ValueError):
+                    continue
+                self.assertGreaterEqual(d, p["min"], f"{r['id']}.{p['key']} def {d} < min {p['min']}")
+                self.assertLessEqual(d, p["max"], f"{r['id']}.{p['key']} def {d} > max {p['max']}")
+
+    def test_param_ranges_cover_known_edge_cases(self):
+        specs = {p["key"]: p for r in self.recipes for p in r["params"]}
+        self.assertGreaterEqual(specs["ramp_in_ms"]["max"], 10000)  # long ramps fit
+        self.assertLess(specs["freq_shift"]["min"], 0)              # signed shift
+        self.assertEqual(specs["stroke_freq"]["max"], 5)           # slow-rate band
+        self.assertEqual(specs["wobble_amplitude"]["unit"], "%")    # width swing, not 0–1
+        self.assertEqual(specs["beta_phase"]["max"], 360)          # full phase
+
     def test_steps_carry_op_axis_and_mode(self):
         # Blend (additive vs overwrite) is derived UI-side from step mode, so
         # every step must carry it (or default additive) under params.

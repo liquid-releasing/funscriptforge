@@ -1868,25 +1868,52 @@ def _pretty_label(name: str, prefix: str) -> str:
 
 
 def _param_spec(key: str, default):
-    """Heuristic UI range for an event default_param, by name."""
+    """UI slider range for an event default_param, by name — grounded in the
+    Edger normalization table (pulse_frequency max 120 Hz, pulse_width 100%,
+    frequency 1200 Hz, volume 1.0) and the observed default ranges across the 32
+    events. Rules are ordered so the specific cases win before the generic ones;
+    every event's default must land inside its [min, max] (verified by test)."""
     k = key.lower()
     try:
         d = float(default)
     except (TypeError, ValueError):
         d = 0.0
-    if "duration" in k:
-        return {"min": 0, "max": 60000, "step": 500, "unit": "ms"}
-    if "ramp" in k:
-        return {"min": 0, "max": 3000, "step": 50, "unit": "ms"}
-    if "pulse_rate" in k or "pulse_freq" in k or k in ("frequency", "buzz_freq", "osc_freq") or "freq" in k:
-        return {"min": 0, "max": 120, "step": 0.5, "unit": "Hz"}
+
+    # Envelope timings (ms) — ramp_in/out/up, ramp_ms, duration. ramp_in_ms
+    # reaches 10000 on long oscillation events, so keep generous headroom.
+    if "ramp" in k or k.endswith("_ms") or "duration" in k:
+        return {"min": 0, "max": 12000, "step": 50, "unit": "ms"}
+    # Waveform phase offset (degrees).
+    if "phase" in k:
+        return {"min": 0, "max": 360, "step": 5, "unit": "°"}
+    # Signed carrier-frequency shift (clutch sweeps run ±50 Hz).
+    if "freq_shift" in k:
+        return {"min": -120, "max": 120, "step": 5, "unit": "Hz"}
+    # Pulse rate — the pulse_frequency axis (normalized by 120 Hz).
+    if "pulse_rate" in k or "pulse_freq" in k:
+        return {"min": 0, "max": 120, "step": 1, "unit": "Hz"}
+    # Pulse-width MODULATION swing (wobble) is in % of width, not 0–1.
+    if "wobble_amplitude" in k:
+        return {"min": 0, "max": 50, "step": 0.5, "unit": "%"}
+    # Pulse width itself (%) — guard against the amplitude case above.
     if "width" in k:
         return {"min": 0, "max": 100, "step": 1, "unit": "%"}
-    if "intensity" in k or "amplitude" in k:
-        return {"min": 0, "max": 1, "step": 0.05, "unit": ""}
-    if "volume" in k or "boost" in k or "offset" in k or "level" in k:
-        return {"min": -1, "max": 1, "step": 0.05, "unit": ""}
-    # fallback: bracket the default
+    # Slow stroke / carrier rate (0.25–2 on stroke_freq; lone `frequency`=1).
+    if "stroke_freq" in k or k == "frequency":
+        return {"min": 0, "max": 5, "step": 0.05, "unit": "Hz"}
+    # Other oscillation / buzz frequencies (Hz, ~1.5–65; avoid 10-multiples).
+    if "freq" in k:
+        return {"min": 0, "max": 80, "step": 0.5, "unit": "Hz"}
+    # Oscillation / buzz amplitudes — normalized swing, non-negative (≤0.85).
+    if "amplitude" in k or "intensity" in k:
+        return {"min": 0, "max": 1, "step": 0.01, "unit": ""}
+    # Volume-domain offsets / boosts — normalized, signed (−0.4 … 0.2 observed).
+    if ("volume" in k or "boost" in k or "offset" in k or "level" in k
+            or "drop" in k or "reduction" in k):
+        return {"min": -1, "max": 1, "step": 0.01, "unit": ""}
+    # Fallback: bracket the default symmetrically if signed, else 0..2·default.
+    if d < 0:
+        return {"min": min(-1.0, d * 2), "max": 1, "step": 0.01, "unit": ""}
     hi = max(1.0, d * 2) if d > 0 else 1.0
     return {"min": 0, "max": hi, "step": 0.05, "unit": ""}
 
