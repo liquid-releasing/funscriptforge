@@ -349,13 +349,14 @@ export default function CharactersTab({
   };
   const mechAxisCount = activeAxes(mechStyle).length;
 
-  // ── Real per-chapter 2D channel draw ──────────────────────────────
-  // For the active chapter's character, generate alpha+beta via the
-  // funscript-tools pipeline (the proven Streamlit path) over just this
-  // chapter's window — short slice → fast (the reason chapters exist).
-  // The 9-channel grid draws these real curves where present; the rest
-  // (3-phase / prostate) stay previews until export. Debounced; the
-  // latest request wins.
+  // ── Real per-chapter channel draw (all 9, live) ───────────────────
+  // Generate the full 3-phase channel set for the active chapter's
+  // character via the funscript-tools pipeline (the proven Streamlit
+  // path) over just this chapter's window. Measured: ~0.7s per chapter
+  // vs ~60s for a 67-min script — at chapter scope the full 9 channels
+  // cost the same as 2D, so we draw them all live (the 2D/3-phase split
+  // was a whole-script Streamlit holdover). Short slice → fast is the
+  // whole reason long scripts became chapters. Debounced; latest wins.
   const [channelData, setChannelData] = useState(null);
   const [channelsLoading, setChannelsLoading] = useState(false);
   const appliedParamsKey = JSON.stringify(appliedForActive?.params || {});
@@ -371,7 +372,7 @@ export default function CharactersTab({
       stimProcess(path, {
         character: appliedChar.label,
         sliders: appliedForActive?.params || {},
-        mode: '2d',
+        mode: '3phase',
         startMs: activeChapter.atMs,
         endMs: activeChapter.endMs,
       })
@@ -1077,10 +1078,9 @@ function ActionRow({ stagedChar, isNothingStaged, dirty, isLastChapter, onAccept
 // ──────────────────────────────────────────────────────────────
 // ChannelGrid — the output set this editor produces, as a grid of
 // mini-previews (the "set of funscripts we end up with"). For Character
-// that's the 9 e-stim channels. alpha + beta draw the REAL per-chapter
-// 2D output (generated live via funscript-tools); the remaining 3-phase /
-// prostate channels stay previews until export generates them. Same
-// component will serve Mechanical's axis set later (set-driven).
+// that's the 9 e-stim channels, drawn LIVE per chapter from the real
+// funscript-tools output (~0.7s/chapter — see the stimProcess effect).
+// Same component will serve Mechanical's axis set later (set-driven).
 // ──────────────────────────────────────────────────────────────
 
 // Grid channel id → funscript-tools output suffix.
@@ -1101,9 +1101,9 @@ function ChannelGrid({ character, estimSelected, channelData = null, loading = f
     ? Object.values(channelData).filter((c) => c?.actions?.length).length
     : 0;
   const rightLabel = loading
-    ? 'generating 2D…'
+    ? 'generating…'
     : (liveCount > 0
-      ? `2D live · alpha + beta · others at export`
+      ? `${liveCount} channel${liveCount === 1 ? '' : 's'} live · this chapter`
       : 'static preview');
   return (
     <div style={{ marginTop: 18 }}>
