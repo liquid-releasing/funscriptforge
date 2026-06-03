@@ -112,6 +112,20 @@ describe('humanizeSteps', () => {
     expect(lines[0].text).toContain('over the selected duration');
     expect(lines[0].text).not.toContain('15.0s');
   });
+  it('says "selected ramp" for a $ramp token, but prints seconds for a literal ramp', () => {
+    const defaults = { duration_ms: 15000, ramp_up_ms: 250 };
+    const tokenRamp = humanizeSteps(
+      [{ op: 'apply_linear_change', axis: 'volume', params: { start_value: 0.1, end_value: 0.1, duration_ms: '$duration_ms', ramp_in_ms: '$ramp_up_ms', mode: 'additive' } }],
+      {}, defaults,
+    );
+    expect(tokenRamp[0].text).toContain('selected ramp');
+    expect(tokenRamp[0].text).not.toMatch(/ramp 0\.\d+s/);
+    const literalRamp = humanizeSteps(
+      [{ op: 'apply_linear_change', axis: 'volume', params: { start_value: 0.2, end_value: 0.2, ramp_in_ms: 1000, duration_ms: '$duration_ms', mode: 'additive' } }],
+      {}, defaults,
+    );
+    expect(literalRamp[0].text).toContain('ramp 1.00s');
+  });
 });
 
 describe('recipeGlyphKind', () => {

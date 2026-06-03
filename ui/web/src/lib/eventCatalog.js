@@ -74,11 +74,17 @@ export function humanizeSteps(steps, paramVals, defaults) {
     const rawDur = p.duration_ms;
     const scalesToSpan = typeof rawDur === 'string' && rawDur.replace(/^\$/, '').startsWith('duration');
     const dur = r(rawDur);
-    const ramp = r(p.ramp_in_ms);
     const durTxt = scalesToSpan
       ? ' over the selected duration'
       : (typeof dur === 'number' ? ` over ${(dur / 1000).toFixed(1)}s` : '');
-    const rampTxt = typeof ramp === 'number' && ramp > 0 ? `, ramp ${(ramp / 1000).toFixed(2)}s` : '';
+    // Ramp is the same story: usually a `$ramp` token bound to the ramp slider,
+    // so it's whatever the user selected — only a literal is a fixed envelope.
+    const rawRamp = p.ramp_in_ms;
+    const rampIsToken = typeof rawRamp === 'string' && rawRamp.replace(/^\$/, '').includes('ramp');
+    const ramp = r(rawRamp);
+    const rampTxt = rampIsToken
+      ? ', selected ramp'
+      : (typeof ramp === 'number' && ramp > 0 ? `, ramp ${(ramp / 1000).toFixed(2)}s` : '');
     let text;
     if (s.op === 'apply_linear_change') {
       text = `Sweep ${axis} ${r(p.start_value)}→${r(p.end_value)}${durTxt}${rampTxt}`;
