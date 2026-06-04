@@ -965,6 +965,70 @@ def _collect_events_yaml(target) -> str | None:
     return yaml.safe_dump({"events": edger}, sort_keys=False, allow_unicode=True)
 
 
+def _render_waveform_png(actions: list, out_path: Path, width: int = 480, height: int = 140) -> bool:
+    """Render a compact MiniWave-style funscript curve PNG (library-card image).
+    Pure matplotlib (Agg backend, headless). Returns False on any failure."""
+    if not actions:
+        return False
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except Exception:
+        return False
+    try:
+        t = [a["at"] for a in actions]
+        p = [a["pos"] for a in actions]
+        fig, ax = plt.subplots(figsize=(width / 100, height / 100), dpi=100)
+        fig.patch.set_facecolor("#0e1117")
+        ax.set_facecolor("#0e1117")
+        ax.fill_between(t, p, 0, color="#4dabf7", alpha=0.18, linewidth=0)
+        ax.plot(t, p, color="#4dabf7", linewidth=0.8)
+        ax.set_ylim(-2, 102)
+        ax.margins(x=0)
+        ax.axis("off")
+        fig.tight_layout(pad=0)
+        fig.savefig(out_path, dpi=100, facecolor=fig.get_facecolor())
+        plt.close(fig)
+        return out_path.exists()
+    except Exception as exc:
+        print(f"waveform.png skipped: {exc}", file=sys.stderr)
+        return False
+
+
+def _render_stim_wav(alpha: Path, beta: Path, out_path: Path, duration_s: float) -> bool:
+    """Render the stamped e-stim alpha/beta channels to a stereo WAV via the
+    existing audio-synthesis engine. Pulse waveform (the common device default).
+    Returns False on any failure."""
+    try:
+        from forge.audio_synthesis import render_stereo_audio
+        render_stereo_audio(str(alpha), str(beta), str(out_path), duration_s, waveform="pulse")
+        return out_path.exists()
+    except Exception as exc:
+        print(f"stim.wav skipped: {exc}", file=sys.stderr)
+        return False
+
+
+def _extract_frame(media: str, t_ms: int, out_path: Path) -> bool:
+    """Grab a single 320px-wide frame at `t_ms` via ffmpeg. Returns False when
+    ffmpeg is absent or the grab fails."""
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        return False
+    t = max(0, int(t_ms)) / 1000.0
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-ss", f"{t:.3f}", "-i", str(media),
+             "-frames:v", "1", "-vf", "scale=320:-1", str(out_path)],
+            capture_output=True, timeout=30,
+        )
+        return out_path.exists()
+    except Exception as exc:
+        print(f"frame at {t_ms}ms skipped: {exc}", file=sys.stderr)
+        return False
+
+
 @_cli_command
 def cmd_export(args):
     """Collect the project's outputs into a loose folder or a `.forge` zip.
@@ -1054,7 +1118,41 @@ def cmd_export(args):
                 shutil.copy2(sp, staging / f"{analysis}.json")
                 artifacts.append({"path": f"{analysis}.json", "kind": "sidecar", "analysis": analysis})
 
-        # 5. manifest.ffmeta
+        # 5. thumbnails/ — waveform always; hero + per-chapter frames when media
+        thumbs = staging / "thumbnails"
+        thumbs.mkdir(parents=True, exist_ok=True)
+        if _render_waveform_png(actions, thumbs / "waveform.png"):
+            artifacts.append({"path": "thumbnails/waveform.png", "kind": "thumbnail", "role": "waveform"})
+        if args.media and Path(args.media).exists():
+            chap_list = []
+            cj = fdir / f"{stem}.chapters.json"
+            if cj.exists():
+                try:
+                    chap_list = json.loads(cj.read_text(encoding="utf-8")).get("chapters") or []
+                except (OSError, json.JSONDecodeError):
+                    chap_list = []
+            hero_t = chap_list[0].get("at_ms") if chap_list else int(duration_ms * 0.05)
+            if _extract_frame(args.media, hero_t or 0, thumbs / "hero.png"):
+                artifacts.append({"path": "thumbnails/hero.png", "kind": "thumbnail", "role": "hero"})
+            for i, ch in enumerate(chap_list):
+                name = f"chapter_{i + 1:02d}.png"
+                if _extract_frame(args.media, ch.get("at_ms", 0), thumbs / name):
+                    artifacts.append({"path": f"thumbnails/{name}", "kind": "thumbnail", "role": "chapter", "index": i + 1})
+
+        # 6. audio/stim.wav — render the stamped e-stim alpha/beta to stereo WAV.
+        # Opt-in (--stim-wav): a full-length WAV is large (~10 MB/min); the
+        # channel funscripts are the primary e-stim artifact. For "no restim"
+        # playback the user can ask for it.
+        if args.stim_wav:
+            est_dir = staging / "stations" / "estim3p"
+            alpha, beta = est_dir / f"{stem}.alpha.funscript", est_dir / f"{stem}.beta.funscript"
+            if alpha.exists() and beta.exists() and duration_ms > 0:
+                adir = staging / "audio"
+                adir.mkdir(parents=True, exist_ok=True)
+                if _render_stim_wav(alpha, beta, adir / "stim.wav", duration_ms / 1000.0):
+                    artifacts.append({"path": "audio/stim.wav", "kind": "audio", "role": "estim"})
+
+        # 7. manifest.ffmeta
         manifest = {
             "version": 1, "schema": "ffmeta/v1", "stem": stem,
             "created_with": "FunscriptForge", "duration_ms": duration_ms,
@@ -2714,8 +2812,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output path (default: <dir>/<stem>_export/ for loose, <dir>/<stem>.forge for forge).",
     )
     p_exp.add_argument("--stem", metavar="STEM", help="Bundle stem (default: source stem).")
+    p_exp.add_argument("--media", metavar="PATH", help="Media file for hero + per-chapter frame thumbnails (optional).")
     p_exp.add_argument("--blend-seams", action="store_true", help="Apply blend_seams to the main funscript.")
     p_exp.add_argument("--final-smooth", action="store_true", help="Apply final_smooth to the main funscript.")
+    p_exp.add_argument("--stim-wav", action="store_true", help="Render audio/stim.wav from the e-stim channels (large; opt-in).")
 
     # --- finalize ---
     p_fin = sub.add_parser(

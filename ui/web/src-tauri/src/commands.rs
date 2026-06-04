@@ -1960,6 +1960,8 @@ pub async fn export_write(
     blend_seams: bool,
     final_smooth: bool,
     stem: Option<String>,
+    media: Option<String>,
+    stim_wav: bool,
 ) -> Result<serde_json::Value, String> {
     let src = effective_funscript_path(&funscript_path);
     let mut args: Vec<String> = vec!["export".into(), src, "--mode".into(), mode];
@@ -1971,11 +1973,18 @@ pub async fn export_write(
         args.push("--stem".into());
         args.push(s);
     }
+    if let Some(m) = media {
+        args.push("--media".into());
+        args.push(m);
+    }
     if blend_seams {
         args.push("--blend-seams".into());
     }
     if final_smooth {
         args.push("--final-smooth".into());
+    }
+    if stim_wav {
+        args.push("--stim-wav".into());
     }
     let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let out = run_cli(&argv).await?;

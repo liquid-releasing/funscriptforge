@@ -255,7 +255,9 @@ export default function ExportTab({ project }) {
   const [postProcessing, setPostProcessing] = useState({
     blendSeams: true,
     finalSmooth: true,
+    stimWav: false,
   });
+  const hasMedia = !!project?.mediaPath;
 
   // Polish stamps drive what gets packed — Export is the packager, Polish the
   // generator. Read the stamp record so the artifact list reflects what's
@@ -287,8 +289,10 @@ export default function ExportTab({ project }) {
       const res = await exportWrite(path, {
         mode,
         stem: stem !== projectStem ? stem : null,
+        media: project?.mediaPath || null,
         blendSeams: postProcessing.blendSeams,
         finalSmooth: postProcessing.finalSmooth,
+        stimWav: postProcessing.stimWav,
       });
       if (!res) { setWriteError('Export is unavailable in browser mode.'); return; }
       setResult(res);
@@ -318,7 +322,12 @@ export default function ExportTab({ project }) {
 
       <PostProcessing postProcessing={postProcessing} onChange={setPostProcessing} />
 
-      <PackedArtifacts mode={mode} stampedStations={stampedStations} />
+      <PackedArtifacts
+        mode={mode}
+        stampedStations={stampedStations}
+        hasMedia={hasMedia}
+        stimWav={postProcessing.stimWav}
+      />
 
       {mode === 'loose' ? (
         <NamingControls
@@ -500,6 +509,11 @@ const POST_OPTIONS = [
     label: 'Final smooth',
     desc: 'Light global low-pass pass that removes residual sharp edges.',
   },
+  {
+    id: 'stimWav',
+    label: 'Render stim.wav',
+    desc: 'Pre-render the e-stim channels to a stereo WAV for no-restim audio playback. Large (~10 MB/min) — off by default.',
+  },
 ];
 
 function PostProcessing({ postProcessing, onChange }) {
@@ -550,7 +564,8 @@ function PostProcessing({ postProcessing, onChange }) {
 // What the export will actually pack, derived from the Polish stamp record +
 // the always-present artifacts. Read-only preview — the CLI packs whatever it
 // finds; this mirrors that so there are no lying checkboxes.
-function PackedArtifacts({ mode, stampedStations }) {
+function PackedArtifacts({ mode, stampedStations, hasMedia, stimWav }) {
+  const estimStamped = stampedStations.includes('estim3p');
   const rows = [];
   rows.push({
     name: mode === 'forge' ? 'motion.funscript' : '<stem>.funscript',
@@ -575,6 +590,16 @@ function PackedArtifacts({ mode, stampedStations }) {
     kind: 'sidecar',
     desc: 'Authoring sidecars — each packed when present.',
   });
+  rows.push({
+    name: 'thumbnails/waveform.png',
+    kind: 'thumbnail',
+    desc: hasMedia
+      ? 'Funscript curve + hero & per-chapter frame snapshots (media attached).'
+      : 'Funscript curve preview. Attach media for hero + per-chapter frames.',
+  });
+  if (stimWav && estimStamped) {
+    rows.push({ name: 'audio/stim.wav', kind: 'audio', desc: 'Pre-rendered e-stim stereo WAV (large — opt-in).' });
+  }
   if (mode === 'forge') {
     rows.push({ name: 'manifest.ffmeta', kind: 'manifest', desc: 'What the bundle contains and how the artifacts relate.' });
   }

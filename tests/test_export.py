@@ -87,6 +87,23 @@ class TestExportCLI(unittest.TestCase):
         with zipfile.ZipFile(out) as z:
             self.assertIn("motion.funscript", z.namelist())
 
+    def test_waveform_thumbnail_always(self):
+        out = os.path.join(self.tmp, "wf.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            self.assertIn("thumbnails/waveform.png", z.namelist())
+
+    def test_stim_wav_opt_in_only(self):
+        # e-stim stamped but --stim-wav NOT passed -> no audio/stim.wav.
+        self.assertEqual(_run("polish-apply", self.main, "--station", "estim3p").returncode, 0)
+        _run("polish-write", self.main, "--passes-json",
+             json.dumps({"passes": {"estim3p": {"accepted": True}}}))
+        no_wav = os.path.join(self.tmp, "nowav.forge")
+        _run("export", self.main, "--mode", "forge", "--out", no_wav)
+        with zipfile.ZipFile(no_wav) as z:
+            self.assertNotIn("audio/stim.wav", z.namelist())
+
 
 if __name__ == "__main__":
     unittest.main()
