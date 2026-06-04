@@ -21,7 +21,7 @@ import {
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
 import AnalysisTab from './screens/AnalysisTab.jsx';
-import DeviceTab from './screens/DeviceTab.jsx';
+import PolishTab from './screens/PolishTab.jsx';
 import ChaptersTab from './screens/ChaptersTab.jsx';
 import PhrasesTab from './screens/PhrasesTab.jsx';
 import StanzasTab from './screens/StanzasTab.jsx';
@@ -71,13 +71,15 @@ const TABS = [
   // TAB_CHAIN / chain filenames / tabGate keep working without churn. See
   // memory `project_channels_character_merge.md`.
   { id: 'stim',      label: 'Channels' },
-  // 'device' moved here 2026-05-25 — was between Analysis and Chapters.
-  // Targeting belongs at the end of the editing journey (the *where*),
-  // after chapters/patterns/phrases/stanzas/events/characters define
-  // the *what*. A new multi-device UI is replacing the single-pick
-  // model that lived here previously; the current DeviceTab.jsx
-  // continues to render in this slot until the replacement lands.
-  { id: 'device',    label: 'Device' },
+  // 'polish' (2026-06-04 — replaced the 'device' tab) is the last step
+  // before Export: it shapes the device-agnostic Channels output into
+  // device-ready files via per-station forge passes (clamp + smoothing +
+  // lag), Stamping one output (or TCode set / e-stim channel set) per
+  // station under <forge>/polish/<station>/. Targeting + clamping belong
+  // at the end of the editing journey (the *where* + *how it plays*),
+  // after chapters/phrases/stanzas/events/channels define the *what*.
+  // See memory project_polish_tab.md.
+  { id: 'polish',    label: 'Polish' },
   { id: 'export',    label: 'Export' },
   // 'catalog' (2026-05-18) sits past Export with a visual separator —
   // utility tab, not part of the Project → Export pipeline. Source-of-
@@ -581,8 +583,8 @@ export default function App() {
     phrases:  'stanzas',
     stanzas:  'events',
     events:   'stim',
-    stim:     'device',
-    device:   'export',
+    stim:     'polish',
+    polish:   'export',
   };
   const tabGate = (id) => {
     // Suppress "open a funscript" while a load is in flight — the busy
@@ -591,12 +593,9 @@ export default function App() {
     if (id === 'project') {
       if (!project?.path && !isLoadingProject) return 'Open a funscript before continuing.';
     }
-    if (['analysis', 'device', 'chapters', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
+    if (['analysis', 'polish', 'chapters', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
         && !project?.path && !isLoadingProject) {
       return 'Open a funscript before continuing.';
-    }
-    if (id === 'device' && project?.path && selectedDevices.length === 0) {
-      return 'Pick at least one target device to continue.';
     }
     return null;
   };
@@ -781,11 +780,10 @@ export default function App() {
             setAppError={setAppError}
           />
         )}
-        {tab === 'device' && (
-          <DeviceTab
+        {tab === 'polish' && (
+          <PolishTab
             project={typeof openedProject === 'object' ? openedProject : null}
-            selectedDevices={selectedDevices}
-            onToggleDevice={toggleDevice}
+            setAppError={setAppError}
           />
         )}
         {tab === 'chapters' && (
