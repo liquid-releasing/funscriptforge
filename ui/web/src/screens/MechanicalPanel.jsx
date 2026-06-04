@@ -10,7 +10,7 @@
 // each axis glows in proportion to how hard the selected style drives it.
 // Ported + restyled from the v3 channels design (channels-mech.jsx).
 
-import { Icon } from 'forgemoment';
+import { Icon, Sparkline } from 'forgemoment';
 import {
   MULTIAXIS_STYLES, AXIS_META, SECONDARY_AXES,
   styleById, axisAmplitude,
@@ -33,7 +33,11 @@ function SectionLabel({ children, right }) {
   );
 }
 
-export default function MechanicalPanel({ styleId, onSelectStyle }) {
+export default function MechanicalPanel({
+  styleId, onSelectStyle,
+  axisData = null, loading = false, chapter = null,
+  dirty = false, isLastChapter = false, onAccept, onReset,
+}) {
   const style = styleById(styleId);
   const axes = style.axes || {};
   const activeCount = Object.keys(axes).length;
@@ -92,40 +96,53 @@ export default function MechanicalPanel({ styleId, onSelectStyle }) {
         {/* The cooler viewer. */}
         <AxisDiagram axes={axes} />
 
-        {/* Per-axis amplitude bars — covers all five secondary axes,
-            including surge/sway which the diagram only hints at. */}
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {SECONDARY_AXES.map((axis) => {
-            const meta = AXIS_META[axis];
-            const amp = axisAmplitude(styleId, axis);
-            const on = amp > 0;
-            return (
-              <div key={axis} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="mono" style={{
-                  width: 26, fontSize: 10, fontWeight: 700,
-                  color: on ? ACTIVE : 'var(--text-dim)',
-                }}>{meta.tcode}</span>
-                <span style={{
-                  width: 48, fontSize: 11.5,
-                  color: on ? 'var(--text)' : 'var(--text-dim)',
-                }}>{meta.label}</span>
-                <div style={{
-                  flex: 1, height: 5, borderRadius: 3,
-                  background: 'var(--surface-2)', overflow: 'hidden',
+        {/* Per-axis output funscripts — the REAL curves the engine produces
+            for this style over this chapter, T-code labeled. These are exactly
+            what export writes (<stem>.<axis>.funscript). Only the axes this
+            style drives are shown; stroke-only styles show none. */}
+        {activeCount > 0 && (
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {SECONDARY_AXES.map((axis) => {
+              const amp = axisAmplitude(styleId, axis);
+              if (amp === 0) return null;       // style doesn't drive this axis
+              const meta = AXIS_META[axis];
+              const data = axisData?.[axis];
+              const live = !!(data?.actions?.length);
+              return (
+                <div key={axis} style={{
+                  background: 'var(--surface-2)',
+                  border: `1px solid ${live ? ACTIVE + '55' : 'var(--border)'}`,
+                  borderRadius: 8, padding: '8px 10px',
                 }}>
-                  <div style={{
-                    width: `${Math.round(amp * 100)}%`, height: '100%',
-                    background: ACTIVE, borderRadius: 3,
-                  }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span className="mono" style={{ fontSize: 10, fontWeight: 700, color: ACTIVE }}>{meta.tcode}</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 600 }}>{meta.label}</span>
+                    <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-dim)', marginLeft: 'auto' }}>
+                      {live ? `${Math.round(amp * 100)}%` : (loading ? 'generating…' : `${Math.round(amp * 100)}%`)}
+                    </span>
+                  </div>
+                  {live ? (
+                    <div style={{ height: 40 }}>
+                      <Sparkline
+                        actions={data.actions}
+                        start={chapter?.atMs ?? data.actions[0].at}
+                        end={chapter?.endMs ?? data.actions[data.actions.length - 1].at}
+                        colorMode="velocity"
+                        height="100%"
+                        filled
+                      />
+                    </div>
+                  ) : (
+                    <div style={{
+                      height: 40, display: 'grid', placeItems: 'center',
+                      fontSize: 10, color: 'var(--text-dim)',
+                    }}>{loading ? '…' : 'no preview'}</div>
+                  )}
                 </div>
-                <span className="mono" style={{
-                  width: 34, textAlign: 'right', fontSize: 10,
-                  color: on ? 'var(--text-muted)' : 'var(--text-dim)',
-                }}>{on ? `${Math.round(amp * 100)}%` : '—'}</span>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         <div style={{
           marginTop: 14, fontSize: 10.5, color: 'var(--text-dim)', lineHeight: 1.5,
@@ -134,6 +151,45 @@ export default function MechanicalPanel({ styleId, onSelectStyle }) {
           {activeCount === 0
             ? 'Stroke passes through untouched — no secondary-axis files generated.'
             : 'Secondary-axis funscripts (roll · pitch · twist · surge · sway) derive from the stroke at Polish/export time.'}
+        </div>
+
+        {/* Accept / Reset — mirrors the Character editor's accept-and-advance.
+            The pick is staged; Accept commits it to this chapter and moves on. */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, marginTop: 12,
+          paddingTop: 12, borderTop: '1px solid var(--border)',
+        }}>
+          <button
+            onClick={onAccept}
+            title={`Commit ${style.label} motion to this chapter and move on`}
+            style={{
+              padding: '8px 14px', fontSize: 12.5, fontWeight: 700,
+              background: ACTIVE, color: '#fff', border: 'none', borderRadius: 6,
+              cursor: 'pointer', fontFamily: 'inherit',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            <Icon name="check" size={13} />
+            Use {style.label} {isLastChapter ? '(last chapter)' : '· next chapter'}
+          </button>
+          {dirty && (
+            <button
+              onClick={onReset}
+              title="Discard the staged style for this chapter"
+              style={{
+                padding: '6px 10px', fontSize: 11.5, fontWeight: 600,
+                background: 'transparent', color: 'var(--text-muted)',
+                border: '1px solid var(--border)', borderRadius: 5,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              Reset
+            </button>
+          )}
+          <span style={{ flex: 1 }} />
+          {dirty && (
+            <span style={{ fontSize: 10.5, color: ACTIVE }}>unsaved changes</span>
+          )}
         </div>
       </div>
     </div>

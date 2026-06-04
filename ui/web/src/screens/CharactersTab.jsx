@@ -37,7 +37,7 @@ import {
   defaultParamsFor,
 } from '../data/characters.js';
 import {
-  listCharacters, readCharacters, saveCharacters, stimProcess,
+  listCharacters, readCharacters, saveCharacters, stimProcess, multiaxisProcess,
 } from '../api/forge.js';
 import { useChapterClip } from '../hooks/useChapterClip.js';
 import MechanicalPanel from './MechanicalPanel.jsx';
@@ -338,16 +338,28 @@ export default function CharactersTab({
   // immediately on pick (no Accept step — mirrors the Events write-through
   // the user preferred). Rides in the same per-chapter applied object as
   // the character, so it persists the same way.
-  const mechStyle = appliedForActive?.mechStyle ?? DEFAULT_STYLE;
-  const setMechStyle = (style) => {
+  // Mechanical: per-chapter position style, STAGED then committed on Accept
+  // (mirrors Character's accept-and-advance). The axis diagram + strip count
+  // track the staged pick; the chapter-list chip and export read the
+  // committed value.
+  const appliedMechStyle = appliedForActive?.mechStyle ?? DEFAULT_STYLE;
+  const [stagedMechStyle, setStagedMechStyle] = useState(appliedMechStyle);
+  useEffect(() => {
+    setStagedMechStyle(appliedForActive?.mechStyle ?? DEFAULT_STYLE);
+  }, [activeChapterId, appliedForActive?.mechStyle]);
+  const mechDirty = stagedMechStyle !== appliedMechStyle;
+  const acceptMech = () => {
     if (!activeChapterId) return;
-    const prevEntry = applied?.[activeChapterId] || { characterId: undefined, params: {} };
+    const prevEntry = applied?.[activeChapterId] || {};
     commitApplied({
       ...(applied || {}),
-      [activeChapterId]: { ...prevEntry, mechStyle: style },
+      [activeChapterId]: { ...prevEntry, mechStyle: stagedMechStyle },
     });
+    const i = chapters.findIndex((c) => c.id === activeChapterId);
+    if (i >= 0 && i < chapters.length - 1) setActiveChapterId(chapters[i + 1].id);
   };
-  const mechAxisCount = activeAxes(mechStyle).length;
+  const resetMech = () => setStagedMechStyle(appliedMechStyle);
+  const mechAxisCount = activeAxes(stagedMechStyle).length;
 
   // ── Real per-chapter channel draw (all 9, live) ───────────────────
   // Generate the full 3-phase channel set for the active chapter's
@@ -359,10 +371,15 @@ export default function CharactersTab({
   // whole reason long scripts became chapters. Debounced; latest wins.
   const [channelData, setChannelData] = useState(null);
   const [channelsLoading, setChannelsLoading] = useState(false);
-  const appliedParamsKey = JSON.stringify(appliedForActive?.params || {});
+  // Drive the preview off the STAGED character + sliders (what the user is
+  // actively editing), NOT the committed `applied` — so moving a slider or
+  // switching the card updates the chart live, before Accept. staged resets
+  // to applied on chapter switch, so the chart shows the committed state
+  // first and then tracks edits.
+  const stagedParamsKey = JSON.stringify(staged.params || {});
   useEffect(() => {
     setChannelData(null);
-    if (editorMode !== 'character' || !path || !activeChapter || !appliedChar) {
+    if (editorMode !== 'character' || !path || !activeChapter || !stagedChar) {
       setChannelsLoading(false);
       return undefined;
     }
@@ -370,8 +387,8 @@ export default function CharactersTab({
     setChannelsLoading(true);
     const timer = setTimeout(() => {
       stimProcess(path, {
-        character: appliedChar.label,
-        sliders: appliedForActive?.params || {},
+        character: stagedChar.label,
+        sliders: staged.params || {},
         mode: '3phase',
         startMs: activeChapter.atMs,
         endMs: activeChapter.endMs,
@@ -382,7 +399,36 @@ export default function CharactersTab({
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, activeChapterId, appliedChar?.id, editorMode, appliedParamsKey]);
+  }, [path, activeChapterId, stagedChar?.id, editorMode, stagedParamsKey]);
+
+  // ── Real per-chapter Mechanical draw ──────────────────────────────
+  // Generate the secondary-axis funscripts (twist/roll/pitch/surge/sway)
+  // for the staged style over the active chapter window. The engine is
+  // pure-Python deterministic + sub-ms, so this is effectively instant.
+  const [axisData, setAxisData] = useState(null);
+  const [axisLoading, setAxisLoading] = useState(false);
+  useEffect(() => {
+    setAxisData(null);
+    if (editorMode !== 'mechanical' || !path || !activeChapter
+        || !stagedMechStyle || stagedMechStyle === DEFAULT_STYLE) {
+      setAxisLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setAxisLoading(true);
+    const timer = setTimeout(() => {
+      multiaxisProcess(path, {
+        style: stagedMechStyle,
+        startMs: activeChapter.atMs,
+        endMs: activeChapter.endMs,
+      })
+        .then((res) => { if (!cancelled) setAxisData(res?.axes || {}); })
+        .catch(() => { if (!cancelled) setAxisData({}); })
+        .finally(() => { setAxisLoading(false); });
+    }, 150);
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, activeChapterId, stagedMechStyle, editorMode]);
 
   if (!project?.path) {
     return (
@@ -585,7 +631,17 @@ export default function CharactersTab({
         />
 
         {editorMode === 'mechanical' ? (
-          <MechanicalPanel styleId={mechStyle} onSelectStyle={setMechStyle} />
+          <MechanicalPanel
+            styleId={stagedMechStyle}
+            onSelectStyle={setStagedMechStyle}
+            axisData={axisData}
+            loading={axisLoading}
+            chapter={activeChapter}
+            dirty={mechDirty}
+            isLastChapter={chapters.findIndex((c) => c.id === activeChapterId) >= chapters.length - 1}
+            onAccept={acceptMech}
+            onReset={resetMech}
+          />
         ) : (
           <CharacterPanel
             catalog={catalog}
@@ -744,6 +800,8 @@ function ChapterList({ chapters, applied, catalog, activeId, onSelect }) {
           const charId = a?.characterId;
           const char = charId ? lookup(charId) : null;
           const isNothing = (c.id in (applied || {})) && charId === null;
+          const mechStyle = a?.mechStyle;
+          const mechEdited = mechStyle && mechStyle !== 'None';
           const isActive = c.id === activeId;
           const accent = char?.color || (isNothing ? NOTHING_COLOR : null);
           return (
@@ -778,34 +836,52 @@ function ChapterList({ chapters, applied, catalog, activeId, onSelect }) {
                   {fmtTimeShort(c.atMs)}–{fmtTimeShort(c.endMs)}
                 </div>
               </div>
-              {char && (
-                <Pill
-                  tone="neutral"
-                  style={{
-                    background: char.color + '22',
-                    color: char.color,
-                    borderColor: char.color + '55',
-                    justifySelf: 'end',
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                  }}
-                >
-                  <Icon name={char.icon || 'circle'} size={11} />
-                  {char.label}
-                </Pill>
-              )}
-              {isNothing && (
-                <Pill
-                  tone="neutral"
-                  style={{
-                    background: NOTHING_COLOR + '22',
-                    color: NOTHING_COLOR,
-                    borderColor: NOTHING_COLOR + '55',
-                    justifySelf: 'end',
-                  }}
-                >
-                  {NOTHING.label}
-                </Pill>
-              )}
+              <div style={{
+                display: 'flex', flexDirection: 'column', gap: 4,
+                alignItems: 'flex-end', justifySelf: 'end',
+              }}>
+                {char && (
+                  <Pill
+                    tone="neutral"
+                    style={{
+                      background: char.color + '22',
+                      color: char.color,
+                      borderColor: char.color + '55',
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                    }}
+                  >
+                    <Icon name={char.icon || 'circle'} size={11} />
+                    {char.label}
+                  </Pill>
+                )}
+                {isNothing && (
+                  <Pill
+                    tone="neutral"
+                    style={{
+                      background: NOTHING_COLOR + '22',
+                      color: NOTHING_COLOR,
+                      borderColor: NOTHING_COLOR + '55',
+                    }}
+                  >
+                    {NOTHING.label}
+                  </Pill>
+                )}
+                {mechEdited && (
+                  <span
+                    title={`Mechanical: ${mechStyle}`}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 3,
+                      fontSize: 9.5, fontWeight: 700, color: '#ff8c42',
+                      background: 'rgba(255,140,66,0.12)',
+                      border: '1px solid rgba(255,140,66,0.4)',
+                      borderRadius: 999, padding: '1px 7px',
+                    }}
+                  >
+                    <Icon name="refresh-cw" size={9} />
+                    {mechStyle}
+                  </span>
+                )}
+              </div>
             </button>
           );
         })}

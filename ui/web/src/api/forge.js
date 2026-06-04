@@ -436,6 +436,19 @@ export function stimProcess(funscriptPath, { character, sliders = {}, mode = '2d
   );
 }
 
+/** Generate the secondary-axis funscripts (twist/roll/pitch/surge/sway) for a
+ *  chapter window via the multiaxis engine — the Mechanical editor's live draw.
+ *  Pass the position-style name (Cowgirl/Doggy/…) and the chapter window.
+ *  Returns {available, style, axes:{axis:{actions:[{at,pos}]}}}. Deterministic,
+ *  sub-ms per chapter. Browser → empty. */
+export function multiaxisProcess(funscriptPath, { style, startMs = null, endMs = null } = {}) {
+  return call(
+    'multiaxis_process',
+    { funscriptPath, style, startMs, endMs },
+    () => Promise.resolve({ available: false, style, axes: {} }),
+  );
+}
+
 /** Export the canonical `<stem>.feel.yml` to a playable Edger
  *  `<stem>.events.yml`. With `write:false` nothing is written and the
  *  rendered YAML is returned anyway (Preview). Returns

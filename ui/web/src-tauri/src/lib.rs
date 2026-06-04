@@ -40,6 +40,7 @@ pub fn run() {
             commands::read_characters,
             commands::save_characters,
             commands::stim_process,
+            commands::multiaxis_process,
             commands::list_event_recipes,
             commands::edger_export,
             commands::edger_import,

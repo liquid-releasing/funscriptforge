@@ -1946,6 +1946,44 @@ def cmd_stim_process(args):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def cmd_multiaxis_process(args):
+    """Generate secondary-axis funscripts for a window (a chapter) via the
+    multiaxis engine, emit as JSON axis actions. React bridge to
+    `forge.multiaxis.generate_multiaxis` — deterministic, sub-millisecond per
+    chapter (pure Python, no subprocess). The Mechanical editor draws these
+    live; export writes them as `<stem>.<axis>.funscript`."""
+    from forge.multiaxis import generate_multiaxis
+    from forge.multiaxis_presets import MULTIAXIS_PRESETS
+    from forge.funscript import load_funscript, parse_actions
+
+    times, pos = parse_actions(load_funscript(args.input))
+    pairs = list(zip(times, pos))
+    if args.start_ms is not None or args.end_ms is not None:
+        lo = args.start_ms if args.start_ms is not None else (times[0] if times else 0)
+        hi = args.end_ms if args.end_ms is not None else (times[-1] if times else 0)
+        pairs = [(t, p) for t, p in pairs if lo <= t <= hi]
+
+    style = args.style
+    if len(pairs) < 2 or not style or style == "None" or style not in MULTIAXIS_PRESETS:
+        # Nothing to generate (stroke-only / None / unknown style).
+        print(json.dumps({"available": True, "style": style, "axes": {}}))
+        return
+
+    win = [{"at": int(t), "pos": int(round(p))} for t, p in pairs]
+    phrases = [{"start_ms": pairs[0][0], "end_ms": pairs[-1][0]}]
+    res = generate_multiaxis(win, phrases, {0: style}, MULTIAXIS_PRESETS)
+
+    axes = {}
+    for name in ("twist", "roll", "pitch", "surge", "sway"):
+        sig = getattr(res, name)
+        if sig and sig.times_ms:
+            axes[name] = {"actions": [
+                {"at": int(t), "pos": int(round(p))}
+                for t, p in zip(sig.times_ms, sig.positions)
+            ]}
+    print(json.dumps({"available": True, "style": style, "axes": axes}))
+
+
 def _catalog_dir() -> Path:
     return Path(__file__).resolve().parent / "catalog"
 
@@ -2756,6 +2794,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_stp.add_argument("--start-ms", type=int, default=None, help="Window start (chapter atMs)")
     p_stp.add_argument("--end-ms", type=int, default=None, help="Window end (chapter endMs)")
 
+    # --- multiaxis-process (React bridge to the multiaxis engine) ---
+    p_mxp = sub.add_parser(
+        "multiaxis-process",
+        help="Generate secondary-axis funscripts for a (chapter) window via the multiaxis engine",
+    )
+    p_mxp.add_argument("input", help="Path to the input funscript")
+    p_mxp.add_argument("--style", required=True,
+                       help="Position style (MULTIAXIS_PRESETS key: Cowgirl/Missionary/Doggy/Riding/Random/None)")
+    p_mxp.add_argument("--start-ms", type=int, default=None, help="Window start (chapter atMs)")
+    p_mxp.add_argument("--end-ms", type=int, default=None, help="Window end (chapter endMs)")
+
     # --- list-event-recipes (Edger catalog → Events tab) ---
     sub.add_parser(
         "list-event-recipes",
@@ -3238,6 +3287,7 @@ def main():
         "characters-write": cmd_characters_write,
         "characters-read":  cmd_characters_read,
         "stim-process":     cmd_stim_process,
+        "multiaxis-process": cmd_multiaxis_process,
         "list-event-recipes": cmd_list_event_recipes,
         "edger-export":     cmd_edger_export,
         "edger-import":     cmd_edger_import,

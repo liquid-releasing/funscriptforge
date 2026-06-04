@@ -1837,6 +1837,37 @@ pub async fn stim_process(
     serde_json::from_str(&out).map_err(|e| format!("parse stim-process output: {}", e))
 }
 
+/// Generate secondary-axis funscripts for a window (a chapter) via the
+/// multiaxis engine — the React bridge to `forge.multiaxis.generate_multiaxis`.
+/// Deterministic + sub-millisecond per chapter (pure Python, no subprocess),
+/// so no temp-file staging needed. Returns
+/// `{ available, style, axes: { twist|roll|pitch|surge|sway: { actions[] } } }`.
+#[tauri::command]
+pub async fn multiaxis_process(
+    funscript_path: String,
+    style: String,
+    start_ms: Option<i64>,
+    end_ms: Option<i64>,
+) -> Result<serde_json::Value, String> {
+    let mut args: Vec<String> = vec![
+        "multiaxis-process".into(),
+        funscript_path,
+        "--style".into(),
+        style,
+    ];
+    if let Some(s) = start_ms {
+        args.push("--start-ms".into());
+        args.push(s.to_string());
+    }
+    if let Some(e) = end_ms {
+        args.push("--end-ms".into());
+        args.push(e.to_string());
+    }
+    let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let out = run_cli(&argv).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse multiaxis-process output: {}", e))
+}
+
 /// Export `<stem>.feel.yml` to a playable Edger `<stem>.events.yml`. With
 /// `write=false` nothing is written — the rendered YAML is still returned
 /// (Preview). Returns `{ path, count, skipped[], yaml }`.
