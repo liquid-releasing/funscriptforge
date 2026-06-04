@@ -2505,6 +2505,41 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output .funscript path (apply mode; default: *_transform_applied.funscript).",
     )
 
+    # --- polish-apply (UI bridge: clamp Channels output to device-ready files) ---
+    p_pol = sub.add_parser(
+        "polish-apply",
+        help="Clamp a funscript for one Polish station (preview or write device-ready files)",
+    )
+    p_pol.add_argument("funscript", help="Path to the effective input .funscript")
+    p_pol.add_argument(
+        "--station", required=True, metavar="ID",
+        help="Polish station: estim3p | handy | osr2 | sr6",
+    )
+    p_pol.add_argument(
+        "--params-json", metavar="FILE|JSON",
+        help="Knob overrides {key: value} as a JSON file path or inline JSON.",
+    )
+    p_pol.add_argument(
+        "--stem", metavar="STEM",
+        help="Output filename stem (default: the source stem).",
+    )
+    p_pol.add_argument(
+        "--preview", action="store_true",
+        help="Emit 3-pane trace JSON for a window; write nothing.",
+    )
+    p_pol.add_argument("--start-ms", type=int, help="Preview window start (ms).")
+    p_pol.add_argument("--end-ms", type=int, help="Preview window end (ms).")
+
+    # --- polish-read / polish-write (polish.yml stamp record) ---
+    p_pr = sub.add_parser("polish-read", help="Read <stem>.polish.yml stamp record")
+    p_pr.add_argument("input", help="Path to the source media/funscript")
+    p_pw = sub.add_parser("polish-write", help="Write <stem>.polish.yml stamp record")
+    p_pw.add_argument("input", help="Path to the source media/funscript")
+    p_pw.add_argument(
+        "--passes-json", required=True, metavar="FILE|-",
+        help="Stamp record JSON (path, or '-' for stdin).",
+    )
+
     # --- finalize ---
     p_fin = sub.add_parser(
         "finalize",
@@ -3052,6 +3087,200 @@ def cmd_device_aware(args):
     print(f"Written: {out}")
 
 
+def _polish_path(target) -> Path:
+    """Resolve `<dir>/.<stem>.forge/<stem>.polish.yml` — the per-source record
+    of which Polish stations were stamped, with their knob values and the
+    source hash they were stamped against (to flag staleness)."""
+    from videoflow.sidecar import forge_dir
+    stem = Path(target).stem
+    return forge_dir(target) / f"{stem}.polish.yml"
+
+
+def _polish_out_dir(target, station_id: str) -> Path:
+    """Per-station output folder: `<forge>/polish/<station>/`. Each station
+    gets its own folder so TCode multi-axis sibling sets (OSR2/SR6) land
+    together for MultiFunPlayer and single-file stations never collide."""
+    from videoflow.sidecar import forge_dir
+    return forge_dir(target) / "polish" / station_id
+
+
+def _polish_source_hash(target) -> str:
+    """Deterministic hash of the effective funscript + characters sidecar.
+
+    Stamps record this; when the source later changes the recorded hash no
+    longer matches and the UI marks that pass `stale`. Best-effort — missing
+    inputs simply don't contribute."""
+    import hashlib
+    h = hashlib.sha1()
+    p = Path(target)
+    if p.exists():
+        h.update(p.read_bytes())
+    chars = _characters_path(target)
+    if chars.exists():
+        h.update(chars.read_bytes())
+    return h.hexdigest()[:16]
+
+
+def _write_funscript_like(path: Path, source_data: dict, actions: list) -> None:
+    """Write `actions` into a copy of `source_data` (preserving metadata)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    out = dict(source_data)
+    out["actions"] = actions
+    path.write_text(json.dumps(out), encoding="utf-8")
+
+
+@_cli_command
+def cmd_polish_apply(args):
+    """Polish — clamp Channels output into device-ready files (last step
+    before Export). Thin CLI over `forge.polish`; reuses the tested
+    device_specs clamp as the safety backstop.
+
+    --preview  → emit the 3-pane trace JSON {station, character, clamped,
+                 performed, stats} for a window (--start-ms/--end-ms), write
+                 nothing. The live UI preview runs in JS; this is the
+                 authoritative/cross-check path.
+    apply      → clamp the whole track and write the station's output file(s)
+                 under `<forge>/polish/<station>/`. Strokers write one
+                 funscript; OSR2/SR6 (TCode) also clamp any existing axis
+                 sibling sidecars and write the set. E-Stim 9-channel
+                 generation is wired in a follow-up (returns `pending`).
+    """
+    from forge import polish
+
+    if args.station not in polish.STATIONS:
+        raise ValueError(
+            f"unknown polish station {args.station!r}. "
+            f"Available: {', '.join(polish.STATIONS)}"
+        )
+    station = polish.STATIONS[args.station]
+
+    with open(args.funscript, encoding="utf-8") as f:
+        data = json.load(f)
+    actions = data.get("actions", [])
+
+    knobs = None
+    if args.params_json:
+        knobs = _load_json_arg(args.params_json) or None
+
+    # --- preview: windowed 3-pane traces, write nothing ---
+    if args.preview:
+        win = actions
+        if (args.start_ms is not None or args.end_ms is not None) and actions:
+            lo = args.start_ms if args.start_ms is not None else actions[0]["at"]
+            hi = args.end_ms if args.end_ms is not None else actions[-1]["at"]
+            win = [a for a in actions if lo <= a["at"] <= hi]
+        pv = polish.preview_pass(win, station.id, knobs)
+        json.dump({
+            "station": station.id,
+            "character": pv["character"],
+            "clamped": pv["clamped"],
+            "performed": pv["performed"],
+            "stats": pv["stats"],
+        }, sys.stdout)
+        sys.stdout.write("\n")
+        return
+
+    # --- apply: clamp whole track, write device-ready file(s) ---
+    stem = args.stem or Path(args.funscript).stem
+    out_dir = _polish_out_dir(args.funscript, station.id)
+
+    if station.kind == "estim":
+        # E-Stim 9-channel generation (reuse funscript_tools.process) lands in
+        # the follow-up. Report honestly rather than writing a wrong file.
+        print(json.dumps({
+            "station": station.id, "saved": [], "pending": "estim-generation",
+            "note": "E-Stim channel generation is not yet wired into polish-apply.",
+        }))
+        return
+
+    saved = []
+    clamped, stats = polish.apply_pass(actions, station.id, knobs)
+    main_path = out_dir / station.output_template.format(stem=stem)
+    _write_funscript_like(main_path, data, clamped)
+    saved.append(str(main_path))
+
+    # TCode multi-axis (OSR2/SR6): clamp any existing axis sibling sidecars
+    # that sit next to the source and write them into the station folder.
+    if station.kind == "stroker-tcode":
+        src_dir = Path(args.funscript).parent
+        src_stem = Path(args.funscript).stem
+        for axis in station.axes:
+            if axis == "L0":
+                continue  # main written above
+            sib = src_dir / polish.sibling_path(src_stem, axis)
+            if not sib.exists():
+                continue
+            sdata = json.loads(sib.read_text(encoding="utf-8"))
+            sclamped, _ = polish.apply_pass(sdata.get("actions", []), station.id, knobs)
+            out_sib = out_dir / polish.sibling_path(stem, axis)
+            _write_funscript_like(out_sib, sdata, sclamped)
+            saved.append(str(out_sib))
+
+    print(json.dumps({
+        "station": station.id,
+        "saved": saved,
+        "stats": stats,
+        "source_hash": _polish_source_hash(args.funscript),
+    }))
+
+
+@_cli_command
+def cmd_polish_read(args):
+    """Read `<stem>.polish.yml` → `{version, schema, current_hash, passes:{}}`.
+
+    `current_hash` is the live source hash; the UI compares it to each pass's
+    `source_hash` to mark stale stamps. Returns an empty record when missing.
+    """
+    import yaml
+    path = _polish_path(args.input)
+    current = _polish_source_hash(args.input)
+    if not path.exists():
+        print(json.dumps({"version": 1, "schema": "polish/v1",
+                          "current_hash": current, "passes": {}}))
+        return
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        print(f"Error reading {path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(doc, dict):
+        doc = {}
+    print(json.dumps({
+        "version": doc.get("version", 1),
+        "schema": doc.get("schema", "polish/v1"),
+        "current_hash": current,
+        "passes": doc.get("passes") or {},
+    }))
+
+
+@_cli_command
+def cmd_polish_write(args):
+    """Write the Polish stamp record to `<stem>.polish.yml`. Passes arrive as
+    JSON (`{passes:{station:{accepted, accepted_at, knobs}}}` or a bare map)
+    via --passes-json (a path, or '-' for stdin). The source hash is stamped
+    here so the UI can detect staleness on the next read."""
+    import yaml
+    if args.passes_json == "-":
+        payload = json.loads(sys.stdin.read())
+    else:
+        payload = _load_json_arg(args.passes_json)  # inline JSON or file path
+    passes = payload.get("passes") if isinstance(payload, dict) and "passes" in payload else payload
+    if not isinstance(passes, dict):
+        passes = {}
+
+    src_hash = _polish_source_hash(args.input)
+    for st in passes.values():
+        if isinstance(st, dict) and st.get("accepted") and not st.get("source_hash"):
+            st["source_hash"] = src_hash
+
+    path = _polish_path(args.input)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = {"version": 1, "schema": "polish/v1", "passes": passes}
+    path.write_text(yaml.safe_dump(doc, sort_keys=False, allow_unicode=True),
+                    encoding="utf-8")
+    print(json.dumps({"saved": str(path), "count": len(passes), "source_hash": src_hash}))
+
+
 def _default_path(source: str, suffix: str) -> str:
     base, _ = os.path.splitext(source)
     return base + suffix
@@ -3264,6 +3493,9 @@ def main():
         "transform":        cmd_transform,
         "phrase-transform": cmd_phrase_transform,
         "transform-apply":  cmd_transform_apply,
+        "polish-apply":     cmd_polish_apply,
+        "polish-read":      cmd_polish_read,
+        "polish-write":     cmd_polish_write,
         "customize":        cmd_customize,
         "finalize":         cmd_finalize,
         "export-plan":      cmd_export_plan,

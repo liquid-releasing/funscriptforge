@@ -1868,6 +1868,86 @@ pub async fn multiaxis_process(
     serde_json::from_str(&out).map_err(|e| format!("parse multiaxis-process output: {}", e))
 }
 
+/// Polish — preview the 3-pane device-clamp trace for one station over a
+/// window. Reads the EFFECTIVE funscript (working copy once edits begin).
+/// Returns `{ station, character, clamped, performed, stats }`.
+#[tauri::command]
+pub async fn polish_preview(
+    funscript_path: String,
+    station: String,
+    params: serde_json::Value,
+    start_ms: Option<i64>,
+    end_ms: Option<i64>,
+) -> Result<serde_json::Value, String> {
+    let params_s = serde_json::to_string(&params).map_err(|e| format!("serialize params: {}", e))?;
+    let src = effective_funscript_path(&funscript_path);
+    let mut args: Vec<String> = vec![
+        "polish-apply".into(), src,
+        "--station".into(), station,
+        "--params-json".into(), params_s,
+        "--preview".into(),
+    ];
+    if let Some(s) = start_ms {
+        args.push("--start-ms".into());
+        args.push(s.to_string());
+    }
+    if let Some(e) = end_ms {
+        args.push("--end-ms".into());
+        args.push(e.to_string());
+    }
+    let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let out = run_cli(&argv).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse polish preview: {}", e))
+}
+
+/// Polish — clamp the whole track for one station and write its device-ready
+/// file(s) under `<forge>/polish/<station>/`. Reads the EFFECTIVE funscript.
+/// Returns `{ station, saved[], stats, source_hash }` (or `pending` for
+/// stations whose generation isn't wired yet, e.g. e-stim).
+#[tauri::command]
+pub async fn polish_apply(
+    funscript_path: String,
+    station: String,
+    params: serde_json::Value,
+    stem: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let params_s = serde_json::to_string(&params).map_err(|e| format!("serialize params: {}", e))?;
+    let src = effective_funscript_path(&funscript_path);
+    let mut args: Vec<String> = vec![
+        "polish-apply".into(), src,
+        "--station".into(), station,
+        "--params-json".into(), params_s,
+    ];
+    if let Some(s) = stem {
+        args.push("--stem".into());
+        args.push(s);
+    }
+    let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let out = run_cli(&argv).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse polish apply: {}", e))
+}
+
+/// Read the `<stem>.polish.yml` stamp record. Returns
+/// `{ version, schema, current_hash, passes }` (empty when absent).
+#[tauri::command]
+pub async fn polish_read(input: String) -> Result<serde_json::Value, String> {
+    let out = run_cli(&["polish-read", &input]).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse polish-read: {}", e))
+}
+
+/// Write the `<stem>.polish.yml` stamp record. `passes` is the per-station
+/// map; the source hash is stamped on the Python side. Returns
+/// `{ saved, count, source_hash }`.
+#[tauri::command]
+pub async fn polish_write(
+    input: String,
+    passes: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let passes_s = serde_json::to_string(&passes).map_err(|e| format!("serialize passes: {}", e))?;
+    let out = run_cli(&["polish-write", &input, "--passes-json", &passes_s]).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse polish-write: {}", e))
+}
+
 /// Export `<stem>.feel.yml` to a playable Edger `<stem>.events.yml`. With
 /// `write=false` nothing is written — the rendered YAML is still returned
 /// (Preview). Returns `{ path, count, skipped[], yaml }`.

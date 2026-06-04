@@ -472,6 +472,50 @@ export function edgerImport(eventsYmlPath) {
   );
 }
 
+/** Polish — preview the 3-pane device-clamp trace for one station over a
+ *  window. Returns {station, character, clamped, performed, stats}. The live
+ *  UI preview normally runs in-process via polishEngine.js; this is the
+ *  authoritative/cross-check path. Browser mode → empty traces. */
+export function polishPreview(funscriptPath, station, params = {}, { startMs = null, endMs = null } = {}) {
+  return call(
+    'polish_preview',
+    { funscriptPath, station, params, startMs, endMs },
+    () => Promise.resolve({ station, character: [], clamped: [], performed: [], stats: {} }),
+  );
+}
+
+/** Polish — clamp the whole track for one station and write its device-ready
+ *  file(s) under `<forge>/polish/<station>/`. Returns
+ *  {station, saved:[], stats, source_hash} (or {pending} for e-stim until its
+ *  channel generation is wired). Browser mode → null. */
+export function polishApply(funscriptPath, station, params = {}, { stem = null } = {}) {
+  return call(
+    'polish_apply',
+    { funscriptPath, station, params, stem },
+    () => Promise.resolve(null),
+  );
+}
+
+/** Read the `<stem>.polish.yml` stamp record. Returns
+ *  {version, schema, current_hash, passes}. Browser mode → empty. */
+export function polishRead(input) {
+  return call(
+    'polish_read',
+    { input },
+    () => Promise.resolve({ version: 1, schema: 'polish/v1', current_hash: '', passes: {} }),
+  );
+}
+
+/** Write the `<stem>.polish.yml` stamp record (per-station passes map). The
+ *  source hash is stamped Python-side. Returns {saved, count, source_hash}. */
+export function polishWrite(input, passes) {
+  return call(
+    'polish_write',
+    { input, passes },
+    () => Promise.resolve(null),
+  );
+}
+
 /** Apply one transform over `spans`, writing the merged funscript to
  *  `outputPath`. Returns {saved, transform, spans}. */
 export function transformApply(funscriptPath, transform, params, spans, outputPath) {
