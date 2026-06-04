@@ -928,6 +928,165 @@ def cmd_finalize(args):
     print(f"\nSaved: {output}")
 
 
+def _export_finalize(actions: list, *, blend: bool, smooth: bool) -> list:
+    """Apply the same finalize passes as `cmd_finalize` (blend_seams +
+    final_smooth) to a copy of `actions`. Used by Export's main-funscript
+    write-through so the bundled motion track matches what `finalize` produces."""
+    result = copy.deepcopy(actions)
+    if blend:
+        result = TRANSFORM_CATALOG["blend_seams"].apply(result, None)
+    if smooth:
+        result = TRANSFORM_CATALOG["final_smooth"].apply(result, None)
+    return result
+
+
+def _collect_events_yaml(target) -> str | None:
+    """Render a fresh playable Edger `events.yml` body from `<stem>.feel.yml`.
+
+    Returns the YAML text, or None when there are no real events. Lean variant
+    of `cmd_edger_export`'s render (no reconciliation comments — the bundle
+    just needs a valid events file)."""
+    import yaml
+    feel = _feel_path(target)
+    if not feel.exists():
+        return None
+    try:
+        doc = yaml.safe_load(feel.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return None
+    events = (doc.get("events") or []) if isinstance(doc, dict) else []
+    edger = [
+        _canonical_to_edger(e) for e in events
+        if e.get("effect") and e.get("effect") != "normal"
+    ]
+    if not edger:
+        return None
+    edger.sort(key=lambda x: x["time"])
+    return yaml.safe_dump({"events": edger}, sort_keys=False, allow_unicode=True)
+
+
+@_cli_command
+def cmd_export(args):
+    """Collect the project's outputs into a loose folder or a `.forge` zip.
+
+    Export is a PACKAGER, not a generator: it gathers the effective main
+    funscript (optionally finalized), the device-ready files Polish stamped
+    (`<forge>/polish/<station>/`, for the `accepted` passes in
+    `<stem>.polish.yml`), a fresh `events.yml` (from `<stem>.feel.yml`), the
+    authoring sidecars that exist (chapters / phrases / characters json), and
+    writes a `manifest.ffmeta` describing it all.
+
+      --mode loose  -> writes the tree into `<out>/` (a folder)
+      --mode forge  -> writes `<out>` as a `.forge` zip (single-file deliverable)
+
+    `--out` defaults to `<dir>/<stem>_export/` (loose) or `<dir>/<stem>.forge`
+    (forge). Reads the EFFECTIVE funscript (Rust resolves work-else-original).
+    """
+    import shutil
+    import tempfile
+    import zipfile
+    import yaml
+    from videoflow.sidecar import forge_dir
+
+    src = args.funscript
+    stem = args.stem or Path(src).stem
+    fdir = forge_dir(src)
+
+    staging = Path(tempfile.mkdtemp(prefix="ff_export_"))
+    artifacts: list[dict] = []
+    try:
+        # 1. Main funscript (+ optional finalize) -> motion.funscript
+        with open(src, encoding="utf-8") as f:
+            data = json.load(f)
+        actions = data.get("actions", [])
+        if args.blend_seams or args.final_smooth:
+            actions = _export_finalize(actions, blend=args.blend_seams, smooth=args.final_smooth)
+        main = dict(data)
+        main["actions"] = actions
+        (staging / "motion.funscript").write_text(json.dumps(main), encoding="utf-8")
+        artifacts.append({"path": "motion.funscript", "kind": "funscript", "role": "stroke", "axis": "L0"})
+        duration_ms = actions[-1]["at"] if actions else 0
+
+        # 2. Polish stations (accepted) -> stations/<id>/...
+        passes = {}
+        ppath = _polish_path(src)
+        if ppath.exists():
+            try:
+                pdoc = yaml.safe_load(ppath.read_text(encoding="utf-8")) or {}
+                passes = pdoc.get("passes") or {}
+            except yaml.YAMLError:
+                passes = {}
+        polish_root = fdir / "polish"
+        stations_meta = {}
+        for sid, p in passes.items():
+            if not (isinstance(p, dict) and p.get("accepted")):
+                continue
+            sdir = polish_root / sid
+            if not sdir.is_dir():
+                continue
+            dest = staging / "stations" / sid
+            dest.mkdir(parents=True, exist_ok=True)
+            files = []
+            for fp in sorted(sdir.glob("*.funscript")):
+                shutil.copy2(fp, dest / fp.name)
+                artifacts.append({
+                    "path": f"stations/{sid}/{fp.name}", "kind": "funscript",
+                    "role": "device", "station": sid,
+                })
+                files.append(fp.name)
+            if files:
+                stations_meta[sid] = {"files": files, "accepted_at": p.get("accepted_at")}
+
+        # 3. events.yml (fresh from feel.yml)
+        ev = _collect_events_yaml(src)
+        if ev:
+            (staging / "events.yml").write_text(ev, encoding="utf-8")
+            artifacts.append({"path": "events.yml", "kind": "events"})
+
+        # 4. Authoring sidecars that exist
+        for analysis, fname in (
+            ("chapters", f"{stem}.chapters.json"),
+            ("phrases", f"{stem}.phrases.json"),
+            ("characters", f"{stem}.characters.json"),
+        ):
+            sp = fdir / fname
+            if sp.exists():
+                shutil.copy2(sp, staging / f"{analysis}.json")
+                artifacts.append({"path": f"{analysis}.json", "kind": "sidecar", "analysis": analysis})
+
+        # 5. manifest.ffmeta
+        manifest = {
+            "version": 1, "schema": "ffmeta/v1", "stem": stem,
+            "created_with": "FunscriptForge", "duration_ms": duration_ms,
+            "artifacts": artifacts, "stations": stations_meta,
+        }
+        (staging / "manifest.ffmeta").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+        # --- write output ---
+        if args.mode == "forge":
+            out = Path(args.out) if args.out else (Path(src).parent / f"{stem}.forge")
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+                for fp in sorted(staging.rglob("*")):
+                    if fp.is_file():
+                        z.write(fp, fp.relative_to(staging).as_posix())
+            result_path = str(out)
+        else:
+            out = Path(args.out) if args.out else (Path(src).parent / f"{stem}_export")
+            if out.exists():
+                shutil.rmtree(out, ignore_errors=True)
+            shutil.copytree(staging, out)
+            result_path = str(out)
+
+        print(json.dumps({
+            "mode": args.mode, "path": result_path,
+            "artifacts": len(artifacts), "stations": list(stations_meta),
+            "manifest": manifest,
+        }))
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
 @_cli_command
 def cmd_catalog(args):
     """Inspect or manage the cross-funscript pattern catalog."""
@@ -2540,6 +2699,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Stamp record JSON (path, or '-' for stdin).",
     )
 
+    # --- export (collect outputs into a loose folder or .forge zip) ---
+    p_exp = sub.add_parser(
+        "export",
+        help="Collect project outputs (motion + Polish stations + events + sidecars) into a loose folder or a .forge zip",
+    )
+    p_exp.add_argument("funscript", help="Path to the effective input .funscript")
+    p_exp.add_argument(
+        "--mode", choices=["loose", "forge"], default="forge",
+        help="loose = folder of files; forge = single .forge zip (default).",
+    )
+    p_exp.add_argument(
+        "--out", metavar="PATH",
+        help="Output path (default: <dir>/<stem>_export/ for loose, <dir>/<stem>.forge for forge).",
+    )
+    p_exp.add_argument("--stem", metavar="STEM", help="Bundle stem (default: source stem).")
+    p_exp.add_argument("--blend-seams", action="store_true", help="Apply blend_seams to the main funscript.")
+    p_exp.add_argument("--final-smooth", action="store_true", help="Apply final_smooth to the main funscript.")
+
     # --- finalize ---
     p_fin = sub.add_parser(
         "finalize",
@@ -3749,6 +3926,7 @@ def main():
         "polish-apply":     cmd_polish_apply,
         "polish-read":      cmd_polish_read,
         "polish-write":     cmd_polish_write,
+        "export":           cmd_export,
         "customize":        cmd_customize,
         "finalize":         cmd_finalize,
         "export-plan":      cmd_export_plan,

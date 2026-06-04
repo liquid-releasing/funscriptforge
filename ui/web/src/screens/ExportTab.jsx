@@ -19,9 +19,11 @@
 // State is local. Cross-tab artifact awareness (which artifacts are
 // actually fresh vs stale) attaches when the chain-file plumbing lands.
 
-import { useMemo, useState } from 'react';
-import { Pill, Button, Icon, fmtTimeShort } from 'forgemoment';
+import { useEffect, useMemo, useState } from 'react';
+import { Pill, Button, Icon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
+import { exportWrite, revealPath, polishRead } from '../api/forge.js';
+import { POLISH_BY_ID } from '../data/polishDevices.js';
 
 const MODES = [
   {
@@ -234,43 +236,68 @@ function forgeBundlePath(id) {
   }
 }
 
-export default function ExportTab({ project, selectedDevices = [] }) {
+export default function ExportTab({ project }) {
   const projectStem = useMemo(() => {
     if (!project?.path) return 'project';
     const file = String(project.path).split(/[/\\]/).pop() || 'project';
     return file.replace(/\.funscript$/i, '');
   }, [project?.path]);
 
+  const path = project?.path ?? null;
+  const isSample = typeof path === 'string' && path.startsWith('sample://');
+  const canWrite = !!path && !isSample;
+
   const [mode, setMode] = useState('forge');
-  const [enabled, setEnabled] = useState(() =>
-    Object.fromEntries(ARTIFACTS.map((a) => [a.id, a.defaultEnabled])),
-  );
   const [stem, setStem] = useState(projectStem);
   const [suffixScheme, setSuffixScheme] = useState('dot'); // 'dot' | 'underscore'
-  // Post-processing applied during write — these modify the primary funscript's
-  // content, not the artifact set. Default both on; the wiring pass plumbs
-  // them through cli.py finalize / cli.py export.
+  // Post-processing applied to the main funscript during write (via cli.py
+  // export → blend_seams / final_smooth). Default both on.
   const [postProcessing, setPostProcessing] = useState({
     blendSeams: true,
     finalSmooth: true,
   });
-  const [variants, setVariants] = useState(defaultVariantState);
 
-  // Skeleton-only artifact filter: show what's relevant given the project's
-  // selected devices + the active mode. An artifact is "available" if (a)
-  // it has no device prerequisites OR (b) at least one of its required
-  // devices is selected. Forge-only artifacts hide in loose mode.
-  const availableArtifacts = useMemo(() => {
-    return ARTIFACTS.filter((a) => {
-      if (a.forgeOnly && mode !== 'forge') return false;
-      if (a.devicesRequired.length === 0) return true;
-      return a.devicesRequired.some((d) => selectedDevices.includes(d));
-    });
-  }, [mode, selectedDevices]);
+  // Polish stamps drive what gets packed — Export is the packager, Polish the
+  // generator. Read the stamp record so the artifact list reflects what's
+  // actually been forged.
+  const [polishPasses, setPolishPasses] = useState({});
+  useEffect(() => {
+    if (!path) { setPolishPasses({}); return undefined; }
+    let cancelled = false;
+    polishRead(path)
+      .then((res) => { if (!cancelled) setPolishPasses(res?.passes || {}); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [path]);
 
-  const checkedCount = availableArtifacts.filter((a) => enabled[a.id]).length;
+  const stampedStations = useMemo(
+    () => Object.entries(polishPasses).filter(([, p]) => p?.accepted).map(([id]) => id),
+    [polishPasses],
+  );
 
-  const toggle = (id) => setEnabled((e) => ({ ...e, [id]: !e[id] }));
+  const [writing, setWriting] = useState(false);
+  const [result, setResult] = useState(null);
+  const [writeError, setWriteError] = useState(null);
+
+  // Re-stem only when the user changed it; otherwise let the CLI default.
+  const doWrite = async () => {
+    if (!canWrite) return;
+    setWriting(true); setWriteError(null); setResult(null);
+    try {
+      const res = await exportWrite(path, {
+        mode,
+        stem: stem !== projectStem ? stem : null,
+        blendSeams: postProcessing.blendSeams,
+        finalSmooth: postProcessing.finalSmooth,
+      });
+      if (!res) { setWriteError('Export is unavailable in browser mode.'); return; }
+      setResult(res);
+    } catch (e) {
+      setWriteError(String(e?.message || e));
+    } finally {
+      setWriting(false);
+    }
+  };
 
   if (!project?.path) {
     return (
@@ -283,40 +310,15 @@ export default function ExportTab({ project, selectedDevices = [] }) {
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '22px 28px', background: 'var(--bg)' }}>
-      <Header
-        mode={mode}
-        stem={stem}
-        checkedCount={checkedCount}
-        availableCount={availableArtifacts.length}
-      />
+      <Header mode={mode} stem={stem} stationCount={stampedStations.length} />
 
       <ModeToggle mode={mode} onChange={setMode} />
 
-      <ExportPreview
-        project={project}
-        stem={stem}
-      />
+      <ExportPreview project={project} stem={stem} />
 
-      <PostProcessing
-        postProcessing={postProcessing}
-        onChange={setPostProcessing}
-      />
+      <PostProcessing postProcessing={postProcessing} onChange={setPostProcessing} />
 
-      <ArtifactSummary
-        mode={mode}
-        artifacts={availableArtifacts}
-        enabled={enabled}
-        stem={stem}
-        suffixScheme={suffixScheme}
-        onToggle={toggle}
-      />
-
-      <OutputVariants
-        selectedDevices={selectedDevices}
-        variants={variants}
-        onChange={setVariants}
-        project={project}
-      />
+      <PackedArtifacts mode={mode} stampedStations={stampedStations} />
 
       {mode === 'loose' ? (
         <NamingControls
@@ -330,9 +332,17 @@ export default function ExportTab({ project, selectedDevices = [] }) {
         <BundlePreview stem={stem} />
       )}
 
-      <CompatibilityChecks mode={mode} />
-
-      <FooterActions mode={mode} stem={stem} checkedCount={checkedCount} />
+      <FooterActions
+        mode={mode}
+        stem={stem}
+        canWrite={canWrite}
+        isSample={isSample}
+        writing={writing}
+        result={result}
+        error={writeError}
+        onWrite={doWrite}
+        onReveal={() => result?.path && revealPath(result.path)}
+      />
     </div>
   );
 }
@@ -340,7 +350,7 @@ export default function ExportTab({ project, selectedDevices = [] }) {
 // ──────────────────────────────────────────────────────────────
 // Header
 // ──────────────────────────────────────────────────────────────
-function Header({ mode, stem, checkedCount, availableCount }) {
+function Header({ mode, stem, stationCount }) {
   const modeLabel = MODES.find((m) => m.id === mode)?.label || mode;
   return (
     <div style={{
@@ -362,12 +372,14 @@ function Header({ mode, stem, checkedCount, availableCount }) {
           maxWidth: 720, lineHeight: 1.45,
         }}>
           Pack the project for the LQR player ({modeLabel.toLowerCase()}).
-          Nothing is destructive — Export only writes new files.
-          The actual writer lands with the wiring pass; checkboxes and naming reflect what would land.
+          Export collects the motion track, the device files Polish stamped, events,
+          and the authoring sidecars — it only writes new files, nothing destructive.
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-        <Pill tone="info" dot>{checkedCount} of {availableCount}</Pill>
+        <Pill tone={stationCount > 0 ? 'info' : 'neutral'} dot>
+          {stationCount} station{stationCount === 1 ? '' : 's'} stamped
+        </Pill>
         <Pill tone="neutral">{stem}</Pill>
       </div>
     </div>
@@ -535,12 +547,43 @@ function PostProcessing({ postProcessing, onChange }) {
 // ──────────────────────────────────────────────────────────────
 // ArtifactSummary — checkbox list of what would be written
 // ──────────────────────────────────────────────────────────────
-function ArtifactSummary({ mode, artifacts, enabled, stem, suffixScheme, onToggle }) {
+// What the export will actually pack, derived from the Polish stamp record +
+// the always-present artifacts. Read-only preview — the CLI packs whatever it
+// finds; this mirrors that so there are no lying checkboxes.
+function PackedArtifacts({ mode, stampedStations }) {
+  const rows = [];
+  rows.push({
+    name: mode === 'forge' ? 'motion.funscript' : '<stem>.funscript',
+    kind: 'funscript',
+    desc: 'Primary stroke axis (L0), with any post-processing applied.',
+  });
+  stampedStations.forEach((id) => {
+    const d = POLISH_BY_ID[id];
+    rows.push({
+      name: mode === 'forge' ? `stations/${id}/` : `polish/${id}/`,
+      kind: 'funscript',
+      desc: `${d?.label || id} — Polish-stamped ${d?.sublabel || 'device files'}.`,
+    });
+  });
+  rows.push({
+    name: mode === 'forge' ? 'events.yml' : '<stem>.events.yml',
+    kind: 'sidecar',
+    desc: 'Point-in-time effects — packed when events are authored.',
+  });
+  rows.push({
+    name: mode === 'forge' ? '{chapters,phrases,characters}.json' : '<stem>.{chapters,phrases,characters}.json',
+    kind: 'sidecar',
+    desc: 'Authoring sidecars — each packed when present.',
+  });
+  if (mode === 'forge') {
+    rows.push({ name: 'manifest.ffmeta', kind: 'manifest', desc: 'What the bundle contains and how the artifacts relate.' });
+  }
+
   return (
     <div style={{ marginTop: 16 }}>
       <SectionLabel right={
         <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>
-          {artifacts.filter((a) => enabled[a.id]).length} of {artifacts.length}
+          {stampedStations.length} Polish station{stampedStations.length === 1 ? '' : 's'}
         </span>
       }>
         Artifacts
@@ -550,45 +593,29 @@ function ArtifactSummary({ mode, artifacts, enabled, stem, suffixScheme, onToggl
         background: 'var(--surface)', border: '1px solid var(--border)',
         borderRadius: 8, overflow: 'hidden',
       }}>
-        {artifacts.map((a, i) => {
-          const fname = mode === 'forge'
-            ? forgeBundlePath(a.id)
-            : looseFilename(stem, a.id, suffixScheme);
-          const on = enabled[a.id];
-          return (
-            <label key={a.id} style={{
-              display: 'grid',
-              gridTemplateColumns: '20px 1fr',
-              gap: 10, padding: '10px 14px', alignItems: 'flex-start',
-              background: on ? 'rgba(77,171,247,0.04)' : 'transparent',
-              borderBottom: i < artifacts.length - 1 ? '1px solid var(--border)' : 'none',
-              cursor: 'pointer',
-            }}>
-              <input type="checkbox" checked={on} onChange={() => onToggle(a.id)}
-                     style={{ marginTop: 4, accentColor: '#4dabf7' }} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                  <span className="mono" style={{
-                    fontSize: 12, fontWeight: 600,
-                    color: on ? 'var(--text)' : 'var(--text-dim)',
-                  }}>
-                    {fname}
-                  </span>
-                  <KindBadge kind={a.kind} />
-                </div>
-                <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 3, lineHeight: 1.45 }}>
-                  {a.desc}
-                </div>
-              </div>
-            </label>
-          );
-        })}
-        {artifacts.length === 0 && (
-          <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--text-dim)' }}>
-            No artifacts available for the current device selection.
+        {rows.map((a, i) => (
+          <div key={a.name} style={{
+            display: 'grid', gridTemplateColumns: '1fr', gap: 3,
+            padding: '10px 14px',
+            borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{a.name}</span>
+              <KindBadge kind={a.kind} />
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.45 }}>{a.desc}</div>
           </div>
-        )}
+        ))}
       </div>
+      {stampedStations.length === 0 && (
+        <div style={{
+          marginTop: 8, padding: '8px 12px', borderRadius: 6,
+          background: 'rgba(255,181,71,0.08)', border: '1px solid rgba(255,181,71,0.35)',
+          fontSize: 11, color: '#ffb547', lineHeight: 1.45,
+        }}>
+          No Polish stations stamped yet — only motion + sidecars will pack. Visit Polish to forge device outputs.
+        </div>
+      )}
     </div>
   );
 }
@@ -966,7 +993,7 @@ function CheckRow({ check, last }) {
 // ──────────────────────────────────────────────────────────────
 // FooterActions — disabled Write
 // ──────────────────────────────────────────────────────────────
-function FooterActions({ mode, stem, checkedCount }) {
+function FooterActions({ mode, stem, canWrite, isSample, writing, result, error, onWrite, onReveal }) {
   const writeLabel = mode === 'forge' ? `Pack ${stem}.forge` : 'Write outputs';
   return (
     <div style={{
@@ -975,21 +1002,38 @@ function FooterActions({ mode, stem, checkedCount }) {
       borderRadius: 10,
       display: 'flex', alignItems: 'center', gap: 10,
     }}>
-      <Button kind="ghost" size="sm" icon="folder-open" disabled>
+      <Button kind="ghost" size="sm" icon="folder-open" disabled={!result} onClick={onReveal}>
         Reveal in Explorer
       </Button>
-      <Button kind="ghost" size="sm" icon="copy" disabled>
-        Copy paths
-      </Button>
       <span style={{ flex: 1 }} />
-      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-        {checkedCount} artifact{checkedCount === 1 ? '' : 's'} queued · writer wiring later
-      </span>
-      <Button kind="primary" size="sm" icon="download" disabled>
-        {writeLabel}
+      {error && (
+        <span style={{ fontSize: 11, color: '#ff5470', maxWidth: 420, textAlign: 'right' }}>{error}</span>
+      )}
+      {result && !error && (
+        <span style={{ fontSize: 11, color: '#3ed598', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Icon name="check" size={12} />
+          {result.artifacts} artifact{result.artifacts === 1 ? '' : 's'}
+          {result.stations?.length ? ` · ${result.stations.length} station${result.stations.length === 1 ? '' : 's'}` : ''}
+          {' → '}
+          <span className="mono" style={{ color: 'var(--text-soft)' }}>{shortPath(result.path)}</span>
+        </span>
+      )}
+      {!result && !error && !canWrite && (
+        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+          {isSample ? 'Export needs a real project on disk.' : 'Open a project to export.'}
+        </span>
+      )}
+      <Button kind="primary" size="sm" icon="download" disabled={!canWrite || writing} onClick={onWrite}>
+        {writing ? 'Writing…' : writeLabel}
       </Button>
     </div>
   );
+}
+
+function shortPath(p) {
+  if (!p) return '';
+  const parts = String(p).split(/[/\\]/);
+  return parts.length <= 2 ? p : `…/${parts.slice(-2).join('/')}`;
 }
 
 // ──────────────────────────────────────────────────────────────

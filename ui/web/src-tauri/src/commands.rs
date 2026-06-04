@@ -1948,6 +1948,56 @@ pub async fn polish_write(
     serde_json::from_str(&out).map_err(|e| format!("parse polish-write: {}", e))
 }
 
+/// Export — collect the project's outputs into a loose folder or a `.forge`
+/// zip. Reads the EFFECTIVE funscript; packs the main motion track, Polish's
+/// stamped station files, a fresh events.yml, authoring sidecars, and a
+/// manifest.ffmeta. Returns `{ mode, path, artifacts, stations, manifest }`.
+#[tauri::command]
+pub async fn export_write(
+    funscript_path: String,
+    mode: String,
+    out: Option<String>,
+    blend_seams: bool,
+    final_smooth: bool,
+    stem: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let src = effective_funscript_path(&funscript_path);
+    let mut args: Vec<String> = vec!["export".into(), src, "--mode".into(), mode];
+    if let Some(o) = out {
+        args.push("--out".into());
+        args.push(o);
+    }
+    if let Some(s) = stem {
+        args.push("--stem".into());
+        args.push(s);
+    }
+    if blend_seams {
+        args.push("--blend-seams".into());
+    }
+    if final_smooth {
+        args.push("--final-smooth".into());
+    }
+    let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let out = run_cli(&argv).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse export result: {}", e))
+}
+
+/// Reveal a path in the OS file manager (selects the file on Windows). Best
+/// effort — Explorer returns a non-zero exit even on success, so we don't
+/// check status.
+#[tauri::command]
+pub async fn reveal_path(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    let mut cmd = std::process::Command::new("explorer");
+    if p.is_file() {
+        cmd.arg("/select,").arg(&path);
+    } else {
+        cmd.arg(&path);
+    }
+    let _ = cmd.spawn().map_err(|e| format!("reveal {}: {}", path, e))?;
+    Ok(())
+}
+
 /// Export `<stem>.feel.yml` to a playable Edger `<stem>.events.yml`. With
 /// `write=false` nothing is written — the rendered YAML is still returned
 /// (Preview). Returns `{ path, count, skipped[], yaml }`.

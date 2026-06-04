@@ -516,6 +516,22 @@ export function polishWrite(input, passes) {
   );
 }
 
+/** Export — collect the project's outputs into a loose folder or a `.forge`
+ *  zip (the packager; Polish is the generator). Returns
+ *  {mode, path, artifacts, stations, manifest}. Browser mode → null. */
+export function exportWrite(funscriptPath, { mode = 'forge', out = null, blendSeams = false, finalSmooth = false, stem = null } = {}) {
+  return call(
+    'export_write',
+    { funscriptPath, mode, out, blendSeams, finalSmooth, stem },
+    () => Promise.resolve(null),
+  );
+}
+
+/** Reveal a path in the OS file manager (selects the file on Windows). */
+export function revealPath(path) {
+  return call('reveal_path', { path }, () => Promise.resolve(null));
+}
+
 /** Apply one transform over `spans`, writing the merged funscript to
  *  `outputPath`. Returns {saved, transform, spans}. */
 export function transformApply(funscriptPath, transform, params, spans, outputPath) {

@@ -45,6 +45,8 @@ pub fn run() {
             commands::polish_apply,
             commands::polish_read,
             commands::polish_write,
+            commands::export_write,
+            commands::reveal_path,
             commands::list_event_recipes,
             commands::edger_export,
             commands::edger_import,
