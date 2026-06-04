@@ -996,16 +996,19 @@ def _render_waveform_png(actions: list, out_path: Path, width: int = 480, height
         return False
 
 
-def _render_stim_wav(alpha: Path, beta: Path, out_path: Path, duration_s: float) -> bool:
-    """Render the stamped e-stim alpha/beta channels to a stereo WAV via the
-    existing audio-synthesis engine. Pulse waveform (the common device default).
+def _render_stim_audio(alpha: Path, beta: Path, out_path: Path, duration_s: float) -> bool:
+    """Render the stamped e-stim alpha/beta channels to a stereo audio file via
+    the existing audio-synthesis engine (pulse waveform, the common device
+    default). Output is FLAC — LOSSLESS is mandatory for e-stim: the L/R signal
+    encodes carrier frequency + inter-channel phase + pulse shape, which lossy
+    codecs (mp3/ogg) would corrupt; FLAC is bit-exact and ~half the size of WAV.
     Returns False on any failure."""
     try:
         from forge.audio_synthesis import render_stereo_audio
         render_stereo_audio(str(alpha), str(beta), str(out_path), duration_s, waveform="pulse")
         return out_path.exists()
     except Exception as exc:
-        print(f"stim.wav skipped: {exc}", file=sys.stderr)
+        print(f"stim audio skipped: {exc}", file=sys.stderr)
         return False
 
 
@@ -1143,14 +1146,14 @@ def cmd_export(args):
         # Opt-in (--stim-wav): a full-length WAV is large (~10 MB/min); the
         # channel funscripts are the primary e-stim artifact. For "no restim"
         # playback the user can ask for it.
-        if args.stim_wav:
+        if args.stim_audio:
             est_dir = staging / "stations" / "estim3p"
             alpha, beta = est_dir / f"{stem}.alpha.funscript", est_dir / f"{stem}.beta.funscript"
             if alpha.exists() and beta.exists() and duration_ms > 0:
                 adir = staging / "audio"
                 adir.mkdir(parents=True, exist_ok=True)
-                if _render_stim_wav(alpha, beta, adir / "stim.wav", duration_ms / 1000.0):
-                    artifacts.append({"path": "audio/stim.wav", "kind": "audio", "role": "estim"})
+                if _render_stim_audio(alpha, beta, adir / "stim.flac", duration_ms / 1000.0):
+                    artifacts.append({"path": "audio/stim.flac", "kind": "audio", "role": "estim", "format": "flac"})
 
         # 7. manifest.ffmeta
         manifest = {
@@ -2815,7 +2818,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument("--media", metavar="PATH", help="Media file for hero + per-chapter frame thumbnails (optional).")
     p_exp.add_argument("--blend-seams", action="store_true", help="Apply blend_seams to the main funscript.")
     p_exp.add_argument("--final-smooth", action="store_true", help="Apply final_smooth to the main funscript.")
-    p_exp.add_argument("--stim-wav", action="store_true", help="Render audio/stim.wav from the e-stim channels (large; opt-in).")
+    p_exp.add_argument("--stim-audio", action="store_true", help="Render audio/stim.flac (lossless) from the e-stim channels (opt-in).")
 
     # --- finalize ---
     p_fin = sub.add_parser(

@@ -43,6 +43,24 @@ class TestExportCLI(unittest.TestCase):
         passes = json.dumps({"passes": {"handy": {"accepted": True, "accepted_at": "2026-06-04T00:00:00Z"}}})
         self.assertEqual(_run("polish-write", self.main, "--passes-json", passes).returncode, 0)
 
+    def _assign_character(self):
+        """Write a characters.json so e-stim generation has a character to use.
+        Returns False (caller should skip) when no presets are available."""
+        cat = json.loads(_run("list-characters", "--format", "json").stdout)
+        chars = cat.get("characters") or []
+        if not chars:
+            return False
+        forge = os.path.join(self.tmp, ".scene.forge")
+        os.makedirs(forge, exist_ok=True)
+        with open(os.path.join(forge, "scene.characters.json"), "w") as f:
+            json.dump({"version": 1, "characters": {"ch1": {"characterId": chars[0]["id"], "params": {}}}}, f)
+        return True
+
+    def _stamp_estim(self):
+        self.assertEqual(_run("polish-apply", self.main, "--station", "estim3p").returncode, 0)
+        _run("polish-write", self.main, "--passes-json",
+             json.dumps({"passes": {"estim3p": {"accepted": True}}}))
+
     def test_forge_zip_contains_motion_manifest_and_station(self):
         self._stamp_handy()
         out = os.path.join(self.tmp, "scene.forge")
@@ -94,15 +112,26 @@ class TestExportCLI(unittest.TestCase):
         with zipfile.ZipFile(out) as z:
             self.assertIn("thumbnails/waveform.png", z.namelist())
 
-    def test_stim_wav_opt_in_only(self):
-        # e-stim stamped but --stim-wav NOT passed -> no audio/stim.wav.
-        self.assertEqual(_run("polish-apply", self.main, "--station", "estim3p").returncode, 0)
-        _run("polish-write", self.main, "--passes-json",
-             json.dumps({"passes": {"estim3p": {"accepted": True}}}))
-        no_wav = os.path.join(self.tmp, "nowav.forge")
-        _run("export", self.main, "--mode", "forge", "--out", no_wav)
-        with zipfile.ZipFile(no_wav) as z:
-            self.assertNotIn("audio/stim.wav", z.namelist())
+    def test_stim_audio_opt_in_only(self):
+        # e-stim channels present but --stim-audio NOT passed -> no audio file.
+        if not self._assign_character():
+            self.skipTest("no stim characters available")
+        self._stamp_estim()
+        no_audio = os.path.join(self.tmp, "noaudio.forge")
+        _run("export", self.main, "--mode", "forge", "--out", no_audio)
+        with zipfile.ZipFile(no_audio) as z:
+            names = z.namelist()
+        self.assertFalse(any(n.startswith("audio/") for n in names), names)
+
+    def test_stim_audio_renders_flac_when_opted_in(self):
+        if not self._assign_character():
+            self.skipTest("no stim characters available")
+        self._stamp_estim()
+        out = os.path.join(self.tmp, "flac.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out, "--stim-audio")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            self.assertIn("audio/stim.flac", z.namelist())
 
 
 if __name__ == "__main__":
