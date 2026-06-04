@@ -1962,6 +1962,7 @@ pub async fn export_write(
     stem: Option<String>,
     media: Option<String>,
     stim_audio: bool,
+    stim_format: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let src = effective_funscript_path(&funscript_path);
     let mut args: Vec<String> = vec!["export".into(), src, "--mode".into(), mode];
@@ -1985,6 +1986,10 @@ pub async fn export_write(
     }
     if stim_audio {
         args.push("--stim-audio".into());
+        if let Some(fmt) = stim_format {
+            args.push("--stim-format".into());
+            args.push(fmt);
+        }
     }
     let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let out = run_cli(&argv).await?;

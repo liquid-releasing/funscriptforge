@@ -256,6 +256,7 @@ export default function ExportTab({ project }) {
     blendSeams: true,
     finalSmooth: true,
     stimAudio: false,
+    stimFormat: 'wav',
   });
   const hasMedia = !!project?.mediaPath;
 
@@ -293,6 +294,7 @@ export default function ExportTab({ project }) {
         blendSeams: postProcessing.blendSeams,
         finalSmooth: postProcessing.finalSmooth,
         stimAudio: postProcessing.stimAudio,
+        stimFormat: postProcessing.stimFormat,
       });
       if (!res) { setWriteError('Export is unavailable in browser mode.'); return; }
       setResult(res);
@@ -327,6 +329,7 @@ export default function ExportTab({ project }) {
         stampedStations={stampedStations}
         hasMedia={hasMedia}
         stimAudio={postProcessing.stimAudio}
+        stimFormat={postProcessing.stimFormat}
       />
 
       {mode === 'loose' ? (
@@ -511,8 +514,8 @@ const POST_OPTIONS = [
   },
   {
     id: 'stimAudio',
-    label: 'Render stim audio (FLAC)',
-    desc: 'Pre-render the e-stim channels to a lossless stereo FLAC for no-restim playback. Lossless is required — mp3/ogg would corrupt the e-stim signal. Off by default (still large).',
+    label: 'Render stim audio',
+    desc: 'Pre-render the e-stim channels to a stereo file for no-restim playback. WAV by default; mp3 is the common real-world format (smaller). Off by default.',
   },
 ];
 
@@ -549,6 +552,28 @@ function PostProcessing({ postProcessing, onChange }) {
                 <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 2, lineHeight: 1.45 }}>
                   {o.desc}
                 </div>
+                {o.id === 'stimAudio' && on && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                    {['wav', 'mp3'].map((fmt) => {
+                      const sel = (postProcessing.stimFormat || 'wav') === fmt;
+                      return (
+                        <button
+                          key={fmt}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange((p) => ({ ...p, stimFormat: fmt })); }}
+                          style={{
+                            padding: '3px 10px', borderRadius: 5, cursor: 'pointer',
+                            fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
+                            background: sel ? 'rgba(77,171,247,0.16)' : 'var(--surface-2)',
+                            border: `1px solid ${sel ? '#4dabf7' : 'var(--border)'}`,
+                            color: sel ? '#4dabf7' : 'var(--text-soft)',
+                          }}
+                        >
+                          {fmt.toUpperCase()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </label>
           );
@@ -564,7 +589,7 @@ function PostProcessing({ postProcessing, onChange }) {
 // What the export will actually pack, derived from the Polish stamp record +
 // the always-present artifacts. Read-only preview — the CLI packs whatever it
 // finds; this mirrors that so there are no lying checkboxes.
-function PackedArtifacts({ mode, stampedStations, hasMedia, stimAudio }) {
+function PackedArtifacts({ mode, stampedStations, hasMedia, stimAudio, stimFormat = 'wav' }) {
   const estimStamped = stampedStations.includes('estim3p');
   const rows = [];
   rows.push({
@@ -598,7 +623,7 @@ function PackedArtifacts({ mode, stampedStations, hasMedia, stimAudio }) {
       : 'Funscript curve preview. Attach media for hero + per-chapter frames.',
   });
   if (stimAudio && estimStamped) {
-    rows.push({ name: 'audio/stim.flac', kind: 'audio', desc: 'Pre-rendered e-stim stereo FLAC, lossless (opt-in).' });
+    rows.push({ name: `audio/stim.${stimFormat}`, kind: 'audio', desc: `Pre-rendered e-stim stereo ${stimFormat.toUpperCase()} (opt-in).` });
   }
   if (mode === 'forge') {
     rows.push({ name: 'manifest.ffmeta', kind: 'manifest', desc: 'What the bundle contains and how the artifacts relate.' });
@@ -938,7 +963,7 @@ function BundlePreview({ stem }) {
 │   └── estim3p/<stem>.{alpha,beta,…}.funscript  ×9
 ├── events.yml                   point-in-time effects (when authored)
 ├── chapters.json / phrases.json / characters.json
-├── audio/stim.flac              opt-in pre-rendered e-stim audio (lossless)
+├── audio/stim.wav               opt-in pre-rendered e-stim audio (or .mp3)
 └── thumbnails/
     ├── waveform.png             MiniWave-style funscript curve (always)
     ├── hero.png                 library card image (when media attached)

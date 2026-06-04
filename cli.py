@@ -996,16 +996,32 @@ def _render_waveform_png(actions: list, out_path: Path, width: int = 480, height
         return False
 
 
-def _render_stim_audio(alpha: Path, beta: Path, out_path: Path, duration_s: float) -> bool:
+def _render_stim_audio(alpha: Path, beta: Path, out_path: Path, duration_s: float,
+                       fmt: str = "wav") -> bool:
     """Render the stamped e-stim alpha/beta channels to a stereo audio file via
     the existing audio-synthesis engine (pulse waveform, the common device
-    default). Output is FLAC — LOSSLESS is mandatory for e-stim: the L/R signal
-    encodes carrier frequency + inter-channel phase + pulse shape, which lossy
-    codecs (mp3/ogg) would corrupt; FLAC is bit-exact and ~half the size of WAV.
-    Returns False on any failure."""
+    default). WAV by default; ``fmt="mp3"`` transcodes via ffmpeg (libsndfile
+    here lacks MPEG write). WAV and mp3 are both standard for audio e-stim in
+    practice. Returns False on any failure."""
     try:
         from forge.audio_synthesis import render_stereo_audio
-        render_stereo_audio(str(alpha), str(beta), str(out_path), duration_s, waveform="pulse")
+        if fmt == "mp3":
+            import shutil
+            import subprocess
+            tmp_wav = out_path.with_suffix(".stim.tmp.wav")
+            render_stereo_audio(str(alpha), str(beta), str(tmp_wav), duration_s, waveform="pulse")
+            if not shutil.which("ffmpeg"):
+                print("mp3 requested but ffmpeg missing — kept WAV", file=sys.stderr)
+                tmp_wav.replace(out_path.with_suffix(".wav"))
+                return out_path.with_suffix(".wav").exists()
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(tmp_wav), "-codec:a", "libmp3lame",
+                 "-b:a", "192k", str(out_path)],
+                capture_output=True, timeout=600,
+            )
+            tmp_wav.unlink(missing_ok=True)
+        else:
+            render_stereo_audio(str(alpha), str(beta), str(out_path), duration_s, waveform="pulse")
         return out_path.exists()
     except Exception as exc:
         print(f"stim audio skipped: {exc}", file=sys.stderr)
@@ -1152,8 +1168,9 @@ def cmd_export(args):
             if alpha.exists() and beta.exists() and duration_ms > 0:
                 adir = staging / "audio"
                 adir.mkdir(parents=True, exist_ok=True)
-                if _render_stim_audio(alpha, beta, adir / "stim.flac", duration_ms / 1000.0):
-                    artifacts.append({"path": "audio/stim.flac", "kind": "audio", "role": "estim", "format": "flac"})
+                fmt = args.stim_format
+                if _render_stim_audio(alpha, beta, adir / f"stim.{fmt}", duration_ms / 1000.0, fmt=fmt):
+                    artifacts.append({"path": f"audio/stim.{fmt}", "kind": "audio", "role": "estim", "format": fmt})
 
         # 7. manifest.ffmeta
         manifest = {
@@ -2818,7 +2835,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument("--media", metavar="PATH", help="Media file for hero + per-chapter frame thumbnails (optional).")
     p_exp.add_argument("--blend-seams", action="store_true", help="Apply blend_seams to the main funscript.")
     p_exp.add_argument("--final-smooth", action="store_true", help="Apply final_smooth to the main funscript.")
-    p_exp.add_argument("--stim-audio", action="store_true", help="Render audio/stim.flac (lossless) from the e-stim channels (opt-in).")
+    p_exp.add_argument("--stim-audio", action="store_true", help="Render audio/stim.<fmt> from the e-stim channels (opt-in).")
+    p_exp.add_argument("--stim-format", choices=["wav", "mp3"], default="wav", help="stim audio format (default: wav; mp3 via ffmpeg).")
 
     # --- finalize ---
     p_fin = sub.add_parser(

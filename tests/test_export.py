@@ -123,15 +123,30 @@ class TestExportCLI(unittest.TestCase):
             names = z.namelist()
         self.assertFalse(any(n.startswith("audio/") for n in names), names)
 
-    def test_stim_audio_renders_flac_when_opted_in(self):
+    def test_stim_audio_renders_wav_by_default(self):
         if not self._assign_character():
             self.skipTest("no stim characters available")
         self._stamp_estim()
-        out = os.path.join(self.tmp, "flac.forge")
+        out = os.path.join(self.tmp, "wav.forge")
         r = _run("export", self.main, "--mode", "forge", "--out", out, "--stim-audio")
         self.assertEqual(r.returncode, 0, r.stderr)
         with zipfile.ZipFile(out) as z:
-            self.assertIn("audio/stim.flac", z.namelist())
+            self.assertIn("audio/stim.wav", z.namelist())
+
+    def test_stim_audio_mp3_alternate(self):
+        import shutil
+        if not shutil.which("ffmpeg"):
+            self.skipTest("ffmpeg not on PATH")
+        if not self._assign_character():
+            self.skipTest("no stim characters available")
+        self._stamp_estim()
+        out = os.path.join(self.tmp, "mp3.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out, "--stim-audio", "--stim-format", "mp3")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+        self.assertIn("audio/stim.mp3", names)
+        self.assertNotIn("audio/stim.wav", names)
 
 
 if __name__ == "__main__":
