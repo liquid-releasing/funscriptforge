@@ -227,10 +227,32 @@ class TestPolishCLI(unittest.TestCase):
         self.assertIn("scene.funscript", names)
         self.assertIn("scene.twist.funscript", names)
 
-    def test_apply_estim_pending(self):
+    def test_apply_estim_without_character_errors(self):
+        # No characters.json beside the temp source -> nothing to generate;
+        # report a helpful error rather than writing empty/wrong channels.
         r = _run_cli("polish-apply", self.main, "--station", "estim3p")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(json.loads(r.stdout).get("pending"), "estim-generation")
+        out = json.loads(r.stdout)
+        self.assertEqual(out["saved"], [])
+        self.assertIn("error", out)
+
+    def test_apply_estim_generates_channels(self):
+        # Assign a real character (whole-track, no chapters) and confirm the
+        # 9-channel set is generated + clamped.
+        cat = json.loads(_run_cli("list-characters", "--format", "json").stdout)
+        chars = cat.get("characters") or []
+        if not chars:
+            self.skipTest("no stim characters available (funscript-tools missing)")
+        char_id = chars[0]["id"]
+        forge = os.path.join(self.tmp, ".scene.forge")
+        os.makedirs(forge, exist_ok=True)
+        with open(os.path.join(forge, "scene.characters.json"), "w") as f:
+            json.dump({"version": 1, "characters": {"ch1": {"characterId": char_id, "params": {}}}}, f)
+        r = _run_cli("polish-apply", self.main, "--station", "estim3p")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = json.loads(r.stdout)
+        self.assertGreater(len(out["saved"]), 0, out)
+        self.assertTrue(any(p.endswith(".alpha.funscript") for p in out["saved"]))
 
     def test_polish_yml_roundtrip_with_hash(self):
         passes = json.dumps({"passes": {"handy": {"accepted": True,

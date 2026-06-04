@@ -3129,6 +3129,228 @@ def _write_funscript_like(path: Path, source_data: dict, actions: list) -> None:
     path.write_text(json.dumps(out), encoding="utf-8")
 
 
+# The 9-channel 3-phase e-stim set funscript-tools emits (same as
+# cmd_stim_process's non-2d `wanted` list). Order is stable for output.
+_ESTIM_CHANNELS = [
+    "alpha", "beta", "pulse_frequency", "frequency", "volume",
+    "pulse_rise_time", "alpha-prostate", "beta-prostate", "volume-prostate",
+]
+
+
+def _slug_character(s: str) -> str:
+    """Mirror cmd_list_characters' `_slug` (label -> characters.json id)."""
+    return s.lower().replace(" ", "_").replace("-", "_")
+
+
+def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> dict:
+    """Generate the whole-track e-stim 9-channel set and clamp each channel.
+
+    E-stim characters are assigned per chapter (`<stem>.characters.json`), so
+    this walks the chapters, generates each window's channels via the proven
+    funscript-tools `process()` (the same path the Channels live draw uses),
+    concatenates per channel across chapters, then runs each channel through
+    `polish.apply_pass` (rate ceiling / quiet floor / smoothing + the
+    foc3phase safety backstop). Unassigned chapters produce no e-stim.
+
+    Returns ``{channel: {"template": {...}, "actions": [...]}}``. Raises
+    ValueError when funscript-tools is unavailable or there's nothing to do.
+    """
+    import contextlib
+    import shutil
+    import tempfile
+
+    from forge import polish
+    from forge.funscript import load_funscript, parse_actions
+    from forge.funscript_tools import AVAILABLE, build_config, process
+    from videoflow.sidecar import forge_dir
+
+    if not AVAILABLE:
+        raise ValueError("funscript-tools not available — cannot generate e-stim")
+
+    from forge.stim_config import merged_presets
+    presets, _ = merged_presets()
+    slug_to_label = {_slug_character(lbl): lbl for lbl in presets}
+
+    stem = Path(funscript_path).stem
+    chap_path = forge_dir(funscript_path) / f"{stem}.chapters.json"
+    chapters = []
+    if chap_path.exists():
+        try:
+            chapters = json.loads(chap_path.read_text(encoding="utf-8")).get("chapters") or []
+        except (OSError, json.JSONDecodeError):
+            chapters = []
+
+    chars_doc = {}
+    cp = _characters_path(funscript_path)
+    if cp.exists():
+        try:
+            chars_doc = json.loads(cp.read_text(encoding="utf-8")).get("characters") or {}
+        except (OSError, json.JSONDecodeError):
+            chars_doc = {}
+
+    times, pos = parse_actions(load_funscript(funscript_path))
+    pairs = list(zip(times, pos))
+    if len(pairs) < 2:
+        raise ValueError("no actions to generate e-stim from")
+
+    # Build the (lo, hi, characterId, params) windows. With chapters, one per
+    # chapter; without, the whole track using the single character assignment.
+    windows = []
+    if chapters:
+        # Chapter ids are positional `ch{i+1}` — the sidecar has no id field;
+        # the loader (Rust commands.rs) assigns it, and characters.json keys
+        # by it. Replicate that here so assignments line up.
+        for i, ch in enumerate(chapters):
+            cid = f"ch{i + 1}"
+            lo = ch.get("at_ms", ch.get("atMs", ch.get("start_ms")))
+            hi = ch.get("end_ms", ch.get("endMs"))
+            assign = chars_doc.get(cid) or {}
+            windows.append((lo, hi, assign.get("characterId"), assign.get("params") or {}))
+    else:
+        assign = next(iter(chars_doc.values()), {}) if chars_doc else {}
+        windows.append((pairs[0][0], pairs[-1][0], assign.get("characterId"), assign.get("params") or {}))
+
+    raw = {}        # channel -> concatenated actions (absolute time)
+    templates = {}  # channel -> first-seen doc minus actions
+    tmp = Path(tempfile.mkdtemp(prefix="ff_polish_estim_"))
+    try:
+        for idx, (lo, hi, cid, params) in enumerate(windows):
+            if not cid:
+                continue  # unassigned chapter — no e-stim here
+            label = slug_to_label.get(cid) or slug_to_label.get(_slug_character(cid))
+            if not label:
+                continue
+            wlo = lo if lo is not None else pairs[0][0]
+            whi = hi if hi is not None else pairs[-1][0]
+            win = [(t, p) for t, p in pairs if wlo <= t <= whi]
+            if len(win) < 2:
+                continue
+            wdir = tmp / f"w{idx}"
+            wdir.mkdir(parents=True, exist_ok=True)
+            in_path = wdir / f"{stem}.funscript"
+            in_path.write_text(json.dumps({
+                "actions": [{"at": int(t), "pos": int(round(p))} for t, p in win],
+            }), encoding="utf-8")
+            config = build_config(label, params, output_dir=str(wdir))
+            # process() logs to stdout; keep our stdout JSON-clean.
+            with contextlib.redirect_stdout(sys.stderr):
+                result = process(str(in_path), config, None)
+            if not result.get("success"):
+                continue
+            for suf in _ESTIM_CHANNELS:
+                cpth = wdir / f"{stem}.{suf}.funscript"
+                if not cpth.exists():
+                    continue
+                cd = json.loads(cpth.read_text(encoding="utf-8"))
+                raw.setdefault(suf, []).extend(
+                    {"at": a["at"], "pos": a["pos"]} for a in cd.get("actions", [])
+                )
+                if suf not in templates:
+                    templates[suf] = {k: v for k, v in cd.items() if k != "actions"}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    if not raw:
+        raise ValueError("no e-stim generated — assign a character to at least one chapter")
+
+    out = {}
+    for name, acts in raw.items():
+        acts.sort(key=lambda a: a["at"])
+        clamped, _ = polish.apply_pass(acts, station.id, knobs)
+        out[name] = {"template": templates.get(name, {}), "actions": clamped}
+    return out
+
+
+# multiaxis engine axis name -> TCode axis code (inverse of polish.TCODE_SUFFIX).
+_AXIS_TO_TCODE = {"surge": "L1", "sway": "L2", "twist": "R0", "roll": "R1", "pitch": "R2"}
+
+
+def _polish_generate_tcode(funscript_path: str, knobs: dict | None, station) -> dict:
+    """Generate + clamp the TCode axis set (OSR2/SR6) from per-chapter
+    `mechStyle`, mirroring the e-stim path. Walks the chapters, generates each
+    window's secondary axes via `multiaxis.generate_multiaxis` (the same engine
+    the Mechanical live draw uses), keeps only the axes this station supports,
+    concatenates, and clamps each. Always includes the clamped L0 main.
+
+    Returns ``{axis_name|'L0': [actions]}`` (axis_name == sibling suffix), or
+    ``{}`` for the axes if no chapter carries a usable mechStyle (caller then
+    falls back to clamping any existing sibling sidecars).
+    """
+    from forge import polish
+    from forge.funscript import load_funscript, parse_actions
+    from forge.multiaxis import generate_multiaxis
+    from forge.multiaxis_presets import MULTIAXIS_PRESETS
+    from videoflow.sidecar import forge_dir
+
+    # Which suffixes this station actually writes (L0 excluded — handled apart).
+    suffixes = {polish.TCODE_SUFFIX[a] for a in station.axes if a != "L0"}
+
+    stem = Path(funscript_path).stem
+    chap_path = forge_dir(funscript_path) / f"{stem}.chapters.json"
+    chapters = []
+    if chap_path.exists():
+        try:
+            chapters = json.loads(chap_path.read_text(encoding="utf-8")).get("chapters") or []
+        except (OSError, json.JSONDecodeError):
+            chapters = []
+
+    chars_doc = {}
+    cp = _characters_path(funscript_path)
+    if cp.exists():
+        try:
+            chars_doc = json.loads(cp.read_text(encoding="utf-8")).get("characters") or {}
+        except (OSError, json.JSONDecodeError):
+            chars_doc = {}
+
+    times, pos = parse_actions(load_funscript(funscript_path))
+    pairs = list(zip(times, pos))
+    if len(pairs) < 2:
+        raise ValueError("no actions to generate axes from")
+
+    windows = []
+    if chapters:
+        for i, ch in enumerate(chapters):
+            assign = chars_doc.get(f"ch{i + 1}") or {}
+            lo = ch.get("at_ms", ch.get("atMs"))
+            hi = ch.get("end_ms", ch.get("endMs"))
+            windows.append((lo, hi, assign.get("mechStyle")))
+    else:
+        assign = next(iter(chars_doc.values()), {}) if chars_doc else {}
+        windows.append((pairs[0][0], pairs[-1][0], assign.get("mechStyle")))
+
+    raw = {}  # suffix -> concatenated actions
+    for lo, hi, style in windows:
+        if not style or style == "None" or style not in MULTIAXIS_PRESETS:
+            continue
+        wlo = lo if lo is not None else pairs[0][0]
+        whi = hi if hi is not None else pairs[-1][0]
+        win = [{"at": int(t), "pos": int(round(p))} for t, p in pairs if wlo <= t <= whi]
+        if len(win) < 2:
+            continue
+        res = generate_multiaxis(win, [{"start_ms": win[0]["at"], "end_ms": win[-1]["at"]}],
+                                 {0: style}, MULTIAXIS_PRESETS)
+        for name in ("twist", "roll", "pitch", "surge", "sway"):
+            if name not in suffixes:
+                continue
+            sig = getattr(res, name)
+            if sig and sig.times_ms:
+                raw.setdefault(name, []).extend(
+                    {"at": int(t), "pos": int(round(p))}
+                    for t, p in zip(sig.times_ms, sig.positions)
+                )
+
+    out = {}
+    # L0 — clamped main, always.
+    main_clamped, _ = polish.apply_pass([{"at": int(t), "pos": int(round(p))} for t, p in pairs],
+                                        station.id, knobs)
+    out["L0"] = main_clamped
+    for name, acts in raw.items():
+        acts.sort(key=lambda a: a["at"])
+        clamped, _ = polish.apply_pass(acts, station.id, knobs)
+        out[name] = clamped
+    return out
+
+
 @_cli_command
 def cmd_polish_apply(args):
     """Polish — clamp Channels output into device-ready files (last step
@@ -3185,37 +3407,68 @@ def cmd_polish_apply(args):
     out_dir = _polish_out_dir(args.funscript, station.id)
 
     if station.kind == "estim":
-        # E-Stim 9-channel generation (reuse funscript_tools.process) lands in
-        # the follow-up. Report honestly rather than writing a wrong file.
+        # E-Stim: generate the whole-track 9-channel set from the per-chapter
+        # character assignments, clamp each channel, write the set.
+        try:
+            channels = _polish_generate_estim(args.funscript, knobs, station)
+        except ValueError as exc:
+            print(json.dumps({"station": station.id, "saved": [], "error": str(exc)}))
+            return
+        saved = []
+        for name, payload in channels.items():
+            cpath = out_dir / f"{stem}.{name}.funscript"
+            _write_funscript_like(cpath, payload["template"], payload["actions"])
+            saved.append(str(cpath))
         print(json.dumps({
-            "station": station.id, "saved": [], "pending": "estim-generation",
-            "note": "E-Stim channel generation is not yet wired into polish-apply.",
+            "station": station.id, "saved": saved,
+            "channels": len(channels),
+            "source_hash": _polish_source_hash(args.funscript),
         }))
         return
 
     saved = []
+
+    # TCode multi-axis (OSR2/SR6): generate the axis set from per-chapter
+    # mechStyle (the live Mechanical engine), clamp each, write the sibling
+    # set. Fall back to clamping any existing axis sidecars beside the source
+    # when no chapter carries a usable style.
+    if station.kind == "stroker-tcode":
+        gen = _polish_generate_tcode(args.funscript, knobs, station)
+        # L0 main first.
+        main_path = out_dir / station.output_template.format(stem=stem)
+        _write_funscript_like(main_path, data, gen.pop("L0"))
+        saved.append(str(main_path))
+        if len(gen) == 0:
+            # No generated axes — fall back to existing sidecars.
+            src_dir = Path(args.funscript).parent
+            src_stem = Path(args.funscript).stem
+            for axis in station.axes:
+                if axis == "L0":
+                    continue
+                sib = src_dir / polish.sibling_path(src_stem, axis)
+                if not sib.exists():
+                    continue
+                sdata = json.loads(sib.read_text(encoding="utf-8"))
+                sclamped, _ = polish.apply_pass(sdata.get("actions", []), station.id, knobs)
+                out_sib = out_dir / polish.sibling_path(stem, axis)
+                _write_funscript_like(out_sib, sdata, sclamped)
+                saved.append(str(out_sib))
+        else:
+            for axis_name, acts in gen.items():
+                out_sib = out_dir / f"{stem}.{axis_name}.funscript"
+                _write_funscript_like(out_sib, data, acts)
+                saved.append(str(out_sib))
+        print(json.dumps({
+            "station": station.id, "saved": saved,
+            "source_hash": _polish_source_hash(args.funscript),
+        }))
+        return
+
+    # Single-axis stroker (Handy): clamp the main funscript and write.
     clamped, stats = polish.apply_pass(actions, station.id, knobs)
     main_path = out_dir / station.output_template.format(stem=stem)
     _write_funscript_like(main_path, data, clamped)
     saved.append(str(main_path))
-
-    # TCode multi-axis (OSR2/SR6): clamp any existing axis sibling sidecars
-    # that sit next to the source and write them into the station folder.
-    if station.kind == "stroker-tcode":
-        src_dir = Path(args.funscript).parent
-        src_stem = Path(args.funscript).stem
-        for axis in station.axes:
-            if axis == "L0":
-                continue  # main written above
-            sib = src_dir / polish.sibling_path(src_stem, axis)
-            if not sib.exists():
-                continue
-            sdata = json.loads(sib.read_text(encoding="utf-8"))
-            sclamped, _ = polish.apply_pass(sdata.get("actions", []), station.id, knobs)
-            out_sib = out_dir / polish.sibling_path(stem, axis)
-            _write_funscript_like(out_sib, sdata, sclamped)
-            saved.append(str(out_sib))
-
     print(json.dumps({
         "station": station.id,
         "saved": saved,
