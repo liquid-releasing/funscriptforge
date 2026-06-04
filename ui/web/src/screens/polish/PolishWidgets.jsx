@@ -27,7 +27,7 @@ export function fmtKnobValue(v, knob) {
 }
 
 // ─── Three-pane trace preview (character / device-envelope / as-performed) ───
-export function TracePane({ traces, phrases, totalMs, height = 240, ember = '#ff7a3a', compact = false }) {
+export function TracePane({ traces, phrases, totalMs, height = 240, ember = '#ff7a3a', compact = false, fill = false }) {
   const W = 1000;
   const H = height;
   const padX = 24;
@@ -73,7 +73,7 @@ export function TracePane({ traces, phrases, totalMs, height = 240, ember = '#ff
   const r3 = r2 + rowH + rowGap;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, display: 'block' }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: fill ? '100%' : H, display: 'block' }} preserveAspectRatio="none">
       <defs>
         <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stopColor={ember} stopOpacity={0.55} />

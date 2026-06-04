@@ -273,6 +273,7 @@ export default function PolishTab({ project, setAppError = () => {} }) {
           background: EXPRESSIVE ? `linear-gradient(180deg, ${ember}08, transparent 30%), #12151e` : '#12151e',
           border: `1px solid ${EXPRESSIVE ? ember + '33' : '#2d3148'}`, borderRadius: 12,
           padding: '18px 22px', overflow: 'auto', position: 'relative',
+          display: 'flex', flexDirection: 'column', minHeight: 0,
         }}>
           {EXPRESSIVE && <Sparks ember={ember} count={6} />}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14, position: 'relative' }}>
@@ -292,12 +293,14 @@ export default function PolishTab({ project, setAppError = () => {} }) {
             </div>
           </div>
 
-          <div style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid #2d3148', borderRadius: 8, padding: '14px 16px', marginBottom: 14, position: 'relative' }}>
+          <div style={{ flex: 1, minHeight: 220, background: 'rgba(255,255,255,0.015)', border: '1px solid #2d3148', borderRadius: 8, padding: '14px 16px', marginBottom: 14, position: 'relative', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7390', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Three-pane preview</div>
             {windowActions.length >= 2 ? (
-              <TracePane traces={traces} phrases={ribbon} totalMs={windowLen} height={240} ember={ember} />
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <TracePane traces={traces} phrases={ribbon} totalMs={windowLen} ember={ember} fill />
+              </div>
             ) : (
-              <div style={{ height: 240, display: 'grid', placeItems: 'center', color: '#6b7390', fontSize: 13 }}>
+              <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: '#6b7390', fontSize: 13 }}>
                 {path ? 'No actions in the preview window.' : 'Open a project to preview.'}
               </div>
             )}

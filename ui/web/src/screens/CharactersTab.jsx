@@ -1210,6 +1210,9 @@ function ChannelGrid({ character, estimSelected, channelData = null, loading = f
         marginTop: 6,
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
+        // Pin a moderate row height so cards don't stretch tall (which left the
+        // waveform looking like ~1/4 of the cell). The chart flex-fills this.
+        gridAutoRows: '128px',
         gap: 10,
       }}>
         {ESTIM_CHANNELS.map((ch) => {
@@ -1234,8 +1237,8 @@ function ChannelGrid({ character, estimSelected, channelData = null, loading = f
                   {live ? 'live' : ch.id}
                 </span>
               </div>
-              {live ? (
-                <div style={{ height: 36 }}>
+              <div style={{ flex: 1, minHeight: 64 }}>
+                {live ? (
                   <Sparkline
                     actions={data.actions}
                     start={chapter?.atMs ?? data.actions[0].at}
@@ -1244,10 +1247,10 @@ function ChannelGrid({ character, estimSelected, channelData = null, loading = f
                     height="100%"
                     filled
                   />
-                </div>
-              ) : (
-                <PlaceholderEnvelope color={accent} />
-              )}
+                ) : (
+                  <PlaceholderEnvelope color={accent} />
+                )}
+              </div>
             </div>
           );
         })}
