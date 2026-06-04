@@ -33,7 +33,19 @@
       "position_max": 100,
       "max_acceleration": 4000,
       "max_delta": 100,
-      "notes": "Confidence: LOW. Speed depends on servo model and build quality (300-600 mm/s range). 500 is mid-range for standard 20kg.cm servos. OSR Wiki and vendor pages don't publish speed specs. Stroke: 112mm default / 150mm max."
+      "notes": "Confidence: LOW. Speed depends on servo model and build quality (300-600 mm/s range). 500 is mid-range for standard 20kg.cm servos. OSR Wiki and vendor pages don't publish speed specs. Stroke: 112mm default / 150mm max. TCode v0.2/v0.3 multi-axis (2-servo: stroke + roll/pitch + twist)."
+    },
+    "sr6": {
+      "name": "SR6",
+      "type": "stroker",
+      "max_speed": 500,
+      "max_bpm": 150,
+      "min_cycle_ms": 200,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 4000,
+      "max_delta": 100,
+      "notes": "Confidence: LOW. 6-axis OSR variant (full L0/L1/L2/R0/R1/R2 = surge/sway/twist/roll/pitch + stroke). Same servo platform as OSR2; limits mirrored pending per-axis data. TCode v0.3 multi-axis."
     },
     "estim_foc": {
       "name": "Estim — FOC",
