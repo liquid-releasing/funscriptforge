@@ -3528,7 +3528,7 @@ def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> 
         shutil.rmtree(tmp, ignore_errors=True)
 
     if not raw:
-        raise ValueError("no e-stim generated — assign a character to at least one chapter")
+        raise ValueError("No e-stim to generate — assign a character to at least one chapter in the Channels tab first.")
 
     out = {}
     for name, acts in raw.items():

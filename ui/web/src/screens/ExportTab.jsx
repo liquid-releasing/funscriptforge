@@ -928,17 +928,21 @@ function BundlePreview({ stem }) {
         }}>
 {`${stem}.forge/                       (a ZIP, single file from the user's view)
 ├── manifest.ffmeta              what artifacts ride together
-├── motion.funscript             linear stroker (Handy / Keon)
-├── motion.osr.funscript         multi-axis (OSR2 / SR6, when present)
-├── stim/                        per-character channels
-│   └── <character>/<channel>.funscript  ×9
-├── events.yml                   point-in-time effects
-├── chapters.json                section boundaries
-├── characters.json              per-chapter character assignments
+├── motion.funscript             primary stroke axis (L0)
+├── stations/                    one folder per Polish-stamped device
+│   ├── handy/<stem>.handy.funscript
+│   ├── osr2/                    TCode set — OSR2
+│   │   ├── <stem>.funscript     L0 (stroke)
+│   │   └── <stem>.{twist,roll,pitch}.funscript
+│   ├── sr6/                     TCode set — SR6 (+ surge, sway)
+│   └── estim3p/<stem>.{alpha,beta,…}.funscript  ×9
+├── events.yml                   point-in-time effects (when authored)
+├── chapters.json / phrases.json / characters.json
+├── audio/stim.wav               opt-in pre-rendered e-stim audio
 └── thumbnails/
-    ├── hero.png                 library card image
-    ├── chapter_*.png            per-chapter snapshot
-    └── waveform.png             MiniWave-style funscript curve`}
+    ├── waveform.png             MiniWave-style funscript curve (always)
+    ├── hero.png                 library card image (when media attached)
+    └── chapter_*.png            per-chapter snapshot (when media attached)`}
         </div>
         <div style={{
           marginTop: 10, fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5,

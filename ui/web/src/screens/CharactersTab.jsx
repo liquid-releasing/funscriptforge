@@ -1105,14 +1105,6 @@ function CharacterPanel({
           onAccept={onAccept}
           onReset={onReset}
         />
-
-        {!estimSelected && (
-          <div style={{
-            marginTop: 10, fontSize: 11, color: '#ffb547',
-          }}>
-            Without e-stim selected on the Device tab, the generated channels won't be exported.
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1232,7 +1224,6 @@ function ChannelGrid({ character, estimSelected, channelData = null, loading = f
               padding: 12,
               display: 'flex', flexDirection: 'column', gap: 8,
               minHeight: 88,
-              opacity: estimSelected ? 1 : 0.55,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{

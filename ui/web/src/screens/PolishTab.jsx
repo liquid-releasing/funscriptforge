@@ -158,9 +158,10 @@ export default function PolishTab({ project, setAppError = () => {} }) {
     try {
       const res = await polishApply(path, d.id, knobs[d.id]);
       if (!res || res.error) {
-        const msg = res?.error || 'Stamp failed';
-        setStampError((e) => ({ ...e, [d.id]: msg }));
-        setAppError(msg);
+        // Expected guidance (e.g. "assign a character") — surface INLINE under
+        // the station's Stamp button, not via the global app-error banner
+        // (which would bleed onto every other tab, incl. Export).
+        setStampError((e) => ({ ...e, [d.id]: res?.error || 'Stamp failed' }));
         return;
       }
       const next = {
