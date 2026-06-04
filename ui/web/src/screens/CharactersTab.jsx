@@ -25,7 +25,7 @@
 // persistence to a chain file, real preset list from cli.py
 // list-characters, and the 9-channel output from cli.py stim-process.
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pill, Icon, fmtTimeShort,
   MediaViewer, ChapterRibbon, Slider, Sparkline,
@@ -138,12 +138,22 @@ export default function CharactersTab({
   // sidecar first (durable authoring), and only fall back to the seed when
   // the sidecar is empty/missing. Once loaded into the App-level cache for
   // this path we never re-read (the cache is the working copy).
+  const loadingPathsRef = useRef(new Set());
   useEffect(() => {
     if (!path) return;
     if (charactersByPath[path]) return;
     if (chapters.length === 0) return;
+    // Guard against re-firing the async read while it's already in flight.
+    // `charactersByPath` is in the deps (the guard above reads it), so this
+    // effect re-runs on every cache change; without this ref the read could
+    // be launched many times before the first resolve sets the cache,
+    // flooding the readCharacters IPC.
+    if (loadingPathsRef.current.has(path)) return;
+    loadingPathsRef.current.add(path);
     let cancelled = false;
+    const done = () => loadingPathsRef.current.delete(path);
     const fallback = () => {
+      done();
       if (cancelled) return;
       setCharactersByPath((prev) => (prev[path]
         ? prev
@@ -151,10 +161,11 @@ export default function CharactersTab({
     };
     readCharacters(path)
       .then((res) => {
-        if (cancelled) return;
+        if (cancelled) { done(); return; }
         const disk = res?.characters;
         if (disk && Object.keys(disk).length > 0) {
           setCharactersByPath((prev) => (prev[path] ? prev : { ...prev, [path]: disk }));
+          done();
         } else {
           fallback();
         }
@@ -452,7 +463,7 @@ export default function CharactersTab({
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '22px 28px', background: 'var(--bg)' }}>
-      <Header chapter={activeChapter} character={appliedChar} estimSelected={estimSelected} />
+      <Header mode={editorMode} character={appliedChar} mechStyle={stagedMechStyle} mechAxisCount={mechAxisCount} />
 
       {activeChapter && (
         <>
@@ -743,7 +754,12 @@ function EditorStrip({ mode, onMode, characterLabel, mechCount }) {
 // ──────────────────────────────────────────────────────────────
 // Header
 // ──────────────────────────────────────────────────────────────
-function Header({ chapter, character, estimSelected }) {
+function Header({ mode, character, mechStyle, mechAxisCount }) {
+  const isMech = mode === 'mechanical';
+  const eyebrow = isMech
+    ? 'Channels · Mechanical — per-chapter motion'
+    : 'Channels · Character — per-chapter sensation feel';
+  const title = isMech ? 'Pick a motion style per chapter' : 'Pick a character per chapter';
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
@@ -754,28 +770,38 @@ function Header({ chapter, character, estimSelected }) {
           fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
           textTransform: 'uppercase', color: 'var(--text-dim)',
         }}>
-          Characters · per-chapter sensation feel
+          {eyebrow}
         </div>
         <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>
-          Pick a character per chapter
+          {title}
         </div>
         <div style={{
           fontSize: 11.5, color: 'var(--text-dim)', marginTop: 4,
           maxWidth: 720, lineHeight: 1.45,
         }}>
-          This is the first tab that <em>generates</em> output — each chapter's character produces a separate funscript per channel.
-          E-stim resolves to 9 channels; the set rides together in the .forge bundle so the player picks what fits the connected device.
-          Pick gentle, reactive, scene-builder, unpredictable, or balanced per chapter.
+          {isMech ? (
+            <>
+              <strong>Mechanical</strong> drives a multi-axis toy — each chapter's position style
+              generates a separate funscript per axis (R0&nbsp;twist, R1&nbsp;roll, R2&nbsp;pitch,
+              L1&nbsp;surge, L2&nbsp;sway). They ride together in the .forge bundle so a multi-axis
+              device plays the geometry while single-axis devices stay on the main stroke.
+            </>
+          ) : (
+            <>
+              <strong>Character</strong> shapes how the e-stim <em>feels</em> — each chapter's
+              character produces a separate funscript per channel. E-stim resolves to 9 channels;
+              the set rides together in the .forge bundle so the player picks what fits the connected
+              device. Pick gentle, reactive, scene-builder, unpredictable, or balanced per chapter.
+            </>
+          )}
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-        {!estimSelected && (
-          <Pill tone="warn">
-            <Icon name="alert-triangle" size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />
-            E-stim not selected on Device tab
-          </Pill>
-        )}
-        {character && <Pill tone="info" dot>{character.label}</Pill>}
+        {isMech
+          ? (mechStyle && mechStyle !== 'None' && (
+              <Pill tone="info" dot>{mechStyle} · {mechAxisCount} {mechAxisCount === 1 ? 'axis' : 'axes'}</Pill>
+            ))
+          : (character && <Pill tone="info" dot>{character.label}</Pill>)}
       </div>
     </div>
   );
