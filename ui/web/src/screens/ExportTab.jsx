@@ -647,8 +647,9 @@ function PackedArtifacts({ mode, stampedStations, hasMedia, stimWav, stimMp3 }) 
           background: 'var(--surface-2)', border: '1px solid var(--border)',
           fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.45,
         }}>
-          Exporting the motion track + sidecars. To also bundle device-ready files
-          (Handy, OSR2/SR6, e-stim), stamp them in Polish first — optional.
+          Exporting the motion track + sidecars. E-stim channels and multi-axis (TCode)
+          are generated automatically from your Channels assignments. Per-device stroker
+          tuning (Handy · Lovense · Vacuglide) stays optional — stamp it in Polish.
         </div>
       )}
     </div>
@@ -939,7 +940,7 @@ function BundlePreview({ stem }) {
 {`${stem}.forge/                       (a ZIP, single file from the user's view)
 ├── manifest.ffmeta              what artifacts ride together
 ├── motion.funscript             primary stroke axis (L0)
-├── stations/                    one folder per Polish-stamped device
+├── stations/                    one folder per device (Polish-stamped or auto-generated)
 │   ├── handy/<stem>.handy.funscript
 │   ├── tcode/                   TCode set — OSR2 / SR6
 │   │   ├── <stem>.funscript     L0 (stroke)

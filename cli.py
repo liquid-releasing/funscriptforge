@@ -1071,7 +1071,13 @@ def cmd_export(args):
     import yaml
     from videoflow.sidecar import forge_dir
 
+    # The positional `src` is the ORIGINAL funscript — it owns the stem, the
+    # forge dir, the authoring sidecars, and the per-chapter character/style
+    # assignments the generators read. `--effective` (when present) is the
+    # edited work funscript we pack as the *motion* track. Deriving the stem
+    # from `src` (not the work path) keeps sidecar/channel filenames correct.
     src = args.funscript
+    motion_src = args.effective or src
     stem = args.stem or Path(src).stem
     fdir = forge_dir(src)
 
@@ -1079,7 +1085,7 @@ def cmd_export(args):
     artifacts: list[dict] = []
     try:
         # 1. Main funscript (+ optional finalize) -> motion.funscript
-        with open(src, encoding="utf-8") as f:
+        with open(motion_src, encoding="utf-8") as f:
             data = json.load(f)
         actions = data.get("actions", [])
         if args.blend_seams or args.final_smooth:
@@ -1119,6 +1125,55 @@ def cmd_export(args):
                 files.append(fp.name)
             if files:
                 stations_meta[sid] = {"files": files, "accepted_at": p.get("accepted_at")}
+
+        # 2b. Auto-generate derived device files from the Channels authoring for
+        # any station the user did NOT stamp in Polish — so assigning a
+        # character or a Mechanical style still yields files at export
+        # ("skip Polish, still get what you authored"). Default clamps; each in
+        # its own folder. e-stim ← per-chapter characters; multi-axis (TCode) ←
+        # per-chapter Mechanical styles. motion.funscript already serves plain
+        # 1-axis devices, so the per-device stroker clamps stay a Polish opt-in.
+        from forge import polish as _polish_mod
+
+        def _emit_generated_station(sid, files_map):
+            """files_map: {filename: (template_doc, actions)}. Writes the set,
+            records artifacts + station meta (flagged generated)."""
+            dest = staging / "stations" / sid
+            dest.mkdir(parents=True, exist_ok=True)
+            names = []
+            for fname, (tmpl, acts) in files_map.items():
+                _write_funscript_like(dest / fname, tmpl, acts)
+                artifacts.append({
+                    "path": f"stations/{sid}/{fname}", "kind": "funscript",
+                    "role": "device", "station": sid, "generated": True,
+                })
+                names.append(fname)
+            if names:
+                stations_meta[sid] = {"files": names, "generated": True}
+
+        if "estim3p" not in stations_meta:
+            try:
+                chans = _polish_generate_estim(src, None, _polish_mod.STATIONS["estim3p"])
+            except ValueError:
+                chans = {}            # no character assigned / tools missing — nothing to do
+            if chans:
+                _emit_generated_station("estim3p", {
+                    f"{stem}.{name}.funscript": (payload["template"], payload["actions"])
+                    for name, payload in chans.items()
+                })
+
+        if "tcode" not in stations_meta:
+            try:
+                axes = _polish_generate_tcode(src, None, _polish_mod.STATIONS["tcode"])
+            except ValueError:
+                axes = {}
+            # Emit only when a Mechanical style produced real secondary axes;
+            # an L0-only result would just duplicate motion.funscript.
+            if len(axes) > 1:
+                _emit_generated_station("tcode", {
+                    (f"{stem}.funscript" if axis == "L0" else f"{stem}.{axis}.funscript"): (data, acts)
+                    for axis, acts in axes.items()
+                })
 
         # 3. events.yml (fresh from feel.yml)
         ev = _collect_events_yaml(src)
@@ -2834,6 +2889,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output path (default: <dir>/<stem>_export/ for loose, <dir>/<stem>.forge for forge).",
     )
     p_exp.add_argument("--stem", metavar="STEM", help="Bundle stem (default: source stem).")
+    p_exp.add_argument("--effective", metavar="PATH", help="Edited (work) funscript to pack as motion; the positional arg stays the original (for stem/sidecars/generation).")
     p_exp.add_argument("--media", metavar="PATH", help="Media file for hero + per-chapter frame thumbnails (optional).")
     p_exp.add_argument("--blend-seams", action="store_true", help="Apply blend_seams to the main funscript.")
     p_exp.add_argument("--final-smooth", action="store_true", help="Apply final_smooth to the main funscript.")

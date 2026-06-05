@@ -1964,8 +1964,15 @@ pub async fn export_write(
     stim_wav: bool,
     stim_mp3: bool,
 ) -> Result<serde_json::Value, String> {
-    let src = effective_funscript_path(&funscript_path);
-    let mut args: Vec<String> = vec!["export".into(), src, "--mode".into(), mode];
+    // Pass the ORIGINAL path as the positional (owns stem / sidecars / the
+    // character + style assignments the export generators read); hand the
+    // edited work funscript over `--effective` so it packs as the motion track.
+    let effective = effective_funscript_path(&funscript_path);
+    let mut args: Vec<String> = vec!["export".into(), funscript_path.clone(), "--mode".into(), mode];
+    if effective != funscript_path {
+        args.push("--effective".into());
+        args.push(effective);
+    }
     if let Some(o) = out {
         args.push("--out".into());
         args.push(o);

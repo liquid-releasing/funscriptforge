@@ -112,6 +112,33 @@ class TestExportCLI(unittest.TestCase):
         with zipfile.ZipFile(out) as z:
             self.assertIn("thumbnails/waveform.png", z.namelist())
 
+    def test_export_autogenerates_estim_from_characters_without_stamp(self):
+        # Characters assigned in Channels but e-stim NOT stamped in Polish:
+        # export should still generate the channel set ("skip Polish, still
+        # get what you authored").
+        if not self._assign_character():
+            self.skipTest("no stim characters available")
+        out = os.path.join(self.tmp, "autoestim.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+            manifest = json.loads(z.read("manifest.ffmeta"))
+        self.assertTrue(any(n.startswith("stations/estim3p/") for n in names), names)
+        self.assertTrue(any(n.endswith(".alpha.funscript") for n in names), names)
+        # Flagged as generated (not a Polish stamp) in the manifest.
+        self.assertTrue(manifest["stations"].get("estim3p", {}).get("generated"))
+
+    def test_export_no_characters_no_stations(self):
+        # No characters.json at all -> nothing auto-generated, motion still packs.
+        out = os.path.join(self.tmp, "bare2.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+        self.assertIn("motion.funscript", names)
+        self.assertFalse(any(n.startswith("stations/") for n in names), names)
+
     def test_stim_audio_opt_in_only(self):
         # e-stim channels present but neither --stim-wav nor --stim-mp3 -> no audio.
         if not self._assign_character():
