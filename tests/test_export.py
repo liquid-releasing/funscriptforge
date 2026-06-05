@@ -130,7 +130,8 @@ class TestExportCLI(unittest.TestCase):
         self.assertTrue(manifest["stations"].get("estim3p", {}).get("generated"))
 
     def test_export_no_characters_no_stations(self):
-        # No characters.json at all -> nothing auto-generated, motion still packs.
+        # Bare funscript: no chapters.json AND no characters.json -> nothing
+        # auto-generated (no arc fallback without chapters), motion still packs.
         out = os.path.join(self.tmp, "bare2.forge")
         r = _run("export", self.main, "--mode", "forge", "--out", out)
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -138,6 +139,29 @@ class TestExportCLI(unittest.TestCase):
             names = z.namelist()
         self.assertIn("motion.funscript", names)
         self.assertFalse(any(n.startswith("stations/") for n in names), names)
+
+    def test_export_default_arc_when_chapters_but_skipped_channels(self):
+        # Analyzed project (chapters.json present) but Channels skipped (NO
+        # characters.json): export auto-generates e-stim + multi-axis from the
+        # position-derived default arc. This is the "skip from open to export"
+        # path — touch nothing and still get coherent device files.
+        cat = json.loads(_run("list-characters", "--format", "json").stdout)
+        if not (cat.get("characters") or []):
+            self.skipTest("no stim characters available")
+        forge = os.path.join(self.tmp, ".scene.forge")
+        os.makedirs(forge, exist_ok=True)
+        with open(os.path.join(forge, "scene.chapters.json"), "w") as f:
+            json.dump({"chapters": [
+                {"at_ms": 0, "end_ms": 5000},
+                {"at_ms": 5000, "end_ms": 9950},
+            ]}, f)
+        out = os.path.join(self.tmp, "defarc.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+        self.assertTrue(any(n.startswith("stations/estim3p/") for n in names), names)
+        self.assertTrue(any(n.startswith("stations/tcode/") for n in names), names)
 
     def test_stim_audio_opt_in_only(self):
         # e-stim channels present but neither --stim-wav nor --stim-mp3 -> no audio.

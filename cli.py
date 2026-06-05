@@ -3561,18 +3561,26 @@ def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> 
 
     # Build the (lo, hi, characterId, params) windows. With chapters, one per
     # chapter; without, the whole track using the single character assignment.
+    from forge.channels_defaults import default_character_for
     windows = []
     if chapters:
         # Chapter ids are positional `ch{i+1}` — the sidecar has no id field;
         # the loader (Rust commands.rs) assigns it, and characters.json keys
-        # by it. Replicate that here so assignments line up.
+        # by it. Replicate that here so assignments line up. When a chapter has
+        # no assigned character (user skipped Channels), fall back to the
+        # position-derived default arc so "skip and export" still produces
+        # coherent e-stim.
+        n = len(chapters)
         for i, ch in enumerate(chapters):
             cid = f"ch{i + 1}"
             lo = ch.get("at_ms", ch.get("atMs", ch.get("start_ms")))
             hi = ch.get("end_ms", ch.get("endMs"))
             assign = chars_doc.get(cid) or {}
-            windows.append((lo, hi, assign.get("characterId"), assign.get("params") or {}))
+            char_id = assign.get("characterId") or default_character_for(i, n)
+            windows.append((lo, hi, char_id, assign.get("params") or {}))
     else:
+        # No chapters (bare funscript) — only generate when a character is
+        # explicitly assigned; no arc fallback, keep the minimal path minimal.
         assign = next(iter(chars_doc.values()), {}) if chars_doc else {}
         windows.append((pairs[0][0], pairs[-1][0], assign.get("characterId"), assign.get("params") or {}))
 
@@ -3680,13 +3688,17 @@ def _polish_generate_tcode(funscript_path: str, knobs: dict | None, station) -> 
     if len(pairs) < 2:
         raise ValueError("no actions to generate axes from")
 
+    from forge.channels_defaults import default_mech_for
     windows = []
     if chapters:
+        # Skipped Mechanical -> fall back to the position-derived default arc
+        # (only when chapters exist; a bare funscript stays minimal).
+        n = len(chapters)
         for i, ch in enumerate(chapters):
             assign = chars_doc.get(f"ch{i + 1}") or {}
             lo = ch.get("at_ms", ch.get("atMs"))
             hi = ch.get("end_ms", ch.get("endMs"))
-            windows.append((lo, hi, assign.get("mechStyle")))
+            windows.append((lo, hi, assign.get("mechStyle") or default_mech_for(i, n)))
     else:
         assign = next(iter(chars_doc.values()), {}) if chars_doc else {}
         windows.append((pairs[0][0], pairs[-1][0], assign.get("mechStyle")))
