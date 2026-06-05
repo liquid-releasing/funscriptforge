@@ -2247,7 +2247,13 @@ def cmd_stim_process(args):
             "actions": [{"at": int(t), "pos": int(round(p))} for t, p in pairs],
         }), encoding="utf-8")
 
-        config = build_config(args.character, sliders, output_dir=str(tmp))
+        # Virtual characters (e.g. Scene Closer) generate from a base Edger
+        # preset, then get a post-process below. Real characters pass through.
+        from forge.stim_config import resolve_character, apply_virtual_envelope
+        base_label, virtual = resolve_character(args.character)
+        win_lo, win_hi = pairs[0][0], pairs[-1][0]
+
+        config = build_config(base_label, sliders, output_dir=str(tmp))
         if args.mode == "2d":
             config.setdefault("prostate_generation", {})["generate_prostate_files"] = False
         # funscript-tools' process() logs progress to stdout ("Generated e1
@@ -2272,9 +2278,9 @@ def cmd_stim_process(args):
             if not cp.exists():
                 continue
             cd = json.loads(cp.read_text(encoding="utf-8"))
-            channels[suf] = {"actions": [
-                {"at": a["at"], "pos": a["pos"]} for a in cd.get("actions", [])
-            ]}
+            acts = [{"at": a["at"], "pos": a["pos"]} for a in cd.get("actions", [])]
+            acts = apply_virtual_envelope(suf, acts, win_lo, win_hi, virtual)
+            channels[suf] = {"actions": acts}
         print(json.dumps({"available": True, "mode": args.mode, "channels": channels}))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -3356,7 +3362,7 @@ def cmd_list_characters(args):
     so the JS catalog (in `data/characters.js`) can match UI-only fields
     (color / tagline / devices) by id without spaces / case issues.
     """
-    from forge.stim_config import merged_presets
+    from forge.stim_config import merged_presets, virtual_character_records
 
     presets, err = merged_presets()
     if err and args.format != "json":
@@ -3374,6 +3380,10 @@ def cmd_list_characters(args):
             "sliders": preset.get("sliders", []),
             "config": preset.get("config", {}),
         })
+    # Forge-level virtual characters (e.g. Scene Closer) — generated from a base
+    # preset + a post-process at our layer, so they appear in the catalog
+    # alongside the real Edger presets.
+    records.extend(virtual_character_records())
 
     if args.format == "json":
         out = {"characters": records}
@@ -3570,10 +3580,17 @@ def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> 
     templates = {}  # channel -> first-seen doc minus actions
     tmp = Path(tempfile.mkdtemp(prefix="ff_polish_estim_"))
     try:
+        from forge.stim_config import resolve_character, apply_virtual_envelope
         for idx, (lo, hi, cid, params) in enumerate(windows):
             if not cid:
                 continue  # unassigned chapter — no e-stim here
-            label = slug_to_label.get(cid) or slug_to_label.get(_slug_character(cid))
+            # Virtual characters (Scene Closer) generate from a base preset and
+            # get a post-process below; real ones resolve via slug_to_label.
+            base_label, virtual = resolve_character(cid)
+            if virtual:
+                label = base_label
+            else:
+                label = slug_to_label.get(cid) or slug_to_label.get(_slug_character(cid))
             if not label:
                 continue
             wlo = lo if lo is not None else pairs[0][0]
@@ -3598,9 +3615,9 @@ def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> 
                 if not cpth.exists():
                     continue
                 cd = json.loads(cpth.read_text(encoding="utf-8"))
-                raw.setdefault(suf, []).extend(
-                    {"at": a["at"], "pos": a["pos"]} for a in cd.get("actions", [])
-                )
+                acts = [{"at": a["at"], "pos": a["pos"]} for a in cd.get("actions", [])]
+                acts = apply_virtual_envelope(suf, acts, wlo, whi, virtual)
+                raw.setdefault(suf, []).extend(acts)
                 if suf not in templates:
                     templates[suf] = {k: v for k, v in cd.items() if k != "actions"}
     finally:

@@ -153,3 +153,104 @@ def _deep_merge(base: dict, override: dict) -> None:
             _deep_merge(base[k], v)
         else:
             base[k] = v
+
+
+# ── Virtual characters (route B) ───────────────────────────────────────
+# Characters we provide WITHOUT editing the vendored Edger engine: generate
+# from a base Edger preset, then post-process the channels at our layer.
+# Edger's volume ramp is hard-coded RISING (``make_volume_ramp`` builds a
+# 0→peak envelope), so a "winds down" character can't be a pure config —
+# we generate with a base, then scale the intensity (volume) channels by a
+# descending taper across the assigned span.
+#
+# Scene Closer = the reverse Scene Builder: same texture, but the intensity
+# eases OFF over the scene instead of building up. Builder opens, Closer
+# closes — the arc's finale.
+
+VIRTUAL_CHARACTERS: dict[str, dict] = {
+    "scene_closer": {
+        "label": "Scene Closer",
+        "description": (
+            "Winds the scene down — eases off and de-escalates over its span. "
+            "The reverse of Scene Builder: Builder opens, Closer closes."
+        ),
+        "base": "Scene Builder",       # Edger preset to generate from
+        "envelope": "descending",      # scale volume 1.0 → floor across the span
+        "envelope_floor": 0.2,         # intensity at the end of the span (0..1)
+    },
+}
+
+# Channels whose amplitude carries "intensity" — the descending envelope
+# scales these; motion/frequency/pulse channels are left untouched.
+_VOLUME_CHANNELS = ("volume", "volume-prostate")
+
+
+def _slug(s: str) -> str:
+    """Slugify a character label/id (``Scene Builder`` -> ``scene_builder``)."""
+    return (s or "").lower().replace(" ", "_").replace("-", "_")
+
+
+def resolve_character(cid_or_label: str) -> tuple[str, Optional[dict]]:
+    """Resolve a character id/label to ``(base_label, virtual_spec_or_None)``.
+
+    Virtual characters (e.g. ``scene_closer``) resolve to their base Edger
+    preset label plus a post-process spec. Real presets pass through
+    unchanged with ``None`` — callers keep their existing label lookup.
+    """
+    spec = VIRTUAL_CHARACTERS.get(_slug(cid_or_label))
+    if spec:
+        return spec["base"], spec
+    return cid_or_label, None
+
+
+def virtual_character_records() -> list[dict]:
+    """Catalog records for the forge-level virtual characters.
+
+    Inherits the base preset's sliders/config so the UI has knobs. Skipped
+    when the base preset is unavailable (funscript-tools missing) so the
+    catalog stays consistent — no virtual characters without real ones.
+    """
+    presets, _ = merged_presets()
+    out: list[dict] = []
+    for key, spec in VIRTUAL_CHARACTERS.items():
+        base = presets.get(spec["base"])
+        if not base:
+            continue
+        out.append({
+            "id": key,
+            "label": spec["label"],
+            "description": spec["description"],
+            "sliders": base.get("sliders", []),
+            "config": base.get("config", {}),
+            "virtual": True,
+            "base": spec["base"],
+        })
+    return out
+
+
+def apply_virtual_envelope(
+    channel_name: str,
+    actions: list[dict],
+    window_lo: int,
+    window_hi: int,
+    spec: Optional[dict],
+) -> list[dict]:
+    """Apply a virtual character's post-process to one channel's actions.
+
+    ``descending``: scale the volume channels by a linear taper from 1.0 at
+    ``window_lo`` down to ``envelope_floor`` at ``window_hi`` — the unbuild.
+    Non-volume channels and non-descending specs pass through unchanged.
+    """
+    if not spec or spec.get("envelope") != "descending":
+        return actions
+    if channel_name not in _VOLUME_CHANNELS:
+        return actions
+    floor = float(spec.get("envelope_floor", 0.2))
+    span = max(1, window_hi - window_lo)
+    out: list[dict] = []
+    for a in actions:
+        frac = (a["at"] - window_lo) / span
+        frac = 1.0 if frac > 1.0 else (0.0 if frac < 0.0 else frac)
+        factor = 1.0 - (1.0 - floor) * frac
+        out.append({"at": a["at"], "pos": int(round(a["pos"] * factor))})
+    return out

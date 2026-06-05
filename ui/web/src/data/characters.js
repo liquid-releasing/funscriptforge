@@ -86,6 +86,23 @@ export const CHARACTERS = [
         min: 0, max: 1, step: 0.05, def: 0.5 },
     ],
   },
+  {
+    // Forge-level virtual character (route B): generates from Scene Builder,
+    // then a descending volume envelope at export/draw time — the reverse arc.
+    id: 'scene_closer',
+    label: 'Scene Closer',
+    color: '#ff8e72',
+    icon: 'pause',           // eases off — winds the scene down to a close
+    tagline: 'Winds the scene down to a close',
+    desc: 'Eases off and de-escalates across the chapter — the reverse of Scene Builder. Builder opens, Closer closes.',
+    devices: ['estim', 'vibrator', 'bhaptics'],
+    sliders: [
+      { id: 'build_speed', label: 'Ease-off speed', leftHint: 'eases quickly', rightHint: 'very slow fade',
+        min: 0, max: 10, step: 0.1, def: 7.5 },
+      { id: 'arc_width',   label: 'Arc width',   leftHint: 'tight',          rightHint: 'broad',
+        min: 0, max: 1, step: 0.01, def: 0.25 },
+    ],
+  },
 ];
 
 // Default slider params for a character — pulled fresh from the
