@@ -1961,8 +1961,8 @@ pub async fn export_write(
     final_smooth: bool,
     stem: Option<String>,
     media: Option<String>,
-    stim_audio: bool,
-    stim_format: Option<String>,
+    stim_wav: bool,
+    stim_mp3: bool,
 ) -> Result<serde_json::Value, String> {
     let src = effective_funscript_path(&funscript_path);
     let mut args: Vec<String> = vec!["export".into(), src, "--mode".into(), mode];
@@ -1984,12 +1984,11 @@ pub async fn export_write(
     if final_smooth {
         args.push("--final-smooth".into());
     }
-    if stim_audio {
-        args.push("--stim-audio".into());
-        if let Some(fmt) = stim_format {
-            args.push("--stim-format".into());
-            args.push(fmt);
-        }
+    if stim_wav {
+        args.push("--stim-wav".into());
+    }
+    if stim_mp3 {
+        args.push("--stim-mp3".into());
     }
     let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let out = run_cli(&argv).await?;

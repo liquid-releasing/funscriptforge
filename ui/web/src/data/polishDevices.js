@@ -55,18 +55,20 @@ export const POLISH_DEVICES = [
     ],
   },
   {
-    id: 'osr2',
-    label: 'OSR2',
+    // OSR2 and SR6 share one station — always writes the full 6-axis TCode set.
+    // OSR2 owners play the 4 axes their 2-servo build supports; SR6 owners play
+    // all 6. Same files, the player picks. OSR2/SR6 caps are identical (150/500).
+    id: 'tcode',
+    label: 'OSR2 / SR6',
     sublabel: 'TCode multi-axis',
     kind: 'stroker-tcode',
-    deviceKeys: ['osr2'],
-    axes: ['L0', 'R0', 'R1', 'R2'],       // stroke + twist + roll + pitch
+    deviceKeys: ['sr6'],
+    axes: ['L0', 'L1', 'L2', 'R0', 'R1', 'R2'],  // full stroke + surge/sway/twist/roll/pitch
     severity: 3,
     ember: '#ff8e3a',
     glyph: 'stroker-multi',
-    // device_specs osr2: 150 BPM / 500 pos/s
-    constraintHint: 'Servo slew · writes TCode axis set',
-    outputFile: '{stem}.funscript',       // L0; siblings .twist/.roll/.pitch
+    constraintHint: 'Servo slew · full 6-axis TCode set',
+    outputFile: '{stem}.funscript',       // L0; siblings .surge/.sway/.twist/.roll/.pitch
     tcode: true,
     knobs: [
       { key: 'maxBpm',    label: 'Max BPM',     min: 60,  max: 220, step: 5,    unit: 'bpm', default: 150, cap: 150, help: 'Servo carriage ceiling.' },
@@ -76,24 +78,41 @@ export const POLISH_DEVICES = [
     ],
   },
   {
-    id: 'sr6',
-    label: 'SR6',
-    sublabel: 'TCode 6-axis',
-    kind: 'stroker-tcode',
-    deviceKeys: ['sr6'],
-    axes: ['L0', 'L1', 'L2', 'R0', 'R1', 'R2'],  // full surge/sway/twist/roll/pitch + stroke
+    id: 'lovense',
+    label: 'Lovense',
+    sublabel: 'Bluetooth 1-axis',
+    kind: 'stroker',
+    deviceKeys: ['generic'],              // conservative BT fallback: 100 BPM / 300 pos/s
+    axes: ['L0'],
     severity: 4,
-    ember: '#ffb547',
-    glyph: 'stroker-multi',
-    constraintHint: '6-axis servo slew · full TCode set',
-    outputFile: '{stem}.funscript',       // L0; siblings .surge/.sway/.twist/.roll/.pitch
-    tcode: true,
-    experimental: true,
+    ember: '#ff5fa2',
+    glyph: 'stroker-1ax',
+    constraintHint: 'Bluetooth range · gentle slew',
+    outputFile: '{stem}.lovense.funscript',
     knobs: [
-      { key: 'maxBpm',    label: 'Max BPM',     min: 60,  max: 220, step: 5,    unit: 'bpm', default: 150, cap: 150, help: 'Servo carriage ceiling.' },
-      { key: 'smoothing', label: 'Smoothing',   min: 0,   max: 1,   step: 0.05, unit: '',    default: 0.40, help: 'Low-pass per axis.' },
-      { key: 'latency',   label: 'Lead-time',   min: -20, max: 200, step: 5,    unit: 'ms',  default: 50,   help: 'Servo command pre-roll.' },
-      { key: 'quantize',  label: 'Position step', min: 1, max: 10,  step: 1,    unit: '%',   default: 1,    help: 'Smallest increment per axis.' },
+      { key: 'maxBpm',    label: 'Max BPM',     min: 40,  max: 160, step: 5,    unit: 'bpm', default: 100, cap: 100, help: 'Bluetooth devices cycle slower than wired strokers.' },
+      { key: 'smoothing', label: 'Smoothing',   min: 0,   max: 1,   step: 0.05, unit: '',    default: 0.45, help: 'Low-pass on the position curve.' },
+      { key: 'latency',   label: 'Lead-time',   min: -20, max: 300, step: 5,    unit: 'ms',  default: 80,   help: 'BT command latency is high — send early to land on the beat.' },
+      { key: 'quantize',  label: 'Position step', min: 1, max: 10,  step: 1,    unit: '%',   default: 1,    help: 'Smallest position increment the device resolves.' },
+    ],
+  },
+  {
+    id: 'vacuglide',
+    label: 'Vacuglide 2',
+    sublabel: 'Autoblow cloud · 1-axis',
+    kind: 'stroker',
+    deviceKeys: ['vacuglide'],            // Handy-class caps pending vendor data: 120 BPM / 450 pos/s
+    axes: ['L0'],
+    severity: 5,
+    ember: '#3fd0c9',
+    glyph: 'stroker-1ax',
+    constraintHint: 'Cloud stroker · uploads funscript',
+    outputFile: '{stem}.vacuglide.funscript',
+    knobs: [
+      { key: 'maxBpm',    label: 'Max BPM',     min: 60,  max: 180, step: 5,    unit: 'bpm', default: 120, cap: 120, help: 'Autoblow carriage ceiling (mirrors Handy pending vendor data).' },
+      { key: 'smoothing', label: 'Smoothing',   min: 0,   max: 1,   step: 0.05, unit: '',    default: 0.40, help: 'Low-pass on the position curve.' },
+      { key: 'latency',   label: 'Lead-time',   min: -20, max: 200, step: 5,    unit: 'ms',  default: 0,    help: 'Cloud playback is pre-synced from the uploaded script — little local lead-time needed.' },
+      { key: 'quantize',  label: 'Position step', min: 1, max: 10,  step: 1,    unit: '%',   default: 1,    help: 'Smallest position increment the device resolves.' },
     ],
   },
 ];

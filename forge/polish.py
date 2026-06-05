@@ -99,29 +99,42 @@ STATIONS: dict[str, Station] = {
         default_knobs={"maxBpm": 120, "smoothing": 0.45, "latency": 60, "quantize": 1},
         constraint_hint="BPM ceiling · carriage acceleration",
     ),
-    "osr2": Station(
-        id="osr2",
-        label="OSR2",
+    # OSR2 and SR6 share one station: we always write the full 6-axis TCode set
+    # (L0 stroke + surge/sway/twist/roll/pitch). OSR2 owners play the 4 axes
+    # their 2-servo build supports; SR6 owners play all 6. Same files, the
+    # player picks. OSR2/SR6 limits are identical in device_specs (500 / 150).
+    "tcode": Station(
+        id="tcode",
+        label="OSR2 / SR6",
         sublabel="TCode multi-axis",
-        kind="stroker-tcode",
-        device_keys=["osr2"],
-        # 2-servo OSR2: stroke + twist + roll + pitch (no surge/sway carriage).
-        axes=["L0", "R0", "R1", "R2"],
-        output_template="{stem}.funscript",  # L0; siblings derived from axes
-        default_knobs={"maxBpm": 150, "smoothing": 0.40, "latency": 50, "quantize": 1},
-        constraint_hint="Servo slew · TCode axis set",
-    ),
-    "sr6": Station(
-        id="sr6",
-        label="SR6",
-        sublabel="TCode 6-axis",
         kind="stroker-tcode",
         device_keys=["sr6"],
         axes=["L0", "L1", "L2", "R0", "R1", "R2"],
         output_template="{stem}.funscript",  # L0; siblings derived from axes
         default_knobs={"maxBpm": 150, "smoothing": 0.40, "latency": 50, "quantize": 1},
-        constraint_hint="6-axis servo slew · full TCode set",
-        experimental=True,
+        constraint_hint="Servo slew · full 6-axis TCode set",
+    ),
+    "lovense": Station(
+        id="lovense",
+        label="Lovense",
+        sublabel="Bluetooth 1-axis",
+        kind="stroker",
+        device_keys=["generic"],  # conservative BT fallback: 100 BPM / 300 pos/s
+        axes=["L0"],
+        output_template="{stem}.lovense.funscript",
+        default_knobs={"maxBpm": 100, "smoothing": 0.45, "latency": 80, "quantize": 1},
+        constraint_hint="Bluetooth range · gentle slew",
+    ),
+    "vacuglide": Station(
+        id="vacuglide",
+        label="Vacuglide 2",
+        sublabel="Autoblow cloud · 1-axis",
+        kind="stroker",
+        device_keys=["vacuglide"],
+        axes=["L0"],
+        output_template="{stem}.vacuglide.funscript",
+        default_knobs={"maxBpm": 120, "smoothing": 0.40, "latency": 0, "quantize": 1},
+        constraint_hint="Cloud stroker · uploads funscript",
     ),
 }
 
@@ -243,8 +256,9 @@ def lag_for_device(station_id: str) -> float:
     """Mechanical lag time-constant (ms) per station. Preview only."""
     return {
         "handy": 22,     # electric motor — fast
-        "osr2": 18,      # direct servo
-        "sr6": 18,
+        "tcode": 18,     # direct servo (OSR2 / SR6)
+        "lovense": 35,   # Bluetooth — higher command latency
+        "vacuglide": 28, # Autoblow stroker — cloud-synced
         "estim3p": 6,    # near-instant
     }.get(station_id, 30)
 

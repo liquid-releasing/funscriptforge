@@ -92,7 +92,7 @@ export function shiftTime(samples, deltaMs) {
 
 // Mechanical lag time-constant per station (ms). Mirror polish.lag_for_device.
 export function lagForStation(stationId) {
-  return { handy: 22, osr2: 18, sr6: 18, estim3p: 6 }[stationId] ?? 30;
+  return { handy: 22, tcode: 18, lovense: 35, vacuglide: 28, estim3p: 6 }[stationId] ?? 30;
 }
 
 // ─── Dense <-> sparse (mirror polish.py) ─────────────────────────────────────

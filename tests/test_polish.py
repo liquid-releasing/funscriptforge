@@ -29,7 +29,7 @@ def _jerky(n=200, dt=20):
 class TestStationCatalog(unittest.TestCase):
 
     def test_v1_stations_present(self):
-        self.assertEqual(set(polish.STATIONS), {"estim3p", "handy", "osr2", "sr6"})
+        self.assertEqual(set(polish.STATIONS), {"estim3p", "handy", "tcode", "lovense", "vacuglide"})
 
     def test_every_station_resolves_in_device_specs(self):
         specs = load_device_specs()
@@ -39,23 +39,25 @@ class TestStationCatalog(unittest.TestCase):
                 for key in st.device_keys:
                     self.assertIn(key, specs, f"{sid} -> unknown device_specs key {key!r}")
 
-    def test_sr6_added_to_device_specs(self):
+    def test_sr6_in_device_specs(self):
+        # The merged 'tcode' station clamps against the sr6 spec (== osr2).
         specs = load_device_specs()
         self.assertIn("sr6", specs)
         self.assertEqual(specs["sr6"].device_type, "stroker")
         self.assertGreater(specs["sr6"].max_speed, 0)
 
-    def test_sr6_experimental_handy_estim_not(self):
-        self.assertTrue(polish.STATIONS["sr6"].experimental)
-        self.assertFalse(polish.STATIONS["handy"].experimental)
-        self.assertFalse(polish.STATIONS["estim3p"].experimental)
+    def test_no_experimental_stations(self):
+        # v1 ships four owned/verifiable stations — none flagged experimental.
+        for sid, st in polish.STATIONS.items():
+            with self.subTest(station=sid):
+                self.assertFalse(st.experimental)
 
     def test_axis_topology(self):
         self.assertEqual(polish.STATIONS["handy"].axes, ["L0"])           # single
-        self.assertEqual(polish.STATIONS["sr6"].axes,                     # full TCode
+        self.assertEqual(polish.STATIONS["lovense"].axes, ["L0"])         # single (BT)
+        self.assertEqual(polish.STATIONS["vacuglide"].axes, ["L0"])       # single (cloud)
+        self.assertEqual(polish.STATIONS["tcode"].axes,                   # full 6-axis TCode
                          ["L0", "L1", "L2", "R0", "R1", "R2"])
-        self.assertIn("L0", polish.STATIONS["osr2"].axes)                 # has main
-        self.assertNotIn("L1", polish.STATIONS["osr2"].axes)             # OSR2 has no surge carriage
 
 
 class TestSiblingPaths(unittest.TestCase):
@@ -69,8 +71,8 @@ class TestSiblingPaths(unittest.TestCase):
         self.assertEqual(polish.sibling_path("scene", "R1"), "scene.roll.funscript")
         self.assertEqual(polish.sibling_path("scene", "R2"), "scene.pitch.funscript")
 
-    def test_sr6_full_sibling_set(self):
-        paths = [polish.sibling_path("v", a) for a in polish.STATIONS["sr6"].axes]
+    def test_tcode_full_sibling_set(self):
+        paths = [polish.sibling_path("v", a) for a in polish.STATIONS["tcode"].axes]
         self.assertEqual(paths, [
             "v.funscript", "v.surge.funscript", "v.sway.funscript",
             "v.twist.funscript", "v.roll.funscript", "v.pitch.funscript",
@@ -106,7 +108,7 @@ class TestApplyPass(unittest.TestCase):
     def test_backstop_clamps_jerky_script(self):
         # A 5000 pos/s script must be tamed below each device's max_speed.
         acts = _jerky()
-        for sid in ("handy", "osr2", "sr6"):
+        for sid in ("handy", "tcode", "lovense"):
             with self.subTest(station=sid):
                 out, stats = polish.apply_pass(acts, sid)
                 spec = combined_limits(polish.STATIONS[sid].device_keys)
@@ -218,8 +220,8 @@ class TestPolishCLI(unittest.TestCase):
         self.assertTrue(out["saved"][0].endswith("scene.handy.funscript"))
         self.assertTrue(os.path.exists(out["saved"][0]))
 
-    def test_apply_sr6_writes_tcode_set(self):
-        r = _run_cli("polish-apply", self.main, "--station", "sr6")
+    def test_apply_tcode_writes_tcode_set(self):
+        r = _run_cli("polish-apply", self.main, "--station", "tcode")
         self.assertEqual(r.returncode, 0, r.stderr)
         out = json.loads(r.stdout)
         names = sorted(os.path.basename(p) for p in out["saved"])

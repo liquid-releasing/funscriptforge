@@ -202,12 +202,12 @@ export default function PolishTab({ project, setAppError = () => {} }) {
         </span>
       </div>
 
-      {/* ── Conveyor: stations row ───────────────────────────────── */}
-      <div style={{ padding: '12px 28px 18px' }}>
+      {/* ── Conveyor: stations row (slim — leave the bench room) ────── */}
+      <div style={{ padding: '8px 28px 10px' }}>
         <div style={{
           display: 'grid', gridTemplateColumns: `auto repeat(${POLISH_DEVICES.length}, 1fr)`,
           alignItems: 'stretch', gap: 0, background: '#12151e', border: '1px solid #2d3148',
-          borderRadius: 12, padding: 14,
+          borderRadius: 12, padding: 10,
         }}>
           {/* Origin — Channels source */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 18px 0 6px', borderRight: '1px dashed #3a3f5c', minWidth: 110 }}>
@@ -247,7 +247,7 @@ export default function PolishTab({ project, setAppError = () => {} }) {
                     <span style={{ width: 16, height: 16, borderRadius: 8, display: 'grid', placeItems: 'center', background: 'rgba(62,213,152,0.18)', color: '#3ed598', fontSize: 10, fontWeight: 800 }}>✓</span>
                   )}
                 </div>
-                <div style={{ height: 36, background: 'rgba(255,255,255,0.02)', borderRadius: 4, overflow: 'hidden', padding: '3px 4px' }}>
+                <div style={{ height: 26, background: 'rgba(255,255,255,0.02)', borderRadius: 4, overflow: 'hidden', padding: '3px 4px' }}>
                   <MiniTrace samples={dTraces?.performed} totalMs={windowLen} ember={d.ember} />
                 </div>
                 <HeatMeter value={burnOff(dTraces)} ember={d.ember} height={3} />
@@ -293,7 +293,7 @@ export default function PolishTab({ project, setAppError = () => {} }) {
             </div>
           </div>
 
-          <div style={{ flex: 1, minHeight: 220, background: 'rgba(255,255,255,0.015)', border: '1px solid #2d3148', borderRadius: 8, padding: '14px 16px', marginBottom: 14, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, minHeight: 150, background: 'rgba(255,255,255,0.015)', border: '1px solid #2d3148', borderRadius: 8, padding: '14px 16px', marginBottom: 14, position: 'relative', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7390', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Three-pane preview</div>
             {windowActions.length >= 2 ? (
               <div style={{ flex: 1, minHeight: 0 }}>

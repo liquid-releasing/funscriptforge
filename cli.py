@@ -1158,19 +1158,21 @@ def cmd_export(args):
                 if _extract_frame(args.media, ch.get("at_ms", 0), thumbs / name):
                     artifacts.append({"path": f"thumbnails/{name}", "kind": "thumbnail", "role": "chapter", "index": i + 1})
 
-        # 6. audio/stim.wav — render the stamped e-stim alpha/beta to stereo WAV.
-        # Opt-in (--stim-wav): a full-length WAV is large (~10 MB/min); the
-        # channel funscripts are the primary e-stim artifact. For "no restim"
-        # playback the user can ask for it.
-        if args.stim_audio:
+        # 6. audio/stim.{wav,mp3} — render the stamped e-stim alpha/beta to a
+        # stereo control signal. Both formats are independent opt-ins (--stim-wav
+        # / --stim-mp3): WAV is the lossless original, mp3 the common real-world
+        # delivery format (smaller). A full-length WAV is large (~10 MB/min); the
+        # channel funscripts remain the primary e-stim artifact.
+        stim_formats = (["wav"] if args.stim_wav else []) + (["mp3"] if args.stim_mp3 else [])
+        if stim_formats:
             est_dir = staging / "stations" / "estim3p"
             alpha, beta = est_dir / f"{stem}.alpha.funscript", est_dir / f"{stem}.beta.funscript"
             if alpha.exists() and beta.exists() and duration_ms > 0:
                 adir = staging / "audio"
                 adir.mkdir(parents=True, exist_ok=True)
-                fmt = args.stim_format
-                if _render_stim_audio(alpha, beta, adir / f"stim.{fmt}", duration_ms / 1000.0, fmt=fmt):
-                    artifacts.append({"path": f"audio/stim.{fmt}", "kind": "audio", "role": "estim", "format": fmt})
+                for fmt in stim_formats:
+                    if _render_stim_audio(alpha, beta, adir / f"stim.{fmt}", duration_ms / 1000.0, fmt=fmt):
+                        artifacts.append({"path": f"audio/stim.{fmt}", "kind": "audio", "role": "estim", "format": fmt})
 
         # 7. manifest.ffmeta
         manifest = {
@@ -2835,8 +2837,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument("--media", metavar="PATH", help="Media file for hero + per-chapter frame thumbnails (optional).")
     p_exp.add_argument("--blend-seams", action="store_true", help="Apply blend_seams to the main funscript.")
     p_exp.add_argument("--final-smooth", action="store_true", help="Apply final_smooth to the main funscript.")
-    p_exp.add_argument("--stim-audio", action="store_true", help="Render audio/stim.<fmt> from the e-stim channels (opt-in).")
-    p_exp.add_argument("--stim-format", choices=["wav", "mp3"], default="wav", help="stim audio format (default: wav; mp3 via ffmpeg).")
+    p_exp.add_argument("--stim-wav", action="store_true", help="Render audio/stim.wav from the e-stim channels (opt-in).")
+    p_exp.add_argument("--stim-mp3", action="store_true", help="Render audio/stim.mp3 from the e-stim channels (opt-in; via ffmpeg).")
 
     # --- finalize ---
     p_fin = sub.add_parser(

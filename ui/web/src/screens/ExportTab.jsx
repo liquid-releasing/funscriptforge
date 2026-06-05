@@ -255,8 +255,8 @@ export default function ExportTab({ project }) {
   const [postProcessing, setPostProcessing] = useState({
     blendSeams: true,
     finalSmooth: true,
-    stimAudio: false,
-    stimFormat: 'wav',
+    stimWav: false,
+    stimMp3: false,
   });
   const hasMedia = !!project?.mediaPath;
 
@@ -293,8 +293,8 @@ export default function ExportTab({ project }) {
         media: project?.mediaPath || null,
         blendSeams: postProcessing.blendSeams,
         finalSmooth: postProcessing.finalSmooth,
-        stimAudio: postProcessing.stimAudio,
-        stimFormat: postProcessing.stimFormat,
+        stimWav: postProcessing.stimWav,
+        stimMp3: postProcessing.stimMp3,
       });
       if (!res) { setWriteError('Export is unavailable in browser mode.'); return; }
       setResult(res);
@@ -328,8 +328,8 @@ export default function ExportTab({ project }) {
         mode={mode}
         stampedStations={stampedStations}
         hasMedia={hasMedia}
-        stimAudio={postProcessing.stimAudio}
-        stimFormat={postProcessing.stimFormat}
+        stimWav={postProcessing.stimWav}
+        stimMp3={postProcessing.stimMp3}
       />
 
       {mode === 'loose' ? (
@@ -513,9 +513,14 @@ const POST_OPTIONS = [
     desc: 'Light global low-pass pass that removes residual sharp edges.',
   },
   {
-    id: 'stimAudio',
-    label: 'Render stim audio',
-    desc: 'Pre-render the e-stim channels to a stereo file for no-restim playback. WAV by default; mp3 is the common real-world format (smaller). Off by default.',
+    id: 'stimWav',
+    label: 'Render stim audio · WAV',
+    desc: 'Pre-render the e-stim channels to a stereo WAV (lossless, ~10 MB/min) for no-restim playback. Needs a stamped e-stim station. Off by default.',
+  },
+  {
+    id: 'stimMp3',
+    label: 'Render stim audio · MP3',
+    desc: 'Same stereo render as MP3 (smaller, the common real-world format; via ffmpeg). Needs a stamped e-stim station. Off by default.',
   },
 ];
 
@@ -552,28 +557,6 @@ function PostProcessing({ postProcessing, onChange }) {
                 <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 2, lineHeight: 1.45 }}>
                   {o.desc}
                 </div>
-                {o.id === 'stimAudio' && on && (
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                    {['wav', 'mp3'].map((fmt) => {
-                      const sel = (postProcessing.stimFormat || 'wav') === fmt;
-                      return (
-                        <button
-                          key={fmt}
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange((p) => ({ ...p, stimFormat: fmt })); }}
-                          style={{
-                            padding: '3px 10px', borderRadius: 5, cursor: 'pointer',
-                            fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
-                            background: sel ? 'rgba(77,171,247,0.16)' : 'var(--surface-2)',
-                            border: `1px solid ${sel ? '#4dabf7' : 'var(--border)'}`,
-                            color: sel ? '#4dabf7' : 'var(--text-soft)',
-                          }}
-                        >
-                          {fmt.toUpperCase()}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             </label>
           );
@@ -589,7 +572,7 @@ function PostProcessing({ postProcessing, onChange }) {
 // What the export will actually pack, derived from the Polish stamp record +
 // the always-present artifacts. Read-only preview — the CLI packs whatever it
 // finds; this mirrors that so there are no lying checkboxes.
-function PackedArtifacts({ mode, stampedStations, hasMedia, stimAudio, stimFormat = 'wav' }) {
+function PackedArtifacts({ mode, stampedStations, hasMedia, stimWav, stimMp3 }) {
   const estimStamped = stampedStations.includes('estim3p');
   const rows = [];
   rows.push({
@@ -622,8 +605,9 @@ function PackedArtifacts({ mode, stampedStations, hasMedia, stimAudio, stimForma
       ? 'Funscript curve + hero & per-chapter frame snapshots (media attached).'
       : 'Funscript curve preview. Attach media for hero + per-chapter frames.',
   });
-  if (stimAudio && estimStamped) {
-    rows.push({ name: `audio/stim.${stimFormat}`, kind: 'audio', desc: `Pre-rendered e-stim stereo ${stimFormat.toUpperCase()} (opt-in).` });
+  if (estimStamped) {
+    if (stimWav) rows.push({ name: 'audio/stim.wav', kind: 'audio', desc: 'Pre-rendered e-stim stereo WAV (lossless, opt-in).' });
+    if (stimMp3) rows.push({ name: 'audio/stim.mp3', kind: 'audio', desc: 'Pre-rendered e-stim stereo MP3 (compact, opt-in).' });
   }
   if (mode === 'forge') {
     rows.push({ name: 'manifest.ffmeta', kind: 'manifest', desc: 'What the bundle contains and how the artifacts relate.' });
@@ -660,10 +644,11 @@ function PackedArtifacts({ mode, stampedStations, hasMedia, stimAudio, stimForma
       {stampedStations.length === 0 && (
         <div style={{
           marginTop: 8, padding: '8px 12px', borderRadius: 6,
-          background: 'rgba(255,181,71,0.08)', border: '1px solid rgba(255,181,71,0.35)',
-          fontSize: 11, color: '#ffb547', lineHeight: 1.45,
+          background: 'var(--surface-2)', border: '1px solid var(--border)',
+          fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.45,
         }}>
-          No Polish stations stamped yet — only motion + sidecars will pack. Visit Polish to forge device outputs.
+          Exporting the motion track + sidecars. To also bundle device-ready files
+          (Handy, OSR2/SR6, e-stim), stamp them in Polish first — optional.
         </div>
       )}
     </div>
@@ -956,10 +941,11 @@ function BundlePreview({ stem }) {
 ├── motion.funscript             primary stroke axis (L0)
 ├── stations/                    one folder per Polish-stamped device
 │   ├── handy/<stem>.handy.funscript
-│   ├── osr2/                    TCode set — OSR2
+│   ├── tcode/                   TCode set — OSR2 / SR6
 │   │   ├── <stem>.funscript     L0 (stroke)
-│   │   └── <stem>.{twist,roll,pitch}.funscript
-│   ├── sr6/                     TCode set — SR6 (+ surge, sway)
+│   │   └── <stem>.{surge,sway,twist,roll,pitch}.funscript
+│   ├── lovense/<stem>.lovense.funscript
+│   ├── vacuglide/<stem>.vacuglide.funscript
 │   └── estim3p/<stem>.{alpha,beta,…}.funscript  ×9
 ├── events.yml                   point-in-time effects (when authored)
 ├── chapters.json / phrases.json / characters.json

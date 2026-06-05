@@ -63,7 +63,6 @@ export default function MechanicalPanel({
         }}>
           {MULTIAXIS_STYLES.map((s) => {
             const sel = s.id === styleId;
-            const n = Object.keys(s.axes || {}).length;
             return (
               <button
                 key={s.id}
@@ -77,8 +76,8 @@ export default function MechanicalPanel({
                 }}
               >
                 <span style={{ fontSize: 12.5, fontWeight: 700 }}>{s.label}</span>
-                <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>
-                  {n === 0 ? 'stroke only' : `${n} ax${n === 1 ? 'is' : 'es'}`}
+                <span style={{ fontSize: 10, color: sel ? ACTIVE : 'var(--text-dim)', fontWeight: 600 }}>
+                  {s.tag}
                 </span>
               </button>
             );
@@ -150,7 +149,7 @@ export default function MechanicalPanel({
           <Icon name="info" size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />
           {activeCount === 0
             ? 'Stroke passes through untouched — no secondary-axis files generated.'
-            : 'Secondary-axis funscripts (roll · pitch · twist · surge · sway) derive from the stroke at Polish/export time.'}
+            : 'All five axes are derived algorithmically from the L0 stroke at export. Surge & sway only export to SR6-class devices.'}
         </div>
 
         {/* Accept / Reset — mirrors the Character editor's accept-and-advance.

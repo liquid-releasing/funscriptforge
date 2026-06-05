@@ -71,6 +71,18 @@
       "max_delta": 100,
       "notes": "Confidence: LOW. Conservative fallback for Lovense/Kiiroo/WeVibe Bluetooth devices. Each device has different limits; 300 is a safe floor. Intiface (Buttplug.io) is a protocol, not a device."
     },
+    "vacuglide": {
+      "name": "Vacuglide 2 (Autoblow)",
+      "type": "stroker",
+      "max_speed": 450,
+      "max_bpm": 120,
+      "min_cycle_ms": 250,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 3500,
+      "max_delta": 100,
+      "notes": "Confidence: LOW. Autoblow/XSense cloud stroker (Vacuglide 2). Polish clamps a standard 1-axis funscript; playback uploads it to the vendor cloud via @xsense/autoblow-sdk (forgeplayer adapter, post-beta). Speed/BPM mirror Handy-class pending vendor data; refine from user feedback."
+    },
     "estim_stereo": {
       "name": "Estim — Stereo",
       "type": "estim",
