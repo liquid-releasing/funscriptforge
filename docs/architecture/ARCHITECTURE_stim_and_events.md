@@ -158,6 +158,48 @@ process_events()     → modifies those files at phrase timecodes
 Sequential, not separate. Events enhance the generated channels — they layer
 on top of the baseline, they don't replace it.
 
+> **Current implementation (Tauri app, 2026-06-08) — events bake into the
+> e-stim channels at generation.**
+>
+> The design above is live, with the wiring updated for the Tauri rewrite.
+> Authoring is canonical in `<stem>.feel.yml` (Events tab, write-through). The
+> bake-in happens inside the **shared e-stim generator** so it covers both the
+> **Polish** tab's Stamp and **Export**'s auto-generation:
+>
+> ```
+> cli.py::_polish_generate_estim()
+>   1. per-chapter character → funscript-tools process() → 9 channels
+>   2. concatenate channels across chapters (absolute ms)
+>   3. _bake_events_into_channels():           ← the bake-in step
+>        feel.yml → _collect_events_yaml() → <stem>.events.yml
+>        write channels + events.yml to a tmp dir
+>        forge.funscript_tools.apply_events()  (Edger's process_events,
+>          globs <stem>.*.funscript siblings, modulates volume / pulse_freq /
+>          frequency / … in place against catalog/edger_event_definitions.yml)
+>        read the modulated channels back
+>   4. device clamp (forge.polish.apply_pass) runs on the event-shaped signal
+> ```
+>
+> **Why bake, not sidecar:** restim and forgeplayer play **channels**, not
+> events — they have no `events.yml` reader. So for an authored event to be
+> *felt*, it must be written into the channel signal at generation. The
+> `events.yml` sidecar is still shipped in the export bundle (human-readable,
+> portable, and the re-gen path for Edger's Custom Event Builder); because our
+> own players ignore it, there is no double-apply in our stack.
+>
+> **Fail-safe:** any error in the bake step (malformed event, missing
+> definitions) logs to stderr and ships the un-modulated channels — generation
+> never breaks. Absent `feel.yml` events, the step is a transparent no-op.
+>
+> Strokers and TCode (OSR2/SR6) are unaffected — events are an e-stim concept;
+> mechanical axes take no Edger events. The Polish live 3-pane preview still
+> shows the base (un-baked) signal for now; baking events into per-tab previews
+> is a separate cross-modality follow-up.
+>
+> Adapter: `forge/funscript_tools.py::apply_events()`. Bake step:
+> `cli.py::_bake_events_into_channels()`. Tests:
+> `tests/test_polish.py::test_estim_bakes_authored_events` (+ `_noop`).
+
 ### Enchantments (ship with FunscriptForge)
 
 Ten enchantments ship with FunscriptForge — the General events from

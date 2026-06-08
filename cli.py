@@ -3508,6 +3508,73 @@ def _slug_character(s: str) -> str:
     return s.lower().replace(" ", "_").replace("-", "_")
 
 
+def _bake_events_into_channels(funscript_path: str, stem: str, raw: dict,
+                               templates: dict) -> dict:
+    """Bake authored events (`<stem>.feel.yml`) into the concatenated e-stim
+    channels via funscript-tools' event engine, BEFORE the device clamp.
+
+    restim / forgeplayer play channels, not events — so for events to be felt
+    they must be baked into the channel signal at generation (the events.yml
+    sidecar that Export also ships is for Edger/event-aware re-gen, which our
+    own players never do, so there is no double-apply in our stack).
+
+    Mechanism: write each concatenated channel as `<stem>.<axis>.funscript`
+    plus a fresh `<stem>.events.yml` (rendered from feel.yml) into a tmp dir,
+    run `funscript_tools.apply_events` (Edger's `process_events`, which globs
+    those siblings and modulates them in place against our vendored
+    `edger_event_definitions.yml`), then read the modulated channels back.
+
+    Fail-safe: any error logs to stderr and returns `raw` unchanged so
+    generation never breaks on a malformed event.
+    """
+    events_body = _collect_events_yaml(funscript_path)
+    if not events_body:
+        return raw  # no real events authored — nothing to bake
+
+    import contextlib
+    import shutil
+    import tempfile
+
+    from forge.funscript_tools import apply_events
+
+    defs_path = _catalog_dir() / "edger_event_definitions.yml"
+    if not defs_path.exists():
+        print("event bake-in skipped: definitions not found", file=sys.stderr)
+        return raw
+
+    evdir = Path(tempfile.mkdtemp(prefix="ff_events_bake_"))
+    try:
+        # process_events derives the base from <stem>.events.yml and globs
+        # <stem>.*.funscript siblings — so the channel files must be named to
+        # match and live in the same dir.
+        for axis, acts in raw.items():
+            doc = {k: v for k, v in templates.get(axis, {}).items()}
+            doc["actions"] = sorted(acts, key=lambda a: a["at"])
+            (evdir / f"{stem}.{axis}.funscript").write_text(
+                json.dumps(doc), encoding="utf-8")
+        ev_path = evdir / f"{stem}.events.yml"
+        ev_path.write_text(events_body, encoding="utf-8")
+
+        with contextlib.redirect_stdout(sys.stderr):
+            apply_events(str(ev_path), str(defs_path))
+
+        baked = {}
+        for axis in raw:
+            cp = evdir / f"{stem}.{axis}.funscript"
+            if cp.exists():
+                cd = json.loads(cp.read_text(encoding="utf-8"))
+                baked[axis] = [{"at": int(a["at"]), "pos": a["pos"]}
+                               for a in cd.get("actions", [])]
+            else:
+                baked[axis] = raw[axis]
+        return baked
+    except Exception as exc:
+        print(f"event bake-in skipped: {exc}", file=sys.stderr)
+        return raw
+    finally:
+        shutil.rmtree(evdir, ignore_errors=True)
+
+
 def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> dict:
     """Generate the whole-track e-stim 9-channel set and clamp each channel.
 
@@ -3633,6 +3700,10 @@ def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> 
 
     if not raw:
         raise ValueError("No e-stim to generate — assign a character to at least one chapter in the Channels tab first.")
+
+    # Bake authored events into the channels before clamping, so the device
+    # signal carries the effects (restim/forgeplayer play channels, not events).
+    raw = _bake_events_into_channels(funscript_path, stem, raw, templates)
 
     out = {}
     for name, acts in raw.items():

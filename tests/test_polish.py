@@ -256,6 +256,59 @@ class TestPolishCLI(unittest.TestCase):
         self.assertGreater(len(out["saved"]), 0, out)
         self.assertTrue(any(p.endswith(".alpha.funscript") for p in out["saved"]))
 
+    def _gen_estim_volume(self):
+        """Run estim generation and return the saved volume channel actions."""
+        r = _run_cli("polish-apply", self.main, "--station", "estim3p")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = json.loads(r.stdout)
+        vol = next((p for p in out.get("saved", []) if p.endswith(".volume.funscript")), None)
+        self.assertIsNotNone(vol, out)
+        with open(vol) as f:
+            return json.load(f)["actions"]
+
+    def test_estim_bakes_authored_events(self):
+        # Events authored in <stem>.feel.yml must bake into the generated e-stim
+        # channels (restim/forgeplayer play channels, not events). A volume-
+        # modulating event ('cum') over [2s,8s] must change the volume channel.
+        cat = json.loads(_run_cli("list-characters", "--format", "json").stdout)
+        chars = cat.get("characters") or []
+        if not chars:
+            self.skipTest("no stim characters available (funscript-tools missing)")
+        forge = os.path.join(self.tmp, ".scene.forge")
+        os.makedirs(forge, exist_ok=True)
+        with open(os.path.join(forge, "scene.characters.json"), "w") as f:
+            json.dump({"version": 1,
+                       "characters": {"ch1": {"characterId": chars[0]["id"], "params": {}}}}, f)
+
+        # 1. Generate with NO events (the deterministic baseline).
+        base = self._gen_estim_volume()
+
+        # 2. Author one volume-modulating event, regenerate.
+        import yaml
+        with open(os.path.join(forge, "scene.feel.yml"), "w") as f:
+            yaml.safe_dump({"events": [{
+                "id": "e1", "begin_ms": 2000, "end_ms": 8000,
+                "effect": "cum", "intensity": 0.8,
+                "params": {}, "devices": [], "overrides": {},
+            }]}, f, sort_keys=False)
+        baked = self._gen_estim_volume()
+
+        # The event reshapes the volume channel — baked must differ from base.
+        self.assertNotEqual(base, baked, "events did not bake into the volume channel")
+
+    def test_estim_no_feel_yml_is_noop(self):
+        # Absent feel.yml: generation still succeeds and the bake step is a
+        # transparent pass-through (no crash, channels produced).
+        cat = json.loads(_run_cli("list-characters", "--format", "json").stdout)
+        if not (cat.get("characters") or []):
+            self.skipTest("no stim characters available (funscript-tools missing)")
+        forge = os.path.join(self.tmp, ".scene.forge")
+        os.makedirs(forge, exist_ok=True)
+        with open(os.path.join(forge, "scene.characters.json"), "w") as f:
+            json.dump({"version": 1,
+                       "characters": {"ch1": {"characterId": cat["characters"][0]["id"], "params": {}}}}, f)
+        self.assertGreater(len(self._gen_estim_volume()), 0)
+
     def test_polish_yml_roundtrip_with_hash(self):
         passes = json.dumps({"passes": {"handy": {"accepted": True,
                                                   "accepted_at": "2026-06-04T00:00:00Z",

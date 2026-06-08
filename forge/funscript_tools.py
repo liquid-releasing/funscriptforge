@@ -182,6 +182,38 @@ def process_with_default_config(funscript_path: str, output_dir: str,
     return cli.process(funscript_path, config, on_progress)
 
 
+def apply_events(events_yml_path: str, definitions_path: str,
+                 perform_backup: bool = False, volume_headroom: int = 10,
+                 config: dict | None = None) -> tuple:
+    """Bake an Edger ``events.yml`` into the generated channel funscripts.
+
+    funscript-tools' event engine globs the ``<stem>.<axis>.funscript`` files
+    sitting beside ``events_yml_path`` and modulates them IN PLACE (volume /
+    pulse_frequency / frequency / …) per each event's steps. This is the
+    bake-in step: events shape the e-stim channels at generation so
+    restim / forgeplayer — which play channels only, not events — feel them.
+
+    Args:
+        events_yml_path: Path to ``<stem>.events.yml`` (its base name drives
+            the funscript glob; the channels must be siblings in the same dir).
+        definitions_path: Path to ``edger_event_definitions.yml``.
+        perform_backup: Zip the channels before modifying (off — we work in tmp).
+        volume_headroom: Headroom (0-20) Edger carves above peak volume so
+            additive events don't clip.
+        config: Optional funscript-tools file_management config.
+
+    Returns:
+        ``(message, modified_files, backup_path)`` from ``process_events``.
+    """
+    _ensure_cli()
+    from pathlib import Path
+    from processing.event_processor import process_events
+    return process_events(
+        events_yml_path, perform_backup, Path(definitions_path),
+        volume_headroom=volume_headroom, config=config,
+    )
+
+
 def preview_output(source: dict, config: dict, output_type: str = "alpha") -> dict:
     """Preview a single channel without file I/O.
 
