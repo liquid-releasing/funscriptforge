@@ -221,7 +221,7 @@ const TARGET_GROUPS = [
     id: 'strokers',
     label: 'Strokers',
     ext: '.funscript',
-    icon: 'wand-sparkles',
+    icon: 'move-3d',
     color: '#4dabf7',
     consumer: 'MultiFunPlayer · Intiface · Handy',
     derive(ctx) {
@@ -383,7 +383,7 @@ function DestShell({ color, icon, label, right, children, on = true }) {
 function DiskDestination({ mode, onMode, stem, onStem, projectPath }) {
   const folder = projectPath ? String(projectPath).split(/[/\\]/).slice(0, -1).join('/') : '—';
   return (
-    <DestShell color="#4dabf7" icon="hard-drive" label="Disk"
+    <DestShell color="#4dabf7" icon="save" label="Disk"
                right={<Pill tone="info" dot>default</Pill>}>
       <p style={{ fontSize: 11.5, color: 'var(--text-dim)', margin: 0, lineHeight: 1.45 }}>
         Write into the project folder. Choose the shape:
@@ -427,7 +427,7 @@ function ForgePlayerDestination({ on, onToggle }) {
          onClick={onToggle}
          onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onToggle(); } }}
          style={{ cursor: 'pointer' }}>
-      <DestShell color="#3ed598" icon="play-circle" label="Open in ForgePlayer" on={on}
+      <DestShell color="#3ed598" icon="play" label="Open in ForgePlayer" on={on}
                  right={<CheckboxSquare checked={on} color="#3ed598" />}>
         <p style={{ fontSize: 11.5, color: 'var(--text-dim)', margin: 0, lineHeight: 1.45 }}>
           Hand the result to the LQR player. Launches ForgePlayer and reveals the file
@@ -447,7 +447,7 @@ function ForgePlayerDestination({ on, onToggle }) {
 function CloudDestination() {
   return (
     <div style={{ opacity: 0.6 }}>
-      <DestShell color="#3fd0c9" icon="cloud-upload" label="Autoblow cloud" on={false}
+      <DestShell color="#3fd0c9" icon="upload-cloud" label="Autoblow cloud" on={false}
                  right={<Pill tone="neutral">later</Pill>}>
         <p style={{ fontSize: 11.5, color: 'var(--text-dim)', margin: 0, lineHeight: 1.45 }}>
           Push the clamped stroke script to a Vacuglide / Autoblow device over the cloud SDK.
@@ -554,7 +554,7 @@ function ActionsRow({
       }}>
         <Button kind="ghost" size="sm" icon="folder-open" disabled={!result} onClick={onReveal}>Reveal</Button>
         <Button kind="ghost" size="sm" icon="copy" disabled={!result} onClick={onCopy}>Copy path</Button>
-        <Button kind="ghost" size="sm" icon="play-circle" disabled={!result || launching} onClick={onForgePlayer}>
+        <Button kind="ghost" size="sm" icon="play" disabled={!result || launching} onClick={onForgePlayer}>
           {launching ? 'Launching…' : 'Open in ForgePlayer →'}
         </Button>
         <span style={{ flex: 1 }} />

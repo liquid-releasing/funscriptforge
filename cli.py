@@ -2850,7 +2850,12 @@ def build_parser() -> argparse.ArgumentParser:
         "polish-apply",
         help="Clamp a funscript for one Polish station (preview or write device-ready files)",
     )
-    p_pol.add_argument("funscript", help="Path to the effective input .funscript")
+    p_pol.add_argument("funscript", help="Path to the ORIGINAL source .funscript (owns stem, sidecars, and e-stim/TCode generation)")
+    p_pol.add_argument(
+        "--effective", metavar="PATH",
+        help="Edited/effective motion funscript to clamp (defaults to the positional path). "
+             "Stem, chapter/character sidecars, and generation always use the positional ORIGINAL.",
+    )
     p_pol.add_argument(
         "--station", required=True, metavar="ID",
         help="Polish station: estim3p | handy | osr2 | sr6",
@@ -3832,7 +3837,12 @@ def cmd_polish_apply(args):
         )
     station = polish.STATIONS[args.station]
 
-    with open(args.funscript, encoding="utf-8") as f:
+    # Motion to CLAMP comes from the effective (edited) funscript; stem,
+    # sidecars, and e-stim/TCode generation all key off the positional
+    # ORIGINAL (args.funscript) below — so a `<stem>.work.funscript` no longer
+    # breaks generation by mangling the stem.
+    eff = args.effective or args.funscript
+    with open(eff, encoding="utf-8") as f:
         data = json.load(f)
     actions = data.get("actions", [])
 

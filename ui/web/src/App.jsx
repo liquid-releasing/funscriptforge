@@ -869,7 +869,7 @@ export default function App() {
           />
         )}
         {tab === 'catalog' && <CatalogTab />}
-        {tab !== 'library' && tab !== 'project' && tab !== 'analysis' && tab !== 'device' && tab !== 'chapters' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && tab !== 'catalog' && (
+        {tab !== 'library' && tab !== 'project' && tab !== 'analysis' && tab !== 'polish' && tab !== 'chapters' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && tab !== 'catalog' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>

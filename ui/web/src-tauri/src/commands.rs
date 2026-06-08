@@ -1912,9 +1912,16 @@ pub async fn polish_apply(
     stem: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let params_s = serde_json::to_string(&params).map_err(|e| format!("serialize params: {}", e))?;
-    let src = effective_funscript_path(&funscript_path);
+    // The ORIGINAL path owns stem + sidecars (chapters/characters) + generation;
+    // the effective (edited) funscript is the motion to clamp. Passing the
+    // effective path as the positional broke e-stim/TCode generation when a
+    // `<stem>.work.funscript` existed (stem became `<stem>.work`, so the
+    // chapter/character sidecars weren't found). Mirror the export `--effective`
+    // split: original positional, effective via flag.
+    let eff = effective_funscript_path(&funscript_path);
     let mut args: Vec<String> = vec![
-        "polish-apply".into(), src,
+        "polish-apply".into(), funscript_path.clone(),
+        "--effective".into(), eff,
         "--station".into(), station,
         "--params-json".into(), params_s,
     ];
