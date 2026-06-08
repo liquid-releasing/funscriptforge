@@ -1939,6 +1939,28 @@ pub async fn polish_apply(
     serde_json::from_str(&out).map_err(|e| format!("parse polish apply: {}", e))
 }
 
+/// Generate the RAW e-stim channels for a preview window so the Polish 3-pane
+/// preview can show the ACTUAL channels (not the position motion). Returns
+/// `{ station, window, channels: { name: [{at,pos}] } }`, rebased to 0. Fast
+/// (~1.7s — one chapter's generation), so no progress stream. E-stim only.
+#[tauri::command]
+pub async fn polish_channels(
+    funscript_path: String,
+    station: String,
+    start_ms: i64,
+    end_ms: i64,
+) -> Result<serde_json::Value, String> {
+    let start_s = start_ms.to_string();
+    let end_s = end_ms.to_string();
+    let out = run_cli(&[
+        "polish-channels", &funscript_path,
+        "--station", &station,
+        "--start-ms", &start_s,
+        "--end-ms", &end_s,
+    ]).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse polish-channels: {}", e))
+}
+
 /// Read the `<stem>.polish.yml` stamp record. Returns
 /// `{ version, schema, current_hash, passes }` (empty when absent).
 #[tauri::command]

@@ -43,6 +43,7 @@ pub fn run() {
             commands::multiaxis_process,
             commands::polish_preview,
             commands::polish_apply,
+            commands::polish_channels,
             commands::polish_read,
             commands::polish_write,
             commands::export_write,

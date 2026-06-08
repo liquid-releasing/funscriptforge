@@ -2875,6 +2875,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_pol.add_argument("--start-ms", type=int, help="Preview window start (ms).")
     p_pol.add_argument("--end-ms", type=int, help="Preview window end (ms).")
 
+    # --- polish-channels (raw e-stim channels for a preview window) ---
+    p_pc = sub.add_parser(
+        "polish-channels",
+        help="Generate raw e-stim channels for a window (Polish preview shows actual channels)",
+    )
+    p_pc.add_argument("funscript", help="Path to the source .funscript (owns stem + sidecars)")
+    p_pc.add_argument("--station", required=True, metavar="ID", help="Polish station (estim3p)")
+    p_pc.add_argument("--start-ms", type=int, required=True, help="Window start (ms).")
+    p_pc.add_argument("--end-ms", type=int, required=True, help="Window end (ms).")
+
     # --- polish-read / polish-write (polish.yml stamp record) ---
     p_pr = sub.add_parser("polish-read", help="Read <stem>.polish.yml stamp record")
     p_pr.add_argument("input", help="Path to the source media/funscript")
@@ -3726,6 +3736,121 @@ def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> 
     return out
 
 
+def _polish_preview_estim_channels(funscript_path: str, start_ms: int, end_ms: int) -> dict:
+    """Generate RAW e-stim channels (no device clamp, no event bake) for the
+    [start_ms, end_ms] preview window, rebased to the window start.
+
+    The Polish 3-pane preview previously showed the position MOTION clamped —
+    which is the right signal for a stroker but wrong for e-stim (e-stim plays
+    9 modulation channels, not position). This returns the ACTUAL channels for
+    the window so the UI can show them and apply the device knobs live in JS
+    (the JS engine clamp mirrors `polish.apply_pass`, so the preview matches
+    what Stamp writes). Generation mirrors `_polish_generate_estim` for the
+    chapter(s) the window touches — same character resolution and default arc.
+    """
+    import contextlib
+    import shutil
+    import tempfile
+
+    from forge.funscript import load_funscript, parse_actions
+    from forge.funscript_tools import AVAILABLE, build_config, process
+    from videoflow.sidecar import forge_dir
+
+    if not AVAILABLE:
+        raise ValueError("funscript-tools not available — cannot preview e-stim channels")
+
+    from forge.stim_config import (apply_virtual_envelope, merged_presets,
+                                   resolve_character)
+    presets, _ = merged_presets()
+    slug_to_label = {_slug_character(lbl): lbl for lbl in presets}
+
+    stem = Path(funscript_path).stem
+    chap_path = forge_dir(funscript_path) / f"{stem}.chapters.json"
+    chapters = []
+    if chap_path.exists():
+        try:
+            chapters = json.loads(chap_path.read_text(encoding="utf-8")).get("chapters") or []
+        except (OSError, json.JSONDecodeError):
+            chapters = []
+
+    chars_doc = {}
+    cp = _characters_path(funscript_path)
+    if cp.exists():
+        try:
+            chars_doc = json.loads(cp.read_text(encoding="utf-8")).get("characters") or {}
+        except (OSError, json.JSONDecodeError):
+            chars_doc = {}
+
+    times, pos = parse_actions(load_funscript(funscript_path))
+    pairs = list(zip(times, pos))
+    if len(pairs) < 2:
+        raise ValueError("no actions to preview e-stim from")
+
+    from forge.channels_defaults import default_character_for
+    windows = []
+    if chapters:
+        n = len(chapters)
+        for i, ch in enumerate(chapters):
+            lo = ch.get("at_ms", ch.get("atMs", ch.get("start_ms")))
+            hi = ch.get("end_ms", ch.get("endMs"))
+            assign = chars_doc.get(f"ch{i + 1}") or {}
+            char_id = assign.get("characterId") or default_character_for(i, n)
+            windows.append((lo, hi, char_id, assign.get("params") or {}))
+    else:
+        assign = next(iter(chars_doc.values()), {}) if chars_doc else {}
+        windows.append((pairs[0][0], pairs[-1][0], assign.get("characterId"), assign.get("params") or {}))
+
+    raw = {}
+    tmp = Path(tempfile.mkdtemp(prefix="ff_polish_prev_"))
+    try:
+        for idx, (lo, hi, cid, params) in enumerate(windows):
+            wlo = lo if lo is not None else pairs[0][0]
+            whi = hi if hi is not None else pairs[-1][0]
+            if whi < start_ms or wlo > end_ms:
+                continue  # window doesn't touch this chapter
+            if not cid:
+                continue
+            base_label, virtual = resolve_character(cid)
+            label = base_label if virtual else (
+                slug_to_label.get(cid) or slug_to_label.get(_slug_character(cid)))
+            if not label:
+                continue
+            win = [(t, p) for t, p in pairs if wlo <= t <= whi]
+            if len(win) < 2:
+                continue
+            wdir = tmp / f"w{idx}"
+            wdir.mkdir(parents=True, exist_ok=True)
+            in_path = wdir / f"{stem}.funscript"
+            in_path.write_text(json.dumps({
+                "actions": [{"at": int(t), "pos": int(round(p))} for t, p in win],
+            }), encoding="utf-8")
+            config = build_config(label, params, output_dir=str(wdir))
+            with contextlib.redirect_stdout(sys.stderr):
+                result = process(str(in_path), config, None)
+            if not result.get("success"):
+                continue
+            for suf in _ESTIM_CHANNELS:
+                cpth = wdir / f"{stem}.{suf}.funscript"
+                if not cpth.exists():
+                    continue
+                cd = json.loads(cpth.read_text(encoding="utf-8"))
+                acts = [{"at": a["at"], "pos": a["pos"]} for a in cd.get("actions", [])]
+                acts = apply_virtual_envelope(suf, acts, wlo, whi, virtual)
+                raw.setdefault(suf, []).extend(acts)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    # Clip to the window and rebase to 0 (the UI window is 0-based).
+    out = {}
+    for suf, acts in raw.items():
+        clipped = [{"at": int(a["at"] - start_ms), "pos": a["pos"]}
+                   for a in sorted(acts, key=lambda a: a["at"])
+                   if start_ms <= a["at"] <= end_ms]
+        if len(clipped) >= 2:
+            out[suf] = clipped
+    return out
+
+
 # multiaxis engine axis name -> TCode axis code (inverse of polish.TCODE_SUFFIX).
 _AXIS_TO_TCODE = {"surge": "L1", "sway": "L2", "twist": "R0", "roll": "R1", "pitch": "R2"}
 
@@ -3950,6 +4075,29 @@ def cmd_polish_apply(args):
         "saved": saved,
         "stats": stats,
         "source_hash": _polish_source_hash(args.funscript),
+    }))
+
+
+@_cli_command
+def cmd_polish_channels(args):
+    """Polish preview — generate the RAW e-stim channels for a window so the UI
+    can show the ACTUAL channels (not the position motion) and clamp them live.
+
+    Returns ``{station, window:{start_ms,end_ms}, channels:{name:[{at,pos}]}}``
+    with channel actions rebased to the window start (0-based). E-stim only;
+    other stations have nothing to preview here (strokers already preview the
+    position motion truthfully).
+    """
+    if args.station != "estim3p":
+        print(json.dumps({"station": args.station, "window": None, "channels": {}}))
+        return
+    start_ms = int(args.start_ms)
+    end_ms = int(args.end_ms)
+    channels = _polish_preview_estim_channels(args.funscript, start_ms, end_ms)
+    print(json.dumps({
+        "station": args.station,
+        "window": {"start_ms": start_ms, "end_ms": end_ms},
+        "channels": channels,
     }))
 
 
@@ -4223,6 +4371,7 @@ def main():
         "phrase-transform": cmd_phrase_transform,
         "transform-apply":  cmd_transform_apply,
         "polish-apply":     cmd_polish_apply,
+        "polish-channels":  cmd_polish_channels,
         "polish-read":      cmd_polish_read,
         "polish-write":     cmd_polish_write,
         "export":           cmd_export,

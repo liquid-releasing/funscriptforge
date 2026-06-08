@@ -256,6 +256,38 @@ class TestPolishCLI(unittest.TestCase):
         self.assertGreater(len(out["saved"]), 0, out)
         self.assertTrue(any(p.endswith(".alpha.funscript") for p in out["saved"]))
 
+    def test_channels_preview_returns_rebased_channels(self):
+        # polish-channels feeds the Polish preview the ACTUAL e-stim channels
+        # for a window, rebased to 0 so the UI window is 0-based.
+        cat = json.loads(_run_cli("list-characters", "--format", "json").stdout)
+        chars = cat.get("characters") or []
+        if not chars:
+            self.skipTest("no stim characters available (funscript-tools missing)")
+        forge = os.path.join(self.tmp, ".scene.forge")
+        os.makedirs(forge, exist_ok=True)
+        with open(os.path.join(forge, "scene.characters.json"), "w") as f:
+            json.dump({"version": 1, "characters": {"ch1": {"characterId": chars[0]["id"], "params": {}}}}, f)
+        r = _run_cli("polish-channels", self.main, "--station", "estim3p",
+                     "--start-ms", "2000", "--end-ms", "8000")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = json.loads(r.stdout)
+        self.assertEqual(out["window"], {"start_ms": 2000, "end_ms": 8000})
+        self.assertIn("volume", out["channels"])
+        self.assertIn("alpha", out["channels"])
+        for acts in out["channels"].values():
+            ats = [a["at"] for a in acts]
+            self.assertGreaterEqual(min(ats), 0)            # rebased to window start
+            self.assertLessEqual(max(ats), 6000)            # clipped to window length
+            self.assertTrue(all(0 <= a["pos"] <= 100 for a in acts))
+
+    def test_channels_preview_non_estim_is_empty(self):
+        # Strokers preview the position motion truthfully — nothing to generate.
+        r = _run_cli("polish-channels", self.main, "--station", "handy",
+                     "--start-ms", "0", "--end-ms", "5000")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = json.loads(r.stdout)
+        self.assertEqual(out["channels"], {})
+
     def _gen_estim_volume(self):
         """Run estim generation and return the saved volume channel actions."""
         r = _run_cli("polish-apply", self.main, "--station", "estim3p")

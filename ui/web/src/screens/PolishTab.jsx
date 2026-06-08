@@ -10,13 +10,21 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 
-import { polishApply, polishRead, polishWrite, isTauri } from '../api/forge.js';
+import { polishApply, polishChannels, polishRead, polishWrite, isTauri } from '../api/forge.js';
 import { POLISH_DEVICES, outputFilesFor } from '../data/polishDevices.js';
-import { previewPass, resolveKnobs } from '../data/polishEngine.js';
+import { previewPass, resolveKnobs, actionsToDense, engineClamp, computeStats } from '../data/polishEngine.js';
 import {
-  AnvilGlyph, DeviceGlyph, HeatMeter, KnobRow, MiniTrace, Sparks,
+  AnvilGlyph, ChannelLanes, DeviceGlyph, HeatMeter, KnobRow, MiniTrace, Sparks,
   StatTriplet, StateBadge, TracePane, shade,
 } from './polish/PolishWidgets.jsx';
+
+// The 3 e-stim channels you feel most, shown as lanes (9 are generated). volume
+// = intensity envelope; alpha/beta = the two output phases.
+const ESTIM_PREVIEW_CHANNELS = [
+  { key: 'volume', label: 'Volume · intensity' },
+  { key: 'alpha', label: 'Alpha · phase' },
+  { key: 'beta', label: 'Beta · phase' },
+];
 
 const PREVIEW_MS = 30000;          // representative preview window length
 const EXPRESSIVE = true;           // forge metaphor (sparks / hot anvil)
@@ -57,9 +65,12 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
   const [currentHash, setCurrentHash] = useState('');
   const [stamping, setStamping] = useState(null);  // id currently being stamped
   const [stampError, setStampError] = useState({}); // id -> message
+  const [channelData, setChannelData] = useState(null);   // {station, window, channels} for e-stim preview
+  const [channelsLoading, setChannelsLoading] = useState(false);
 
   const focusedDevice = POLISH_DEVICES.find((d) => d.id === focused) || POLISH_DEVICES[0];
   const ember = focusedDevice.ember;
+  const isEstim = focusedDevice.kind === 'estim';
 
   // ── Load the polish.yml stamp record on mount / project switch ──────────
   useEffect(() => {
@@ -132,6 +143,44 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
   }, [windowActions, knobs]);
 
   const traces = allTraces[focusedDevice.id] || { character: [], clamped: [], performed: [], stats: {} };
+
+  // ── E-stim: fetch the ACTUAL generated channels for the preview window ───
+  // (the position-motion TracePane is the wrong signal for e-stim). Generated
+  // Python-side (~1.7s, one chapter) on focus/window change — NOT on knob
+  // change; knobs clamp the channels live in JS below.
+  useEffect(() => {
+    if (!isEstim || !isTauri() || !canStamp || !previewWindow) {
+      setChannelData(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setChannelsLoading(true);
+    polishChannels(path, 'estim3p', Math.round(previewWindow.start), Math.round(previewWindow.end))
+      .then((res) => { if (!cancelled) setChannelData(res || null); })
+      .catch(() => { if (!cancelled) setChannelData(null); })
+      .finally(() => { if (!cancelled) setChannelsLoading(false); });
+    return () => { cancelled = true; };
+  }, [isEstim, path, canStamp, previewWindow?.start, previewWindow?.end]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Per-channel lanes: raw generated curve + the knob-clamped curve (live).
+  const channelLanes = useMemo(() => {
+    if (!isEstim || !channelData?.channels) return [];
+    const k = knobs.estim3p || {};
+    return ESTIM_PREVIEW_CHANNELS
+      .filter((c) => (channelData.channels[c.key]?.length ?? 0) >= 2)
+      .map((c) => {
+        const raw = actionsToDense(channelData.channels[c.key]);
+        return { key: c.key, label: c.label, raw, clamped: engineClamp(raw, 'estim', k) };
+      });
+  }, [isEstim, channelData, knobs]);
+
+  // For e-stim the stat strip reads off the volume channel (raw vs clamped) so
+  // RMS / Peak Δ reflect the actual channel, not the position motion.
+  const stats = useMemo(() => {
+    if (!isEstim) return traces.stats;
+    const vol = channelLanes.find((l) => l.key === 'volume') || channelLanes[0];
+    return vol ? computeStats(vol.raw, vol.clamped, 'estim3p') : {};
+  }, [isEstim, traces.stats, channelLanes]);
 
   const setKnob = (id, key, value) => {
     setKnobs((s) => ({ ...s, [id]: { ...s[id], [key]: value } }));
@@ -322,8 +371,27 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
           </div>
 
           <div style={{ flex: 1, minHeight: 150, background: 'rgba(255,255,255,0.015)', border: '1px solid #2d3148', borderRadius: 8, padding: '14px 16px', marginBottom: 14, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7390', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Three-pane preview</div>
-            {windowActions.length >= 2 ? (
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7390', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+              <span>{isEstim ? 'Channel preview · what the device gets' : 'Three-pane preview'}</span>
+              {isEstim && channelData?.channels && (
+                <span style={{ color: '#6b7390', fontWeight: 600 }}>
+                  {Object.keys(channelData.channels).length} channels · showing {channelLanes.length}
+                </span>
+              )}
+            </div>
+            {isEstim ? (
+              channelLanes.length ? (
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <ChannelLanes lanes={channelLanes} phrases={ribbon} totalMs={windowLen} ember={ember} fill />
+                </div>
+              ) : (
+                <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: '#6b7390', fontSize: 13 }}>
+                  {!canStamp ? 'Open a project to preview.'
+                    : channelsLoading ? 'Generating channels…'
+                      : 'No channels for this window — assign a character in the Channels tab.'}
+                </div>
+              )
+            ) : windowActions.length >= 2 ? (
               <div style={{ flex: 1, minHeight: 0 }}>
                 <TracePane traces={traces} phrases={ribbon} totalMs={windowLen} ember={ember} fill />
               </div>
@@ -334,11 +402,15 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
             )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, position: 'relative' }}>
-            <StatTriplet label="Peak BPM" src={traces.stats.srcMaxBpm ?? ''} polished={traces.stats.clampMaxBpm ?? ''} accent={ember} />
-            <StatTriplet label="RMS" src={traces.stats.srcRms ?? ''} polished={traces.stats.clampRms ?? ''} accent={ember} />
-            <StatTriplet label="Peak Δ" src="" polished={`${traces.stats.peakDelta ?? 0}%`} accent={ember} />
-            <StatTriplet label="Mech. lag" src="" polished={`${traces.stats.mechLagMs ?? 0} ms`} accent={ember} />
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isEstim ? 3 : 4}, 1fr)`, gap: 10, position: 'relative' }}>
+            {/* Peak BPM is a stroke metric — meaningless on dense e-stim channels
+                (it overcounts wildly). Drop it for e-stim; keep the rest. */}
+            {!isEstim && (
+              <StatTriplet label="Peak BPM" src={stats.srcMaxBpm ?? ''} polished={stats.clampMaxBpm ?? ''} accent={ember} />
+            )}
+            <StatTriplet label="RMS" src={stats.srcRms ?? ''} polished={stats.clampRms ?? ''} accent={ember} />
+            <StatTriplet label="Peak Δ" src="" polished={`${stats.peakDelta ?? 0}%`} accent={ember} />
+            <StatTriplet label="Mech. lag" src="" polished={`${stats.mechLagMs ?? 0} ms`} accent={ember} />
           </div>
         </section>
 

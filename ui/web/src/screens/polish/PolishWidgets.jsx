@@ -118,6 +118,94 @@ export function TracePane({ traces, phrases, totalMs, height = 240, ember = '#ff
   );
 }
 
+// ─── E-stim channel lanes — the ACTUAL generated channels ────────────────────
+// For e-stim the device plays 9 modulation channels, not position, so the
+// position-motion TracePane shows the wrong signal. Each lane here is ONE real
+// generated channel: its RAW curve (ghost, dashed) under the knob-CLAMPED curve
+// (solid ember = what the device gets). Lanes are different channels, not
+// processing stages — so there's no "as performed" lag row.
+export function ChannelLanes({ lanes, phrases, totalMs, height = 240, ember = '#c075ff', fill = false }) {
+  const W = 1000;
+  const H = height;
+  const padX = 24;
+  const padY = 8;
+  const innerW = W - padX * 2;
+  const safeTotal = Math.max(1, totalMs);
+  const xOf = (ms) => padX + (ms / safeTotal) * innerW;
+  const yOf = (pos, rowTop, rowH) => rowTop + (1 - pos / 100) * rowH;
+  const n = Math.max(1, lanes.length);
+  const ribbonH = 14;
+  const rowGap = 8;
+  const usableH = H - ribbonH - rowGap - padY * 2;
+  const rowH = (usableH - rowGap * (n - 1)) / n;
+  const ribbonTop = padY;
+
+  function path(samples, rowTop) {
+    if (!samples || !samples.length) return '';
+    let d = `M ${xOf(samples[0].at)} ${yOf(samples[0].pos, rowTop, rowH)}`;
+    const step = Math.max(1, Math.floor(samples.length / 600));
+    for (let i = step; i < samples.length; i += step) {
+      d += ` L ${xOf(samples[i].at)} ${yOf(samples[i].pos, rowTop, rowH)}`;
+    }
+    return d;
+  }
+  function area(samples, rowTop) {
+    if (!samples || !samples.length) return '';
+    let d = `M ${xOf(samples[0].at)} ${rowTop + rowH}`;
+    const step = Math.max(1, Math.floor(samples.length / 600));
+    for (let i = 0; i < samples.length; i += step) {
+      d += ` L ${xOf(samples[i].at)} ${yOf(samples[i].pos, rowTop, rowH)}`;
+    }
+    d += ` L ${xOf(samples[samples.length - 1].at)} ${rowTop + rowH} Z`;
+    return d;
+  }
+
+  const labelStyle = {
+    fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 700,
+    letterSpacing: '0.06em', textTransform: 'uppercase',
+  };
+  const gradId = `chan-grad-${ember.slice(1)}`;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: fill ? '100%' : H, display: 'block' }} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={ember} stopOpacity={0.5} />
+          <stop offset="100%" stopColor={ember} stopOpacity={0.04} />
+        </linearGradient>
+      </defs>
+
+      {(phrases || []).map((p) => (
+        <g key={p.id}>
+          <rect x={xOf(p.start)} y={ribbonTop} width={Math.max(0, xOf(p.end) - xOf(p.start))} height={ribbonH}
+            fill={p.color} opacity={0.18} rx={2} />
+          <rect x={xOf(p.start)} y={ribbonTop} width={3} height={ribbonH} fill={p.color} opacity={0.9} />
+          <text x={xOf(p.start) + 8} y={ribbonTop + ribbonH - 3.5}
+            fontFamily="var(--font-mono)" fontSize={8.5} fontWeight={700}
+            fill={p.color} letterSpacing="0.08em" style={{ textTransform: 'uppercase' }}>
+            {p.label}
+          </text>
+        </g>
+      ))}
+
+      {lanes.map((lane, i) => {
+        const rowTop = ribbonTop + ribbonH + rowGap + i * (rowH + rowGap);
+        return (
+          <g key={lane.key}>
+            <rect x={padX} y={rowTop} width={innerW} height={rowH} fill="rgba(255,255,255,0.02)" rx={3} />
+            {/* raw generated channel — ghost, dashed */}
+            <path d={path(lane.raw, rowTop)} stroke="#9ba3c4" strokeOpacity={0.5} strokeWidth={1} fill="none" strokeDasharray="2 2" />
+            {/* knob-clamped — solid ember (what the device actually gets) */}
+            <path d={area(lane.clamped, rowTop)} fill={`url(#${gradId})`} opacity={0.7} />
+            <path d={path(lane.clamped, rowTop)} stroke={ember} strokeWidth={1.3} fill="none" />
+            <text x={padX + 4} y={rowTop + 11} style={labelStyle} fill={ember}>{lane.label}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 // ─── Mini trace for a station card ───────────────────────────────────────────
 export function MiniTrace({ samples, totalMs, ember }) {
   const W = 200;

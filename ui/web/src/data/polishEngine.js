@@ -127,7 +127,10 @@ export function denseToActions(samples) {
 }
 
 // ─── The pass ────────────────────────────────────────────────────────────────
-function engineClamp(samples, kind, knobs) {
+// Exported so the e-stim channel preview can clamp each generated channel with
+// the live knobs (mirrors per-channel polish.apply_pass) without re-running the
+// full previewPass + stats per channel.
+export function engineClamp(samples, kind, knobs) {
   let clamped = samples.map((s) => ({ at: s.at, pos: s.pos }));
   if (knobs.smoothing != null && knobs.smoothing > 0) clamped = lowpass(clamped, knobs.smoothing);
   if (knobs.slewRate != null) clamped = slewLimit(clamped, knobs.slewRate);

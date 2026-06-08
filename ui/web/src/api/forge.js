@@ -496,6 +496,18 @@ export function polishApply(funscriptPath, station, params = {}, { stem = null }
   );
 }
 
+/** Generate the RAW e-stim channels for a preview window so the Polish preview
+ *  can show the ACTUAL channels (not the position motion). Returns
+ *  {station, window, channels:{name:[{at,pos}]}} rebased to 0. ~1.7s (one
+ *  chapter's generation). E-stim only; other stations → empty. Browser → null. */
+export function polishChannels(funscriptPath, station, startMs, endMs) {
+  return call(
+    'polish_channels',
+    { funscriptPath, station, startMs, endMs },
+    () => Promise.resolve(null),
+  );
+}
+
 /** Read the `<stem>.polish.yml` stamp record. Returns
  *  {version, schema, current_hash, passes}. Browser mode → empty. */
 export function polishRead(input) {
