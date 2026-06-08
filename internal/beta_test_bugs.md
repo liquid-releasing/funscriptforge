@@ -6,6 +6,40 @@ verify + commit) · ✅ committed.
 
 ---
 
+## Session 2026-06-08 (export restructure + events bake-in dogfood)
+
+### 🟡 Fixed — live in dev build (HMR, pure JS), NOT yet committed
+
+1. **Bare "Working…" with no description** after several changes in Chapters.
+   The recalc/apply busy banner should say what it's doing (like the Assess
+   phase). Root cause = the known issue #11: three sites called the busy
+   indicator with a bare boolean (`setBusy?.(true)`), and App renders a neutral
+   "Working…" fallback when `busy` carries no `.message`. Fixed all three to
+   pass a descriptive message + clear with `null`:
+   - `ChaptersTab.jsx` (Tame) → "Applying Tame to <chapter>…"
+   - `PhrasesTab.jsx` (Apply transform) → "Applying <transform> to N phrases…"
+   - `StanzasTab.jsx` (Apply transform) → "Applying <transform> to N stanzas…"
+   → **Re-test:** apply Tame on a chapter / a transform on phrases — the footer
+   names the operation, never bare "Working…".
+
+2. **Phrase playback didn't stop at the focused phrase's end.** Playing p10
+   (after editing p11/p12 — incidental) ran straight past p10's end into the
+   next phrase. Root cause: focused-phrase `onTimeChange` was hard-coded to
+   "play straight through, no loop-back" (the 2026-06-01 decision #9), so it
+   never stopped at the boundary. Refined: when a phrase is **focused**,
+   playback now **stops at its end** (pins to the boundary; no loop-back, no
+   bleed into the next phrase). Re-pressing play replays the phrase from the
+   top. Chapter scope (no focus) still plays straight through. (`PhrasesTab.jsx`
+   onTimeChange + onPlayPause.)
+   → **Re-test:** focus a phrase, play — it stops at the phrase end; press play
+   again → replays from the start.
+   → **Note:** reverses part of the 2026-06-01 "play straight through" call
+   (#9) for the *focused* case, per the 2026-06-08 report. **StanzasTab has the
+   identical handler — mirror this once phrases feel right** (left unchanged
+   for now to verify on the reported surface first).
+
+---
+
 ## Session 2026-06-01 (Timeline1 / large 6-min, 500 MB source)
 
 ### 🟡 Fixed today — live in dev build, NOT yet committed

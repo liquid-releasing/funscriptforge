@@ -449,7 +449,7 @@ export default function PhrasesTab({
   // transformed). Persistence to disk rides the chain step.
   const handleApply = async () => {
     if (!project?.path || !transformId || previewSpans.length === 0) return;
-    setBusy?.(true);
+    setBusy?.({ message: `Applying ${transformId} to ${previewSpans.length} phrase${previewSpans.length === 1 ? '' : 's'}…` });
     try {
       const res = await transformApplyActions(
         project.path, transformId, params, previewSpans,
@@ -468,7 +468,7 @@ export default function PhrasesTab({
     } catch (e) {
       setAppError?.(`Could not apply transform: ${e?.message ?? e}`);
     } finally {
-      setBusy?.(false);
+      setBusy?.(null);
     }
   };
 
@@ -724,7 +724,15 @@ export default function PhrasesTab({
               currentMs={currentMs}
               totalMs={activeChapter.endMs}
               isPlaying={isPlaying}
-              onPlayPause={() => setIsPlaying((p) => !p)}
+              onPlayPause={() => {
+                // Pressing play at (or past) the focused phrase's end replays
+                // it from the top — so stop-at-end (onTimeChange) never strands
+                // the playhead on the boundary with nothing left to play.
+                if (!isPlaying && focusedPhrase && currentMs >= sliceScope.end - 1) {
+                  setCurrentMs(sliceScope.start);
+                }
+                setIsPlaying((p) => !p);
+              }}
               onSeek={(ms) => {
                 // Clamp to SLICE (the editing target). Transport
                 // buttons can't cross the slice boundary even though
@@ -734,16 +742,19 @@ export default function PhrasesTab({
                 setCurrentMs(Math.max(sliceScope.start, Math.min(sliceScope.end, ms)));
               }}
               onTimeChange={(ms) => {
-                // Video-driven time updates (throttled 4Hz). Phrases are a
-                // REVIEW surface (detection-only), not an edit scope — so
-                // playback runs straight through; NO loop-back at the slice
-                // boundary (that's chapters' job: there the loop keeps you
-                // inside the thing you're editing). The highlighted phrase
-                // stays put as the playhead crosses into the next one;
-                // replay is one click on the prev transport. User-decided
-                // 2026-06-01 — also fixes the old inconsistency where an
-                // unfocused first phrase played through but focused ones
-                // looped. See internal/beta_test_bugs.md #9.
+                // Video-driven time updates (throttled 4Hz). When a phrase is
+                // FOCUSED the user is reviewing THAT phrase — so playback STOPS
+                // at the phrase's end: pin to the boundary, no loop-back, no
+                // bleeding into the next phrase. Re-press play to replay from
+                // the top (see onPlayPause). Chapter scope (no focus) still
+                // plays straight through. Refines the 2026-06-01 "play straight
+                // through" decision after the user found a focused phrase
+                // didn't stop at its end (2026-06-08). See beta_test_bugs.md.
+                if (focusedPhrase && isPlaying && ms >= sliceScope.end) {
+                  setIsPlaying(false);
+                  setCurrentMs(sliceScope.end);
+                  return;
+                }
                 setCurrentMs(ms);
               }}
               onPrev={onPrev}

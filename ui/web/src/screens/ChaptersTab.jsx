@@ -692,7 +692,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     // the synchronous JS merge below.
     if (tone.id === 'tame') {
       if (!project?.path) return;
-      setBusy?.(true);
+      setBusy?.({ message: `Applying Tame to ${active.name || 'chapter'}…` });
       try {
         const spans = [{ start_ms: active.atMs, end_ms: active.endMs }];
         const res = await transformApplyActions(
@@ -707,7 +707,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       } catch (e) {
         setAppError?.(`Could not apply Tame: ${e?.message ?? e}`);
       } finally {
-        setBusy?.(false);
+        setBusy?.(null);
       }
       setAcceptedChapterIds((prev) => new Set(prev).add(active.id));
       advance();

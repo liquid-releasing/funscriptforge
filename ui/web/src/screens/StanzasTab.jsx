@@ -309,7 +309,7 @@ export default function StanzasTab({
   // persistence rides the chain step. Mirrors PhrasesTab.handleApply.
   const handleApply = async () => {
     if (!project?.path || !transformId || previewSpans.length === 0) return;
-    setBusy?.(true);
+    setBusy?.({ message: `Applying ${transformId} to ${previewSpans.length} stanza${previewSpans.length === 1 ? '' : 's'}…` });
     try {
       const res = await transformApplyActions(
         project.path, transformId, params, previewSpans,
@@ -328,7 +328,7 @@ export default function StanzasTab({
     } catch (e) {
       setAppError?.(`Could not apply transform: ${e?.message ?? e}`);
     } finally {
-      setBusy?.(false);
+      setBusy?.(null);
     }
   };
 
