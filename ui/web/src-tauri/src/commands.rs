@@ -1998,6 +1998,7 @@ pub async fn export_write(
     media: Option<String>,
     stim_wav: bool,
     stim_mp3: bool,
+    exclude: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
     // Pass the ORIGINAL path as the positional (owns stem / sidecars / the
     // character + style assignments the export generators read); hand the
@@ -2031,6 +2032,12 @@ pub async fn export_write(
     }
     if stim_mp3 {
         args.push("--stim-mp3".into());
+    }
+    if let Some(ex) = exclude {
+        if !ex.is_empty() {
+            args.push("--exclude".into());
+            args.push(ex.join(","));
+        }
     }
     let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     // Stream per-step progress (motion → stations → thumbnails → audio →

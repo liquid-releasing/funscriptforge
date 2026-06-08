@@ -92,6 +92,15 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
   }), [stem, mode, hasMedia, project, stampedStations, options.stimWav, options.stimMp3]);
 
   const targets = useMemo(() => TARGET_GROUPS.map((t) => ({ ...t, ...t.derive(ctx) })), [ctx]);
+  // Which target groups are checked ("what's in the bundle"). Default = all in.
+  const [kept, setKept] = useState(() => new Set(TARGET_GROUPS.map((t) => t.id)));
+  const toggleKeep = (id) => setKept((s) => {
+    const next = new Set(s);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const keptCount = targets.filter((t) => kept.has(t.id)).length;
+  const excludeIds = TARGET_GROUPS.filter((t) => !kept.has(t.id)).map((t) => t.id);
   const readyCount = targets.filter((t) => t.state === 'ready' || t.state === 'auto' || t.state === 'present').length;
 
   const launchForgePlayer = async (revealAfter) => {
@@ -133,6 +142,7 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
         finalSmooth: options.finalSmooth,
         stimWav: options.stimWav,
         stimMp3: options.stimMp3,
+        exclude: excludeIds,
       });
       if (!res) { setWriteError('Export is unavailable in browser mode.'); return; }
       setResult(res);
@@ -169,15 +179,17 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
 
       <ExportPreview project={project} stem={stem} />
 
-      {/* TARGETS — what gets written, grouped by consumer */}
-      <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{readyCount} of {targets.length} ready</span>}>
-        Targets
+      {/* TARGETS — what gets written; check what goes in the bundle */}
+      <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{keptCount} of {targets.length} selected</span>}>
+        What's in the bundle
       </SectionLabel>
       <div style={{
         marginTop: 6, marginBottom: 18,
         display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10,
       }}>
-        {targets.map((t) => <TargetCard key={t.id} target={t} />)}
+        {targets.map((t) => (
+          <TargetCard key={t.id} target={t} kept={kept.has(t.id)} onToggle={() => toggleKeep(t.id)} />
+        ))}
       </div>
 
       {/* DESTINATIONS — where it goes */}
@@ -207,8 +219,8 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
       {/* ACTIONS — the verbs */}
       <ActionsRow
         destSummary={destSummary}
-        readyCount={readyCount}
-        canWrite={canWrite}
+        readyCount={keptCount}
+        canWrite={canWrite && keptCount > 0}
         isSample={isSample}
         writing={writing}
         launching={launching}
@@ -247,7 +259,7 @@ const TARGET_GROUPS = [
       const files = ['motion.funscript', ...stamped.map((id) => `stations/${id}/`)];
       return {
         state: 'ready',
-        hint: 'Primary stroke axis (L0) always rides; Polish-stamped device files join it. TCode (OSR2/SR6) auto-generates from Channels.',
+        hint: 'Stroke axis (L0) + any Polish-stamped device files. OSR2/SR6 ship as multi-axis funscripts (MultiFunPlayer / XTPlayer convert them to TCode for the firmware) — auto-generated from Channels if not stamped.',
         stat: [
           { label: 'actions', value: (ctx.actionCount || 0).toLocaleString() },
           { label: 'devices', value: stamped.length ? `${stamped.length} stamped` : 'motion + auto' },
@@ -283,15 +295,15 @@ const TARGET_GROUPS = [
   },
   {
     id: 'authoring',
-    label: 'Authoring',
+    label: 'Forge metadata',
     ext: '.json · .yml',
     icon: 'file-cog',
     color: '#a3e635',
-    consumer: 're-import · Edger · other tools',
+    consumer: 'reopen in FunscriptForge · Edger',
     derive() {
       return {
         state: 'present',
-        hint: 'Chapter boundaries, phrase tags, per-chapter characters, and the events sidecar — each packed when the tab produced it.',
+        hint: 'The re-editable project: chapter boundaries, phrase tags, per-chapter characters, and the events sidecar. Pack it to reopen and reproduce this exact output later — leave it out for a play-only bundle.',
         stat: [{ label: 'sidecars', value: 'chapters · phrases · characters' }, { label: 'events', value: 'events.yml' }],
         files: ['{chapters,phrases,characters}.json', 'events.yml'],
       };
@@ -325,21 +337,28 @@ const STATE_BADGE = {
   none:     { tone: 'warn',    label: 'not ready' },
 };
 
-function TargetCard({ target: t }) {
-  const dim = t.state === 'none' || t.state === 'optional';
+function TargetCard({ target: t, kept = true, onToggle }) {
   const badge = STATE_BADGE[t.state] || STATE_BADGE.ready;
+  // Unchecked = excluded from the bundle: dim it and drop the color accent.
+  const off = !kept;
   return (
-    <div style={{
-      position: 'relative', padding: 14, borderRadius: 10,
-      background: dim ? 'var(--surface-2, #12151e)' : 'var(--surface)',
-      // Longhand only — mixing `border` shorthand with `borderLeft` warns in
-      // React (shorthand/non-shorthand conflict on rerender).
-      borderStyle: 'solid',
-      borderWidth: '1px 1px 1px 4px',
-      borderColor: `var(--border) var(--border) var(--border) ${dim ? 'var(--border)' : t.color}`,
-      display: 'flex', flexDirection: 'column', gap: 8,
-      opacity: t.state === 'none' ? 0.7 : 1,
-    }}>
+    <div
+      onClick={onToggle}
+      role="checkbox"
+      aria-checked={kept}
+      title={kept ? 'In the bundle — click to leave out' : 'Left out — click to include'}
+      style={{
+        position: 'relative', padding: 14, borderRadius: 10, cursor: 'pointer',
+        background: off ? 'var(--surface-2, #12151e)' : 'var(--surface)',
+        // Longhand only — mixing `border` shorthand with `borderLeft` warns in
+        // React (shorthand/non-shorthand conflict on rerender).
+        borderStyle: 'solid',
+        borderWidth: '1px 1px 1px 4px',
+        borderColor: `var(--border) var(--border) var(--border) ${off ? 'var(--border)' : t.color}`,
+        display: 'flex', flexDirection: 'column', gap: 8,
+        opacity: off ? 0.55 : 1,
+        boxShadow: kept ? `0 0 0 1px ${t.color}33` : 'none',
+      }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
           width: 28, height: 28, borderRadius: 6, display: 'grid', placeItems: 'center',
@@ -352,6 +371,16 @@ function TargetCard({ target: t }) {
           <span className="mono" style={{ fontSize: 10, color: 'var(--text-dim)' }}>{t.ext}</span>
         </div>
         <Pill tone={badge.tone} dot={badge.tone !== 'neutral'}>{badge.label}</Pill>
+        {/* Keep/skip checkbox — mirrors the ForgeGen target pattern. */}
+        <div style={{
+          width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+          display: 'grid', placeItems: 'center',
+          background: kept ? t.color : 'transparent',
+          border: `1.5px solid ${kept ? t.color : 'var(--border-strong, var(--border))'}`,
+          color: '#0e1117',
+        }}>
+          {kept && <Icon name="check" size={12} />}
+        </div>
       </div>
 
       <p style={{ fontSize: 11.5, color: 'var(--text-dim)', margin: 0, lineHeight: 1.45 }}>{t.hint}</p>

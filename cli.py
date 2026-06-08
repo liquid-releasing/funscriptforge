@@ -1081,6 +1081,20 @@ def cmd_export(args):
     stem = args.stem or Path(src).stem
     fdir = forge_dir(src)
 
+    # Target groups the user unchecked in the Export UI ("what's in the bundle").
+    # strokers = motion.funscript + non-estim device stations (handy/lovense/
+    # vacuglide/tcode); estim = the 9-channel estim3p set + stim audio;
+    # authoring = sidecars + events.yml; preview = thumbnails. Default empty =
+    # include everything (back-compat).
+    excluded = {t.strip() for t in (args.exclude or "").split(",") if t.strip()}
+    inc_strokers = "strokers" not in excluded
+    inc_estim = "estim" not in excluded
+    inc_authoring = "authoring" not in excluded
+    inc_preview = "preview" not in excluded
+    # A device station maps to the e-stim group iff it is the estim3p station.
+    def _station_included(sid):
+        return inc_estim if sid == "estim3p" else inc_strokers
+
     staging = Path(tempfile.mkdtemp(prefix="ff_export_"))
     artifacts: list[dict] = []
     try:
@@ -1093,9 +1107,12 @@ def cmd_export(args):
             actions = _export_finalize(actions, blend=args.blend_seams, smooth=args.final_smooth)
         main = dict(data)
         main["actions"] = actions
-        (staging / "motion.funscript").write_text(json.dumps(main), encoding="utf-8")
-        artifacts.append({"path": "motion.funscript", "kind": "funscript", "role": "stroke", "axis": "L0"})
         duration_ms = actions[-1]["at"] if actions else 0
+        # Always read the motion (duration + waveform need it) but only PACK
+        # motion.funscript when the Strokers target is kept.
+        if inc_strokers:
+            (staging / "motion.funscript").write_text(json.dumps(main), encoding="utf-8")
+            artifacts.append({"path": "motion.funscript", "kind": "funscript", "role": "stroke", "axis": "L0"})
 
         # 2. Polish stations (accepted) -> stations/<id>/...
         _emit_progress("Export — gathering stamped device stations…")
@@ -1112,6 +1129,8 @@ def cmd_export(args):
         for sid, p in passes.items():
             if not (isinstance(p, dict) and p.get("accepted")):
                 continue
+            if not _station_included(sid):
+                continue  # target group unchecked in the Export UI
             sdir = polish_root / sid
             if not sdir.is_dir():
                 continue
@@ -1153,7 +1172,7 @@ def cmd_export(args):
             if names:
                 stations_meta[sid] = {"files": names, "generated": True}
 
-        if "estim3p" not in stations_meta:
+        if inc_estim and "estim3p" not in stations_meta:
             _emit_progress("Export — generating e-stim channels (no stamped pass)…")
             try:
                 chans = _polish_generate_estim(src, None, _polish_mod.STATIONS["estim3p"])
@@ -1165,7 +1184,7 @@ def cmd_export(args):
                     for name, payload in chans.items()
                 })
 
-        if "tcode" not in stations_meta:
+        if inc_strokers and "tcode" not in stations_meta:
             _emit_progress("Export — generating T-Code axes (no stamped pass)…")
             try:
                 axes = _polish_generate_tcode(src, None, _polish_mod.STATIONS["tcode"])
@@ -1179,44 +1198,46 @@ def cmd_export(args):
                     for axis, acts in axes.items()
                 })
 
-        # 3. events.yml (fresh from feel.yml)
-        ev = _collect_events_yaml(src)
-        if ev:
-            (staging / "events.yml").write_text(ev, encoding="utf-8")
-            artifacts.append({"path": "events.yml", "kind": "events"})
-
-        # 4. Authoring sidecars that exist
-        for analysis, fname in (
-            ("chapters", f"{stem}.chapters.json"),
-            ("phrases", f"{stem}.phrases.json"),
-            ("characters", f"{stem}.characters.json"),
-        ):
-            sp = fdir / fname
-            if sp.exists():
-                shutil.copy2(sp, staging / f"{analysis}.json")
-                artifacts.append({"path": f"{analysis}.json", "kind": "sidecar", "analysis": analysis})
+        # 3 + 4. Forge metadata — events.yml + authoring sidecars (chapters /
+        # phrases / characters). The re-editable project data: pack only when the
+        # "Forge metadata" target is kept.
+        if inc_authoring:
+            ev = _collect_events_yaml(src)
+            if ev:
+                (staging / "events.yml").write_text(ev, encoding="utf-8")
+                artifacts.append({"path": "events.yml", "kind": "events"})
+            for analysis, fname in (
+                ("chapters", f"{stem}.chapters.json"),
+                ("phrases", f"{stem}.phrases.json"),
+                ("characters", f"{stem}.characters.json"),
+            ):
+                sp = fdir / fname
+                if sp.exists():
+                    shutil.copy2(sp, staging / f"{analysis}.json")
+                    artifacts.append({"path": f"{analysis}.json", "kind": "sidecar", "analysis": analysis})
 
         # 5. thumbnails/ — waveform always; hero + per-chapter frames when media
-        _emit_progress("Export — rendering thumbnails…")
-        thumbs = staging / "thumbnails"
-        thumbs.mkdir(parents=True, exist_ok=True)
-        if _render_waveform_png(actions, thumbs / "waveform.png"):
-            artifacts.append({"path": "thumbnails/waveform.png", "kind": "thumbnail", "role": "waveform"})
-        if args.media and Path(args.media).exists():
-            chap_list = []
-            cj = fdir / f"{stem}.chapters.json"
-            if cj.exists():
-                try:
-                    chap_list = json.loads(cj.read_text(encoding="utf-8")).get("chapters") or []
-                except (OSError, json.JSONDecodeError):
-                    chap_list = []
-            hero_t = chap_list[0].get("at_ms") if chap_list else int(duration_ms * 0.05)
-            if _extract_frame(args.media, hero_t or 0, thumbs / "hero.png"):
-                artifacts.append({"path": "thumbnails/hero.png", "kind": "thumbnail", "role": "hero"})
-            for i, ch in enumerate(chap_list):
-                name = f"chapter_{i + 1:02d}.png"
-                if _extract_frame(args.media, ch.get("at_ms", 0), thumbs / name):
-                    artifacts.append({"path": f"thumbnails/{name}", "kind": "thumbnail", "role": "chapter", "index": i + 1})
+        if inc_preview:
+            _emit_progress("Export — rendering thumbnails…")
+            thumbs = staging / "thumbnails"
+            thumbs.mkdir(parents=True, exist_ok=True)
+            if _render_waveform_png(actions, thumbs / "waveform.png"):
+                artifacts.append({"path": "thumbnails/waveform.png", "kind": "thumbnail", "role": "waveform"})
+            if args.media and Path(args.media).exists():
+                chap_list = []
+                cj = fdir / f"{stem}.chapters.json"
+                if cj.exists():
+                    try:
+                        chap_list = json.loads(cj.read_text(encoding="utf-8")).get("chapters") or []
+                    except (OSError, json.JSONDecodeError):
+                        chap_list = []
+                hero_t = chap_list[0].get("at_ms") if chap_list else int(duration_ms * 0.05)
+                if _extract_frame(args.media, hero_t or 0, thumbs / "hero.png"):
+                    artifacts.append({"path": "thumbnails/hero.png", "kind": "thumbnail", "role": "hero"})
+                for i, ch in enumerate(chap_list):
+                    name = f"chapter_{i + 1:02d}.png"
+                    if _extract_frame(args.media, ch.get("at_ms", 0), thumbs / name):
+                        artifacts.append({"path": f"thumbnails/{name}", "kind": "thumbnail", "role": "chapter", "index": i + 1})
 
         # 6. audio/stim.{wav,mp3} — render the stamped e-stim alpha/beta to a
         # stereo control signal. Both formats are independent opt-ins (--stim-wav
@@ -1224,7 +1245,7 @@ def cmd_export(args):
         # delivery format (smaller). A full-length WAV is large (~10 MB/min); the
         # channel funscripts remain the primary e-stim artifact.
         stim_formats = (["wav"] if args.stim_wav else []) + (["mp3"] if args.stim_mp3 else [])
-        if stim_formats:
+        if inc_estim and stim_formats:
             est_dir = staging / "stations" / "estim3p"
             alpha, beta = est_dir / f"{stem}.alpha.funscript", est_dir / f"{stem}.beta.funscript"
             if alpha.exists() and beta.exists() and duration_ms > 0:
@@ -2924,6 +2945,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument("--final-smooth", action="store_true", help="Apply final_smooth to the main funscript.")
     p_exp.add_argument("--stim-wav", action="store_true", help="Render audio/stim.wav from the e-stim channels (opt-in).")
     p_exp.add_argument("--stim-mp3", action="store_true", help="Render audio/stim.mp3 from the e-stim channels (opt-in; via ffmpeg).")
+    p_exp.add_argument("--exclude", metavar="IDS", default="", help="Comma-separated target groups to leave OUT: strokers,estim,authoring,preview. Default: include all.")
 
     # --- finalize ---
     p_fin = sub.add_parser(

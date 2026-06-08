@@ -112,6 +112,18 @@ class TestExportCLI(unittest.TestCase):
         with zipfile.ZipFile(out) as z:
             self.assertIn("thumbnails/waveform.png", z.namelist())
 
+    def test_exclude_drops_target_groups(self):
+        # --exclude leaves out whole target groups (the Export-tab checkboxes).
+        # Excluding strokers + preview drops motion.funscript + thumbnails.
+        out = os.path.join(self.tmp, "ex.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out, "--exclude", "strokers,preview")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+        self.assertNotIn("motion.funscript", names)
+        self.assertFalse(any(n.startswith("thumbnails/") for n in names), names)
+        self.assertIn("manifest.ffmeta", names)  # manifest always rides
+
     def test_export_autogenerates_estim_from_characters_without_stamp(self):
         # Characters assigned in Channels but e-stim NOT stamped in Polish:
         # export should still generate the channel set ("skip Polish, still

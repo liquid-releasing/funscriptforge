@@ -531,10 +531,10 @@ export function polishWrite(input, passes) {
 /** Export — collect the project's outputs into a loose folder or a `.forge`
  *  zip (the packager; Polish is the generator). Returns
  *  {mode, path, artifacts, stations, manifest}. Browser mode → null. */
-export function exportWrite(funscriptPath, { mode = 'forge', out = null, blendSeams = false, finalSmooth = false, stem = null, media = null, stimWav = false, stimMp3 = false } = {}) {
+export function exportWrite(funscriptPath, { mode = 'forge', out = null, blendSeams = false, finalSmooth = false, stem = null, media = null, stimWav = false, stimMp3 = false, exclude = [] } = {}) {
   return call(
     'export_write',
-    { funscriptPath, mode, out, blendSeams, finalSmooth, stem, media, stimWav, stimMp3 },
+    { funscriptPath, mode, out, blendSeams, finalSmooth, stem, media, stimWav, stimMp3, exclude },
     () => Promise.resolve(null),
   );
 }
