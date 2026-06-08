@@ -6,6 +6,57 @@ verify + commit) · ✅ committed.
 
 ---
 
+## Session 2026-06-08b (post-compact re-test: Events lane + Polish forge progress)
+
+### ✅ Committed this session
+
+1. **Events funscript lane mis-rendered on sparser chapters** (VictoriaOaks
+   ch1/ch5/ch12 = near-empty low line; ch10/ch13 correct). Stanzas/Chapters
+   drew the same data correctly. Root cause: different renderers — Stanzas uses
+   `Charts.Sparkline` (connects a line through every action → real motion at any
+   density); Events used `TrackStack`'s per-pixel min→max envelope BARS, which
+   collapse to a 1px dot when a chapter has fewer actions than pixels. Rewrote
+   the Events lane to the connected-polyline model, still bucketed into ~16
+   velocity paths (HMR stack-overflow guard). forgemoment `c7a78ff`.
+   → **Re-test:** VictoriaOaks ch1/ch5/ch12 now show the velocity heatmap.
+
+2. **Polish forge "does not return" / no real progress.** The whole-track
+   e-stim/TCode forge runs the full Restim/multiaxis pipeline once per chapter,
+   serially, then bakes events + clamps. Footer sat on ONE static line the whole
+   time → read as a hang. **CLI proof: VictoriaOaks (17 ch, 23.7k actions) =
+   28.6s exit 0; Prisoner (13 ch + events) = 31s. Returns cleanly; stderr only
+   ~87 lines (no pipe-buffer deadlock).** Added per-chapter `progress:` lines
+   (`_polish_generate_estim`/`_tcode`) → `run_cli_with_progress` → `ff:progress`
+   → PolishTab footer ("Forging E-Stim — chapter 7 of 17…" + bake/clamp).
+   funscriptforge `d12ba15`. ⚠️ Rust changed → tauri:dev MUST recompile.
+
+### 🔴 OPEN — needs repro on the recompiled (progress) build
+
+3. **In-app forge reportedly ran 5+ min without returning** — but CLI is ~29s
+   for the same file. So it's NOT Python slowness. Either the user was on the
+   pre-recompile build, or a bridge stall. The new per-chapter progress is the
+   diagnostic: if it still hangs, note the LAST progress line shown (which
+   chapter / "baking" / "clamping") to localize it. tokio `output().await`
+   drains both pipes, and funscript-tools is pure-Python (no lingering
+   grandchild to hold the pipe), so a classic pipe deadlock is unlikely.
+
+4. **Polish 3-pane preview funscripts don't match the actual stamped channels**
+   (user: OK monochrome; goal = show how the SLIDERS reshape values; "will show
+   in next pass"). Cause: preview runs `polishEngine.previewPass` on a 30s
+   window of the MOTION funscript (clamp-only) — for e-stim it does NOT run the
+   9-channel generation (too slow live), so it previews the wrong signal.
+   Honest for strokers (Handy); misleading for e-stim/TCode. DEFERRED.
+
+5. **Polish re-runs "Assessing phrases" on tab nav (before forging).** PolishTab
+   itself never touches phrases, so a parent/shared effect is firing it. Needs
+   devtools/repro to pin.
+
+6. **Analysis Structure cards show "—"** (phrases/stanzas count not precomputed
+   during Analyze — known queued gap) AND **re-Analyze does not rebuild values
+   on the tabs.** The rebuild part is potentially real; needs repro.
+
+---
+
 ## Session 2026-06-08 (export restructure + events bake-in dogfood)
 
 ### 🟡 Fixed — live in dev build (HMR, pure JS), NOT yet committed
