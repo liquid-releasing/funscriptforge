@@ -10,7 +10,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 
-import { polishApply, polishRead, polishWrite } from '../api/forge.js';
+import { polishApply, polishRead, polishWrite, isTauri } from '../api/forge.js';
 import { POLISH_DEVICES, outputFilesFor } from '../data/polishDevices.js';
 import { previewPass, resolveKnobs } from '../data/polishEngine.js';
 import {
@@ -164,6 +164,23 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
         ? `Forging ${d.label} — generating the multi-axis TCode set…`
         : `Forging ${d.label} — clamping the whole track…`;
     setBusy({ message: forgingMsg });
+    // The forge streams per-chapter progress over the `ff:progress` Tauri
+    // event (run_cli_with_progress). Pipe each line straight into the footer
+    // message so a 13-chapter / ~30s forge advances ("…chapter 7 of 13…")
+    // instead of sitting on one static line (user: "does not return").
+    let offProgress = null;
+    try {
+      if (isTauri()) {
+        const { listen } = await import('@tauri-apps/api/event');
+        offProgress = await listen('ff:progress', (event) => {
+          const raw = String(event?.payload ?? '');
+          const line = raw.startsWith('progress: ') ? raw.slice('progress: '.length) : raw;
+          // Only our own simple Polish lines (not the analyzer's `a::b::c`
+          // structured lines, which may still be flowing from another tab).
+          if (line && !line.includes('::')) setBusy({ message: line });
+        });
+      }
+    } catch { /* listener is best-effort; the forge still runs */ }
     try {
       const res = await polishApply(path, d.id, knobs[d.id]);
       if (!res || res.error) {
@@ -190,6 +207,7 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
       setStampError((e) => ({ ...e, [d.id]: msg }));
       setAppError(msg);
     } finally {
+      if (offProgress) { try { offProgress(); } catch { /* already torn down */ } }
       setStamping(null);
       setBusy(null);
     }

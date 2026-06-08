@@ -1906,6 +1906,7 @@ pub async fn polish_preview(
 /// stations whose generation isn't wired yet, e.g. e-stim).
 #[tauri::command]
 pub async fn polish_apply(
+    app: AppHandle,
     funscript_path: String,
     station: String,
     params: serde_json::Value,
@@ -1930,7 +1931,11 @@ pub async fn polish_apply(
         args.push(s);
     }
     let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let out = run_cli(&argv).await?;
+    // Route through the progress channel so the e-stim/TCode forge can stream
+    // per-chapter status ("Forging E-Stim — chapter 3 of 13…") to the footer;
+    // the whole-track forge is ~2s/chapter serially and otherwise reads as a
+    // hang on a static line (user flagged 2026-06-08).
+    let out = run_cli_with_progress(&app, "ff:progress", &argv).await?;
     serde_json::from_str(&out).map_err(|e| format!("parse polish apply: {}", e))
 }
 

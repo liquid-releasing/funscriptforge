@@ -3661,7 +3661,13 @@ def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> 
     tmp = Path(tempfile.mkdtemp(prefix="ff_polish_estim_"))
     try:
         from forge.stim_config import resolve_character, apply_virtual_envelope
+        nwin = len(windows)
         for idx, (lo, hi, cid, params) in enumerate(windows):
+            # Per-chapter progress — the whole-track forge runs the full Restim
+            # pipeline once per chapter (~2s each), serially, so a 13-chapter
+            # track is ~30s. Without this the footer sits on one static line
+            # for the duration and reads as a hang (user flagged 2026-06-08).
+            _emit_progress(f"Forging E-Stim — chapter {idx + 1} of {nwin}…")
             if not cid:
                 continue  # unassigned chapter — no e-stim here
             # Virtual characters (Scene Closer) generate from a base preset and
@@ -3708,8 +3714,10 @@ def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> 
 
     # Bake authored events into the channels before clamping, so the device
     # signal carries the effects (restim/forgeplayer play channels, not events).
+    _emit_progress("Forging E-Stim — baking authored events…")
     raw = _bake_events_into_channels(funscript_path, stem, raw, templates)
 
+    _emit_progress("Forging E-Stim — clamping channels to device limits…")
     out = {}
     for name, acts in raw.items():
         acts.sort(key=lambda a: a["at"])
@@ -3780,7 +3788,9 @@ def _polish_generate_tcode(funscript_path: str, knobs: dict | None, station) -> 
         windows.append((pairs[0][0], pairs[-1][0], assign.get("mechStyle")))
 
     raw = {}  # suffix -> concatenated actions
-    for lo, hi, style in windows:
+    nwin = len(windows)
+    for idx, (lo, hi, style) in enumerate(windows):
+        _emit_progress(f"Forging T-Code — chapter {idx + 1} of {nwin}…")
         if not style or style == "None" or style not in MULTIAXIS_PRESETS:
             continue
         wlo = lo if lo is not None else pairs[0][0]
