@@ -332,8 +332,11 @@ function TargetCard({ target: t }) {
     <div style={{
       position: 'relative', padding: 14, borderRadius: 10,
       background: dim ? 'var(--surface-2, #12151e)' : 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderLeft: `4px solid ${dim ? 'var(--border)' : t.color}`,
+      // Longhand only — mixing `border` shorthand with `borderLeft` warns in
+      // React (shorthand/non-shorthand conflict on rerender).
+      borderStyle: 'solid',
+      borderWidth: '1px 1px 1px 4px',
+      borderColor: `var(--border) var(--border) var(--border) ${dim ? 'var(--border)' : t.color}`,
       display: 'flex', flexDirection: 'column', gap: 8,
       opacity: t.state === 'none' ? 0.7 : 1,
     }}>
@@ -378,8 +381,10 @@ function DestShell({ color, icon, label, right, children, on = true }) {
     <div style={{
       padding: 14, borderRadius: 10,
       background: on ? 'var(--surface)' : 'var(--surface-2, #12151e)',
-      border: `1px solid ${on ? color : 'var(--border)'}`,
-      borderLeft: `4px solid ${color}`,
+      // Longhand only — `border` shorthand + `borderLeft` warns on rerender.
+      borderStyle: 'solid',
+      borderWidth: '1px 1px 1px 4px',
+      borderColor: (() => { const edge = on ? color : 'var(--border)'; return `${edge} ${edge} ${edge} ${color}`; })(),
       display: 'flex', flexDirection: 'column', gap: 10,
       boxShadow: on ? `0 0 0 1px ${color}40` : 'none',
     }}>
