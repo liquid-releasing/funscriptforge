@@ -1085,6 +1085,7 @@ def cmd_export(args):
     artifacts: list[dict] = []
     try:
         # 1. Main funscript (+ optional finalize) -> motion.funscript
+        _emit_progress("Export — collecting the motion track…")
         with open(motion_src, encoding="utf-8") as f:
             data = json.load(f)
         actions = data.get("actions", [])
@@ -1097,6 +1098,7 @@ def cmd_export(args):
         duration_ms = actions[-1]["at"] if actions else 0
 
         # 2. Polish stations (accepted) -> stations/<id>/...
+        _emit_progress("Export — gathering stamped device stations…")
         passes = {}
         ppath = _polish_path(src)
         if ppath.exists():
@@ -1152,6 +1154,7 @@ def cmd_export(args):
                 stations_meta[sid] = {"files": names, "generated": True}
 
         if "estim3p" not in stations_meta:
+            _emit_progress("Export — generating e-stim channels (no stamped pass)…")
             try:
                 chans = _polish_generate_estim(src, None, _polish_mod.STATIONS["estim3p"])
             except ValueError:
@@ -1163,6 +1166,7 @@ def cmd_export(args):
                 })
 
         if "tcode" not in stations_meta:
+            _emit_progress("Export — generating T-Code axes (no stamped pass)…")
             try:
                 axes = _polish_generate_tcode(src, None, _polish_mod.STATIONS["tcode"])
             except ValueError:
@@ -1193,6 +1197,7 @@ def cmd_export(args):
                 artifacts.append({"path": f"{analysis}.json", "kind": "sidecar", "analysis": analysis})
 
         # 5. thumbnails/ — waveform always; hero + per-chapter frames when media
+        _emit_progress("Export — rendering thumbnails…")
         thumbs = staging / "thumbnails"
         thumbs.mkdir(parents=True, exist_ok=True)
         if _render_waveform_png(actions, thumbs / "waveform.png"):
@@ -1226,6 +1231,7 @@ def cmd_export(args):
                 adir = staging / "audio"
                 adir.mkdir(parents=True, exist_ok=True)
                 for fmt in stim_formats:
+                    _emit_progress(f"Export — rendering stim audio ({fmt.upper()})…")
                     if _render_stim_audio(alpha, beta, adir / f"stim.{fmt}", duration_ms / 1000.0, fmt=fmt):
                         artifacts.append({"path": f"audio/stim.{fmt}", "kind": "audio", "role": "estim", "format": fmt})
 
@@ -1239,6 +1245,7 @@ def cmd_export(args):
 
         # --- write output ---
         if args.mode == "forge":
+            _emit_progress("Export — packaging the .forge bundle…")
             out = Path(args.out) if args.out else (Path(src).parent / f"{stem}.forge")
             out.parent.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
@@ -1247,6 +1254,7 @@ def cmd_export(args):
                         z.write(fp, fp.relative_to(staging).as_posix())
             result_path = str(out)
         else:
+            _emit_progress("Export — writing the loose folder…")
             out = Path(args.out) if args.out else (Path(src).parent / f"{stem}_export")
             if out.exists():
                 shutil.rmtree(out, ignore_errors=True)

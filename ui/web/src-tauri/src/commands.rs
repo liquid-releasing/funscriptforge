@@ -1988,6 +1988,7 @@ pub async fn polish_write(
 /// manifest.ffmeta. Returns `{ mode, path, artifacts, stations, manifest }`.
 #[tauri::command]
 pub async fn export_write(
+    app: AppHandle,
     funscript_path: String,
     mode: String,
     out: Option<String>,
@@ -2032,7 +2033,10 @@ pub async fn export_write(
         args.push("--stim-mp3".into());
     }
     let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let out = run_cli(&argv).await?;
+    // Stream per-step progress (motion → stations → thumbnails → audio →
+    // packaging) to the footer; export can be slow when it generates unstamped
+    // stations or renders stim audio, and used to sit on a static "Writing…".
+    let out = run_cli_with_progress(&app, "ff:progress", &argv).await?;
     serde_json::from_str(&out).map_err(|e| format!("parse export result: {}", e))
 }
 

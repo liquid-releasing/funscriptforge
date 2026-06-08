@@ -867,6 +867,8 @@ export default function App() {
           <ExportTab
             project={typeof openedProject === 'object' ? openedProject : null}
             selectedDevices={selectedDevices}
+            setBusy={setBusy}
+            setAppError={setAppError}
           />
         )}
         {tab === 'catalog' && <CatalogTab />}
@@ -915,6 +917,10 @@ export default function App() {
           busy={busy}
           gate={gateMsg}
           ready={!gateMsg && !appError && !busy && (Boolean(nextTab) || tab === 'export')}
+          // Export owns its own write button in-tab; the footer's generic
+          // accept is a no-op there (no downstream tab), so hide the dead
+          // Reset/Write buttons but keep the bar for the progress banner.
+          hideActions={tab === 'export'}
         />
       )}
       <StatusBar

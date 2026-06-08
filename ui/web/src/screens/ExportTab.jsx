@@ -22,7 +22,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pill, Button, Icon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
-import { exportWrite, revealPath, polishRead, openInForgePlayer } from '../api/forge.js';
+import { exportWrite, revealPath, polishRead, openInForgePlayer, isTauri } from '../api/forge.js';
 
 // The Polish stations that are mechanical strokers (ride under the Strokers
 // target). estim3p is the e-stim flagship and lives in its own target.
@@ -31,7 +31,7 @@ const STROKER_STATIONS = ['handy', 'tcode', 'lovense', 'vacuglide'];
 // ──────────────────────────────────────────────────────────────
 // ExportTab
 // ──────────────────────────────────────────────────────────────
-export default function ExportTab({ project }) {
+export default function ExportTab({ project, setBusy = () => {}, setAppError = () => {} }) {
   const projectStem = useMemo(() => {
     if (!project?.path) return 'project';
     const file = String(project.path).split(/[/\\]/).pop() || 'project';
@@ -109,6 +109,21 @@ export default function ExportTab({ project }) {
   const doWrite = async () => {
     if (!canWrite) return;
     setWriting(true); setWriteError(null); setResult(null);
+    setBusy({ message: `Export — packaging ${mode === 'forge' ? 'the .forge bundle' : 'the loose folder'}…` });
+    // Export streams per-step progress over `ff:progress` (motion → stations →
+    // thumbnails → audio → packaging). Pipe each line into the footer so a slow
+    // export (unstamped-station generation, stim-audio render) visibly advances.
+    let offProgress = null;
+    try {
+      if (isTauri()) {
+        const { listen } = await import('@tauri-apps/api/event');
+        offProgress = await listen('ff:progress', (event) => {
+          const raw = String(event?.payload ?? '');
+          const line = raw.startsWith('progress: ') ? raw.slice('progress: '.length) : raw;
+          if (line && !line.includes('::')) setBusy({ message: line });
+        });
+      }
+    } catch { /* listener is best-effort; the export still runs */ }
     try {
       const res = await exportWrite(path, {
         mode,
@@ -128,7 +143,10 @@ export default function ExportTab({ project }) {
       }
     } catch (e) {
       setWriteError(String(e?.message || e));
+      setAppError(String(e?.message || e));
     } finally {
+      if (offProgress) { try { offProgress(); } catch { /* already torn down */ } }
+      setBusy(null);
       setWriting(false);
     }
   };
@@ -564,7 +582,7 @@ function ActionsRow({
         {result && !error && (
           <span style={{ fontSize: 11, color: '#3ed598', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Icon name="check" size={12} />
-            {result.artifacts} artifact{result.artifacts === 1 ? '' : 's'}
+            Wrote {result.artifacts} file{result.artifacts === 1 ? '' : 's'}
             {result.stations?.length ? ` · ${result.stations.length} station${result.stations.length === 1 ? '' : 's'}` : ''}
             {' → '}
             <span className="mono" style={{ color: 'var(--text-soft)' }}>{shortPath(result.path)}</span>
