@@ -39,7 +39,7 @@ function burnOff(tr) {
   return Math.min(1, Math.sqrt(s / n) / 30);
 }
 
-export default function PolishTab({ project, setAppError = () => {} }) {
+export default function PolishTab({ project, setAppError = () => {}, setBusy = () => {} }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
   const path = project?.path ?? null;
@@ -155,6 +155,15 @@ export default function PolishTab({ project, setAppError = () => {} }) {
     if (!canStamp) return;
     setStamping(d.id);
     setStampError((e) => ({ ...e, [d.id]: null }));
+    // Forging the whole track is slow — e-stim regenerates 9 channels per
+    // chapter via funscript-tools, TCode the axis set. Surface it in the
+    // footer so the wait isn't a silent "is it stuck?".
+    const forgingMsg = d.kind === 'estim'
+      ? `Forging ${d.label} — generating 9 channels per chapter (this can take a bit)…`
+      : d.tcode
+        ? `Forging ${d.label} — generating the multi-axis TCode set…`
+        : `Forging ${d.label} — clamping the whole track…`;
+    setBusy({ message: forgingMsg });
     try {
       const res = await polishApply(path, d.id, knobs[d.id]);
       if (!res || res.error) {
@@ -182,6 +191,7 @@ export default function PolishTab({ project, setAppError = () => {} }) {
       setAppError(msg);
     } finally {
       setStamping(null);
+      setBusy(null);
     }
   };
 

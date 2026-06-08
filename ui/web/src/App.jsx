@@ -784,6 +784,7 @@ export default function App() {
           <PolishTab
             project={typeof openedProject === 'object' ? openedProject : null}
             setAppError={setAppError}
+            setBusy={setBusy}
           />
         )}
         {tab === 'chapters' && (
