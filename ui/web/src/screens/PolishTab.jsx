@@ -112,6 +112,22 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
 
   const windowLen = previewWindow ? Math.max(1, previewWindow.end - previewWindow.start) : 1;
 
+  // Whole-track overview for the conveyor cards. The bench preview is only the
+  // first 30s, which read as "just the opening" on the cards (user flagged) —
+  // a card should show the WHOLE scene's shape. Decimated motion, rebased to 0;
+  // the bench keeps the 30s detail window for knob precision.
+  const trackOverview = useMemo(() => {
+    if (!actions.length) return [];
+    const t0 = actions[0].at;
+    const step = Math.max(1, Math.floor(actions.length / 240));
+    const out = [];
+    for (let i = 0; i < actions.length; i += step) out.push({ at: actions[i].at - t0, pos: actions[i].pos });
+    const last = actions[actions.length - 1];
+    if (out.length && out[out.length - 1].at !== last.at - t0) out.push({ at: last.at - t0, pos: last.pos });
+    return out;
+  }, [actions]);
+  const trackMs = actions.length ? Math.max(1, actions[actions.length - 1].at - actions[0].at) : 1;
+
   const windowActions = useMemo(() => {
     if (!previewWindow) return [];
     return actions
@@ -326,7 +342,9 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
                   )}
                 </div>
                 <div style={{ height: 26, background: 'rgba(255,255,255,0.02)', borderRadius: 4, overflow: 'hidden', padding: '3px 4px' }}>
-                  <MiniTrace samples={dTraces?.performed} totalMs={windowLen} ember={d.ember} />
+                  {/* Whole-track shape (not the 30s bench window) so the card
+                      reads as the full scene. */}
+                  <MiniTrace samples={trackOverview} totalMs={trackMs} ember={d.ember} />
                 </div>
                 <HeatMeter value={burnOff(dTraces)} ember={d.ember} height={3} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, fontFamily: 'var(--font-mono)', color: '#6b7390', marginTop: 2 }}>
@@ -340,7 +358,7 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
         <div style={{ marginTop: 8, fontSize: 10.5, color: '#6b7390', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em', display: 'flex', gap: 14 }}>
           <span>↑ click any station to bring it to the bench</span>
           <span style={{ color: '#3a3f5c' }}>·</span>
-          <span>preview is a {Math.round(windowLen / 1000)}s window; Stamp forges the whole track</span>
+          <span>cards show the whole track · bench preview zooms the first {Math.round(windowLen / 1000)}s · Stamp forges the whole track</span>
         </div>
       </div>
 
