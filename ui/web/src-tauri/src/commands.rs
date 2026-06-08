@@ -2018,6 +2018,85 @@ pub async fn reveal_path(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Locate a sibling ForgePlayer checkout (dev launcher). Returns
+/// `(python_exe, main_py)` — the venv interpreter if present, else system
+/// python. Resolution order: `FORGEPLAYER_ROOT` env override, then a
+/// `forgeplayer/` (or `../forgeplayer/`) sibling discovered by walking up from
+/// the current dir and the executable's directory. Production wiring (an
+/// installed ForgePlayer app) is a follow-up.
+fn locate_forgeplayer() -> Option<(PathBuf, PathBuf)> {
+    let has_main = |root: &Path| root.join("main.py").is_file();
+
+    let mut root: Option<PathBuf> = std::env::var("FORGEPLAYER_ROOT")
+        .ok()
+        .map(PathBuf::from)
+        .filter(|p| has_main(p));
+
+    if root.is_none() {
+        let mut bases: Vec<PathBuf> = Vec::new();
+        if let Ok(cd) = std::env::current_dir() {
+            bases.push(cd);
+        }
+        if let Ok(exe) = std::env::current_exe() {
+            let mut p = exe.parent().map(|x| x.to_path_buf());
+            for _ in 0..6 {
+                if let Some(b) = p {
+                    bases.push(b.clone());
+                    p = b.parent().map(|x| x.to_path_buf());
+                } else {
+                    break;
+                }
+            }
+        }
+        'outer: for b in &bases {
+            for cand in [b.join("forgeplayer"), b.join("..").join("forgeplayer")] {
+                if has_main(&cand) {
+                    root = Some(cand);
+                    break 'outer;
+                }
+            }
+        }
+    }
+
+    let root = root?;
+    let venv = if cfg!(windows) {
+        root.join(".venv").join("Scripts").join("python.exe")
+    } else {
+        root.join(".venv").join("bin").join("python")
+    };
+    let py = if venv.is_file() {
+        venv
+    } else {
+        PathBuf::from(if cfg!(windows) { "python" } else { "python3" })
+    };
+    Some((py, root.join("main.py")))
+}
+
+/// Launch ForgePlayer (the LQR player) as a hand-off destination from Export.
+///
+/// ForgePlayer has no `.forge` bundle importer yet (it reads
+/// `.forgeplayer-session` and loads `.funscript`/audio per stim slot), so we
+/// only launch the app here — the caller also reveals the exported file so the
+/// user can drop it into a slot. `path` is accepted for forward-compat (when
+/// ForgePlayer learns to open a bundle on launch) but not yet forwarded.
+#[tauri::command]
+pub async fn open_in_forgeplayer(path: String) -> Result<(), String> {
+    let _ = &path; // reserved — ForgePlayer cannot yet open a bundle on launch
+    let (py, main_py) = locate_forgeplayer().ok_or_else(|| {
+        "ForgePlayer not found — set FORGEPLAYER_ROOT to its folder, or place a \
+         forgeplayer/ checkout beside FunscriptForge."
+            .to_string()
+    })?;
+    let mut cmd = std::process::Command::new(&py);
+    cmd.arg(&main_py);
+    if let Some(dir) = main_py.parent() {
+        cmd.current_dir(dir);
+    }
+    cmd.spawn()
+        .map_err(|e| format!("launch ForgePlayer ({}): {}", py.display(), e))?;
+    Ok(())
+}
+
 /// Export `<stem>.feel.yml` to a playable Edger `<stem>.events.yml`. With
 /// `write=false` nothing is written — the rendered YAML is still returned
 /// (Preview). Returns `{ path, count, skipped[], yaml }`.

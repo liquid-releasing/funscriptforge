@@ -1,241 +1,36 @@
-// ExportTab — the end of the pipeline. SKELETON pass: shows the
-// shape of what Export will write, in either of two modes:
+// ExportTab — the end of the pipeline, restructured around the three
+// questions every export answers (the ForgeGen v2 Output model, made
+// FF-native):
 //
-//   Loose files (dev)  — multiple sidecars + funscripts land in the
-//                        project folder. Today's reality; the way
-//                        external tools that read chapters.json / etc.
-//                        keep working.
-//   .forge bundle (v1) — single zip with manifest.ffmeta + funscripts
-//                        + audio + thumbnails. The shape the LQR
-//                        multi-modal player consumes. See memory
-//                        `project_export_bundle_design.md`.
+//   TARGETS       — WHAT gets written, grouped by who consumes it
+//                   (Strokers · E-stim · Authoring · Preview). Honest
+//                   readiness cards: the packager writes what's forged, so a
+//                   card shows ready / auto / opt-in / not-ready, never a
+//                   checkbox that lies. (Per-target opt-out is the next
+//                   iteration — needs a `cli.py export` skip flag.)
+//   DESTINATIONS  — WHERE it goes. Disk (loose folder | .forge bundle) is the
+//                   format choice; "Open in ForgePlayer" is a real local
+//                   hand-off; Autoblow cloud is a post-beta `later` card.
+//   ACTIONS       — the verbs: Export (→ destination) · Reveal · Copy path ·
+//                   Open in ForgePlayer →.
 //
-// Skeleton ships: mode toggle, artifact summary (checkboxes + filenames),
-// naming controls (loose mode) or bundle preview (forge mode), 4 stub
-// compatibility checks, disabled Write button. No real file writes —
-// that lands in the wiring pass with `cli.py export` (forge bundle) and
-// `cli.py finalize` (loose files).
-//
-// State is local. Cross-tab artifact awareness (which artifacts are
-// actually fresh vs stale) attaches when the chain-file plumbing lands.
+// Export remains a PACKAGER, not a generator: it gathers the effective motion
+// track, the device files Polish stamped (+ auto-generated e-stim/TCode from
+// Channels), events, authoring sidecars, thumbnails, and a manifest. It only
+// writes new files — nothing destructive.
 
 import { useEffect, useMemo, useState } from 'react';
 import { Pill, Button, Icon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
-import { exportWrite, revealPath, polishRead } from '../api/forge.js';
-import { POLISH_BY_ID } from '../data/polishDevices.js';
+import { exportWrite, revealPath, polishRead, openInForgePlayer } from '../api/forge.js';
 
-const MODES = [
-  {
-    id: 'loose',
-    label: 'Loose files',
-    subtitle: 'dev — multiple sidecars in the project folder',
-  },
-  {
-    id: 'forge',
-    label: '.forge bundle',
-    subtitle: 'v1 — single zip the LQR player consumes',
-  },
-];
+// The Polish stations that are mechanical strokers (ride under the Strokers
+// target). estim3p is the e-stim flagship and lives in its own target.
+const STROKER_STATIONS = ['handy', 'tcode', 'lovense', 'vacuglide'];
 
-// What can ship today. Each artifact carries:
-//   id, kind ('funscript'|'sidecar'|'audio'|'thumbnail'|'manifest')
-//   desc, devicesRequired (subset of project's selectedDevices that must
-//   be on for this artifact to make sense), default enabled state.
-//
-// `name` is a function so loose/forge modes can produce different paths
-// (loose = sidecar next to funscript; forge = path inside the zip).
-const ARTIFACTS = [
-  {
-    id: 'motion',
-    kind: 'funscript',
-    desc: 'Primary stroke axis (L0). Required for any linear stroker.',
-    devicesRequired: [],
-    defaultEnabled: true,
-  },
-  {
-    id: 'motion-osr',
-    kind: 'funscript',
-    desc: 'Multi-axis sidecars: roll / pitch / sway. Required for OSR2 / SR6.',
-    devicesRequired: ['sr6'],
-    defaultEnabled: true,
-  },
-  {
-    id: 'estim-channels',
-    kind: 'funscript',
-    desc: '9-channel e-stim envelopes generated from per-chapter characters.',
-    devicesRequired: ['estim'],
-    defaultEnabled: true,
-  },
-  {
-    id: 'events',
-    kind: 'sidecar',
-    desc: 'Point-in-time effects (edge, hold, surge…) from Events tab.',
-    devicesRequired: [],
-    defaultEnabled: true,
-  },
-  {
-    id: 'authoring-sidecars',
-    kind: 'sidecar',
-    desc: 'Authoring analysis: chapter boundaries, phrase tags, stanza assignments, per-chapter characters. One JSON file per analysis kind — emitted only when the corresponding tab produced data.',
-    devicesRequired: [],
-    defaultEnabled: true,
-  },
-  {
-    id: 'heatmap',
-    kind: 'thumbnail',
-    desc: 'Velocity-colored heatmap PNG of the primary funscript. Library cards / shareable previews.',
-    devicesRequired: [],
-    defaultEnabled: true,
-  },
-  {
-    id: 'stim-audio',
-    kind: 'audio',
-    desc: 'Stereo WAV rendered from the alpha/beta channels. Plays directly on the e-stim device.',
-    devicesRequired: ['estim'],
-    defaultEnabled: true,
-  },
-  {
-    id: 'thumbnails',
-    kind: 'thumbnail',
-    desc: 'Per-chapter snapshot PNGs (hero + chapter_*.png). Forge only.',
-    devicesRequired: [],
-    defaultEnabled: true,
-    forgeOnly: true,
-  },
-  {
-    id: 'manifest',
-    kind: 'manifest',
-    desc: 'manifest.ffmeta — what artifacts the bundle contains and how they relate.',
-    devicesRequired: [],
-    defaultEnabled: true,
-    forgeOnly: true,
-  },
-];
-
-// Output variants — same logical channel set, different encodings for
-// specific hardware. Per-variant `check(ctx)` runs against the loaded
-// project and returns { tone, msg } when something's outside the
-// device's limits — surfaced as a caution triangle in the UI. ctx
-// fields used today: actionCount; expandable as wiring lands.
-const OUTPUT_VARIANTS = {
-  mechanical: {
-    label: 'Mechanical',
-    variants: [
-      {
-        id: 'mech-1d',
-        label: 'Mechanical (Handy / OSR2 / Intiface)',
-        desc: 'One 1D funscript covering Handy, OSR2, and Bluetooth devices (Lovense, Kiiroo). Velocity limit comes from The Handy (most restrictive).',
-        defaultEnabled: true,
-        check: (ctx) => {
-          if (ctx.actionCount > 10000) {
-            return {
-              tone: 'warn',
-              msg: `${ctx.actionCount.toLocaleString()} actions exceeds The Handy's ~10,000 ceiling. The writer will downsample at export time.`,
-            };
-          }
-          return null;
-        },
-      },
-    ],
-  },
-  estim: {
-    label: 'E-stim',
-    note: 'Channel funscripts are identical regardless of which e-stim variant is checked. The difference is the WAV encoding / protocol metadata.',
-    variants: [
-      {
-        id: 'estim-audio-pulse',
-        label: 'Audio 3-phase — pulse',
-        sublabel: 'Tingler / EstimHero / ZC95',
-        desc: 'Pulse train with cosine envelope · stereo WAV · default',
-        defaultEnabled: true,
-        audio: true,
-      },
-      {
-        id: 'estim-audio-continuous',
-        label: 'Audio 3-phase — continuous',
-        sublabel: 'Legacy 2b / 312',
-        desc: 'Continuous sine carrier · stereo WAV',
-        defaultEnabled: false,
-        audio: true,
-        check: (ctx) => {
-          if (ctx.actionCount > 8000) {
-            return {
-              tone: 'warn',
-              msg: 'Legacy 2b / 312 may struggle with very dense content. Consider Pulse encoding for high-density scenes.',
-            };
-          }
-          return null;
-        },
-      },
-      {
-        id: 'estim-foc-3',
-        label: 'FOC-Stim — 3-phase',
-        desc: 'Protocol device · channel funscripts · restim required',
-        defaultEnabled: false,
-      },
-      {
-        id: 'estim-foc-4',
-        label: 'FOC-Stim — 4-phase',
-        desc: 'Protocol device · experimental four-phase mode',
-        defaultEnabled: false,
-      },
-      {
-        id: 'estim-neostim',
-        label: 'NeoStim — 3-phase',
-        desc: 'Protocol device · NeoStim three-phase mode',
-        defaultEnabled: false,
-      },
-    ],
-  },
-};
-
-function defaultVariantState() {
-  const out = {};
-  Object.values(OUTPUT_VARIANTS).forEach((group) => {
-    group.variants.forEach((v) => { out[v.id] = v.defaultEnabled; });
-  });
-  return out;
-}
-
-// Loose-mode filename per suffix scheme. The .axis. vs _axis. distinction
-// matters: most players expect `.roll.funscript`; legacy players need
-// `_roll.funscript`.
-function looseFilename(stem, id, scheme) {
-  const sep = scheme === 'underscore' ? '_' : '.';
-  switch (id) {
-    case 'motion':         return `${stem}.funscript`;
-    case 'motion-osr':     return `${stem}${sep}roll.funscript · ${stem}${sep}pitch.funscript · ${stem}${sep}sway.funscript`;
-    case 'estim-channels': return `${stem}.channels/<character>/<channel>.funscript  (×9)`;
-    case 'events':         return `${stem}.events.yml`;
-    case 'authoring-sidecars':
-      return `${stem}.{chapters,phrases,stanzas,characters}.json  (×4)`;
-    case 'heatmap':        return `${stem}.heatmap.png`;
-    case 'stim-audio':     return `${stem}.stim.wav`;
-    case 'thumbnails':     return '—';
-    case 'manifest':       return `${stem}.ffmeta`;
-    default:               return '?';
-  }
-}
-
-// .forge bundle internal path. Matches the proposed layout in the
-// export-bundle memory.
-function forgeBundlePath(id) {
-  switch (id) {
-    case 'motion':         return 'motion.funscript';
-    case 'motion-osr':     return 'motion.osr.funscript';
-    case 'estim-channels': return 'stim/<character>/<channel>.funscript  (×9)';
-    case 'events':         return 'events.yml';
-    case 'authoring-sidecars':
-      return '{chapters,phrases,stanzas,characters}.json  (×4)';
-    case 'heatmap':        return 'thumbnails/waveform.png';
-    case 'stim-audio':     return 'audio/stim.wav';
-    case 'thumbnails':     return 'thumbnails/  (hero.png + chapter_*.png)';
-    case 'manifest':       return 'manifest.ffmeta';
-    default:               return '?';
-  }
-}
-
+// ──────────────────────────────────────────────────────────────
+// ExportTab
+// ──────────────────────────────────────────────────────────────
 export default function ExportTab({ project }) {
   const projectStem = useMemo(() => {
     if (!project?.path) return 'project';
@@ -246,23 +41,24 @@ export default function ExportTab({ project }) {
   const path = project?.path ?? null;
   const isSample = typeof path === 'string' && path.startsWith('sample://');
   const canWrite = !!path && !isSample;
+  const hasMedia = !!project?.mediaPath;
 
+  // Disk format (the old loose/forge mode) now lives on the disk destination.
   const [mode, setMode] = useState('forge');
   const [stem, setStem] = useState(projectStem);
-  const [suffixScheme, setSuffixScheme] = useState('dot'); // 'dot' | 'underscore'
-  // Post-processing applied to the main funscript during write (via cli.py
-  // export → blend_seams / final_smooth). Default both on.
-  const [postProcessing, setPostProcessing] = useState({
+  // Whether to also launch ForgePlayer after writing.
+  const [toForgePlayer, setToForgePlayer] = useState(false);
+
+  // Render/processing options applied during write (real backend effect).
+  const [options, setOptions] = useState({
     blendSeams: true,
     finalSmooth: true,
     stimWav: false,
     stimMp3: false,
   });
-  const hasMedia = !!project?.mediaPath;
 
-  // Polish stamps drive what gets packed — Export is the packager, Polish the
-  // generator. Read the stamp record so the artifact list reflects what's
-  // actually been forged.
+  // Polish stamps drive what's forged — Export packs what it finds; we read the
+  // stamp record so the target cards reflect reality, not aspiration.
   const [polishPasses, setPolishPasses] = useState({});
   useEffect(() => {
     if (!path) { setPolishPasses({}); return undefined; }
@@ -281,8 +77,35 @@ export default function ExportTab({ project }) {
   const [writing, setWriting] = useState(false);
   const [result, setResult] = useState(null);
   const [writeError, setWriteError] = useState(null);
+  const [launching, setLaunching] = useState(false);
 
-  // Re-stem only when the user changed it; otherwise let the CLI default.
+  const ctx = useMemo(() => ({
+    stem,
+    mode,
+    hasMedia,
+    actionCount: project?.actionCount ?? (project?.actions?.length ?? 0),
+    stampedStations,
+    stampedStrokers: stampedStations.filter((id) => STROKER_STATIONS.includes(id)),
+    estimStamped: stampedStations.includes('estim3p'),
+    stimWav: options.stimWav,
+    stimMp3: options.stimMp3,
+  }), [stem, mode, hasMedia, project, stampedStations, options.stimWav, options.stimMp3]);
+
+  const targets = useMemo(() => TARGET_GROUPS.map((t) => ({ ...t, ...t.derive(ctx) })), [ctx]);
+  const readyCount = targets.filter((t) => t.state === 'ready' || t.state === 'auto' || t.state === 'present').length;
+
+  const launchForgePlayer = async (revealAfter) => {
+    setLaunching(true);
+    try {
+      await openInForgePlayer(result?.path || path);
+      if (revealAfter && result?.path) await revealPath(result.path);
+    } catch (e) {
+      setWriteError(String(e?.message || e));
+    } finally {
+      setLaunching(false);
+    }
+  };
+
   const doWrite = async () => {
     if (!canWrite) return;
     setWriting(true); setWriteError(null); setResult(null);
@@ -291,13 +114,18 @@ export default function ExportTab({ project }) {
         mode,
         stem: stem !== projectStem ? stem : null,
         media: project?.mediaPath || null,
-        blendSeams: postProcessing.blendSeams,
-        finalSmooth: postProcessing.finalSmooth,
-        stimWav: postProcessing.stimWav,
-        stimMp3: postProcessing.stimMp3,
+        blendSeams: options.blendSeams,
+        finalSmooth: options.finalSmooth,
+        stimWav: options.stimWav,
+        stimMp3: options.stimMp3,
       });
       if (!res) { setWriteError('Export is unavailable in browser mode.'); return; }
       setResult(res);
+      if (toForgePlayer && res.path) {
+        // Hand off: launch the player, then reveal the bundle so the user can
+        // drop it into a stim slot (no .forge importer in ForgePlayer yet).
+        await launchForgePlayer(true);
+      }
     } catch (e) {
       setWriteError(String(e?.message || e));
     } finally {
@@ -314,127 +142,350 @@ export default function ExportTab({ project }) {
     );
   }
 
+  const destLabel = mode === 'forge' ? '.forge bundle' : 'loose folder';
+  const destSummary = toForgePlayer ? `${destLabel} · ForgePlayer` : destLabel;
+
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '22px 28px', background: 'var(--bg)' }}>
-      <Header mode={mode} stem={stem} stationCount={stampedStations.length} />
-
-      <ModeToggle mode={mode} onChange={setMode} />
+      <Header stem={stem} stationCount={stampedStations.length} readyCount={readyCount} total={targets.length} />
 
       <ExportPreview project={project} stem={stem} />
 
-      <PostProcessing postProcessing={postProcessing} onChange={setPostProcessing} />
+      {/* TARGETS — what gets written, grouped by consumer */}
+      <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{readyCount} of {targets.length} ready</span>}>
+        Targets
+      </SectionLabel>
+      <div style={{
+        marginTop: 6, marginBottom: 18,
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10,
+      }}>
+        {targets.map((t) => <TargetCard key={t.id} target={t} />)}
+      </div>
 
-      <PackedArtifacts
-        mode={mode}
-        stampedStations={stampedStations}
-        hasMedia={hasMedia}
-        stimWav={postProcessing.stimWav}
-        stimMp3={postProcessing.stimMp3}
-      />
-
-      {mode === 'loose' ? (
-        <NamingControls
-          stem={stem}
-          onStemChange={setStem}
-          suffixScheme={suffixScheme}
-          onSuffixSchemeChange={setSuffixScheme}
+      {/* DESTINATIONS — where it goes */}
+      <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>pick where it lands</span>}>
+        Destinations
+      </SectionLabel>
+      <div style={{
+        marginTop: 6, marginBottom: 18,
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10,
+        alignItems: 'start',
+      }}>
+        <DiskDestination
+          mode={mode} onMode={setMode}
+          stem={stem} onStem={setStem}
           projectPath={project.path}
         />
-      ) : (
-        <BundlePreview stem={stem} />
-      )}
+        <ForgePlayerDestination on={toForgePlayer} onToggle={() => setToForgePlayer((v) => !v)} />
+        <CloudDestination />
+      </div>
 
-      <FooterActions
-        mode={mode}
-        stem={stem}
+      {/* OPTIONS — content-shaping toggles applied during write */}
+      <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>applied during write</span>}>
+        Options
+      </SectionLabel>
+      <Options options={options} onChange={setOptions} estimStamped={ctx.estimStamped} />
+
+      {/* ACTIONS — the verbs */}
+      <ActionsRow
+        destSummary={destSummary}
+        readyCount={readyCount}
         canWrite={canWrite}
         isSample={isSample}
         writing={writing}
+        launching={launching}
         result={result}
         error={writeError}
+        toForgePlayer={toForgePlayer}
         onWrite={doWrite}
         onReveal={() => result?.path && revealPath(result.path)}
+        onCopy={() => result?.path && navigator.clipboard?.writeText(result.path)}
+        onForgePlayer={() => launchForgePlayer(true)}
       />
     </div>
   );
 }
 
 // ──────────────────────────────────────────────────────────────
-// Header
+// TARGETS — consumer-grouped readiness. Each group's `derive(ctx)` returns
+// { state, hint, stat[], files[] } so the card reflects what the packager
+// will actually write. States:
+//   ready    — forged / stamped, will export (green)
+//   auto     — generated at export from upstream assignments (blue)
+//   present  — sidecar(s) present, will ride along (green)
+//   optional — opt-in render, off unless toggled (neutral)
+//   none     — nothing to write; do X first (dim)
 // ──────────────────────────────────────────────────────────────
-function Header({ mode, stem, stationCount }) {
-  const modeLabel = MODES.find((m) => m.id === mode)?.label || mode;
+const TARGET_GROUPS = [
+  {
+    id: 'strokers',
+    label: 'Strokers',
+    ext: '.funscript',
+    icon: 'wand-sparkles',
+    color: '#4dabf7',
+    consumer: 'MultiFunPlayer · Intiface · Handy',
+    derive(ctx) {
+      const stamped = ctx.stampedStrokers;
+      const files = ['motion.funscript', ...stamped.map((id) => `stations/${id}/`)];
+      return {
+        state: 'ready',
+        hint: 'Primary stroke axis (L0) always rides; Polish-stamped device files join it. TCode (OSR2/SR6) auto-generates from Channels.',
+        stat: [
+          { label: 'actions', value: (ctx.actionCount || 0).toLocaleString() },
+          { label: 'devices', value: stamped.length ? `${stamped.length} stamped` : 'motion + auto' },
+        ],
+        files,
+      };
+    },
+  },
+  {
+    id: 'estim',
+    label: 'E-stim',
+    ext: '×9 channels',
+    icon: 'zap',
+    color: '#c075ff',
+    consumer: 'restim · ForgePlayer',
+    derive(ctx) {
+      const audio = [ctx.stimWav && 'audio/stim.wav', ctx.stimMp3 && 'audio/stim.mp3'].filter(Boolean);
+      if (ctx.estimStamped) {
+        return {
+          state: 'ready',
+          hint: 'Polish-stamped 9-channel set. Authored events bake into the channels at generation.',
+          stat: [{ label: 'channels', value: 9 }, { label: 'audio', value: audio.length ? audio.length : 'opt-in' }],
+          files: ['stations/estim3p/  ×9', ...audio],
+        };
+      }
+      return {
+        state: 'auto',
+        hint: 'Auto-generated at export from your per-chapter Channels characters (skipped if none assigned). Stamp E-Stim in Polish to tune it.',
+        stat: [{ label: 'channels', value: '9 · auto' }, { label: 'audio', value: audio.length ? audio.length : 'opt-in' }],
+        files: ['stations/estim3p/  ×9', ...audio],
+      };
+    },
+  },
+  {
+    id: 'authoring',
+    label: 'Authoring',
+    ext: '.json · .yml',
+    icon: 'file-cog',
+    color: '#a3e635',
+    consumer: 're-import · Edger · other tools',
+    derive() {
+      return {
+        state: 'present',
+        hint: 'Chapter boundaries, phrase tags, per-chapter characters, and the events sidecar — each packed when the tab produced it.',
+        stat: [{ label: 'sidecars', value: 'chapters · phrases · characters' }, { label: 'events', value: 'events.yml' }],
+        files: ['{chapters,phrases,characters}.json', 'events.yml'],
+      };
+    },
+  },
+  {
+    id: 'preview',
+    label: 'Preview / share',
+    ext: '.png',
+    icon: 'image',
+    color: '#c77dff',
+    consumer: 'library cards · shareable previews',
+    derive(ctx) {
+      return {
+        state: ctx.hasMedia ? 'ready' : 'optional',
+        hint: ctx.hasMedia
+          ? 'Funscript waveform + hero & per-chapter frame snapshots (media attached).'
+          : 'Funscript waveform PNG always rides. Attach media for hero + per-chapter frames.',
+        stat: [{ label: 'waveform', value: 'always' }, { label: 'frames', value: ctx.hasMedia ? 'hero + chapters' : 'needs media' }],
+        files: ['thumbnails/waveform.png', ...(ctx.hasMedia ? ['thumbnails/hero.png', 'thumbnails/chapter_*.png'] : [])],
+      };
+    },
+  },
+];
+
+const STATE_BADGE = {
+  ready:    { tone: 'success', label: 'ready' },
+  auto:     { tone: 'info',    label: 'auto' },
+  present:  { tone: 'success', label: 'present' },
+  optional: { tone: 'neutral', label: 'opt-in' },
+  none:     { tone: 'warn',    label: 'not ready' },
+};
+
+function TargetCard({ target: t }) {
+  const dim = t.state === 'none' || t.state === 'optional';
+  const badge = STATE_BADGE[t.state] || STATE_BADGE.ready;
   return (
     <div style={{
-      display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-      gap: 16,
+      position: 'relative', padding: 14, borderRadius: 10,
+      background: dim ? 'var(--surface-2, #12151e)' : 'var(--surface)',
+      border: '1px solid var(--border)',
+      borderLeft: `4px solid ${dim ? 'var(--border)' : t.color}`,
+      display: 'flex', flexDirection: 'column', gap: 8,
+      opacity: t.state === 'none' ? 0.7 : 1,
     }}>
-      <div style={{ minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
-          fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
-          textTransform: 'uppercase', color: 'var(--text-dim)',
+          width: 28, height: 28, borderRadius: 6, display: 'grid', placeItems: 'center',
+          background: `${t.color}26`, border: `1px solid ${t.color}59`, flexShrink: 0,
         }}>
-          Export · end of the pipeline
+          <Icon name={t.icon} size={13} style={{ color: t.color }} />
         </div>
-        <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>
-          Write outputs
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{t.label}</div>
+          <span className="mono" style={{ fontSize: 10, color: 'var(--text-dim)' }}>{t.ext}</span>
         </div>
-        <div style={{
-          fontSize: 11.5, color: 'var(--text-dim)', marginTop: 4,
-          maxWidth: 720, lineHeight: 1.45,
-        }}>
-          Pack the project for the LQR player ({modeLabel.toLowerCase()}).
-          Export collects the motion track, the device files Polish stamped, events,
-          and the authoring sidecars — it only writes new files, nothing destructive.
-        </div>
+        <Pill tone={badge.tone} dot={badge.tone !== 'neutral'}>{badge.label}</Pill>
       </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-        <Pill tone={stationCount > 0 ? 'info' : 'neutral'} dot>
-          {stationCount} station{stationCount === 1 ? '' : 's'} stamped
-        </Pill>
-        <Pill tone="neutral">{stem}</Pill>
+
+      <p style={{ fontSize: 11.5, color: 'var(--text-dim)', margin: 0, lineHeight: 1.45 }}>{t.hint}</p>
+
+      <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+        <Icon name="arrow-right" size={10} style={{ verticalAlign: '-1px', marginRight: 4, color: 'var(--text-dim)' }} />
+        {t.consumer}
+      </div>
+
+      <div style={{ display: 'flex', gap: 14, paddingTop: 6, borderTop: '1px dashed var(--border)' }}>
+        {t.stat.map((s, i) => (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</span>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--text)', fontWeight: 700 }}>{s.value}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
 // ──────────────────────────────────────────────────────────────
-// Mode toggle — Loose vs .forge bundle
+// DESTINATIONS
 // ──────────────────────────────────────────────────────────────
-function ModeToggle({ mode, onChange }) {
+function DestShell({ color, icon, label, right, children, on = true }) {
   return (
     <div style={{
-      marginTop: 14,
-      display: 'grid',
-      gridTemplateColumns: 'repeat(2, 1fr)',
-      gap: 8,
+      padding: 14, borderRadius: 10,
+      background: on ? 'var(--surface)' : 'var(--surface-2, #12151e)',
+      border: `1px solid ${on ? color : 'var(--border)'}`,
+      borderLeft: `4px solid ${color}`,
+      display: 'flex', flexDirection: 'column', gap: 10,
+      boxShadow: on ? `0 0 0 1px ${color}40` : 'none',
     }}>
-      {MODES.map((m) => {
-        const sel = m.id === mode;
-        return (
-          <button
-            key={m.id}
-            onClick={() => onChange(m.id)}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 6, display: 'grid', placeItems: 'center',
+          background: `${color}26`, border: `1px solid ${color}59`, flexShrink: 0,
+        }}>
+          <Icon name={icon} size={13} style={{ color }} />
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>{label}</span>
+        {right}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function DiskDestination({ mode, onMode, stem, onStem, projectPath }) {
+  const folder = projectPath ? String(projectPath).split(/[/\\]/).slice(0, -1).join('/') : '—';
+  return (
+    <DestShell color="#4dabf7" icon="hard-drive" label="Disk"
+               right={<Pill tone="info" dot>default</Pill>}>
+      <p style={{ fontSize: 11.5, color: 'var(--text-dim)', margin: 0, lineHeight: 1.45 }}>
+        Write into the project folder. Choose the shape:
+      </p>
+      <Segmented
+        value={mode}
+        onChange={onMode}
+        options={[
+          { value: 'forge', label: '.forge bundle', hint: 'single zip · LQR player + sharing' },
+          { value: 'loose', label: 'Loose files', hint: 'sidecars beside the funscript' },
+        ]}
+      />
+      <div style={{ paddingTop: 6, borderTop: '1px dashed var(--border)', display: 'flex', gap: 10, alignItems: 'center' }}>
+        <Icon name="folder" size={11} style={{ color: 'var(--text-dim)' }} />
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {folder}
+        </span>
+        <span style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>picker — next</span>
+      </div>
+      {mode === 'loose' && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+          stem
+          <input
+            type="text" value={stem} onChange={(e) => onStem(e.target.value)}
+            className="mono"
             style={{
-              display: 'flex', flexDirection: 'column',
-              padding: '12px 14px', borderRadius: 8,
-              background: sel ? 'rgba(77,171,247,0.10)' : 'var(--surface)',
-              border: `1.5px solid ${sel ? '#4dabf7' : 'var(--border)'}`,
-              color: 'var(--text)', cursor: 'pointer',
-              fontFamily: 'inherit', textAlign: 'left',
+              flex: 1, fontSize: 11.5, padding: '5px 8px', background: 'var(--surface-2, #12151e)',
+              borderRadius: 5, border: '1px solid var(--border)', color: 'var(--text)', outline: 'none',
+              fontFamily: 'var(--font-mono)',
             }}
-          >
-            <span style={{
-              fontSize: 13, fontWeight: 700,
-              color: sel ? '#4dabf7' : 'var(--text-soft)',
-            }}>
-              {m.label}
-            </span>
-            <span style={{
-              fontSize: 11, color: 'var(--text-dim)', marginTop: 2,
-            }}>
-              {m.subtitle}
-            </span>
+          />
+        </label>
+      )}
+    </DestShell>
+  );
+}
+
+function ForgePlayerDestination({ on, onToggle }) {
+  return (
+    <div role="button" tabIndex={0}
+         onClick={onToggle}
+         onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); onToggle(); } }}
+         style={{ cursor: 'pointer' }}>
+      <DestShell color="#3ed598" icon="play-circle" label="Open in ForgePlayer" on={on}
+                 right={<CheckboxSquare checked={on} color="#3ed598" />}>
+        <p style={{ fontSize: 11.5, color: 'var(--text-dim)', margin: 0, lineHeight: 1.45 }}>
+          Hand the result to the LQR player. Launches ForgePlayer and reveals the file
+          so you can drop it into a stim slot.
+        </p>
+        <div className="mono" style={{
+          fontSize: 9.5, color: 'var(--text-dim)', padding: '4px 6px', borderRadius: 4,
+          background: 'var(--surface-2, #12151e)',
+        }}>
+          dev launcher · full .forge auto-import is a ForgePlayer follow-up
+        </div>
+      </DestShell>
+    </div>
+  );
+}
+
+function CloudDestination() {
+  return (
+    <div style={{ opacity: 0.6 }}>
+      <DestShell color="#3fd0c9" icon="cloud-upload" label="Autoblow cloud" on={false}
+                 right={<Pill tone="neutral">later</Pill>}>
+        <p style={{ fontSize: 11.5, color: 'var(--text-dim)', margin: 0, lineHeight: 1.45 }}>
+          Push the clamped stroke script to a Vacuglide / Autoblow device over the cloud SDK.
+          Post-beta — needs an account token + the device.
+        </p>
+      </DestShell>
+    </div>
+  );
+}
+
+function CheckboxSquare({ checked, color }) {
+  return (
+    <div style={{
+      width: 20, height: 20, borderRadius: 5,
+      border: `1.5px solid ${checked ? color : 'var(--border-strong, var(--border))'}`,
+      background: checked ? color : 'transparent',
+      display: 'grid', placeItems: 'center', flexShrink: 0,
+    }}>
+      {checked && <Icon name="check" size={12} style={{ color: '#fff' }} />}
+    </div>
+  );
+}
+
+function Segmented({ value, onChange, options }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${options.length}, 1fr)`, gap: 6 }}>
+      {options.map((o) => {
+        const sel = o.value === value;
+        return (
+          <button key={o.value} onClick={(e) => { e.stopPropagation(); onChange(o.value); }} style={{
+            display: 'flex', flexDirection: 'column', gap: 1, padding: '7px 9px', borderRadius: 6,
+            background: sel ? 'rgba(77,171,247,0.12)' : 'var(--surface-2, #12151e)',
+            border: `1px solid ${sel ? '#4dabf7' : 'var(--border)'}`,
+            color: sel ? '#4dabf7' : 'var(--text-soft)', cursor: 'pointer',
+            fontFamily: 'inherit', textAlign: 'left',
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 700 }}>{o.label}</span>
+            <span style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>{o.hint}</span>
           </button>
         );
       })}
@@ -443,386 +494,42 @@ function ModeToggle({ mode, onChange }) {
 }
 
 // ──────────────────────────────────────────────────────────────
-// ExportPreview — final funscript at full width
+// OPTIONS
 // ──────────────────────────────────────────────────────────────
-function ExportPreview({ project, stem }) {
-  const actions = project?.actions ?? [];
-  const totalMs = project?.durationMs ?? 0;
-  const actionCount = project?.actionCount ?? actions.length;
-  return (
-    <div style={{ marginTop: 16 }}>
-      <SectionLabel right={(
-        <Pill tone="success" dot>fresh</Pill>
-      )}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <Icon name="activity" size={12} style={{ color: 'var(--accent)' }} />
-          Export preview
-          <span style={{
-            fontSize: 10, fontWeight: 500, color: 'var(--text-dim)',
-            textTransform: 'none', letterSpacing: 0,
-          }}>
-            final funscript · all accepted transforms applied
-          </span>
-        </span>
-      </SectionLabel>
-      <div style={{
-        marginTop: 6, padding: 14,
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 8,
-      }}>
-        {actions.length > 0 ? (
-          <FunscriptChart
-            actions={actions}
-            totalMs={totalMs}
-            totalActionCount={actionCount}
-            height={220}
-          />
-        ) : (
-          <div style={{
-            padding: 32, textAlign: 'center', fontSize: 12,
-            color: 'var(--text-dim)',
-          }}>
-            No actions in the loaded funscript — preview unavailable.
-          </div>
-        )}
-        <div style={{
-          marginTop: 8, fontSize: 11, color: 'var(--text-dim)',
-          display: 'flex', gap: 16, flexWrap: 'wrap',
-        }}>
-          <span><span className="mono" style={{ color: 'var(--text-soft)' }}>{stem}.funscript</span> · primary stroke axis</span>
-          <span style={{ flex: 1 }} />
-          <span>scroll / drag the chart to inspect any region before writing</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────
-// PostProcessing — content-modifying toggles applied during write
-// ──────────────────────────────────────────────────────────────
-const POST_OPTIONS = [
-  {
-    id: 'blendSeams',
-    label: 'Blend seams',
-    desc: 'Detects high-velocity jumps at phrase boundaries and applies targeted smoothing only at those seams.',
-  },
-  {
-    id: 'finalSmooth',
-    label: 'Final smooth',
-    desc: 'Light global low-pass pass that removes residual sharp edges.',
-  },
-  {
-    id: 'stimWav',
-    label: 'Render stim audio · WAV',
-    desc: 'Pre-render the e-stim channels to a stereo WAV (lossless, ~10 MB/min) for no-restim playback. Needs a stamped e-stim station. Off by default.',
-  },
-  {
-    id: 'stimMp3',
-    label: 'Render stim audio · MP3',
-    desc: 'Same stereo render as MP3 (smaller, the common real-world format; via ffmpeg). Needs a stamped e-stim station. Off by default.',
-  },
+const OPTION_DEFS = [
+  { id: 'blendSeams', label: 'Blend seams', desc: 'Smooths high-velocity jumps only at phrase boundaries.' },
+  { id: 'finalSmooth', label: 'Final smooth', desc: 'Light global low-pass that removes residual sharp edges.' },
+  { id: 'stimWav', label: 'Stim audio · WAV', desc: 'Pre-render e-stim channels to stereo WAV (lossless, ~10 MB/min). Needs a stamped e-stim station.', estim: true },
+  { id: 'stimMp3', label: 'Stim audio · MP3', desc: 'Same render as MP3 (compact, the common real-world format). Needs a stamped e-stim station.', estim: true },
 ];
 
-function PostProcessing({ postProcessing, onChange }) {
+function Options({ options, onChange, estimStamped }) {
   const toggle = (id) => onChange((p) => ({ ...p, [id]: !p[id] }));
   return (
-    <div style={{ marginTop: 16 }}>
-      <SectionLabel right={(
-        <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>
-          applied during write
-        </span>
-      )}>
-        Post-processing
-      </SectionLabel>
-      <div style={{
-        marginTop: 6,
-        display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8,
-      }}>
-        {POST_OPTIONS.map((o) => {
-          const on = !!postProcessing[o.id];
-          return (
-            <label key={o.id} style={{
-              display: 'grid',
-              gridTemplateColumns: '20px 1fr',
-              gap: 10, padding: '10px 12px', borderRadius: 6,
-              background: on ? 'rgba(77,171,247,0.05)' : 'var(--surface)',
-              border: `1px solid ${on ? 'rgba(77,171,247,0.35)' : 'var(--border)'}`,
-              cursor: 'pointer', alignItems: 'flex-start',
-            }}>
-              <input type="checkbox" checked={on} onChange={() => toggle(o.id)}
-                     style={{ marginTop: 4, accentColor: '#4dabf7' }} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{o.label}</div>
-                <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 2, lineHeight: 1.45 }}>
-                  {o.desc}
-                </div>
-              </div>
-            </label>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────
-// ArtifactSummary — checkbox list of what would be written
-// ──────────────────────────────────────────────────────────────
-// What the export will actually pack, derived from the Polish stamp record +
-// the always-present artifacts. Read-only preview — the CLI packs whatever it
-// finds; this mirrors that so there are no lying checkboxes.
-function PackedArtifacts({ mode, stampedStations, hasMedia, stimWav, stimMp3 }) {
-  const estimStamped = stampedStations.includes('estim3p');
-  const rows = [];
-  rows.push({
-    name: mode === 'forge' ? 'motion.funscript' : '<stem>.funscript',
-    kind: 'funscript',
-    desc: 'Primary stroke axis (L0), with any post-processing applied.',
-  });
-  stampedStations.forEach((id) => {
-    const d = POLISH_BY_ID[id];
-    rows.push({
-      name: mode === 'forge' ? `stations/${id}/` : `polish/${id}/`,
-      kind: 'funscript',
-      desc: `${d?.label || id} — Polish-stamped ${d?.sublabel || 'device files'}.`,
-    });
-  });
-  rows.push({
-    name: mode === 'forge' ? 'events.yml' : '<stem>.events.yml',
-    kind: 'sidecar',
-    desc: 'Point-in-time effects — packed when events are authored.',
-  });
-  rows.push({
-    name: mode === 'forge' ? '{chapters,phrases,characters}.json' : '<stem>.{chapters,phrases,characters}.json',
-    kind: 'sidecar',
-    desc: 'Authoring sidecars — each packed when present.',
-  });
-  rows.push({
-    name: 'thumbnails/waveform.png',
-    kind: 'thumbnail',
-    desc: hasMedia
-      ? 'Funscript curve + hero & per-chapter frame snapshots (media attached).'
-      : 'Funscript curve preview. Attach media for hero + per-chapter frames.',
-  });
-  if (estimStamped) {
-    if (stimWav) rows.push({ name: 'audio/stim.wav', kind: 'audio', desc: 'Pre-rendered e-stim stereo WAV (lossless, opt-in).' });
-    if (stimMp3) rows.push({ name: 'audio/stim.mp3', kind: 'audio', desc: 'Pre-rendered e-stim stereo MP3 (compact, opt-in).' });
-  }
-  if (mode === 'forge') {
-    rows.push({ name: 'manifest.ffmeta', kind: 'manifest', desc: 'What the bundle contains and how the artifacts relate.' });
-  }
-
-  return (
-    <div style={{ marginTop: 16 }}>
-      <SectionLabel right={
-        <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>
-          {stampedStations.length} Polish station{stampedStations.length === 1 ? '' : 's'}
-        </span>
-      }>
-        Artifacts
-      </SectionLabel>
-      <div style={{
-        marginTop: 6,
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 8, overflow: 'hidden',
-      }}>
-        {rows.map((a, i) => (
-          <div key={a.name} style={{
-            display: 'grid', gridTemplateColumns: '1fr', gap: 3,
-            padding: '10px 14px',
-            borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-              <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{a.name}</span>
-              <KindBadge kind={a.kind} />
-            </div>
-            <div style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.45 }}>{a.desc}</div>
-          </div>
-        ))}
-      </div>
-      {stampedStations.length === 0 && (
-        <div style={{
-          marginTop: 8, padding: '8px 12px', borderRadius: 6,
-          background: 'var(--surface-2)', border: '1px solid var(--border)',
-          fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.45,
-        }}>
-          Exporting the motion track + sidecars. E-stim channels and multi-axis (TCode)
-          are generated automatically from your Channels assignments. Per-device stroker
-          tuning (Handy · Lovense · Vacuglide) stays optional — stamp it in Polish.
-        </div>
-      )}
-    </div>
-  );
-}
-
-function KindBadge({ kind }) {
-  const palettes = {
-    funscript: { color: '#4dabf7', label: 'funscript' },
-    sidecar:   { color: '#a3e635', label: 'sidecar' },
-    audio:     { color: '#ffb547', label: 'audio' },
-    thumbnail: { color: '#c77dff', label: 'thumbnail' },
-    manifest:  { color: '#3ed598', label: 'manifest' },
-  };
-  const p = palettes[kind] || { color: 'var(--text-dim)', label: kind };
-  return (
-    <span style={{
-      fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em',
-      textTransform: 'uppercase', padding: '1px 6px', borderRadius: 3,
-      background: p.color + '20', color: p.color,
-      border: `1px solid ${p.color}55`,
-    }}>
-      {p.label}
-    </span>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────
-// OutputVariants — same logical output, different encodings
-//
-// Mechanical row renders always; e-stim group renders only when estim
-// is in selectedDevices (the channel funscripts are identical across
-// e-stim variants — the variant chooser is about WAV/protocol).
-// ──────────────────────────────────────────────────────────────
-function OutputVariants({ selectedDevices, variants, onChange, project }) {
-  const showEstim = selectedDevices.includes('estim');
-  const groups = ['mechanical', ...(showEstim ? ['estim'] : [])];
-  const ctx = {
-    actionCount: project?.actionCount ?? (project?.actions?.length ?? 0),
-  };
-  const toggle = (id) => onChange((v) => ({ ...v, [id]: !v[id] }));
-
-  // Audio-capable footer note fires when any audio variant is checked.
-  const anyAudioOn = OUTPUT_VARIANTS.estim.variants.some(
-    (v) => v.audio && variants[v.id],
-  );
-
-  return (
-    <div style={{ marginTop: 16 }}>
-      <SectionLabel right={(
-        <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>
-          per-device encoding · channel funscripts unchanged
-        </span>
-      )}>
-        Output variants
-      </SectionLabel>
-
-      <div style={{
-        marginTop: 6,
-        display: 'grid',
-        gridTemplateColumns: showEstim ? 'minmax(280px, 1fr) minmax(360px, 1.4fr)' : '1fr',
-        gap: 12,
-        alignItems: 'start',
-      }}>
-        {groups.map((groupKey) => (
-          <VariantGroup
-            key={groupKey}
-            group={OUTPUT_VARIANTS[groupKey]}
-            variants={variants}
-            ctx={ctx}
-            onToggle={toggle}
-          />
-        ))}
-      </div>
-
-      {showEstim && anyAudioOn && (
-        <div style={{
-          marginTop: 10, padding: '10px 12px', borderRadius: 6,
-          background: 'rgba(77,171,247,0.08)',
-          border: '1px solid rgba(77,171,247,0.35)',
-          fontSize: 11.5, color: '#4dabf7', lineHeight: 1.5,
-          display: 'flex', alignItems: 'flex-start', gap: 8,
-        }}>
-          <Icon name="volume-2" size={12} style={{ marginTop: 2 }} />
-          <div>
-            Audio-capable variant selected — stereo <span className="mono">.wav</span> files render
-            alongside the channel funscripts. Connect the e-stim device to audio output, hit play,
-            no restim required.
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function VariantGroup({ group, variants, ctx, onToggle }) {
-  return (
     <div style={{
-      background: 'var(--surface)', border: '1px solid var(--border)',
-      borderRadius: 8, overflow: 'hidden',
+      marginTop: 6, marginBottom: 18,
+      display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8,
     }}>
-      <div style={{
-        padding: '8px 12px', borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'baseline', gap: 8,
-        background: 'var(--surface-2)',
-      }}>
-        <span style={{
-          fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
-          textTransform: 'uppercase', color: 'var(--text-muted)',
-        }}>
-          {group.label}
-        </span>
-        {group.note && (
-          <span style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>
-            {group.note}
-          </span>
-        )}
-      </div>
-      {group.variants.map((v, i) => {
-        const on = !!variants[v.id];
-        const warning = v.check ? v.check(ctx) : null;
+      {OPTION_DEFS.map((o) => {
+        const disabled = o.estim && !estimStamped;
+        const on = !!options[o.id] && !disabled;
         return (
-          <label key={v.id} style={{
-            display: 'grid',
-            gridTemplateColumns: '20px 1fr auto',
-            gap: 10, padding: '10px 12px', alignItems: 'flex-start',
-            background: on ? 'rgba(77,171,247,0.04)' : 'transparent',
-            borderBottom: i < group.variants.length - 1 ? '1px solid var(--border)' : 'none',
-            cursor: 'pointer',
+          <label key={o.id} style={{
+            display: 'grid', gridTemplateColumns: '20px 1fr', gap: 10, padding: '10px 12px', borderRadius: 6,
+            background: on ? 'rgba(77,171,247,0.05)' : 'var(--surface)',
+            border: `1px solid ${on ? 'rgba(77,171,247,0.35)' : 'var(--border)'}`,
+            cursor: disabled ? 'not-allowed' : 'pointer', alignItems: 'flex-start',
+            opacity: disabled ? 0.5 : 1,
           }}>
-            <input type="checkbox" checked={on} onChange={() => onToggle(v.id)}
-                   style={{ marginTop: 3, accentColor: '#4dabf7' }} />
+            <input type="checkbox" checked={on} disabled={disabled} onChange={() => toggle(o.id)}
+                   style={{ marginTop: 4, accentColor: '#4dabf7' }} />
             <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-                <span style={{
-                  fontSize: 12.5, fontWeight: 600,
-                  color: on ? 'var(--text)' : 'var(--text-soft)',
-                }}>
-                  {v.label}
-                </span>
-                {v.sublabel && (
-                  <span style={{
-                    fontSize: 10.5, color: 'var(--text-dim)',
-                    fontFamily: 'var(--font-mono)',
-                  }}>
-                    {v.sublabel}
-                  </span>
-                )}
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                {o.label}
+                {disabled && <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 6 }}>· stamp e-stim first</span>}
               </div>
-              <div style={{
-                fontSize: 11, color: 'var(--text-dim)',
-                marginTop: 2, lineHeight: 1.4,
-              }}>
-                {v.desc}
-              </div>
-              {warning && on && (
-                <div style={{
-                  marginTop: 6, padding: '5px 8px', borderRadius: 4,
-                  background: 'rgba(255,181,71,0.08)',
-                  border: '1px solid rgba(255,181,71,0.35)',
-                  fontSize: 10.5, color: '#ffb547', lineHeight: 1.4,
-                  display: 'flex', alignItems: 'flex-start', gap: 6,
-                }}>
-                  <Icon name="alert-triangle" size={11} style={{ marginTop: 1, flexShrink: 0 }} />
-                  <span>{warning.msg}</span>
-                </div>
-              )}
+              <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 2, lineHeight: 1.45 }}>{o.desc}</div>
             </div>
-            {warning && !on && (
-              <Icon name="alert-triangle" size={12}
-                    style={{ color: '#ffb547', marginTop: 4, flexShrink: 0 }}
-                    title={warning.msg} />
-            )}
           </label>
         );
       })}
@@ -831,242 +538,108 @@ function VariantGroup({ group, variants, ctx, onToggle }) {
 }
 
 // ──────────────────────────────────────────────────────────────
-// NamingControls — loose mode only
+// ACTIONS
 // ──────────────────────────────────────────────────────────────
-function NamingControls({ stem, onStemChange, suffixScheme, onSuffixSchemeChange, projectPath }) {
-  const folder = projectPath
-    ? String(projectPath).split(/[/\\]/).slice(0, -1).join('/')
-    : '—';
+function ActionsRow({
+  destSummary, readyCount, canWrite, isSample, writing, launching, result, error,
+  toForgePlayer, onWrite, onReveal, onCopy, onForgePlayer,
+}) {
   return (
-    <div style={{ marginTop: 16 }}>
-      <SectionLabel>Naming &amp; folder</SectionLabel>
+    <>
+      <SectionLabel>Actions</SectionLabel>
       <div style={{
-        marginTop: 6,
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 8, padding: 14,
-        display: 'grid', gridTemplateColumns: '120px 1fr', gap: 10, alignItems: 'center',
+        marginTop: 6, padding: 14,
+        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10,
+        display: 'flex', alignItems: 'center', gap: 8,
       }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Output folder</span>
-        <div className="mono" style={{
-          fontSize: 11.5, padding: '6px 10px',
-          background: 'var(--surface-2)', borderRadius: 5,
-          border: '1px solid var(--border)',
-          color: 'var(--text-soft)',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {folder}
-          <span style={{ marginLeft: 8, fontSize: 9.5, color: 'var(--text-dim)' }}>
-            (folder picker — wiring later)
+        <Button kind="ghost" size="sm" icon="folder-open" disabled={!result} onClick={onReveal}>Reveal</Button>
+        <Button kind="ghost" size="sm" icon="copy" disabled={!result} onClick={onCopy}>Copy path</Button>
+        <Button kind="ghost" size="sm" icon="play-circle" disabled={!result || launching} onClick={onForgePlayer}>
+          {launching ? 'Launching…' : 'Open in ForgePlayer →'}
+        </Button>
+        <span style={{ flex: 1 }} />
+        {error && (
+          <span style={{ fontSize: 11, color: '#ff5470', maxWidth: 380, textAlign: 'right' }}>{error}</span>
+        )}
+        {result && !error && (
+          <span style={{ fontSize: 11, color: '#3ed598', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="check" size={12} />
+            {result.artifacts} artifact{result.artifacts === 1 ? '' : 's'}
+            {result.stations?.length ? ` · ${result.stations.length} station${result.stations.length === 1 ? '' : 's'}` : ''}
+            {' → '}
+            <span className="mono" style={{ color: 'var(--text-soft)' }}>{shortPath(result.path)}</span>
           </span>
-        </div>
+        )}
+        {!result && !error && !canWrite && (
+          <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+            {isSample ? 'Export needs a real project on disk.' : 'Open a project to export.'}
+          </span>
+        )}
+        <Button kind="primary" size="sm" icon="download" disabled={!canWrite || writing} onClick={onWrite}>
+          {writing ? 'Writing…' : `Export (${readyCount} → ${destSummary})`}
+        </Button>
+      </div>
+    </>
+  );
+}
 
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Filename stem</span>
-        <input
-          type="text" value={stem}
-          onChange={(e) => onStemChange(e.target.value)}
-          className="mono"
-          style={{
-            fontSize: 12, padding: '6px 10px',
-            background: 'var(--surface-2)', borderRadius: 5,
-            border: '1px solid var(--border)',
-            color: 'var(--text)', outline: 'none',
-            fontFamily: 'var(--font-mono)',
-          }}
-        />
-
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Suffix scheme</span>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <SuffixOption
-            id="dot" label=".axis.funscript" recommended
-            selected={suffixScheme === 'dot'}
-            onClick={() => onSuffixSchemeChange('dot')}
-          />
-          <SuffixOption
-            id="underscore" label="_axis.funscript"
-            selected={suffixScheme === 'underscore'}
-            onClick={() => onSuffixSchemeChange('underscore')}
-          />
+// ──────────────────────────────────────────────────────────────
+// Header + ExportPreview + helpers (preserved)
+// ──────────────────────────────────────────────────────────────
+function Header({ stem, stationCount, readyCount, total }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+          Export · end of the pipeline
         </div>
+        <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>Targets · Destinations · Actions</div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 4, maxWidth: 720, lineHeight: 1.45 }}>
+          Pick what to write, where it lands, and the verb. Export is a packager — it collects
+          the motion track, the device files Polish stamped, events, and authoring sidecars, and
+          only writes new files (nothing destructive).
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+        <Pill tone={readyCount > 0 ? 'success' : 'neutral'} dot>{readyCount}/{total} targets</Pill>
+        <Pill tone={stationCount > 0 ? 'info' : 'neutral'} dot>
+          {stationCount} station{stationCount === 1 ? '' : 's'}
+        </Pill>
+        <Pill tone="neutral">{stem}</Pill>
       </div>
     </div>
   );
 }
 
-function SuffixOption({ label, recommended, selected, onClick }) {
+function ExportPreview({ project, stem }) {
+  const actions = project?.actions ?? [];
+  const totalMs = project?.durationMs ?? 0;
+  const actionCount = project?.actionCount ?? actions.length;
   return (
-    <button onClick={onClick} style={{
-      padding: '6px 10px', borderRadius: 5,
-      background: selected ? 'rgba(77,171,247,0.14)' : 'var(--surface-2)',
-      border: `1px solid ${selected ? '#4dabf7' : 'var(--border)'}`,
-      color: selected ? '#4dabf7' : 'var(--text-soft)',
-      fontFamily: 'var(--font-mono)', fontSize: 11.5, fontWeight: 600,
-      cursor: 'pointer',
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-    }}>
-      {label}
-      {recommended && (
-        <span style={{
-          fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
-          background: '#3ed59820', color: '#3ed598', letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-        }}>
-          recommended
+    <div style={{ marginTop: 16, marginBottom: 4 }}>
+      <SectionLabel right={<Pill tone="success" dot>fresh</Pill>}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Icon name="activity" size={12} style={{ color: 'var(--accent)' }} />
+          Export preview
+          <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
+            final funscript · all accepted transforms applied
+          </span>
         </span>
-      )}
-    </button>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────
-// BundlePreview — forge mode only
-// ──────────────────────────────────────────────────────────────
-function BundlePreview({ stem }) {
-  return (
-    <div style={{ marginTop: 16 }}>
-      <SectionLabel>Bundle preview</SectionLabel>
-      <div style={{
-        marginTop: 6,
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 8, padding: 14,
-      }}>
-        <div className="mono" style={{
-          fontSize: 11.5, color: 'var(--text-soft)',
-          padding: 10, borderRadius: 5,
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border)',
-          whiteSpace: 'pre',
-          lineHeight: 1.55,
-        }}>
-{`${stem}.forge/                       (a ZIP, single file from the user's view)
-├── manifest.ffmeta              what artifacts ride together
-├── motion.funscript             primary stroke axis (L0)
-├── stations/                    one folder per device (Polish-stamped or auto-generated)
-│   ├── handy/<stem>.handy.funscript
-│   ├── tcode/                   TCode set — OSR2 / SR6
-│   │   ├── <stem>.funscript     L0 (stroke)
-│   │   └── <stem>.{surge,sway,twist,roll,pitch}.funscript
-│   ├── lovense/<stem>.lovense.funscript
-│   ├── vacuglide/<stem>.vacuglide.funscript
-│   └── estim3p/<stem>.{alpha,beta,…}.funscript  ×9
-├── events.yml                   point-in-time effects (when authored)
-├── chapters.json / phrases.json / characters.json
-├── audio/stim.wav               opt-in pre-rendered e-stim audio (or .mp3)
-└── thumbnails/
-    ├── waveform.png             MiniWave-style funscript curve (always)
-    ├── hero.png                 library card image (when media attached)
-    └── chapter_*.png            per-chapter snapshot (when media attached)`}
-        </div>
-        <div style={{
-          marginTop: 10, fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5,
-        }}>
-          The LQR player reads <span className="mono">manifest.ffmeta</span> from the archive
-          and selects the artifacts that match the connected device profile.
-          Other consumers (Beatflo, Sync Player, future shareable-bundles site) read the same structure.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────
-// CompatibilityChecks — static stubs for skeleton
-// ──────────────────────────────────────────────────────────────
-const CHECKS_LOOSE = [
-  { status: 'ok',   label: 'Funscript v1.0 schema',  detail: 'Every .funscript validates against the canonical schema.' },
-  { status: 'ok',   label: 'Action count',           detail: 'Within common player limits (≤10,000 actions per file).' },
-  { status: 'warn', label: 'Adjacent media',         detail: 'No video file alongside the funscript — Library cards will use the placeholder.' },
-  { status: 'ok',   label: 'Sidecar filenames',      detail: 'No collisions with existing files in the project folder.' },
-];
-
-const CHECKS_FORGE = [
-  { status: 'ok',   label: 'manifest.ffmeta valid',  detail: 'Manifest references every artifact in the bundle.' },
-  { status: 'ok',   label: 'Funscript v1.0 schema',  detail: 'Every .funscript validates against the canonical schema.' },
-  { status: 'ok',   label: 'Thumbnails complete',    detail: 'hero + per-chapter + waveform PNGs all present.' },
-  { status: 'warn', label: 'Bundle size',            detail: 'Estimated zip size ~12 MB — large for upload to bundles site.' },
-];
-
-function CompatibilityChecks({ mode }) {
-  const checks = mode === 'forge' ? CHECKS_FORGE : CHECKS_LOOSE;
-  return (
-    <div style={{ marginTop: 16 }}>
-      <SectionLabel right={
-        <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>wiring-later · static stubs</span>
-      }>
-        Compatibility checks
       </SectionLabel>
-      <div style={{
-        marginTop: 6,
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 8, overflow: 'hidden',
-      }}>
-        {checks.map((c, i) => (
-          <CheckRow key={c.label} check={c} last={i === checks.length - 1} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function CheckRow({ check, last }) {
-  const palettes = {
-    ok:   { icon: 'check',           color: '#3ed598' },
-    warn: { icon: 'alert-triangle',  color: '#ffb547' },
-    err:  { icon: 'alert-circle',    color: '#ff5470' },
-  };
-  const p = palettes[check.status] || palettes.ok;
-  return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: '24px 1fr', gap: 10,
-      padding: '10px 14px', alignItems: 'flex-start',
-      borderBottom: last ? 'none' : '1px solid var(--border)',
-    }}>
-      <Icon name={p.icon} size={14} style={{ color: p.color, marginTop: 1 }} />
-      <div>
-        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{check.label}</div>
-        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2, lineHeight: 1.4 }}>
-          {check.detail}
+      <div style={{ marginTop: 6, padding: 14, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8 }}>
+        {actions.length > 0 ? (
+          <FunscriptChart actions={actions} totalMs={totalMs} totalActionCount={actionCount} height={200} />
+        ) : (
+          <div style={{ padding: 32, textAlign: 'center', fontSize: 12, color: 'var(--text-dim)' }}>
+            No actions in the loaded funscript — preview unavailable.
+          </div>
+        )}
+        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <span><span className="mono" style={{ color: 'var(--text-soft)' }}>{stem}.funscript</span> · primary stroke axis</span>
+          <span style={{ flex: 1 }} />
+          <span>scroll / drag the chart to inspect any region before writing</span>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────
-// FooterActions — disabled Write
-// ──────────────────────────────────────────────────────────────
-function FooterActions({ mode, stem, canWrite, isSample, writing, result, error, onWrite, onReveal }) {
-  const writeLabel = mode === 'forge' ? `Pack ${stem}.forge` : 'Write outputs';
-  return (
-    <div style={{
-      marginTop: 18, padding: 14,
-      background: 'var(--surface)', border: '1px solid var(--border)',
-      borderRadius: 10,
-      display: 'flex', alignItems: 'center', gap: 10,
-    }}>
-      <Button kind="ghost" size="sm" icon="folder-open" disabled={!result} onClick={onReveal}>
-        Reveal in Explorer
-      </Button>
-      <span style={{ flex: 1 }} />
-      {error && (
-        <span style={{ fontSize: 11, color: '#ff5470', maxWidth: 420, textAlign: 'right' }}>{error}</span>
-      )}
-      {result && !error && (
-        <span style={{ fontSize: 11, color: '#3ed598', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <Icon name="check" size={12} />
-          {result.artifacts} artifact{result.artifacts === 1 ? '' : 's'}
-          {result.stations?.length ? ` · ${result.stations.length} station${result.stations.length === 1 ? '' : 's'}` : ''}
-          {' → '}
-          <span className="mono" style={{ color: 'var(--text-soft)' }}>{shortPath(result.path)}</span>
-        </span>
-      )}
-      {!result && !error && !canWrite && (
-        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-          {isSample ? 'Export needs a real project on disk.' : 'Open a project to export.'}
-        </span>
-      )}
-      <Button kind="primary" size="sm" icon="download" disabled={!canWrite || writing} onClick={onWrite}>
-        {writing ? 'Writing…' : writeLabel}
-      </Button>
     </div>
   );
 }
@@ -1077,15 +650,12 @@ function shortPath(p) {
   return parts.length <= 2 ? p : `…/${parts.slice(-2).join('/')}`;
 }
 
-// ──────────────────────────────────────────────────────────────
-// Local helper
-// ──────────────────────────────────────────────────────────────
 function SectionLabel({ children, right }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
-      textTransform: 'uppercase', color: 'var(--text-muted)',
+      textTransform: 'uppercase', color: 'var(--text-muted)', marginTop: 4,
     }}>
       <span>{children}</span>
       {right}
