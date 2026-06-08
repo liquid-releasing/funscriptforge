@@ -159,12 +159,30 @@ export function ChannelLanes({ lanes, phrases, totalMs, height = 240, ember = '#
     d += ` L ${xOf(samples[samples.length - 1].at)} ${rowTop + rowH} Z`;
     return d;
   }
+  // Filled band BETWEEN the raw (input) and clamped (output) curves — they share
+  // timestamps, so this polygon is exactly "what the knobs changed". Where the
+  // curves coincide the band vanishes; where the device reshapes the signal it
+  // widens, so the slider effect reads at a glance without staring.
+  function deltaBand(rawS, clampedS, rowTop) {
+    if (!rawS?.length || !clampedS?.length) return '';
+    const step = Math.max(1, Math.floor(clampedS.length / 600));
+    let d = '';
+    for (let i = 0; i < clampedS.length; i += step) {
+      d += `${i === 0 ? 'M' : 'L'} ${xOf(clampedS[i].at)} ${yOf(clampedS[i].pos, rowTop, rowH)} `;
+    }
+    for (let i = rawS.length - 1; i >= 0; i -= step) {
+      d += `L ${xOf(rawS[i].at)} ${yOf(rawS[i].pos, rowTop, rowH)} `;
+    }
+    return `${d}Z`;
+  }
 
   const labelStyle = {
     fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 700,
     letterSpacing: '0.06em', textTransform: 'uppercase',
   };
   const gradId = `chan-grad-${ember.slice(1)}`;
+  const RAW_COLOR = '#7fd6ff';   // input (cool) — contrasts with the ember output
+  const DELTA_COLOR = '#ffb547'; // the knob effect (warm) — pops against both
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: fill ? '100%' : H, display: 'block' }} preserveAspectRatio="none">
@@ -193,11 +211,12 @@ export function ChannelLanes({ lanes, phrases, totalMs, height = 240, ember = '#
         return (
           <g key={lane.key}>
             <rect x={padX} y={rowTop} width={innerW} height={rowH} fill="rgba(255,255,255,0.02)" rx={3} />
-            {/* raw generated channel — ghost, dashed */}
-            <path d={path(lane.raw, rowTop)} stroke="#9ba3c4" strokeOpacity={0.5} strokeWidth={1} fill="none" strokeDasharray="2 2" />
+            {/* the knob effect: filled band between input and output */}
+            <path d={deltaBand(lane.raw, lane.clamped, rowTop)} fill={DELTA_COLOR} opacity={0.28} />
+            {/* raw generated channel — input (cool, dashed) */}
+            <path d={path(lane.raw, rowTop)} stroke={RAW_COLOR} strokeOpacity={0.8} strokeWidth={1} fill="none" strokeDasharray="3 2" />
             {/* knob-clamped — solid ember (what the device actually gets) */}
-            <path d={area(lane.clamped, rowTop)} fill={`url(#${gradId})`} opacity={0.7} />
-            <path d={path(lane.clamped, rowTop)} stroke={ember} strokeWidth={1.3} fill="none" />
+            <path d={path(lane.clamped, rowTop)} stroke={ember} strokeWidth={1.5} fill="none" />
             <text x={padX + 4} y={rowTop + 11} style={labelStyle} fill={ember}>{lane.label}</text>
           </g>
         );

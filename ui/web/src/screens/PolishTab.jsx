@@ -18,12 +18,13 @@ import {
   StatTriplet, StateBadge, TracePane, shade,
 } from './polish/PolishWidgets.jsx';
 
-// The 3 e-stim channels you feel most, shown as lanes (9 are generated). volume
-// = intensity envelope; alpha/beta = the two output phases.
+// The 3 e-stim channels you feel most, shown as lanes (9 are generated).
+// alpha/beta = the two output phases; volume = intensity envelope (pinned to
+// the bottom — it's the slow carrier the two phases ride on).
 const ESTIM_PREVIEW_CHANNELS = [
-  { key: 'volume', label: 'Volume · intensity' },
   { key: 'alpha', label: 'Alpha · phase' },
   { key: 'beta', label: 'Beta · phase' },
+  { key: 'volume', label: 'Volume · intensity' },
 ];
 
 const PREVIEW_MS = 30000;          // representative preview window length
@@ -373,9 +374,12 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
           <div style={{ flex: 1, minHeight: 150, background: 'rgba(255,255,255,0.015)', border: '1px solid #2d3148', borderRadius: 8, padding: '14px 16px', marginBottom: 14, position: 'relative', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7390', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
               <span>{isEstim ? 'Channel preview · what the device gets' : 'Three-pane preview'}</span>
-              {isEstim && channelData?.channels && (
-                <span style={{ color: '#6b7390', fontWeight: 600 }}>
-                  {Object.keys(channelData.channels).length} channels · showing {channelLanes.length}
+              {isEstim && channelData?.channels && channelLanes.length > 0 && (
+                <span style={{ color: '#6b7390', fontWeight: 600, display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}><i style={{ width: 10, height: 0, borderTop: '2px dashed #7fd6ff', display: 'inline-block' }} />input</span>
+                  <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}><i style={{ width: 10, height: 8, background: 'rgba(255,181,71,0.4)', display: 'inline-block', borderRadius: 1 }} />knob effect</span>
+                  <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}><i style={{ width: 10, height: 0, borderTop: `2px solid ${ember}`, display: 'inline-block' }} />to device</span>
+                  <span>· {Object.keys(channelData.channels).length} ch · {channelLanes.length} shown</span>
                 </span>
               )}
             </div>
