@@ -6,6 +6,87 @@ verify + commit) · ✅ committed.
 
 ---
 
+## Session 2026-06-09 (Phase 3 dogfood — post streamlit-removal + Resume build)
+
+### 🟡 Fixed-uncommitted (live in dev build, needs verify + commit)
+
+4. **Title-bar filter dropdown removed** (user: "remove the filter dropdown in
+   the title bar"). Dropped the `ScopePicker` (label="Filter") from `TopBar` in
+   App.jsx + its now-dead `scopeId`/`scopes` state; StatusBar scope is now a
+   static "all chapters".
+
+5. **Hardcoded version "scaffold v0.0.1" → real version from package.json**
+   (user: "update scaffold v0.0.1 to an actual version number"). New
+   `src/appVersion.js` imports `package.json` version (auto-tracks the
+   cut-release bump). Wired the title bar, StatusBar, and AboutDialog to it;
+   dropped the "scaffold" codename. Now shows **v0.1.0-alpha**.
+
+6. **About dialog fleshed out** (user: "About menu item with the hero and
+   liquid releasing white-on-transparent logo, copyright, license, github,
+   acknowledgements"). Source of truth = `forge/about.py` (the old Streamlit
+   About expander), ported to the React `AboutDialog.jsx` + updated for the
+   Tauri build (dropped the stale "Streamlit/PyWebView" tech line). Now has:
+   hero banner (`/hero-forge.png`), LR white-on-transparent logo in the footer
+   (`media/…White-on-Transparent….svg` copied to `public/liquid-releasing-white.svg`),
+   tagline, **real acknowledgements** (funscript-tools/Edger, restim/Diglet48
+   MIT, FFmpeg LGPL/GPL, librosa·numba·SciPy, Tauri·React·Vite·Lucide — each
+   linked, under its own license), GitHub links, and a footer with
+   trademark + © 2026 Liquid Releasing + MIT. Opens from the existing TopBar
+   help button. ⚠️ **Compliance flag (not blocking):** we bundle a GPL ffmpeg
+   (gyan essentials includes libx264/GPL) inside an MIT app — redistributing
+   GPL binaries has obligations (offer corresponding source / honor GPL). Worth
+   a real license review before public beta; the About now at least names it.
+
+1. **MediaViewer wheel-absorb broken — passive `preventDefault` no-op.**
+   Console spam `MediaViewer.jsx:675 Unable to preventDefault inside passive
+   event listener invocation`, and the actual symptom: wheeling over the media
+   surface still scrolls the outer editor page (the absorb it was meant to do
+   never worked). Root cause: `onWheel={handleWheelAbsorb}` → React onWheel is
+   passive. Fix: bound via `useNativeWheel(rootRef, …)` (non-passive
+   addEventListener). forgemoment `MediaViewer.jsx`. Matches the standing
+   `feedback_react_wheel_passive` rule. → **Re-test:** wheel over the viewer =
+   no page scroll, no console warning.
+
+### ✅ Resolved during triage (not a bug)
+
+2. **Large chapter clips (268–655 MB) — RESOLVED: 1080p native, expected.**
+   ffprobe of the local VictoriaOaks `.forge/clips/*.mp4` = **1920×1080** at
+   282–587 MB (same ballpark as the console's 268–655 MB). A 1080p source
+   passes through at native res by design (downscale only triggers above
+   1920px — `feedback_chapter_clip_threshold`), so large 1080p clips are
+   expected and the blob-cap fallback handling them (no OOM) is the system
+   working as intended. NOT the 4K-downscale bug. (Couldn't probe the user's
+   exact downloaded file — but every local VictoriaOaks copy that has clips is
+   1080p; the common VO distribution is 1080p.) Side-note still true: a 655 MB
+   clip = a long / possibly over-merged chapter (separate detection-quality
+   item, already tracked in pending).
+
+### 🟡 Fixed-uncommitted — no-op Reset removed
+
+3. **Footer Reset (no-op stub) removed** (user: "remove the noop reset
+   button"). `App.handleReset` was an intentional no-op ("so the button doesn't
+   pretend to work") and reading as a broken Cancel during analysis. Gated the
+   Reset button on `onReset` presence in shared `forgemoment/AppShell.jsx`
+   (clean opt-in API — other forge apps that pass onReset keep theirs), then
+   dropped `onReset` + the stub from App.jsx.
+
+### ⏳ Deferred — POST-BETA (user decision)
+
+- **Cancel a running analysis (footer Cancel).** Real feature, parked for
+  post-beta. `run_cli_with_progress` (commands.rs ~528) uses
+  `cmd.output().await` (no killable child). To build later: spawn → keep the
+  `Child` in managed state (`State<Mutex<Option<Child>>>` / abort registry by
+  run token) → `cancel_analysis` command that `.kill()`s it → footer **Cancel**
+  shown while `busy`/`analyzing` that calls it + clears busy. See
+  project_funscriptforge_post_beta.
+
+### ✅ Confirmed working this session
+- Full accept-and-chain navigation project→analysis→chapters→phrases→events→
+  stim→polish→export (App.jsx chain logs clean).
+- Chapter-clip blob-cap fallback (no OOM on 268–655 MB clips).
+
+---
+
 ## Session 2026-06-08b (post-compact re-test: Events lane + Polish forge progress)
 
 ### ✅ Committed this session

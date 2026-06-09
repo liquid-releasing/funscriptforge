@@ -1,39 +1,35 @@
 // AboutDialog — modal overlay opened from the TopBar help button.
-// Three sections:
-//   1. Identity (logo / name / version / build info)
-//   2. Help links (docs, GitHub issues, source)
-//   3. Acknowledgements (Liquid Releasing app family + open-source thanks)
+// Sections: hero + identity, help/GitHub links, keyboard shortcuts,
+// acknowledgements (real third-party credits), and a Liquid-Releasing
+// footer (logo + copyright + license + trademark).
 //
-// Light skeleton — content is static. Links go to placeholder URLs until
-// the public docs site exists; tracked in
-// project_funscriptforge_pending.md.
+// Content source of truth for credits/license is forge/about.py (the
+// former Streamlit "About" expander); kept in sync here for the Tauri UI.
 
 import { Button, Icon, Pill } from 'forgemoment';
+import { APP_VERSION } from '../appVersion.js';
 
-// Version sourced from package.json at build time. Vite exposes
-// `import.meta.env` but not package.json directly, so we hardcode for
-// now and pair the bump with the version field in package.json.
-const APP_VERSION = '0.0.1';
-const APP_CODENAME = 'scaffold';
+const TAGLINE = 'The professional post-processor for haptic script creators.';
+const GITHUB = 'https://github.com/liquid-releasing/funscriptforge';
 
 const HELP_LINKS = [
   {
     label: 'Documentation',
     desc: 'User guide, tab walkthroughs, troubleshooting',
     icon: 'file-text',
-    href: 'https://github.com/liquid-releasing/funscriptforge#readme',
+    href: `${GITHUB}#readme`,
   },
   {
     label: 'Report an issue',
     desc: 'GitHub issues — bug reports, feature requests',
     icon: 'alert-circle',
-    href: 'https://github.com/liquid-releasing/funscriptforge/issues',
+    href: `${GITHUB}/issues`,
   },
   {
     label: 'Source',
     desc: 'Repository — MIT licensed',
     icon: 'git-branch',
-    href: 'https://github.com/liquid-releasing/funscriptforge',
+    href: GITHUB,
   },
 ];
 
@@ -44,10 +40,46 @@ const SHORTCUTS = [
   { combo: 'Esc',              action: 'Close this dialog' },
 ];
 
+// Third-party work FunscriptForge builds on. Credits carried over from
+// forge/about.py and updated for the Tauri/React + bundled-backend build.
+const CREDITS = [
+  {
+    name: 'funscript-tools',
+    by: 'Edger · credited',
+    note: 'Tone transforms + eTransform algorithms behind Stim channel '
+        + 'generation. Used with credit to the author.',
+    href: 'https://github.com/edger477/funscript-tools',
+  },
+  {
+    name: 'restim',
+    by: 'Diglet48 · MIT',
+    note: '3-phase synthesis math for e-stim audio (stereo WAV rendering).',
+    href: 'https://github.com/diglet48/restim',
+  },
+  {
+    name: 'FFmpeg',
+    by: 'bundled · GPL',
+    note: 'Media decode + 720p chapter-clip transcode (libx264). Shipped as a '
+        + 'separate binary; its GPL license + source link travel with the app.',
+    href: 'https://ffmpeg.org',
+  },
+  {
+    name: 'librosa · numba · SciPy',
+    by: 'ISC / BSD',
+    note: 'Audio structure, beat, and spectral analysis in the Python backend.',
+    href: 'https://librosa.org',
+  },
+  {
+    name: 'Tauri · React · Vite · Lucide',
+    by: 'MIT / Apache-2.0',
+    note: 'Desktop shell, UI, build tooling, and icons.',
+    href: 'https://tauri.app',
+  },
+];
+
 export default function AboutDialog({ open, onClose, inTauri }) {
   if (!open) return null;
 
-  // Click-outside to close. Click inside the dialog stops propagation.
   const onBackdropClick = () => onClose?.();
 
   return (
@@ -73,6 +105,7 @@ export default function AboutDialog({ open, onClose, inTauri }) {
         }}
       >
         <Header onClose={onClose} />
+        <Hero />
 
         <div style={{ padding: '18px 22px' }}>
           <Identity inTauri={inTauri} />
@@ -119,6 +152,23 @@ function Header({ onClose }) {
   );
 }
 
+// Hero banner — the FunscriptForge key art. Public asset served at root.
+function Hero() {
+  return (
+    <div style={{
+      width: '100%', aspectRatio: '16 / 6', overflow: 'hidden',
+      background: 'var(--surface-2)',
+      borderBottom: '1px solid var(--border)',
+    }}>
+      <img
+        src="/hero-forge.png"
+        alt="FunscriptForge"
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      />
+    </div>
+  );
+}
+
 function Identity({ inTauri }) {
   return (
     <div style={{
@@ -128,20 +178,15 @@ function Identity({ inTauri }) {
       border: '1px solid var(--border)',
       marginBottom: 18,
     }}>
-      <div style={{
-        width: 48, height: 48, borderRadius: 10,
-        background: 'linear-gradient(135deg, #ff7b7b 0%, #c77dff 100%)',
-        display: 'grid', placeItems: 'center',
-        flexShrink: 0,
-      }}>
-        <Icon name="zap" size={22} style={{ color: '#fff' }} />
-      </div>
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em' }}>
           FunscriptForge
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 2 }}>
-          v{APP_VERSION} · {APP_CODENAME}
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.4 }}>
+          {TAGLINE}
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 5 }}>
+          v{APP_VERSION}
         </div>
       </div>
       <Pill tone="neutral" dot>{inTauri ? 'Tauri desktop' : 'browser'}</Pill>
@@ -232,43 +277,65 @@ function ShortcutTable() {
 
 function Acknowledgements() {
   return (
-    <div style={{
-      fontSize: 12, color: 'var(--text-muted)',
-      lineHeight: 1.6, padding: '8px 4px',
-    }}>
-      Part of the Liquid Releasing app family alongside Beatflo (rhythm authoring)
-      and the Sync Player (multi-modal playback). Built on{' '}
-      <Link href="https://tauri.app">Tauri 2</Link>,{' '}
-      <Link href="https://react.dev">React</Link>, and{' '}
-      <Link href="https://vitejs.dev">Vite</Link> with icons by{' '}
-      <Link href="https://lucide.dev">Lucide</Link>.
-      Funscript tooling derives from the broader OSS haptics community —
-      see the source repo for full attributions.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{
+        fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.55,
+        marginBottom: 2,
+      }}>
+        FunscriptForge stands on the open-source haptics and scientific-Python
+        communities. Each project remains under its own copyright and license:
+      </div>
+      {CREDITS.map((c) => (
+        <a
+          key={c.name}
+          href={c.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'block', padding: '8px 11px',
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            color: 'var(--text)', textDecoration: 'none',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600 }}>{c.name}</span>
+            <span style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>{c.by}</span>
+            <Icon name="external-link" size={10}
+                  style={{ color: 'var(--text-dim)', marginLeft: 'auto' }} />
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2, lineHeight: 1.45 }}>
+            {c.note}
+          </div>
+        </a>
+      ))}
+      <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginTop: 4, lineHeight: 1.5 }}>
+        The <span className="mono">.funscript</span> file format is a community
+        standard, not owned by Liquid Releasing.
+      </div>
     </div>
-  );
-}
-
-function Link({ href, children }) {
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer"
-       style={{ color: 'var(--accent)', textDecoration: 'none' }}>
-      {children}
-    </a>
   );
 }
 
 function Footer({ onClose }) {
   return (
     <div style={{
-      display: 'flex', gap: 10, padding: '12px 18px',
+      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px',
       borderTop: '1px solid var(--border)',
       background: 'var(--surface-2)',
     }}>
+      <img
+        src="/liquid-releasing-white.svg"
+        alt="Liquid Releasing"
+        style={{ height: 22, width: 'auto', opacity: 0.92, flexShrink: 0 }}
+      />
       <span style={{
-        fontSize: 11, color: 'var(--text-dim)',
-        alignSelf: 'center', flex: 1,
+        fontSize: 10.5, color: 'var(--text-dim)',
+        alignSelf: 'center', flex: 1, lineHeight: 1.4,
       }}>
-        MIT licensed · &copy; 2026 Liquid Releasing
+        FunscriptForge™ is a trademark of Liquid Releasing.<br />
+        © 2026 Liquid Releasing · MIT License.
       </span>
       <Button kind="primary" size="sm" onClick={onClose}>Done</Button>
     </div>

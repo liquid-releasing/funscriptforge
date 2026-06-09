@@ -9,9 +9,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  TopBar, ScopePicker, AcceptBar, StatusBar,
+  TopBar, AcceptBar, StatusBar,
   Button, Pill,
 } from 'forgemoment';
+import { APP_VERSION } from './appVersion.js';
 import {
   isTauri, ping, loadProject, loadSampleProject, attachMedia,
   pickFunscriptFile, pickMediaFile,
@@ -558,17 +559,6 @@ export default function App() {
   // filter is global (cross-tab) chrome. For now it's only display; the
   // tabs don't yet read this scope. When they do, this state becomes the
   // single source of truth for "what subset of the work is in focus".
-  const [scopeId, setScopeId] = useState('all');
-  const scopes = [
-    { id: 'all', title: 'All chapters' },
-    ...(project?.chapterList ?? []).map((c, i) => ({
-      id: c.id,
-      title: c.name || `Chapter ${i + 1}`,
-      color: c.color,
-      start: c.atMs,
-      end: c.endMs,
-    })),
-  ];
 
   // Workflow chain: each tab knows the next tab to advance to on "Accept
   // and chain." Tabs without an entry have no advance action (Library is
@@ -642,16 +632,6 @@ export default function App() {
     console.log(`accept-and-chain: ${tab} → ${nextTab}`);
     setTab(nextTab);
   };
-  const handleReset = () => {
-    // Reset semantics are still undecided — see project_funscriptforge_pending
-    // → "AcceptBar reset behavior." Candidates: (a) restore working state
-    // from last-accepted chain file; (b) clear per-tab edits since last
-    // Accept; (c) two-level: reset this tab vs reset chain-from-here-down.
-    // For now this is a no-op log so the button doesn't pretend to work.
-    // eslint-disable-next-line no-console
-    console.log(`reset working state for ${tab}`);
-  };
-
   // Revert to original — global, destructive: delete the accumulated
   // working funscript so the effective path falls back to the pristine
   // original, then reload the project to re-seed actions from it. Distinct
@@ -686,7 +666,7 @@ export default function App() {
         logo={(
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <strong style={{ fontSize: 14, letterSpacing: '-0.01em' }}>FunscriptForge</strong>
-            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>scaffold v0.0.1</span>
+            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>v{APP_VERSION}</span>
           </div>
         )}
         file={project ? {
@@ -699,14 +679,6 @@ export default function App() {
             {inTauri ? 'Tauri' : 'browser'}
           </Pill>
         )}
-        scope={project ? (
-          <ScopePicker
-            scopes={scopes}
-            value={scopeId}
-            onChange={setScopeId}
-            label="Filter"
-          />
-        ) : null}
         rightActions={(
           <>
             <Button kind="ghost" size="sm" icon="folder-open"
@@ -911,7 +883,6 @@ export default function App() {
             ? `Accept and chain to ${TABS.find((t) => t.id === nextTab)?.label ?? nextTab}`
             : (tab === 'export' ? 'Write outputs' : 'Accept')}
           onAccept={handleAccept}
-          onReset={handleReset}
           error={appError}
           onClearError={() => setAppError(null)}
           busy={busy}
@@ -925,9 +896,9 @@ export default function App() {
       )}
       <StatusBar
         synced
-        scope={scopeId === 'all' ? 'all chapters' : (scopes.find((s) => s.id === scopeId)?.title ?? scopeId)}
+        scope="all chapters"
         chainFile={chainFile ?? undefined}
-        version="alpha 0.0.1"
+        version={APP_VERSION}
       />
       <AboutDialog
         open={aboutOpen}
