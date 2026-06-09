@@ -58,57 +58,34 @@ Every tab that modifies data follows the same pattern:
 
 ### 1. User makes selections (no disk writes)
 
-The UI collects choices — tone, sliders, device settings — in `st.session_state`.
-Nothing is saved. The user can experiment freely.
+The React UI collects choices — character, sliders, device settings — in component
+state. Nothing is saved. The user can experiment freely.
 
 ### 2. Preview updates in real time
 
-Before/after charts show the effect of current selections. Preview recalculates
-on slider release (Streamlit rerun). No Accept needed to see the preview.
+Before/after charts show the effect of current selections. Preview recalculates as
+the user adjusts controls. No Accept needed to see the preview.
 
 ### 3. User clicks Accept
 
-A single **Accept** button (no arrow, no auto-navigation):
+A single **Accept** button (no arrow, no auto-navigation). On click, the tab calls
+the corresponding `cli.py` subcommand through the Rust bridge (`forge.js` →
+`commands.rs`), then marks the tab accepted in component state.
 
-```python
-if st.button("Accept", type="primary", width="stretch"):
-    _apply(...)
-    st.session_state["tab_accepted"] = True
-    st.rerun()
-```
+### 4. Progress with step-by-step status
 
-### 4. Progress spinner with step-by-step status
+Long operations stream stage labels back from the Python backend via
+`tauri::Emitter` events, which the footer/progress UI renders as they arrive.
 
-`st.status()` shows each step as it runs:
-
-```python
-status = st.status("Applying...", expanded=True)
-status.update(label="Saving project file…")
-save_forge(project)
-status.write("✅ Saved to my-project.forge")
-
-status.update(label="Analyzing beats…")
-# ... long operation with progress callback ...
-status.write("✅ Beat data: 142 beats, ~128 BPM")
-
-status.update(label="Project ready!", state="complete", expanded=False)
-```
-
-**Progress for long operations:** Use callbacks that update the status label
-with counts (e.g., `frame 42 / 300`, `23,710 actions`). The user sees exactly
+**Progress for long operations:** the backend emits callbacks that update the status
+label with counts (e.g., `frame 42 / 300`, `23,710 actions`). The user sees exactly
 what's happening and knows whether to wait or get coffee.
 
 ### 5. Advisory text (no auto-navigation)
 
-After Accept completes, a success message advises the next step:
-
-```python
-if st.session_state.get("tab_accepted"):
-    st.success("Your next step is the **Tone** tab.")
-```
-
-The user clicks the tab themselves. No auto-navigation — it's disorienting
-and prevents the user from reviewing the completed state.
+After Accept completes, a success message advises the next step (e.g., "Your next
+step is the **Phrases** tab"). The user clicks the tab themselves. No auto-navigation
+— it's disorienting and prevents the user from reviewing the completed state.
 
 ### 6. History snapshot for undo
 
@@ -166,7 +143,7 @@ The sidebar shows the last Accept action and an **Undo** button. Undo:
 
 1. Pops the last entry from the `.forge` history array
 2. Removes the chain funscript file for that stage
-3. Clears the accepted flag in session state
+3. Clears the accepted flag in the tab's component state
 4. Saves the updated `.forge`
 
 One level deep per tab — undoes the last Accept, not individual slider changes.

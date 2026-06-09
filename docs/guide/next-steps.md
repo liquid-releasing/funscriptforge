@@ -86,8 +86,8 @@ The Next Steps tab displays full credits for the open-source projects FunscriptF
 
 - **funscript-tools** by Edger — tone transforms, waveform shaping, eTransform algorithms
 - **restim** by Diglet48 — 3-phase synthesis math for audio rendering (MIT license)
-- **Streamlit**, **Matplotlib**, **pandas**, **Python**
-- **forge-ui-components** — shared component library
+- **Tauri**, **React**, **Vite**, **Python**, **ffmpeg**
+- **forgemoment** / **forge-ui-components** — shared component libraries
 
 ---
 

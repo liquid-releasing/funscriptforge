@@ -1,12 +1,21 @@
 # Chart Cache Architecture
 
-## Problem
+> **Historical note.** This document originally addressed a Streamlit-specific
+> re-render problem (Streamlit re-ran every tab on each `st.rerun()`, forcing
+> full-page PNG repaints). The Tauri + React app no longer has that constraint —
+> React re-renders only the active component, and charts are drawn live by
+> forgemoment from data rather than as server-rendered PNGs. The **chain-cached
+> `PointSeries`** model below survives because it is framework-agnostic: `cli.py`
+> still emits per-stage `PointSeries` JSON, and caching avoids recomputing the
+> expensive velocity-color pass for every view.
 
-Streamlit re-renders ALL tabs on every `st.rerun()`. Each Accept triggers
+## Original problem (Streamlit era)
+
+Streamlit re-rendered ALL tabs on every `st.rerun()`. Each Accept triggered
 a full page rebuild. With vibrant static PNG charts (2-3s each) across
-8 tabs, this creates 15-20s repaints even when the user only sees one tab.
+8 tabs, this created 15-20s repaints even when the user only saw one tab.
 
-## Solution: Chain-Cached PointSeries + On-Demand PNG
+## Solution: Chain-Cached PointSeries
 
 ### Chain stages
 ```
@@ -16,16 +25,18 @@ Original → Device → Tone → Phrases
 Each Accept computes and caches a `PointSeries` (velocity colors, positions,
 timestamps) for its output. This is the expensive step (~1s for 23K actions).
 
-### Cache keys in session_state
-```python
-"chain_series_device"   → PointSeries after device awareness
-"chain_series_tone"     → PointSeries after tone applied
-"chain_series_phrases"  → PointSeries after phrase edits
-"chain_bands"           → AnnotationBand list (phrase boundaries)
+### Cache keys
+```
+chain_series_device   → PointSeries after device awareness
+chain_series_tone     → PointSeries after tone applied
+chain_series_phrases  → PointSeries after phrase edits
+chain_bands           → AnnotationBand list (phrase boundaries)
 ```
 
-### PNG rendering (cheap, ~0.5s from cached PointSeries)
-Each tab requests a PNG with or without overlays:
+### Chart rendering (cheap, from cached PointSeries)
+Each view requests a chart with or without overlays. (In the Streamlit era this
+was a server-rendered PNG; in the React app forgemoment Charts draw the same
+cached `PointSeries` directly.)
 
 | Tab | PointSeries source | Phrase boxes | Notes |
 |-----|-------------------|-------------|-------|
@@ -61,13 +72,16 @@ If a user skips tabs or goes backward:
 - If yes: render PNG from cache (0.5s)
 - If no: show spinner, compute, cache, render
 
-### Why PointSeries not PNG
-- PointSeries is framework-agnostic (can render to Matplotlib PNG, Plotly, or future React)
-- Same data, different overlays per tab (with/without phrase boxes)
+### Why PointSeries, not PNG
+- PointSeries is framework-agnostic — it now renders directly in React (forgemoment
+  Charts), and historically rendered to Matplotlib PNG / Plotly
+- Same data, different overlays per view (with/without phrase boxes)
 - Phrase box changes don't require re-computing velocity colors
-- Smaller in memory than PNG bytes
+- Smaller in memory than PNG bytes, and serializes cleanly to JSON across the
+  `cli.py` → Rust → React bridge
 
-### Streamlit limitation
-`st.tabs` executes ALL tab blocks on every rerun. We cannot skip inactive
-tabs. The cache strategy makes this tolerable — each tab renders from
-cached data in milliseconds, only computing if cache is missing.
+### Why caching still helps
+In the React app the UI no longer re-renders every tab, so the original full-page
+repaint cost is gone. Caching the per-stage `PointSeries` still pays off because the
+velocity-color pass (~1s for 23K actions) is expensive — computing it once per stage
+and reusing it across views keeps interactions instant.

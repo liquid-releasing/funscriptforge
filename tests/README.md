@@ -1,8 +1,12 @@
 # tests
 
-Unit tests for the core pipeline modules, UI-panel split logic, accessibility, and smoke tests.
+Unit tests for the core Python pipeline modules (`cli.py` and friends), the e-stim /
+device / transform engines, and integration smoke tests.
 
-789 tests in `tests/` + 60 UI-layer tests in `ui/common/tests/` = **849 total**, all using Python's stdlib `unittest` — no extra dependencies required.
+These cover the **Python backend** that the Tauri + React desktop app drives via
+`cli.py`. The React frontend has its own JS/Vitest tests under `ui/web/` (`npm test`);
+this suite is the Python side. Tests use Python's stdlib `unittest` — no extra
+dependencies required.
 
 > `test_beats.py` integration tests are automatically skipped when `av`, `librosa`, or `numpy` are not installed. All other tests run with no optional dependencies.
 
@@ -97,17 +101,6 @@ python -m unittest discover -s ui/common/tests -v
 | `TestSuggestTransform` | Returns `(key, params)` tuple; all 8 tag rules (frantic → halve_tempo; giggle/plateau/lazy → amplitude_scale amplify; stingy → amplitude_scale reduce; drift/half_stroke → recenter; drone → beat_accent); tag rules take priority over BPM fallbacks; scale targets peak hi ≈ 65; BPM fallbacks (transition → smooth, low BPM → passthrough, narrow → normalize, high BPM → amplitude_scale) |
 | `TestTransformParam` | Required fields present, optional fields default to None/empty |
 
-### `test_pattern_editor_splits.py` — Pattern Editor split-segment logic
-
-| Class | What it covers |
-| --- | --- |
-| `TestSegmentHelpers` | `_get_segments` with 0/1/2 splits, contiguous segments, unsorted input sorted, `_get_active_seg` default + clamping |
-| `TestTransformState` | `_get_seg_transform` empty/legacy/new-key fallback, precedence; `_set_seg_transform` new key, legacy key sync for seg 0, no cross-seg contamination |
-| `TestAddSplitPoint` | Boundary validation (start/end/before/after/duplicate), 2-segment creation, right-half inherits left transform, subsequent segments renumbered +1, multiple accumulating splits |
-| `TestRemoveSplitBoundary` | Only-split removal, first/last boundary removal, merged segment keeps left transform, subsequent segments renumbered -1, no-splits and invalid-index rejection |
-| `TestCopyInstanceToAll` | No-splits copies transform only, proportional split scaling, all segment transforms copied, source unchanged, dest splits cleared when source has none, split points clamped to dest bounds |
-| `TestBuildAllTransforms` | No transforms → unchanged, Apply=False skips instance, invert applied, passthrough unchanged, two segments with independent transforms, multiple instances each transformed, out-of-cycle actions unchanged, result length preserved |
-
 ### `test_integration.py` — full pipeline chain
 
 | Class | What it covers |
@@ -120,34 +113,14 @@ python -m unittest discover -s ui/common/tests -v
 | --- | --- |
 | `TestClampSortDedup` | Positions clamped to [0, 100], out-of-range flagged, timestamps sorted, duplicates deduplicated (last-write wins), no-op on clean input, empty list, single action |
 
-### `test_media_player.py` — `ui/streamlit/panels/media_player.py` (pure-Python helpers)
-
-| Class | What it covers |
-| --- | --- |
-| `TestValidateMediaFileHappyPath` | Each of the 9 supported containers (MP3 ID3/ADTS, MP4/M4A/MOV, WAV, OGG, WebM, MKV, AAC MPEG-4/MPEG-2) with correct magic bytes → `None` |
-| `TestValidateMediaFileCorrupt` | Garbage bytes for each container → error string |
-| `TestValidateMediaFileEdgeCases` | Missing file, empty file, truncated file; `.avi` → helpful ffmpeg hint (not generic error); unknown extension → allowlist message (no `avi` listed) |
-| `TestMediaExtsAllowlist` | `.avi` absent from `VIDEO_EXTS`, `AUDIO_EXTS`, and `MEDIA_EXTS`; all 9 supported extensions present |
-| `TestFindMatchingMedia` | Finds MP4/MP3 by stem match; no match → `None`; missing uploads dir → `None`; MP4 preferred over MP3 |
-
-### `test_launcher.py` — `_MediaHandler` local media HTTP server
-
-| Class | What it covers |
-| --- | --- |
-| `TestMediaHandlerBadRequests` | Empty path → 400; relative path → 400; absolute path to missing file → 404 |
-| `TestMediaHandlerAllowlist` | `.avi`, `.txt`, `.exe` → 403; MP4/MP3/WebM/MKV/WAV/OGG/AAC/M4A/MOV → 200 |
-| `TestMediaHandlerContentType` | MP4 `video/mp4`, MP3 `audio/mpeg`, WebM `video/webm` |
-| `TestMediaHandlerRangeRequests` | Range → 206 with correct body length and `Content-Range`; full request → 200 with `Content-Length` and `Accept-Ranges` |
-| `TestMediaHandlerSymlinkSecurity` | Symlink named `.mp4` resolving to `.txt` → 403; symlink resolving to real `.mp4` → 200 *(skipped if OS requires elevation for symlinks)* |
-
 ### `test_priority2.py` — P2 features
 
 | Class | What it covers |
 | --- | --- |
-| `TestFileUpload` | Upload saved to `output/uploads/`, prefix in selectbox, auto-selects most recent |
+| `TestFileUpload` | Imported funscript saved under the project folder, prefix applied, auto-selects most recent |
 | `TestQualityCheck` | Velocity > 200 warn, velocity > 300 error, interval < 50 ms warn, pass on clean input, 50-row cap |
 | `TestProgressCallback` | Callback invoked for each pipeline stage, stage labels non-empty, thread-safe |
-| `TestValidateMediaFile` | Basic magic-byte smoke tests; see `test_media_player.py` for full coverage |
+| `TestValidateMediaFile` | Magic-byte media validation across the supported containers |
 | `TestRecentsHelpers` | Save/load recent files, max-recents cap, missing file handled gracefully |
 
 ### `test_undo_stack.py` — undo/redo core
@@ -155,23 +128,6 @@ python -m unittest discover -s ui/common/tests -v
 | Class | What it covers |
 | --- | --- |
 | `TestUndoStack` | Push, undo, redo, cap at 50 levels, clear, empty undo/redo no-ops, operation labels, multi-level round-trip |
-
-### `test_undo_helpers.py` — Streamlit undo integration
-
-| Class | What it covers |
-| --- | --- |
-| `TestUndoHelpers` | `push_undo` stores snapshot, `apply_snapshot` restores state, undo/redo buttons toggle availability, operation label visible in tooltip |
-
-### `test_accessibility.py` — WCAG 2.1 AA
-
-| Class | What it covers |
-| --- | --- |
-| `TestAudioPlayerAccessibility` | All 5 buttons have `aria-label`, specific label per button, JS `setAttribute` called on play/pause/stop/end (4 locations), `role="timer"` on time display, `aria-live` attributes |
-| `TestRejectedRowSrOnly` | `.sr-only` span present in rejected rows, text contains "Rejected", appears in both completed and recommended tables |
-| `TestBpmBarTextLogic` | Threshold logic (> 4% width shows label), format `"{bpm:.0f}"`, edge cases (empty, zero width, single phrase) |
-| `TestNoCollapsedLabels` | Regex scan confirms no `label_visibility="collapsed"` in any `ui/streamlit/panels/*.py` |
-| `TestChartCaptions` | BPM step chart caption present, behavioral tag chart caption present, export preview caption present, captions follow `st.plotly_chart` within 8 lines |
-| `TestLangInjection` | `lang="en"` injection present in `app.py`, inside keyboard sentinel block, `.sr-only` CSS injected globally |
 
 ### `test_input_validation.py` — corrupted and truncated funscript input
 
@@ -230,36 +186,20 @@ python -m unittest discover -s ui/common/tests -v
 `fixtures/sample.funscript` — a small synthetic funscript used by all modules.
 It is intentionally short so tests run in < 0.1 s.
 
-## Test count by module
+## Test modules at a glance
 
-| Module | Tests |
-| --- | --- |
-| `test_analyzer.py` | 33 |
-| `test_transformer.py` | 15 |
-| `test_customizer.py` | 12 |
-| `test_utils.py` | 24 |
-| `test_classifier.py` | 36 |
-| `test_pattern_catalog.py` | 29 |
-| `test_pattern_editor_splits.py` | 47 |
-| `test_phrase_transforms.py` | 160 |
-| `test_integration.py` | 20 |
-| `test_cli.py` | 42 |
-| `test_user_transforms.py` | 21 |
-| `test_export_integrity.py` | 15 |
-| `test_priority2.py` | 47 |
-| `test_undo_stack.py` | 20 |
-| `test_undo_helpers.py` | 17 |
-| `test_accessibility.py` | 32 |
-| `test_smoke.py` | 53 |
-| `test_input_validation.py` | 23 |
-| `test_media_player.py` | 34 |
-| `test_launcher.py` | 27 |
-| `test_metadata.py` | 45 |
-| `test_captions.py` | 28 |
-| `test_beats.py` | 17 |
-| other modules | *(see `tests/` directory)* |
-| `ui/common/tests/` | 60 |
-| **Total** | **849** |
+The suite spans the pipeline (analyzer, transformer, customizer, classifier,
+phrase transforms, integration, smoke), the CLI surface (`test_cli.py`), input
+validation, metadata/captions/beats, and the e-stim / device / polish / export
+engines (`test_device_specs.py`, `test_stim_config.py`, `test_audio_synthesis.py`,
+`test_multiaxis.py`, `test_polish.py`, `test_export.py`, `test_events_feel.py`,
+`test_channels_defaults.py`, `test_character_drift.py`, `test_scene_closer.py`,
+`test_transform_apply.py`, `test_funscript_tools_adapter.py`, and more).
+
+> For the authoritative module list and live test counts, run `python cli.py test`
+> (or `python -m unittest discover -s tests -v`) — counts drift as modules are added.
+> The Streamlit-era panel/launcher/accessibility test modules were removed along with
+> the Streamlit UI; the React frontend is tested separately under `ui/web/` (`npm test`).
 
 ---
 

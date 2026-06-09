@@ -191,9 +191,9 @@ The output is a single JSON file capturing the full structural picture.
 
 ### 2 — Review in the UI
 
-Open the Streamlit app and load your funscript. The **Assessment** tab shows
-the full pipeline output — a colour-coded phrase timeline, BPM transitions
-table, and drill-down detail for patterns and phases.
+Open the FunscriptForge desktop app (Tauri + React) and load your funscript. The
+**Analyze** view shows the full pipeline output — a colour-coded phrase timeline,
+BPM transitions table, and drill-down detail for patterns and phases.
 
 The **Phrase Editor** tab shows the full funscript as a colour-coded chart
 with phrase bounding boxes.  Click any phrase to open its detail panel where
@@ -242,13 +242,12 @@ Post-processing: blend seams (bilateral LPF at style boundaries) and final smoot
 
 After reviewing in the UI, run the full pipeline to produce the final funscript.
 
-#### Option A — in the browser (Export tab)
+#### Option A — in the app (Export tab)
 
-Open the **Export** tab and expand **"Run full pipeline — BPM Transformer + Window Customizer"**.
-Adjust the BPM threshold and amplitude scale sliders, toggle whether to apply your Work Item
-windows, then click **▶ Run Pipeline**. Download the result with
-**⬇ Download pipeline result**.  This is independent of any phrase-editor transforms and
-produces a `_pipeline.funscript` file with an embedded `_forge_log`.
+Open the **Export** tab and run the full pipeline. Adjust the BPM threshold and
+amplitude scale, toggle whether to apply your Work Item windows, then write the result.
+This produces a `_pipeline.funscript` file with an embedded `_forge_log`, independent of
+any phrase-editor transforms.
 
 #### Option B — command line
 
@@ -279,102 +278,74 @@ python cli.py pipeline input.funscript --output-dir output/
 
 > **Privacy first.** FunscriptForge runs entirely on your machine.
 > Your funscripts, media files, and edits never leave your computer — no account,
-> no cloud sync, no telemetry.  The app opens in your local browser but only
-> talks to itself.
+> no cloud sync, no telemetry.
 
-These requirements apply whether you install the **packaged app** (Windows `.exe` / macOS `.dmg`) or run from source.
+FunscriptForge is a native **Tauri 2 + React** desktop app. The packaged Windows
+installer bundles everything it needs (the `forge-cli` Python backend and a static
+`ffmpeg`); there is no separate Python, pip, or browser install.
 
 ### Minimum
 
-| | Windows | macOS |
-| --- | --- | --- |
-| **OS** | Windows 10 64-bit (build 1903+) | macOS 11 Big Sur |
-| **CPU** | Any 64-bit dual-core x86 | Intel Core i5 or Apple Silicon (M1+) |
-| **RAM** | 4 GB | 4 GB |
-| **Free disk** | 500 MB (app only) | 500 MB (app only) |
-| **Browser** | Chrome 90+, Edge 90+, Firefox 88+ | Chrome 90+, Firefox 88+, Safari 15+ |
-| **Display** | 1920 × 1080 (1080p) minimum | Functional but requires scrolling in the Phrase Editor — QHD strongly recommended |
+| | Windows |
+| --- | --- |
+| **OS** | Windows 10 64-bit (build 1903+) / Windows 11 |
+| **CPU** | Any 64-bit dual-core x86 |
+| **RAM** | 4 GB |
+| **Free disk** | ~1 GB (app + bundled backend & ffmpeg) |
+| **Runtime** | [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) (preinstalled on Windows 11; installer fetches it if missing) |
+| **Display** | 1920 × 1080 (1080p) minimum |
 
-> **Safari note:** Safari cannot play MKV files. Use Chrome or Firefox if your media is `.mkv`.
+> **Windows-first.** `v0.1.0-alpha` ships a Windows installer. macOS and Linux
+> builds are a post-beta follow-up — until then, run from source on those platforms.
 
 ### Recommended (production funscripts)
 
 | Resource | Recommendation | Why |
 | --- | --- | --- |
 | **RAM** | 8 GB+ | Long funscripts (1+ hour) load the full action list into memory |
-| **CPU** | 4-core, 3 GHz+ | Assessment runs single-threaded; faster clock speed = faster analysis |
+| **CPU** | 4-core, 3 GHz+ | Analysis runs single-threaded; faster clock speed = faster analysis |
 | **Free disk** | 10 GB+ | Media files stay on disk during editing and are never modified — allow room for originals plus exports |
-| **Display** | 2560 × 1440 (QHD) or larger | The Phrase Editor and Pattern Editor use a 3-column layout with an embedded media player. QHD (1440p) provides enough vertical space to show the player, waveform chart, action chart, and transform panel without scrolling. 1080p screens will require scrolling and are not recommended. |
+| **Display** | 2560 × 1440 (QHD) or larger | The Phrase and Polish tabs use a 3-pane layout with an embedded media player; QHD provides enough vertical space without scrolling |
 
 ### Internet connection
 
-An internet connection is **only required once, during installation**.
-After that the app runs **completely offline** — no calls home, no updates in the background.
-
-#### Packaged installer (Windows `.exe` / macOS `.dmg`)
-
-Download one file from the release page. Everything is bundled — no Python, no pip, no further setup.
-The installer itself is the only download required.
-
-#### Running from source
-
-| What is downloaded | From | Approx. size |
-| --- | --- | --- |
-| Python packages via `pip` | [pypi.org](https://pypi.org) | ~150 MB total |
-| ↳ `streamlit` (UI framework) | pypi.org/project/streamlit | ~50 MB with dependencies |
-| ↳ `pandas`, `plotly`, `matplotlib` (data + charts) | pypi.org | ~75 MB combined |
-| Plotly JS bundle (media player waveform chart) | [cdn.plot.ly](https://cdn.plot.ly) | ~3.5 MB |
-
-**Troubleshooting source install failures:**
-
-- `pip install` fails → check that `pypi.org` is reachable; if you are behind a proxy try `pip install --index-url https://pypi.org/simple/ -r requirements.txt`
-- Python version error → requires Python 3.10–3.13 **64-bit**; run `python --version` to confirm
-- pip itself is outdated → run `python -m pip install --upgrade pip` first
-- Plotly JS download fails → check that `cdn.plot.ly` is reachable; or download `plotly-2.27.0.min.js` manually from `https://cdn.plot.ly/plotly-2.27.0.min.js` and copy it to `ui/streamlit/components/audio_player/frontend/`
+An internet connection is **only required once, to download the installer**.
+After that the app runs **completely offline** — no calls home, no background updates.
 
 ---
 
-## Getting started (running from source)
+## Getting started
 
-### Install
+### Install (packaged app)
+
+Download the latest Windows installer (`.msi` or `.exe` / NSIS) from the
+[releases page](https://github.com/liquid-releasing/funscriptforge-releases/releases/latest)
+and run it. See [docs/INSTALL.md](docs/INSTALL.md) for details.
+
+### Run from source (developers / macOS / Linux)
+
+FunscriptForge is a Tauri 2 + React app in `ui/web/`, driving the repo-root
+Python backend (`cli.py`). You need the sibling repos checked out next to this one
+(`funscript-tools`, `forge-ui-components`, `videoflow`, `forgemoment`).
 
 ```bash
+# 1. Python backend env
+python -m venv .venv
+.venv/Scripts/activate          # Windows  (use source .venv/bin/activate elsewhere)
 pip install -r requirements.txt
-pip install -r ui/streamlit/requirements.txt
+
+# 2. Frontend + full desktop app (from ui/web/)
+cd ui/web
+npm install
+npm run tauri:dev               # Rust shell + React + Python backend
+
+# Production installers:
+npx tauri build                 # → src-tauri/target/release/bundle/
 ```
 
-Download the bundled Plotly JS library (one-time, ~3.5 MB):
-
-```bash
-python -c "
-import urllib.request
-urllib.request.urlretrieve(
-    'https://cdn.plot.ly/plotly-2.27.0.min.js',
-    'ui/streamlit/components/audio_player/frontend/plotly-2.27.0.min.js'
-)
-print('Plotly downloaded.')
-"
-```
-
-After this step the app runs fully offline — no internet connection required.
-
-### Launch the UI
-
-```bash
-# Desktop launcher (recommended) — starts local HTTP media server for audio/video streaming
-python launcher.py
-
-# Or run directly (web/upload mode)
-streamlit run ui/streamlit/app.py
-```
-
-Opens at `http://localhost:8501`. Select a funscript from the sidebar and
-click **Load / Analyse** to see the assessment results immediately.
-
-The desktop launcher enables local mode: file paths are entered directly, recent files are
-remembered across sessions, and audio/video streams from disk with no upload or size limit.
-The launcher also works correctly as a PyInstaller frozen executable — writable data
-(`output/`, pattern catalog) is stored beside the executable, not in the read-only bundle.
+In development the Rust shell invokes the backend through the `.venv`
+(`python cli.py <command>`), with `ffmpeg` / `ffprobe` resolved on PATH. See
+[ui/web/README.md](ui/web/README.md) for prerequisites and the platform adapter.
 
 ### Analyze from the command line
 
@@ -417,29 +388,28 @@ funscriptforge/
 │   ├── customizer.py         #   WindowCustomizer
 │   └── config.py             #   CustomizerConfig
 ├── visualizations/           # Plotly + matplotlib motion chart components
-├── ui/                       # All UI code
+├── ui/                       # UI code
 │   ├── common/               #   Framework-agnostic models and logic
 │   │   ├── work_items.py     #   WorkItem + ItemType
-│   │   ├── project.py        #   Project session state
+│   │   ├── project.py        #   Project state
 │   │   ├── pipeline.py       #   run_pipeline / run_pipeline_in_memory
 │   │   └── tests/
-│   ├── streamlit/            #   Streamlit app (local + cloud deployable)
-│   │   ├── app.py
-│   │   └── panels/
-│   └── web/                  #   FastAPI + frontend (planned)
+│   └── web/                  #   Tauri 2 + React + Vite desktop app
+│       ├── src/              #     React source (App.jsx, api/forge.js, tabs)
+│       └── src-tauri/        #     Rust shell (commands.rs bridges to cli.py)
 ├── forge/                    # Forge-layer modules (project, metadata, media analysis)
 │   ├── metadata.py           #   derive_metadata() — auto-derive pace/intensity/arc/mood/tags/tone
 │   ├── beats.py              #   extract_beats() — PyAV + librosa beat detection
 │   ├── captions.py           #   parse_captions() — SRT + WebVTT parser
-│   ├── video.py              #   video_stats(), analyze_motion()
-│   └── tabs/                 #   Streamlit tab modules (project_tab, tone_tab, export_tab)
+│   └── video.py              #   video_stats(), analyze_motion()
+├── cli.py                    # Python backend / CLI (frozen to forge-cli for distribution)
+├── forge-cli.spec            # PyInstaller spec — freezes cli.py + scientific stack
 ├── docs/                     # MkDocs user documentation site (in progress)
 ├── internal/                 # Internal planning docs (gap analysis, backlogs, build notes)
 ├── media/                    # App images, logos, icons
 ├── tests/                    # Core pipeline unit tests
 ├── models.py                 # Shared dataclasses (Phrase now carries tags + metrics)
 ├── utils.py                  # Timestamp helpers, low-pass filter, writable_base_dir
-├── cli.py                    # CLI entry point
 └── requirements.txt
 ```
 
@@ -515,14 +485,17 @@ python cli.py test
 ## Running tests
 
 ```bash
-# Core pipeline + integration + UI tests
+# Python backend: core pipeline + integration + engine tests
 python -m unittest discover -s tests -v
 
-# UI layer
+# Python UI-common layer
 python -m unittest discover -s ui/common/tests -v
 
-# All at once (741 tests)
+# All Python tests at once
 python cli.py test
+
+# React frontend tests
+cd ui/web && npm test
 ```
 
 ---
@@ -535,10 +508,9 @@ python cli.py test
 | [pattern_catalog/README.md](pattern_catalog/README.md) | BPM-threshold baseline transformer (Step 2) |
 | [pattern_catalog/EXTENDING_TRANSFORMS.md](pattern_catalog/EXTENDING_TRANSFORMS.md) | Adding custom transforms via JSON recipes or Python plugins; security model |
 | [user_customization/README.md](user_customization/README.md) | Window-based fine-tuning customizer (Step 3) |
-| [ui/README.md](ui/README.md) | Streamlit UI overview — launcher, local mode, sidebar controls, all four tabs |
-| [ui/streamlit/README.md](ui/streamlit/README.md) | Detailed Streamlit panel reference — Phrase Editor, Pattern Editor, Export |
-| [ui/streamlit/UNDO.md](ui/streamlit/UNDO.md) | Undo/redo — what is captured, how to use it, architecture, extending it |
-| [ui/common/README.md](ui/common/README.md) | Framework-agnostic business logic: `Project`, `WorkItem`, `ViewState` |
+| [ui/README.md](ui/README.md) | Frontend overview — the Tauri + React desktop app, backend, distribution |
+| [ui/web/README.md](ui/web/README.md) | Tauri + React app — prerequisites, run modes, `forge.js` adapter, tab flow |
+| [ui/common/README.md](ui/common/README.md) | Framework-agnostic business logic: `Project`, `WorkItem` |
 | [user_transforms/README.md](user_transforms/README.md) | Adding custom transforms via JSON recipe files |
 | [plugins/README.md](plugins/README.md) | Adding custom transforms via Python plugins |
 | [visualizations/README.md](visualizations/README.md) | Matplotlib motion chart components |

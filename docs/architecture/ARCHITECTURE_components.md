@@ -2,76 +2,87 @@
 
 ## Overview
 
-FunscriptForge uses [forge-ui-components](https://github.com/liquid-releasing/forge-ui-components) as a shared component library. Components follow a two-layer pattern: framework-agnostic `core.py` (pure Python, testable without Streamlit) and thin `streamlit.py` render layer.
+FunscriptForge is a Tauri 2 + React app (`ui/web/`). Its React UI imports shared
+components from the sibling **forgemoment** library (AppShell, Charts, MediaViewer,
+TransformPanel, primitives) by bare specifier, resolved via a Vite alias to the
+sibling source tree.
+
+The Python backend additionally uses
+[forge-ui-components](https://github.com/liquid-releasing/forge-ui-components) for
+the framework-agnostic side of chart/analysis logic. Historically those components
+followed a two-layer pattern — framework-agnostic `core.py` (pure Python) plus a
+thin render layer — and the predicted **migration to React/Tauri has happened**:
+the render layer is now React, while the pure-`core.py` logic (chart data shaping,
+beat analysis wrappers) is still reused by `cli.py` and its modules.
 
 This separation enables:
-- Reuse across FunscriptForge, SyncPlayer, forgegen, and future apps
-- Migration to React/Tauri v2 by replacing only the render layer
-- Testing core logic without UI framework dependencies
+- Reuse across FunscriptForge, ForgePlayer, forgegen, and future apps
+- A React render layer over the same framework-agnostic core logic
+- Testing core logic without any UI-framework dependency
 
 ## Dependency Graph
 
 ```
-FunscriptForge (ui/streamlit/app.py)
+FunscriptForge desktop app (ui/web/ — React + Vite)
 │
-├── forge-ui-components          ← shared UI components
-│   ├── funscript_chart          ← Plotly charts (mono + vibrant)
-│   ├── file_picker              ← upload, guard, clear, stats
-│   ├── beat_bar                 ← wraps videoflow AudioBeatMap
-│   └── project_status           ← sidebar dashboard
+├── forgemoment                  ← shared React UI library (Vite alias to sibling)
+│   ├── AppShell / Charts        ← chart + layout primitives
+│   ├── MediaViewer              ← video / audio / spectrogram / funscript modes
+│   └── TransformPanel           ← before/after preview UI
 │
-├── videoflow (xolvco)           ← beat analysis, scene detection
-│   └── audio.AudioBeatMap       ← BPM, beats, downbeats, phrases, energy
-│
-├── media-tools (xolvco)         ← ffmpeg probe, audio extraction, video ops
-│   └── probe.ProbeResult        ← (future: replace pymediainfo)
-│
-└── visualizations/              ← backward-compat shims → forge-ui-components
-    ├── chart_data.py            ← re-exports from funscript_chart.core
-    └── funscript_chart.py       ← FunscriptChart wrapper → vibrant_figure()
+└── Rust bridge (src-tauri/) ──► cli.py  (Python backend)
+        │
+        ├── forge-ui-components          ← framework-agnostic core logic
+        │   ├── funscript_chart.core     ← chart data (PointSeries, colors, slicing)
+        │   └── beat_bar.core            ← wraps videoflow AudioBeatMap
+        │
+        ├── videoflow (xolvco)           ← beat analysis, scene/chapter detection
+        │   └── audio.AudioBeatMap       ← BPM, beats, downbeats, phrases, energy
+        │
+        └── visualizations/              ← backward-compat shims → forge-ui-components
+            ├── chart_data.py            ← re-exports from funscript_chart.core
+            └── funscript_chart.py       ← FunscriptChart wrapper → vibrant_figure()
 ```
 
-## What Moved Where
+## What the core layer provides
 
 ### funscript_chart
 
-| Before (FunscriptForge) | After (forge-ui-components) |
+The chart data layer lives in `funscript_chart.core` (PointSeries, velocity colors,
+slicing) — framework-agnostic and reusable by `cli.py`. FunscriptForge's
+`visualizations/` directory is now thin backward-compat shims that re-export from
+the component library:
+
+| Shim | Re-exports |
 |---|---|
-| `project_tab._funscript_chart()` | `funscript_chart.streamlit.render_monochrome()` |
-| `project_tab._funscript_stats_row()` | `funscript_chart.streamlit.render_stats_row()` |
-| `device_tab._plot_device()` | `funscript_chart.streamlit.render_monochrome_from_arrays()` |
-| `tone_tab._plot_funscript()` | `funscript_chart.streamlit.render_monochrome_from_arrays()` |
-| `visualizations/chart_data.py` (274 lines) | `funscript_chart.core` (PointSeries, colors, slicing) |
-| `visualizations/funscript_chart.py` (315 lines) | `funscript_chart.core.vibrant_figure()` |
+| `visualizations/chart_data.py` | `funscript_chart.core` (PointSeries, colors, slicing) |
+| `visualizations/funscript_chart.py` | `funscript_chart.core.vibrant_figure()` |
 
-FunscriptForge's `visualizations/` directory is now thin backward-compat shims that re-export from the component library.
-
-### file_picker
-
-All 4 file uploaders in `project_tab.py` (funscript, video, audio, captions) now use `render_upload()` with `on_upload`/`on_clear` callbacks for context-specific behavior.
+The React UI consumes the same `PointSeries` data shape (emitted as JSON by `cli.py`)
+and renders it with forgemoment Charts.
 
 ### beat_bar
 
-Beat detection moved from inline librosa in `project_tab._analyze_beats()` to `forge_ui_components.beat_bar.core.analyze_beats()` which delegates to `videoflow.audio.analyze_beats()`. Cache format upgraded from simple `{tempo_bpm, beats}` to full `AudioBeatMap` JSON (BPM, beats, downbeats, phrases, per-beat energy).
-
-### project_status
-
-Sidebar display logic extracted from `app.py._sidebar()` into `ProjectStatus` dataclass + render functions. The app builds a snapshot from session state; render code never touches session state directly.
+Beat detection delegates to `forge_ui_components.beat_bar.core.analyze_beats()`, which
+in turn calls `videoflow.audio.analyze_beats()`. The cache is full `AudioBeatMap` JSON
+(BPM, beats, downbeats, phrases, per-beat energy).
 
 ## Adding a New Component
 
+For shared **React** UI, add it to the sibling forgemoment library and import it in
+`ui/web/`. For framework-agnostic backend logic:
+
 1. Create `forge_ui_components/<name>/core.py` — pure logic, no UI imports
-2. Create `forge_ui_components/<name>/streamlit.py` — thin render layer
-3. Create `forge_ui_components/<name>/__init__.py` — public API exports
-4. Add tests in `tests/test_<name>.py`
-5. Wire consumer app to import from `forge_ui_components.<name>`
+2. Create `forge_ui_components/<name>/__init__.py` — public API exports
+3. Add tests in `tests/test_<name>.py`
+4. Expose it through a `cli.py` subcommand so the React UI can call it via the Rust bridge
 
-## Session State Contract
+## State Contract
 
-Components never read from `st.session_state` directly. Instead:
-- The calling tab/panel builds a data object (e.g., `ProjectStatus`, `FilePickerConfig`)
-- Passes it to the render function
-- Render function returns results via return values, not side effects
-- Interactive callbacks (`on_upload`, `on_clear`) are passed in by the caller
+Core components are pure and stateless:
+- The caller builds a plain data object (e.g., `ProjectStatus`, `FilePickerConfig`)
+- Passes it to the core function
+- The function returns results via return values, not side effects
 
-This keeps components stateless and testable.
+This keeps the core logic UI-framework agnostic and testable, and lets the React
+front-end consume the same logic over JSON.

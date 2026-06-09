@@ -17,35 +17,35 @@ breaking change scattered across your entire codebase.
 ```
 upstream repo          your fork
 ──────────────         ─────────────────────────────────────────────────────
-processor.py           cli.py (adapter)  ──►  forge_window.py  (tkinter dev)
-funscript.py  ──────►  stable API        ──►  Streamlit page   (desktop app)
-config.py                                ──►  Streamlit page   (SaaS)
+processor.py           cli.py (adapter)  ──►  Tauri/React desktop app
+funscript.py  ──────►  stable API        ──►  (future) HTTP/web server
+config.py                                ──►  CLI / scripts / CI
 ```
 
 `cli.py` is the **adapter** — it translates between the upstream API and a
-stable contract that all UIs bind to. When upstream changes, you fix `cli.py`.
-The UIs never change.
+stable contract that all front-ends bind to. When upstream changes, you fix
+`cli.py`. The front-ends never change.
 
-### Three deployment targets, one adapter
+### Deployment targets, one adapter
 
 | Target | UI layer | How it runs |
 |--------|----------|-------------|
-| Standalone dev/test | tkinter (`forge_window.py`) | `python forge.py` |
-| Desktop (Win/Mac/Linux) | Streamlit page in FunscriptForge | PyInstaller + local Streamlit |
-| SaaS | Streamlit page in FunscriptForge | Deployed cloud Streamlit |
+| Desktop (Windows-first) | Tauri + React app in `ui/web/` | Rust shell spawns `cli.py` (dev) or the frozen `forge-cli` (packaged) per call |
+| SaaS (future) | Same React build | React → HTTP server wrapping `cli.py` |
+| CLI / CI | none | `python cli.py <command>` directly |
 
-The tkinter standalone is a **development harness** — fast to iterate on,
-no Streamlit overhead. Once the UX is right, the Streamlit tab calls the
-exact same `cli.py` functions.
+The Rust shell calls `cli.py` over stdin/stdout JSON — it never imports upstream
+Python. Whether the front-end is the desktop app, a future web server, or a CI
+script, they all call the exact same `cli.py` functions.
 
 ### What cli.py must return
 
-Because Streamlit renders the output, `cli.py` must only return types that
-are UI-framework agnostic:
+Because the front-end (React) renders the output, `cli.py` must only return types
+that serialize cleanly to JSON and stay UI-framework agnostic:
 - `dict`, `list`, `str`, `Path`
-- `numpy` arrays (for waveform data — Streamlit/plotly can render these natively)
+- `numpy` arrays serialized to plain lists (for waveform / chart data)
 - Simple dataclasses
-- **Never:** tkinter objects, upstream class instances, open file handles
+- **Never:** UI-toolkit objects, upstream class instances, open file handles
 
 ---
 
@@ -91,10 +91,14 @@ Rules for `cli.py`:
 - **Owns the config structure** — wrap/translate upstream config internally
 - **One file** — all upstream interaction in one place
 
-### 3. Build the UI on top of `cli.py`
+### 3. Build the front-end on top of `cli.py`
+
+The React app never imports Python at all — it calls `cli.py` subcommands through
+the Rust bridge (`ui/web/src/api/forge.js` → `src-tauri/src/commands.rs`). Inside
+the Python codebase, any module that drives the pipeline imports **only** from
+`cli.py`:
 
 ```python
-# ui/forge_window.py
 from cli import load_file, process, get_default_config   # ✓ only this
 
 # Never:
@@ -113,11 +117,11 @@ If it breaks: the error is in `cli.py`. Fix the translation there. UI untouched.
 
 ### 5. Add to FunscriptForge as a tab
 
-Because the UI calls `cli.py` — not upstream internals — porting to FunscriptForge
-means:
-1. Copy `cli.py` into the FunscriptForge module
-2. Replace `forge_window.py` with a `ttk.Frame`-based tab
-3. The tab calls the same `cli.py` functions unchanged
+Because the front-end calls `cli.py` — not upstream internals — wiring a new
+integration into FunscriptForge means:
+1. Expose the operation as a `cli.py` subcommand returning JSON
+2. Add a thin Rust command in `src-tauri/src/commands.rs` that spawns it
+3. Add a React tab/screen that calls it through `forge.js` — no upstream code touched
 
 ---
 
@@ -125,10 +129,9 @@ means:
 
 | File | Role |
 |------|------|
-| `processor.py` | edger477's processing engine — **never imported by UI** |
-| `cli.py` | *(to be built)* adapter exposing `load_file`, `process`, `get_default_config` |
-| `ui/forge_window.py` | 4-tab workflow UI — imports `cli.py` only |
-| `forge.py` | Entry point |
+| `processor.py` | edger477's processing engine — **never imported by the front-end** |
+| `cli.py` | adapter exposing `load_file`, `process`, `get_default_config` |
+| `ui/web/` (React) | tab-based workflow UI — calls `cli.py` via the Rust bridge only |
 
 Upstream repo: https://github.com/edger477/funscript-tools
 Our fork: https://github.com/liquid-releasing/funscript-tools

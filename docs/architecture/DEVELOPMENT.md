@@ -21,25 +21,49 @@ Duration gets a ✅ if it matches the loaded funscript within 5 seconds, ⚠️ 
 
 ## Running the app (Windows)
 
-Hot reload is unreliable on Windows. Always do a full restart:
+FunscriptForge is a Tauri 2 + React + Vite desktop app. The frontend lives in
+`ui/web/`; the Rust shell drives the repo-root Python backend (`cli.py`) as a
+subprocess. From `ui/web/`:
 
 ```bash
-taskkill /F /IM python.exe /T
-find . -name "__pycache__" -exec rm -rf {} +
-streamlit run ui/streamlit/app.py --server.port 8560 --server.fileWatcherType poll
+npm install            # once
+npm run tauri:dev      # full desktop app (Rust shell + React + Python backend)
 ```
 
-Use an incrementing port (8551, 8552…) each restart to avoid browser cache. Open a fresh tab.
+In development the Rust shell invokes the backend through the project `.venv`
+(`python cli.py <command>`), with `ffmpeg` / `ffprobe` resolved on PATH.
+
+Useful variants:
+
+```bash
+npm run dev            # browser-only UI loop (forge.js returns mock data)
+npx tauri build        # production installers → src-tauri/target/release/bundle/
+```
+
+> Rust commands in `ui/web/src-tauri/src/commands.rs` only recompile on a fresh
+> `npm run tauri:dev`. After editing Rust, restart the dev server — React HMR
+> alone will not pick up new bridge commands.
+
+See [`ui/web/README.md`](../../ui/web/README.md) for prerequisites (Node, Rust,
+WebView2) and the `forge.js` platform adapter.
 
 ---
 
 ## Python environment
 
+The Python backend (`cli.py` and its modules) runs in a project virtualenv:
+
 ```bash
-pip install -r ui/streamlit/requirements.txt
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+pip install -r requirements.txt
 ```
 
-Required: `streamlit`, `pandas`, `plotly`, `pymediainfo`
+For distribution the backend is frozen into a `forge-cli` binary with PyInstaller
+(`pyinstaller forge-cli.spec`) and bundled into the Tauri build as a resource; the
+release CI does this automatically. See `.github/workflows/release.yml`.
+
+Required: `pandas`, `plotly`, `pymediainfo` (plus the analysis stack below)
 
 ### Optional — beat detection
 
@@ -52,7 +76,7 @@ pip install av librosa
 - `av` (PyAV) — bundles FFmpeg libs; extracts audio from video without an external `ffmpeg` binary
 - `librosa` — beat tracking via `librosa.beat.beat_track()`
 
-When these packages are absent the UI degrades gracefully (the Generate beat data button is hidden) and `cli.py beats` exits with a clear error message.
+When these packages are absent the UI degrades gracefully (beat-data features are unavailable) and `cli.py beats` exits with a clear error message.
 
 ### Optional — captions
 

@@ -19,7 +19,13 @@ const host = process.env.TAURI_DEV_HOST;
 const forgemomentRoot = new URL('../../../forgemoment/', import.meta.url);
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react({
+    // MediaViewer's mounted fiber tree can be very large when chapter clips,
+    // timelines, and mode panels are active. React Fast Refresh recursively
+    // walks that tree and can overflow the stack during HMR; excluding this
+    // one shared source file falls back to Vite's normal module reload.
+    exclude: /[\\/]forgemoment[\\/]src[\\/]MediaViewer\.jsx$/,
+  })],
   clearScreen: false,
   resolve: {
     alias: [

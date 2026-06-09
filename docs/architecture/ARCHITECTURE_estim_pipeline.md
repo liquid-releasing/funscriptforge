@@ -64,18 +64,18 @@ The remaining channels (pulse_width, pulse_rise, E1-E4, prostate) are texture fo
 
 ## The Adapter Boundary
 
-`forge_window.py` imports ONLY from `cli.py`. Zero upstream imports. This is the adapter boundary.
+The front-end imports ONLY from `cli.py`. Zero upstream imports. This is the adapter boundary.
 
 ```
-forge_window.py  →  cli.py  →  upstream processor.py
-     UI               API           implementation
+React app  →  Rust bridge  →  cli.py  →  upstream processor.py
+   UI          commands.rs      API          implementation
 ```
 
-This means:
+The React desktop app (`ui/web/`) calls `cli.py` subcommands through the Tauri
+Rust bridge (`src-tauri/src/commands.rs`) — it never touches Python directly. This means:
 - The UI can be rebuilt without touching upstream code
 - The CLI can be tested independently
-- FunscriptForge can call the same CLI functions
-- Streamlit and tkinter use identical logic
+- The desktop app, a future web server, and CI scripts all call the same CLI functions
 
 ---
 
@@ -138,9 +138,8 @@ Agent reads `next_action` → runs step → writes `agent_notes` → evaluates o
 
 | Target | Status |
 |---|---|
-| Windows desktop (PyInstaller exe) | Planned |
-| macOS desktop | Planned |
-| Linux desktop | Planned |
-| SaaS (Streamlit cloud) | Planned |
-| funscript-tools tkinter standalone | Working today |
-| FunscriptForge Streamlit | Working today |
+| Windows desktop (Tauri MSI + NSIS, bundled `forge-cli` + ffmpeg) | Published (`v0.1.0-alpha`) |
+| macOS desktop (Tauri) | Post-beta follow-up |
+| Linux desktop (Tauri) | Post-beta follow-up |
+| SaaS (React → HTTP server wrapping `cli.py`) | Planned |
+| `cli.py` command line | Working today |

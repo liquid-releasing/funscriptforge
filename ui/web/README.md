@@ -1,10 +1,12 @@
 # funscriptforge — Tauri + React app
 
-The desktop UI that replaces the Streamlit frontend ([../streamlit/](../streamlit/)).
+The desktop UI for FunscriptForge. This **is** the FunscriptForge frontend — the
+earlier Streamlit prototype has been removed; the Python backend now lives only as
+the `cli.py` command-line tool that this app drives as a subprocess.
 
-Same React codebase ships to:
+The React codebase is built for:
 
-- **Desktop** (Windows / macOS / Linux) via Tauri 2.x
+- **Desktop** (Windows-first; macOS / Linux are a post-beta follow-up) via Tauri 2.x
 - **Web** (future) via the same Vite build, talking to a Python HTTP server
 
 The dual-target pattern is enforced by [src/api/forge.js](src/api/forge.js) — every backend call routes through it. Components must not import `@tauri-apps/api` directly, or the web build breaks.
@@ -78,25 +80,37 @@ Then add the new files to `bundle.icon` in [src-tauri/tauri.conf.json](src-tauri
 
 ## Bridge to Python
 
-The Rust commands in [src-tauri/src/commands.rs](src-tauri/src/commands.rs) will spawn the existing `funscriptforge` Python CLI per call, capture JSON from stdout, and return it to React — same pattern as [forgegen/BRIDGE_DESIGN.md](../../../forgegen/BRIDGE_DESIGN.md). Long-running commands stream stage labels via `tauri::Emitter` events.
+The Rust commands in [src-tauri/src/commands.rs](src-tauri/src/commands.rs) spawn the
+FunscriptForge Python backend per call, capture JSON from stdout, and return it to React
+— same pattern as [forgegen/BRIDGE_DESIGN.md](../../../forgegen/BRIDGE_DESIGN.md).
+Long-running commands stream stage labels via `tauri::Emitter` events.
 
-The Python side of the bridge lives at [../common/](../common/) (`pipeline.py`, `project.py`, `undo_stack.py`, `view_state.py`, `work_items.py`).
+The backend is the repo-root [`cli.py`](../../cli.py). In development the Rust shell
+invokes it through the project `.venv` Python (`python cli.py <command>`). In a packaged
+build it invokes the frozen **`forge-cli`** binary — a PyInstaller onedir of `cli.py`
+plus the scientific stack (librosa / numba / scipy / videoflow / funscript-tools), built
+from [`forge-cli.spec`](../../forge-cli.spec) and bundled as a Tauri resource. A static
+**ffmpeg / ffprobe** is bundled alongside it (resolved on PATH).
 
-## What's ported, what's not
+Framework-agnostic domain logic shared by the backend lives at [../common/](../common/)
+(`pipeline.py`, `project.py`, `work_items.py`).
 
-- [x] Toolchain scaffold (Vite + React + Tauri 2.x)
-- [x] Platform adapter (`forge.js`)
-- [x] `ping` round-trip command
-- [ ] Library screen (port from [../../ui_design/ui_kits/funscriptforge-app/LibraryScreen.jsx](../../ui_design/ui_kits/funscriptforge-app/LibraryScreen.jsx))
-- [ ] Project tab
-- [ ] Device tab
-- [ ] Chapters tab
-- [ ] Edit tab
-- [ ] Stim tab
-- [ ] Phrases tab
-- [ ] Export tab
-- [ ] Real Python-CLI bridge commands
+## Editing pipeline (tab flow)
+
+The tab strip walks the user through the editing pipeline:
+
+```
+Library / Project → Analyze → Channels → Phrases → Events → Polish → Export
+```
+
+- **Library / Project** — load a funscript (+ optional media), or import a `.forge` bundle
+- **Analyze** — chapter detection via videoflow `auto_chapter`
+- **Channels** — character + mechanical + body arcs (the former "Characters" tab)
+- **Phrases** — per-phrase structural editing and transforms
+- **Events** — point-in-time haptic moments on the Edger catalog
+- **Polish** — device stations: E-Stim, Handy, OSR2, SR6 (TCode)
+- **Export** — writes a `.forge` bundle zip or a loose output folder
 
 ## Migration note
 
-The browser-loaded prototype at [../../ui_design/ui_kits/funscriptforge-app/](../../ui_design/ui_kits/funscriptforge-app/) is the **design source** — it uses Babel-script-tag JSX and CDN React. It stays in place as a reference; screens get rewritten here as bundled ES modules pulling components from [forgemoment](../../../forgemoment/) (AppShell, Charts, MediaViewer, TransformPanel, primitives) rather than duplicating them.
+The browser-loaded prototype at [../../ui_design/ui_kits/funscriptforge-app/](../../ui_design/ui_kits/funscriptforge-app/) is the **design source** — it uses Babel-script-tag JSX and CDN React. It stays in place as a reference; screens are written here as bundled ES modules pulling components from [forgemoment](../../../forgemoment/) (AppShell, Charts, MediaViewer, TransformPanel, primitives) rather than duplicating them.

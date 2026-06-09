@@ -263,3 +263,21 @@ Verify on a clean boot tomorrow, then commit.
 ### ✅ Confirmed working this session
 Tame tone · Ramp up/down · Hero Beat ("beat change from a wall of red") ·
 carry-forward tone · the before/after image preview.
+
+### ✅ NOT A BUG — "black box" on JAV is source-baked censoring (2026-06-09)
+
+User saw a large solid black box over explicit content in the player and asked
+whether it was a 4K→720p downscale artifact. **Diagnosed: it is in the source
+master, not our pipeline.** On `IPZZ-125.molester.omfg_iris3.mp4` (an Ideapocket
+/ IPPA release — studio watermark visible in the frame):
+
+- Source is true 4K (3840×2160, h264, ~9.1 Mbps); our chapter clips are 1280×720.
+- Pulled the same frame (t≈5550s) from the **4K source** and the **720p clip**:
+  the black box is **already present in the 4K source frame**, before any
+  downscale. A full-res crop of the box region is **pure solid black** (PNG
+  compressed to ~3.7 KB — zero texture), i.e. a hard censor box, **not** a fine
+  mosaic that downscaling flattened.
+- This title censors with a **solid black box**, not the pixelated mosaic the user
+  expected. Our pipeline faithfully passes the source through. **No fix needed.**
+  (Diagnostic frames were explicit; extracted, inspected, then deleted — not kept
+  in the tree.)

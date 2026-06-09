@@ -1,8 +1,9 @@
 # ui/common — Framework-agnostic UI business logic
 
-This package contains shared domain logic used by every UI deployment
-target (Streamlit, Flask/web, local desktop).  It has **no dependency on
-any UI framework** — only the project's own core modules.
+This package contains shared domain logic used by the FunscriptForge backend
+across deployment targets (the Tauri desktop app via `cli.py`, and a future
+HTTP/web server).  It has **no dependency on any UI framework** — only the
+project's own core modules.
 
 ## Contents
 
@@ -73,10 +74,8 @@ All 60 tests run in < 0.1 s with no external dependencies.
 
 | Target | Location | Imports from here |
 |---|---|---|
-| Streamlit (local) | `ui/streamlit/` | ✓ |
-| Streamlit Cloud | `ui/streamlit/` | ✓ |
-| Flask/web (SaaS) | `ui/web/` | ✓ (planned) |
-| Local desktop | `ui/local/` | ✓ (planned) |
+| Tauri desktop app (via `cli.py` / frozen `forge-cli`) | `ui/web/` + `cli.py` | ✓ |
+| HTTP/web server (SaaS) | `ui/web/` | ✓ (planned) |
 
 ---
 
