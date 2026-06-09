@@ -2146,6 +2146,40 @@ pub async fn reveal_path(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Open an external URL in the user's default browser. The About dialog's links
+/// use this — a plain `<a target="_blank">` does nothing inside the Tauri
+/// webview. Only http(s) URLs are accepted: the About links are hardcoded
+/// constants, so this scheme check is belt-and-suspenders, not user-facing.
+#[tauri::command]
+pub async fn open_external(url: String) -> Result<(), String> {
+    let lower = url.to_ascii_lowercase();
+    if !(lower.starts_with("https://") || lower.starts_with("http://")) {
+        return Err(format!("refusing to open non-http(s) url: {}", url));
+    }
+    #[cfg(windows)]
+    let mut cmd = {
+        // rundll32 hands the URL to the registered protocol handler (the default
+        // browser) — no console-window flash and no shell parsing of the URL.
+        let mut c = std::process::Command::new("rundll32");
+        c.arg("url.dll,FileProtocolHandler").arg(&url);
+        c
+    };
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("open");
+        c.arg(&url);
+        c
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut cmd = {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(&url);
+        c
+    };
+    cmd.spawn().map_err(|e| format!("open url {}: {}", url, e))?;
+    Ok(())
+}
+
 /// Locate a sibling ForgePlayer checkout (dev launcher). Returns
 /// `(python_exe, main_py)` — the venv interpreter if present, else system
 /// python. Resolution order: `FORGEPLAYER_ROOT` env override, then a

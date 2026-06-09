@@ -544,6 +544,16 @@ export function revealPath(path) {
   return call('reveal_path', { path }, () => Promise.resolve(null));
 }
 
+/** Open an external URL in the user's default browser. The About dialog uses
+ *  this — a plain `<a target="_blank">` does nothing inside the Tauri webview.
+ *  Browser mode → window.open. */
+export function openExternal(url) {
+  return call('open_external', { url }, () => {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return Promise.resolve(null);
+  });
+}
+
 /** Launch ForgePlayer (the LQR player) as an Export hand-off. Best-effort dev
  *  launcher — locates a sibling forgeplayer/ checkout (or FORGEPLAYER_ROOT).
  *  ForgePlayer has no `.forge` importer yet, so the caller also reveals the

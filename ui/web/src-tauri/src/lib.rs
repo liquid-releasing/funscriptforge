@@ -52,6 +52,7 @@ pub fn run() {
             commands::export_write,
             commands::import_forge_bundle,
             commands::reveal_path,
+            commands::open_external,
             commands::open_in_forgeplayer,
             commands::list_event_recipes,
             commands::edger_export,

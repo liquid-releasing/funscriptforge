@@ -8,6 +8,7 @@
 
 import { Button, Icon, Pill } from 'forgemoment';
 import { APP_VERSION } from '../appVersion.js';
+import { openExternal } from '../api/forge.js';
 
 const TAGLINE = 'The professional post-processor for haptic script creators.';
 const GITHUB = 'https://github.com/liquid-releasing/funscriptforge';
@@ -218,6 +219,7 @@ function LinkList({ items }) {
           href={item.href}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={(e) => { e.preventDefault(); openExternal(item.href); }}
           style={{
             display: 'grid',
             gridTemplateColumns: '20px 1fr 14px',
@@ -291,6 +293,7 @@ function Acknowledgements() {
           href={c.href}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={(e) => { e.preventDefault(); openExternal(c.href); }}
           style={{
             display: 'block', padding: '8px 11px',
             background: 'var(--surface-2)',

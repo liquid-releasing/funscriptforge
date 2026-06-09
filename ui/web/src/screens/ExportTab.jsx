@@ -43,8 +43,16 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
   const canWrite = !!path && !isSample;
   const hasMedia = !!project?.mediaPath;
 
-  // Disk format (the old loose/forge mode) now lives on the disk destination.
-  const [mode, setMode] = useState('forge');
+  // Disk shape — MULTI-select. One Export can write a .forge bundle AND a loose
+  // output folder (each is its own write). At least one must stay selected.
+  const [shapes, setShapes] = useState(() => new Set(['forge']));
+  const modes = useMemo(() => ['forge', 'loose'].filter((m) => shapes.has(m)), [shapes]);
+  const toggleShape = (shape) => setShapes((s) => {
+    const next = new Set(s);
+    if (next.has(shape)) { if (next.size > 1) next.delete(shape); } // keep ≥1
+    else next.add(shape);
+    return next;
+  });
   const [stem, setStem] = useState(projectStem);
   // Destination folder. null = the project folder (the default, == where the
   // CLI writes when --out is omitted). A user-picked folder overrides it so you
@@ -63,8 +71,8 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
   // folder you picked for A.
   useEffect(() => { setOutDir(null); }, [path]);
   const folder = outDir || projectFolder;
-  const outName = mode === 'forge' ? `${stem}.forge` : `${stem}.output`;
-  const outPath = folder ? `${folder}/${outName}` : outName;
+  const nameForShape = (shape) => (shape === 'forge' ? `${stem}.forge` : `${stem}.output`);
+  const pathForShape = (shape) => (folder ? `${folder}/${nameForShape(shape)}` : nameForShape(shape));
 
   const onPickFolder = async () => {
     const picked = await pickFolder(folder || undefined);
@@ -98,13 +106,19 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
   );
 
   const [writing, setWriting] = useState(false);
-  const [result, setResult] = useState(null);
+  // One write per selected shape → an array of results. `primary` is the one we
+  // hand to single-target actions (Reveal / ForgePlayer): the .forge bundle if
+  // present, else the first written.
+  const [results, setResults] = useState(null);
+  const primary = useMemo(() => {
+    if (!results || !results.length) return null;
+    return results.find((r) => r.shape === 'forge') || results[0];
+  }, [results]);
   const [writeError, setWriteError] = useState(null);
   const [launching, setLaunching] = useState(false);
 
   const ctx = useMemo(() => ({
     stem,
-    mode,
     hasMedia,
     actionCount: project?.actionCount ?? (project?.actions?.length ?? 0),
     stampedStations,
@@ -112,7 +126,7 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
     estimStamped: stampedStations.includes('estim3p'),
     stimWav: options.stimWav,
     stimMp3: options.stimMp3,
-  }), [stem, mode, hasMedia, project, stampedStations, options.stimWav, options.stimMp3]);
+  }), [stem, hasMedia, project, stampedStations, options.stimWav, options.stimMp3]);
 
   const targets = useMemo(() => TARGET_GROUPS.map((t) => ({ ...t, ...t.derive(ctx) })), [ctx]);
   // Which target groups are checked ("what's in the bundle"). Default = all in.
@@ -126,11 +140,12 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
   const excludeIds = TARGET_GROUPS.filter((t) => !kept.has(t.id)).map((t) => t.id);
   const readyCount = targets.filter((t) => t.state === 'ready' || t.state === 'auto' || t.state === 'present').length;
 
-  const launchForgePlayer = async (revealAfter) => {
+  const launchForgePlayer = async (revealAfter, target) => {
+    const t = target || primary;
     setLaunching(true);
     try {
-      await openInForgePlayer(result?.path || path);
-      if (revealAfter && result?.path) await revealPath(result.path);
+      await openInForgePlayer(t?.path || path);
+      if (revealAfter && t?.path) await revealPath(t.path);
     } catch (e) {
       setWriteError(String(e?.message || e));
     } finally {
@@ -138,10 +153,12 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
     }
   };
 
+  const shapeLabel = (s) => (s === 'forge' ? 'the .forge bundle' : 'the loose folder');
+
   const doWrite = async () => {
-    if (!canWrite) return;
-    setWriting(true); setWriteError(null); setResult(null);
-    setBusy({ message: `Export — packaging ${mode === 'forge' ? 'the .forge bundle' : 'the loose folder'}…` });
+    if (!canWrite || !modes.length) return;
+    setWriting(true); setWriteError(null); setResults(null);
+    setBusy({ message: `Export — packaging ${modes.map(shapeLabel).join(' + ')}…` });
     // Export streams per-step progress over `ff:progress` (motion → stations →
     // thumbnails → audio → packaging). Pipe each line into the footer so a slow
     // export (unstamped-station generation, stim-audio render) visibly advances.
@@ -157,26 +174,33 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
       }
     } catch { /* listener is best-effort; the export still runs */ }
     try {
-      const res = await exportWrite(path, {
-        mode,
-        // Only send --out when the user picked a folder; otherwise let the CLI
-        // use its default (next to the source), which equals projectFolder.
-        out: outDir ? outPath : null,
-        stem: stem !== projectStem ? stem : null,
-        media: project?.mediaPath || null,
-        blendSeams: options.blendSeams,
-        finalSmooth: options.finalSmooth,
-        stimWav: options.stimWav,
-        stimMp3: options.stimMp3,
-        includeMedia: options.includeMedia,
-        exclude: excludeIds,
-      });
-      if (!res) { setWriteError('Export is unavailable in browser mode.'); return; }
-      setResult(res);
-      if (toForgePlayer && res.path) {
+      // One write per selected shape (the CLI takes a single --mode). Sequential
+      // so the footer progress reads cleanly; each lands as its own snapshot.
+      const written = [];
+      for (const m of modes) {
+        const res = await exportWrite(path, {
+          mode: m,
+          // Only send --out when the user picked a folder; otherwise let the CLI
+          // use its default (next to the source), which equals projectFolder.
+          out: outDir ? pathForShape(m) : null,
+          stem: stem !== projectStem ? stem : null,
+          media: project?.mediaPath || null,
+          blendSeams: options.blendSeams,
+          finalSmooth: options.finalSmooth,
+          stimWav: options.stimWav,
+          stimMp3: options.stimMp3,
+          includeMedia: options.includeMedia,
+          exclude: excludeIds,
+        });
+        if (!res) { setWriteError('Export is unavailable in browser mode.'); return; }
+        written.push({ ...res, shape: m });
+      }
+      setResults(written);
+      if (toForgePlayer) {
         // Hand off: launch the player, then reveal the bundle so the user can
         // drop it into a stim slot (no .forge importer in ForgePlayer yet).
-        await launchForgePlayer(true);
+        const forgeRes = written.find((r) => r.shape === 'forge') || written[0];
+        if (forgeRes?.path) await launchForgePlayer(true, forgeRes);
       }
     } catch (e) {
       setWriteError(String(e?.message || e));
@@ -197,7 +221,7 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
     );
   }
 
-  const destLabel = mode === 'forge' ? '.forge bundle' : 'loose folder';
+  const destLabel = modes.map((m) => (m === 'forge' ? '.forge bundle' : 'loose folder')).join(' + ');
   const destSummary = toForgePlayer ? `${destLabel} · ForgePlayer` : destLabel;
 
   return (
@@ -229,9 +253,9 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
         alignItems: 'start',
       }}>
         <DiskDestination
-          mode={mode} onMode={setMode}
+          shapes={shapes} onToggleShape={toggleShape} modes={modes}
           stem={stem} onStem={setStem}
-          folder={folder} outName={outName}
+          folder={folder} nameForShape={nameForShape}
           isCustom={!!outDir}
           onPickFolder={onPickFolder}
           onResetFolder={() => setOutDir(null)}
@@ -244,22 +268,23 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
       <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>applied during write</span>}>
         Options
       </SectionLabel>
-      <Options options={options} onChange={setOptions} estimStamped={ctx.estimStamped} hasMedia={hasMedia} />
+      <Options options={options} onChange={setOptions} estimExportable={kept.has('estim')} hasMedia={hasMedia} />
 
       {/* ACTIONS — the verbs */}
       <ActionsRow
         destSummary={destSummary}
         readyCount={keptCount}
-        canWrite={canWrite && keptCount > 0}
+        canWrite={canWrite && keptCount > 0 && modes.length > 0}
         isSample={isSample}
         writing={writing}
         launching={launching}
-        result={result}
+        results={results}
+        primary={primary}
         error={writeError}
         toForgePlayer={toForgePlayer}
         onWrite={doWrite}
-        onReveal={() => result?.path && revealPath(result.path)}
-        onCopy={() => result?.path && navigator.clipboard?.writeText(result.path)}
+        onReveal={() => primary?.path && revealPath(primary.path)}
+        onCopy={() => results?.length && navigator.clipboard?.writeText(results.map((r) => r.path).join('\n'))}
         onForgePlayer={() => launchForgePlayer(true)}
       />
     </div>
@@ -462,28 +487,27 @@ function DestShell({ color, icon, label, right, children, on = true }) {
   );
 }
 
-function DiskDestination({ mode, onMode, stem, onStem, folder, outName, isCustom, onPickFolder, onResetFolder }) {
-  const fullPath = `${folder || '—'}/${outName}`;
+function DiskDestination({ shapes, onToggleShape, modes, stem, onStem, folder, nameForShape, isCustom, onPickFolder, onResetFolder }) {
   return (
     <DestShell color="#4dabf7" icon="save" label="Disk"
                right={<Pill tone={isCustom ? 'success' : 'info'} dot>{isCustom ? 'custom folder' : 'project folder'}</Pill>}>
       <p style={{ fontSize: 11.5, color: 'var(--text-dim)', margin: 0, lineHeight: 1.45 }}>
-        Choose the shape, then where it lands:
+        Pick one or both shapes, then where they land:
       </p>
-      <Segmented
-        value={mode}
-        onChange={onMode}
+      <MultiSegmented
+        selected={shapes}
+        onToggle={onToggleShape}
         options={[
           { value: 'forge', label: '.forge bundle', hint: 'single zip · backup + re-import + sharing' },
           { value: 'loose', label: 'Output folder', hint: 'device folders + README, for any player' },
         ]}
       />
-      {/* Resolved output path — shown BEFORE writing so "where did it go?"
+      {/* Resolved output path(s) — shown BEFORE writing so "where did it go?"
           never comes up. The folder is editable; the filename is derived. */}
       <div style={{ paddingTop: 8, borderTop: '1px dashed var(--border)', display: 'flex', flexDirection: 'column', gap: 5 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 }}>
-            Lands here
+            {modes.length > 1 ? 'Lands here · both' : 'Lands here'}
           </span>
           {isCustom && (
             <button onClick={(e) => { e.stopPropagation(); onResetFolder?.(); }}
@@ -500,15 +524,20 @@ function DiskDestination({ mode, onMode, stem, onStem, folder, outName, isCustom
             <Icon name="folder" size={10} /> Change…
           </button>
         </div>
-        <span className="mono" title={fullPath}
-              style={{ fontSize: 10.5, color: 'var(--text-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {fullPath}
-        </span>
+        {modes.map((m) => {
+          const fullPath = `${folder || '—'}/${nameForShape(m)}`;
+          return (
+            <span key={m} className="mono" title={fullPath}
+                  style={{ fontSize: 10.5, color: 'var(--text-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {fullPath}
+            </span>
+          );
+        })}
         <span style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>
           Never overwrites — adds (1), (2)… if one's already there. Each export is a new snapshot.
         </span>
       </div>
-      {mode === 'loose' && (
+      {shapes.has('loose') && (
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-muted)' }}>
           stem
           <input
@@ -576,21 +605,34 @@ function CheckboxSquare({ checked, color }) {
   );
 }
 
-function Segmented({ value, onChange, options }) {
+// Multi-select shape toggle — each option is an independent checkbox-button, so
+// .forge bundle and Output folder can both be on. (Replaces the old single-pick
+// Segmented; at least one stays selected, enforced by the parent toggle.)
+function MultiSegmented({ selected, onToggle, options }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${options.length}, 1fr)`, gap: 6 }}>
       {options.map((o) => {
-        const sel = o.value === value;
+        const sel = selected.has(o.value);
         return (
-          <button key={o.value} onClick={(e) => { e.stopPropagation(); onChange(o.value); }} style={{
-            display: 'flex', flexDirection: 'column', gap: 1, padding: '7px 9px', borderRadius: 6,
+          <button key={o.value} onClick={(e) => { e.stopPropagation(); onToggle(o.value); }} style={{
+            display: 'flex', flexDirection: 'column', gap: 3, padding: '7px 9px', borderRadius: 6,
             background: sel ? 'rgba(77,171,247,0.12)' : 'var(--surface-2, #12151e)',
             border: `1px solid ${sel ? '#4dabf7' : 'var(--border)'}`,
             color: sel ? '#4dabf7' : 'var(--text-soft)', cursor: 'pointer',
             fontFamily: 'inherit', textAlign: 'left',
           }}>
-            <span style={{ fontSize: 12, fontWeight: 700 }}>{o.label}</span>
-            <span style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>{o.hint}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{
+                width: 13, height: 13, borderRadius: 3, flexShrink: 0,
+                border: `1.5px solid ${sel ? '#4dabf7' : 'var(--border-strong, var(--border))'}`,
+                background: sel ? '#4dabf7' : 'transparent',
+                display: 'grid', placeItems: 'center',
+              }}>
+                {sel && <Icon name="check" size={9} style={{ color: '#fff' }} />}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 700 }}>{o.label}</span>
+            </span>
+            <span style={{ fontSize: 9.5, color: sel ? 'rgba(77,171,247,0.85)' : 'var(--text-dim)' }}>{o.hint}</span>
           </button>
         );
       })}
@@ -604,12 +646,12 @@ function Segmented({ value, onChange, options }) {
 const OPTION_DEFS = [
   { id: 'blendSeams', label: 'Blend seams', desc: 'Smooths high-velocity jumps only at phrase boundaries.' },
   { id: 'finalSmooth', label: 'Final smooth', desc: 'Light global low-pass that removes residual sharp edges.' },
-  { id: 'stimWav', label: 'Stim audio · WAV', desc: 'Pre-render e-stim channels to stereo WAV (lossless, ~10 MB/min). Needs a stamped e-stim station.', estim: true },
-  { id: 'stimMp3', label: 'Stim audio · MP3', desc: 'Same render as MP3 (compact, the common real-world format). Needs a stamped e-stim station.', estim: true },
+  { id: 'stimWav', label: 'Stim audio · WAV', desc: 'Pre-render the e-stim channels to stereo WAV (lossless, ~10 MB/min). Renders from the stamped E-Stim station, or the channels auto-generated from your Channels characters.', estim: true },
+  { id: 'stimMp3', label: 'Stim audio · MP3', desc: 'Same render as MP3 (compact, the common real-world format). Renders from the stamped E-Stim station, or the auto-generated channels.', estim: true },
   { id: 'includeMedia', label: 'Include source media', desc: 'Embed the video/audio for a standalone bundle (big — GBs). Off = lean bundle that relinks to the original on disk (the manifest records its name + size).', media: true },
 ];
 
-function Options({ options, onChange, estimStamped, hasMedia }) {
+function Options({ options, onChange, estimExportable, hasMedia }) {
   const toggle = (id) => onChange((p) => ({ ...p, [id]: !p[id] }));
   return (
     <div style={{
@@ -617,8 +659,8 @@ function Options({ options, onChange, estimStamped, hasMedia }) {
       display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8,
     }}>
       {OPTION_DEFS.map((o) => {
-        const disabled = (o.estim && !estimStamped) || (o.media && !hasMedia);
-        const disabledHint = o.media ? 'attach media first' : 'stamp e-stim first';
+        const disabled = (o.estim && !estimExportable) || (o.media && !hasMedia);
+        const disabledHint = o.media ? 'attach media first' : 'include e-stim first';
         const on = !!options[o.id] && !disabled;
         return (
           <label key={o.id} style={{
@@ -648,9 +690,12 @@ function Options({ options, onChange, estimStamped, hasMedia }) {
 // ACTIONS
 // ──────────────────────────────────────────────────────────────
 function ActionsRow({
-  destSummary, readyCount, canWrite, isSample, writing, launching, result, error,
+  destSummary, readyCount, canWrite, isSample, writing, launching, results, primary, error,
   toForgePlayer, onWrite, onReveal, onCopy, onForgePlayer,
 }) {
+  const wrote = !!(results && results.length);
+  const totalArtifacts = wrote ? results.reduce((n, r) => n + (r.artifacts || 0), 0) : 0;
+  const stations = primary?.stations?.length || 0;
   return (
     <>
       <SectionLabel>Actions</SectionLabel>
@@ -659,26 +704,27 @@ function ActionsRow({
         background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10,
         display: 'flex', alignItems: 'center', gap: 8,
       }}>
-        <Button kind="ghost" size="sm" icon="folder-open" disabled={!result} onClick={onReveal}>Reveal</Button>
-        <Button kind="ghost" size="sm" icon="copy" disabled={!result} onClick={onCopy}>Copy path</Button>
-        <Button kind="ghost" size="sm" icon="play" disabled={!result || launching} onClick={onForgePlayer}>
+        <Button kind="ghost" size="sm" icon="folder-open" disabled={!wrote} onClick={onReveal}>Reveal</Button>
+        <Button kind="ghost" size="sm" icon="copy" disabled={!wrote} onClick={onCopy}>Copy path</Button>
+        <Button kind="ghost" size="sm" icon="play" disabled={!wrote || launching} onClick={onForgePlayer}>
           {launching ? 'Launching…' : 'Open in ForgePlayer →'}
         </Button>
         <span style={{ flex: 1 }} />
         {error && (
           <span style={{ fontSize: 11, color: '#ff5470', maxWidth: 380, textAlign: 'right' }}>{error}</span>
         )}
-        {result && !error && (
+        {wrote && !error && (
           <span style={{ fontSize: 11, color: '#3ed598', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Icon name="check" size={12} />
-            Wrote {result.artifacts} file{result.artifacts === 1 ? '' : 's'}
-            {result.stations?.length ? ` · ${result.stations.length} station${result.stations.length === 1 ? '' : 's'}` : ''}
-            {result.manifest?.project_version ? ` · snapshot v${result.manifest.project_version}` : ''}
+            Wrote {totalArtifacts} file{totalArtifacts === 1 ? '' : 's'}
+            {results.length > 1 ? ` across ${results.length} outputs` : ''}
+            {stations ? ` · ${stations} station${stations === 1 ? '' : 's'}` : ''}
+            {primary?.manifest?.project_version ? ` · snapshot v${primary.manifest.project_version}` : ''}
             {' → '}
-            <span className="mono" style={{ color: 'var(--text-soft)' }}>{shortPath(result.path)}</span>
+            <span className="mono" style={{ color: 'var(--text-soft)' }}>{shortPath(primary.path)}</span>
           </span>
         )}
-        {!result && !error && !canWrite && (
+        {!wrote && !error && !canWrite && (
           <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
             {isSample ? 'Export needs a real project on disk.' : 'Open a project to export.'}
           </span>
