@@ -1058,8 +1058,14 @@ def _next_available_path(base: Path) -> Path:
     """
     if not base.exists():
         return base
-    suffix = base.suffix  # ".forge" for a bundle file; "" for a loose folder
-    stem = base.name[:-len(suffix)] if suffix else base.name
+    # Files version inside the extension (scene.forge -> scene (1).forge);
+    # directories version the whole name (scene.output -> scene.output (1)),
+    # since a folder's trailing ".output" is identity, not an extension.
+    if base.is_dir():
+        suffix, stem = "", base.name
+    else:
+        suffix = base.suffix
+        stem = base.name[:-len(suffix)] if suffix else base.name
     n = 1
     while True:
         cand = base.parent / f"{stem} ({n}){suffix}"
@@ -1118,6 +1124,111 @@ def _write_project_identity(target, ident: dict) -> None:
     p.write_text(json.dumps(ident, indent=2), encoding="utf-8")
 
 
+# Loose-output organization: device/player-named folders, so a user opening
+# `<stem>.output/` finds files by what they OWN, not by file type. The .forge
+# bundle keeps the flat machine layout (stations/<id>/) that import + the
+# assembler read; this human view is loose-mode only.
+_STATION_FOLDER = {
+    "estim3p": "E-Stim", "handy": "Handy", "tcode": "MultiFunPlayer",
+    "osr2": "OSR2", "sr6": "SR6", "lovense": "Lovense", "vacuglide": "Vacuglide",
+}
+_STATION_PURPOSE = {
+    "estim3p": "E-stim channel set — load in restim or ForgePlayer.",
+    "handy": "Clamped stroke script tuned for The Handy.",
+    "tcode": "Multi-axis set — point MultiFunPlayer or XTPlayer at this folder (it auto-detects the axes).",
+    "osr2": "T-code multi-axis set for the OSR2.",
+    "sr6": "T-code multi-axis set for the SR6.",
+    "lovense": "Clamped script for Lovense devices.",
+    "vacuglide": "Clamped stroke script for Vacuglide / Autoblow.",
+}
+
+
+def _render_output_readme(stem: str, placed: list, manifest: dict) -> str:
+    """Plain-English index for the loose output folder — 'grab this for your
+    device'. Generated from what was actually placed, so it never lies."""
+    L = [f"{stem} — FunscriptForge output", "=" * 44, "",
+         "Grab the files for your device or player:", ""]
+    for label, names, purpose in placed:
+        L.append(f"  {'(this folder)' if label == '.' else label + '/'}")
+        L.append(f"      {purpose}")
+        for n in names:
+            L.append(f"        - {n}")
+        L.append("")
+    media = manifest.get("media") or {}
+    if media and not media.get("bundled"):
+        L.append(f"Source video/audio: {media.get('filename')} — NOT included here. Keep it")
+        L.append("next to these files for players that need the video.")
+        L.append("")
+    L.append("To keep editing this scene, open the sibling .forge bundle in")
+    L.append("FunscriptForge — it's the complete, re-editable backup.")
+    # Plain .txt for any viewer: normalize em-dashes to ASCII so old Windows
+    # editors don't render mojibake (only touches the dash, not e.g. stem text).
+    return ("\n".join(L) + "\n").replace("—", "-")
+
+
+def _emit_loose_output(staging: Path, out: Path, stem: str, manifest: dict) -> None:
+    """Reorganize the staged machine tree into a human-findable output folder:
+    the universal stroke at top, one folder per device/player, previews, and a
+    generated README. Playables only — re-edit metadata + the full bundle live
+    in the .forge backup."""
+    import shutil
+    out.mkdir(parents=True, exist_ok=True)
+    placed = []  # (folder_label, [filenames], purpose) — drives the README
+
+    motion = staging / "motion.funscript"
+    if motion.exists():
+        shutil.copy2(motion, out / f"{stem}.funscript")
+        placed.append((".", [f"{stem}.funscript"],
+                       "Universal stroke script — works with most 1-axis players."))
+
+    audio_dir = staging / "audio"
+    stations_dir = staging / "stations"
+    if stations_dir.is_dir():
+        for sdir in sorted(p for p in stations_dir.iterdir() if p.is_dir()):
+            sid = sdir.name
+            files = sorted(sdir.glob("*"))
+            if not files:
+                continue
+            label = _STATION_FOLDER.get(sid, sid.replace("_", " ").title())
+            dst = out / label
+            dst.mkdir(parents=True, exist_ok=True)
+            names = []
+            for fp in files:
+                shutil.copy2(fp, dst / fp.name)
+                names.append(fp.name)
+            if sid == "estim3p" and audio_dir.is_dir():  # stim audio rides with the channels
+                for ap in sorted(audio_dir.glob("*")):
+                    shutil.copy2(ap, dst / ap.name)
+                    names.append(ap.name)
+            placed.append((label, names, _STATION_PURPOSE.get(sid, f"Files for {label}.")))
+
+    ev = staging / "events.yml"
+    if ev.exists():
+        d = out / "Edger"
+        d.mkdir(exist_ok=True)
+        shutil.copy2(ev, d / f"{stem}.events.yml")
+        placed.append(("Edger", [f"{stem}.events.yml"],
+                       "Edger event script — load alongside the base script in Edger."))
+
+    thumbs = staging / "thumbnails"
+    if thumbs.is_dir():
+        names = []
+        d = out / "Preview"
+        d.mkdir(exist_ok=True)
+        for tp in sorted(thumbs.glob("*")):
+            shutil.copy2(tp, d / tp.name)
+            names.append(tp.name)
+        if names:
+            placed.append(("Preview", names, "Waveform + frame thumbnails for browsing / sharing."))
+
+    # Self-describing machine map (no re-edit metadata — that stays in .forge).
+    mp = staging / "manifest.ffmeta"
+    if mp.exists():
+        shutil.copy2(mp, out / "manifest.ffmeta")
+
+    (out / "README.txt").write_text(_render_output_readme(stem, placed, manifest), encoding="utf-8")
+
+
 @_cli_command
 def cmd_export(args):
     """Collect the project's outputs into a loose folder or a `.forge` zip.
@@ -1132,7 +1243,7 @@ def cmd_export(args):
       --mode loose  -> writes the tree into `<out>/` (a folder)
       --mode forge  -> writes `<out>` as a `.forge` zip (single-file deliverable)
 
-    `--out` defaults to `<dir>/<stem>_export/` (loose) or `<dir>/<stem>.forge`
+    `--out` defaults to `<dir>/<stem>.output/` (loose) or `<dir>/<stem>.forge`
     (forge). Reads the EFFECTIVE funscript (Rust resolves work-else-original).
     """
     import shutil
@@ -1377,10 +1488,10 @@ def cmd_export(args):
                         z.write(fp, fp.relative_to(staging).as_posix())
             result_path = str(out)
         else:
-            _emit_progress("Export — writing the loose folder…")
-            out = Path(args.out) if args.out else (Path(src).parent / f"{stem}_export")
+            _emit_progress("Export — writing the output folder…")
+            out = Path(args.out) if args.out else (Path(src).parent / f"{stem}.output")
             out = _next_available_path(out)  # never clobber a prior snapshot
-            shutil.copytree(staging, out)
+            _emit_loose_output(staging, out, stem, manifest)
             result_path = str(out)
 
         print(json.dumps({
@@ -1455,9 +1566,10 @@ def cmd_import(args):
                                  marking stamped stations accepted)
       manifest.ffmeta         -> <forge>/<stem>.ffmeta.json (load_project reads it)
 
-    Accepts either a `.forge` zip or a loose export folder. `--out` chooses the
-    destination folder (default: the bundle's own folder). Prints JSON with the
-    funscript path the caller should then load.
+    Accepts a `.forge` zip or an unzipped bundle folder (the machine layout with
+    motion.funscript at root) — NOT the human `<stem>.output/` deliverable.
+    `--out` chooses the destination folder (default: the bundle's own folder).
+    Prints JSON with the funscript path the caller should then load.
     """
     import shutil
     import tempfile
@@ -1470,7 +1582,9 @@ def cmd_import(args):
 
     staging = Path(tempfile.mkdtemp(prefix="ff_import_"))
     try:
-        # A `.forge` is a zip; a loose export is already an unpacked folder.
+        # A `.forge` is a zip; an unzipped bundle is already a folder. (The
+        # human `<stem>.output/` folder is NOT an import source — it's a
+        # device-organized deliverable; re-import the sibling .forge instead.)
         if src.is_dir():
             root = src
         else:
@@ -1505,6 +1619,12 @@ def cmd_import(args):
         # The motion track is the project's funscript — required to bootstrap.
         motion = root / "motion.funscript"
         if not motion.exists():
+            if (root / "README.txt").exists() or not manifest:
+                raise ValueError(
+                    "this doesn't look like a .forge bundle (no motion.funscript). "
+                    "If it's a `<stem>.output` folder, import the sibling .forge "
+                    "backup instead — the output folder is a one-way deliverable."
+                )
             raise ValueError(
                 "bundle has no motion.funscript (exported without the Strokers "
                 "target) — there is no stroke track to open as a project."
@@ -3270,7 +3390,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_exp.add_argument(
         "--out", metavar="PATH",
-        help="Output path (default: <dir>/<stem>_export/ for loose, <dir>/<stem>.forge for forge).",
+        help="Output path (default: <dir>/<stem>.output/ for loose, <dir>/<stem>.forge for forge).",
     )
     p_exp.add_argument("--stem", metavar="STEM", help="Bundle stem (default: source stem).")
     p_exp.add_argument("--effective", metavar="PATH", help="Edited (work) funscript to pack as motion; the positional arg stays the original (for stem/sidecars/generation).")
@@ -3287,7 +3407,7 @@ def build_parser() -> argparse.ArgumentParser:
         "import",
         help="Unpack a .forge bundle (or loose export folder) into a re-editable project on disk",
     )
-    p_imp.add_argument("bundle", help="Path to the .forge zip (or a loose export folder).")
+    p_imp.add_argument("bundle", help="Path to the .forge zip (or an unzipped bundle folder).")
     p_imp.add_argument("--out", metavar="DIR", help="Destination folder (default: the bundle's own folder).")
     p_imp.add_argument("--stem", metavar="STEM", help="Override the project stem (default: manifest stem).")
 

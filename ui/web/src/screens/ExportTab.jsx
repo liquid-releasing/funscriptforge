@@ -63,7 +63,7 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
   // folder you picked for A.
   useEffect(() => { setOutDir(null); }, [path]);
   const folder = outDir || projectFolder;
-  const outName = mode === 'forge' ? `${stem}.forge` : `${stem}_export`;
+  const outName = mode === 'forge' ? `${stem}.forge` : `${stem}.output`;
   const outPath = folder ? `${folder}/${outName}` : outName;
 
   const onPickFolder = async () => {
@@ -474,8 +474,8 @@ function DiskDestination({ mode, onMode, stem, onStem, folder, outName, isCustom
         value={mode}
         onChange={onMode}
         options={[
-          { value: 'forge', label: '.forge bundle', hint: 'single zip · LQR player + sharing' },
-          { value: 'loose', label: 'Loose files', hint: 'sidecars beside the funscript' },
+          { value: 'forge', label: '.forge bundle', hint: 'single zip · backup + re-import + sharing' },
+          { value: 'loose', label: 'Output folder', hint: 'device folders + README, for any player' },
         ]}
       />
       {/* Resolved output path — shown BEFORE writing so "where did it go?"

@@ -79,13 +79,47 @@ class TestExportCLI(unittest.TestCase):
         self.assertTrue(any(a.get("station") == "handy" for a in manifest["artifacts"]))
 
     def test_loose_folder(self):
+        # Loose output is the human, device-organized view: universal stroke at
+        # top, a Handy/ folder, manifest + README. (Machine layout — motion.funscript,
+        # stations/<id>/ — lives in the .forge bundle, not here.)
         self._stamp_handy()
         out = os.path.join(self.tmp, "scene_export")
         r = _run("export", self.main, "--mode", "loose", "--out", out)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertTrue(os.path.exists(os.path.join(out, "motion.funscript")))
+        self.assertTrue(os.path.exists(os.path.join(out, "scene.funscript")))
         self.assertTrue(os.path.exists(os.path.join(out, "manifest.ffmeta")))
-        self.assertTrue(os.path.exists(os.path.join(out, "stations", "handy")))
+        self.assertTrue(os.path.isdir(os.path.join(out, "Handy")))
+        self.assertTrue(os.path.exists(os.path.join(out, "README.txt")))
+
+    def test_loose_output_is_device_organized(self):
+        # Device folders + README + universal stroke at top; re-edit metadata
+        # (chapters.json) stays in the .forge backup, NOT the loose deliverable.
+        forge = os.path.join(self.tmp, ".scene.forge")
+        os.makedirs(forge, exist_ok=True)
+        with open(os.path.join(forge, "scene.chapters.json"), "w") as f:
+            json.dump({"chapters": [{"at_ms": 0, "end_ms": 9950}]}, f)
+        self._stamp_handy()
+        out = os.path.join(self.tmp, "human")
+        r = _run("export", self.main, "--mode", "loose", "--out", out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(os.path.exists(os.path.join(out, "scene.funscript")))
+        self.assertTrue(os.path.isdir(os.path.join(out, "Handy")))
+        readme = open(os.path.join(out, "README.txt"), encoding="utf-8").read()
+        self.assertIn("Handy", readme)
+        self.assertFalse(os.path.exists(os.path.join(out, "chapters.json")))
+        self.assertFalse(os.path.exists(os.path.join(out, "scene.chapters.json")))
+
+    def test_loose_default_is_dot_output_and_increments(self):
+        # Default loose destination is <stem>.output/; a second export versions
+        # the FOLDER name (scene.output -> scene.output (1)), not the extension.
+        r1 = _run("export", self.main, "--mode", "loose")
+        self.assertEqual(r1.returncode, 0, r1.stderr)
+        p1 = json.loads(r1.stdout)["path"]
+        self.assertTrue(p1.replace("\\", "/").endswith("scene.output"), p1)
+        r2 = _run("export", self.main, "--mode", "loose")
+        self.assertEqual(r2.returncode, 0, r2.stderr)
+        p2 = json.loads(r2.stdout)["path"]
+        self.assertTrue(p2.replace("\\", "/").endswith("scene.output (1)"), p2)
 
     def test_export_without_polish_still_packs_motion(self):
         out = os.path.join(self.tmp, "bare.forge")
@@ -342,15 +376,26 @@ class TestImportCLI(unittest.TestCase):
         passes = (yaml.safe_load(open(ppath, encoding="utf-8").read()) or {}).get("passes") or {}
         self.assertTrue(passes.get("handy", {}).get("accepted"))
 
-    def test_roundtrip_loose_folder_imports(self):
-        # A loose export folder imports identically to a .forge zip.
-        loose = os.path.join(self.tmp, "scene_export")
-        self.assertEqual(_run("export", self.main, "--mode", "loose", "--out", loose).returncode, 0)
-        dest = os.path.join(self.tmp, "imported_loose")
-        r = _run("import", loose, "--out", dest)
+    def test_import_from_unzipped_bundle_dir(self):
+        # An unzipped .forge (machine layout) imports identically to the zip.
+        bundle = self._export_forge()
+        unz = os.path.join(self.tmp, "unzipped")
+        with zipfile.ZipFile(bundle) as z:
+            z.extractall(unz)
+        dest = os.path.join(self.tmp, "imported_dir")
+        r = _run("import", unz, "--out", dest)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertTrue(os.path.exists(os.path.join(dest, "scene.funscript")))
         self.assertTrue(os.path.exists(os.path.join(dest, ".scene.forge", "scene.chapters.json")))
+
+    def test_import_rejects_output_folder(self):
+        # The human <stem>.output/ deliverable is NOT an import source — point
+        # the user at the .forge backup instead.
+        out = os.path.join(self.tmp, "scene.output")
+        self.assertEqual(_run("export", self.main, "--mode", "loose", "--out", out).returncode, 0)
+        r = _run("import", out, "--out", os.path.join(self.tmp, "nope2"))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn(".forge", r.stderr)
 
     def test_import_defaults_dest_to_bundle_folder(self):
         # No --out: extract beside the bundle.
