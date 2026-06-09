@@ -996,6 +996,89 @@ def _render_waveform_png(actions: list, out_path: Path, width: int = 480, height
         return False
 
 
+def _render_audio_png(audio_json_path: Path, out_path: Path, width: int = 480, height: int = 140) -> bool:
+    """Render the audio peak envelope (from `<stem>.audio.json`) as a PNG.
+    Media-free — reads the cached RMS-per-hop peaks sidecar. False on failure."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        doc = json.loads(Path(audio_json_path).read_text(encoding="utf-8"))
+        peaks = doc.get("peaks") or []
+        if not peaks:
+            return False
+        # Downsample to ~width bars (peak-per-bucket) for a compact card image.
+        n = len(peaks)
+        step = max(1, n // width)
+        env = [max(peaks[i:i + step]) for i in range(0, n, step)]
+        x = list(range(len(env)))
+        fig, ax = plt.subplots(figsize=(width / 100, height / 100), dpi=100)
+        fig.patch.set_facecolor("#0e1117")
+        ax.set_facecolor("#0e1117")
+        ax.fill_between(x, env, 0, color="#ffa94d", alpha=0.65, linewidth=0)
+        ax.set_ylim(0, 1.02)
+        ax.margins(x=0)
+        ax.axis("off")
+        fig.tight_layout(pad=0)
+        fig.savefig(out_path, dpi=100, facecolor=fig.get_facecolor())
+        plt.close(fig)
+        return out_path.exists()
+    except Exception as exc:
+        print(f"audio.png skipped: {exc}", file=sys.stderr)
+        return False
+
+
+def _render_spectrogram_png(spectro_json_path: Path, out_path: Path, width: int = 480, height: int = 140) -> bool:
+    """Render the mel spectrogram (from `<stem>.spectrogram.json` int8 cells) as
+    a magma PNG, low frequencies at the bottom. Media-free. False on failure."""
+    try:
+        import base64
+        import numpy as np
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        doc = json.loads(Path(spectro_json_path).read_text(encoding="utf-8"))
+        b64 = doc.get("cells_b64")
+        n_mels = int(doc.get("n_mels") or 0)
+        if not b64 or n_mels <= 0:
+            return False
+        raw = np.frombuffer(base64.b64decode(b64), dtype=np.int8).astype(np.float32)
+        n_frames = raw.size // n_mels
+        if n_frames == 0:
+            return False
+        cells = raw[: n_frames * n_mels].reshape(n_frames, n_mels).T  # (n_mels, n_frames)
+        fig, ax = plt.subplots(figsize=(width / 100, height / 100), dpi=100)
+        fig.patch.set_facecolor("#0e1117")
+        ax.imshow(cells, aspect="auto", origin="lower", cmap="magma", interpolation="nearest")
+        ax.axis("off")
+        fig.tight_layout(pad=0)
+        fig.savefig(out_path, dpi=100, facecolor=fig.get_facecolor())
+        plt.close(fig)
+        return out_path.exists()
+    except Exception as exc:
+        print(f"spectrogram.png skipped: {exc}", file=sys.stderr)
+        return False
+
+
+def _assessment_summary(funscript_path):
+    """Best-effort auto-metadata (pace / intensity / depth / mood / arc / variety
+    / tags) for the bundle manifest — makes the .forge self-describing for
+    library cards, sharing, the assembler, and cloud destinations. Recomputed
+    cheap from the funscript (no media); None on any failure."""
+    try:
+        from forge.metadata import derive_metadata
+        from assessment.analyzer import FunscriptAnalyzer
+        analyzer = FunscriptAnalyzer(config=AnalyzerConfig())
+        analyzer.load(str(funscript_path))
+        result = analyzer.analyze()
+        stats = result.to_stats_dict() if hasattr(result, "to_stats_dict") else {}
+        phrases = [p if isinstance(p, dict) else p.to_dict() for p in result.phrases]
+        return derive_metadata(stats, phrases)
+    except Exception as exc:
+        print(f"assessment summary skipped: {exc}", file=sys.stderr)
+        return None
+
+
 def _render_stim_audio(alpha: Path, beta: Path, out_path: Path, duration_s: float,
                        fmt: str = "wav") -> bool:
     """Render the stamped e-stim alpha/beta channels to a stereo audio file via
@@ -1387,10 +1470,17 @@ def cmd_export(args):
             if ev:
                 (staging / "events.yml").write_text(ev, encoding="utf-8")
                 artifacts.append({"path": "events.yml", "kind": "events"})
+            # Authoring + analysis sidecars. beats/audio are media-derived but
+            # CAN'T be regenerated without the source video, so they ride for
+            # downstream consumers (beat-sync players, the assembler's beat-
+            # aligned cuts, the audio preview image) — small. The big mel
+            # spectrogram stays a local cache (shipped only as a PNG below).
             for analysis, fname in (
                 ("chapters", f"{stem}.chapters.json"),
                 ("phrases", f"{stem}.phrases.json"),
                 ("characters", f"{stem}.characters.json"),
+                ("beats", f"{stem}.beats.json"),
+                ("audio", f"{stem}.audio.json"),
             ):
                 sp = fdir / fname
                 if sp.exists():
@@ -1402,8 +1492,17 @@ def cmd_export(args):
             _emit_progress("Export — rendering thumbnails…")
             thumbs = staging / "thumbnails"
             thumbs.mkdir(parents=True, exist_ok=True)
+            # Funscript core image (always). Plus the audio + spectrogram images
+            # rendered MEDIA-FREE from the cached sidecars (work even for a lean
+            # bundle with no source video) — the three previews the user wants.
             if _render_waveform_png(actions, thumbs / "waveform.png"):
-                artifacts.append({"path": "thumbnails/waveform.png", "kind": "thumbnail", "role": "waveform"})
+                artifacts.append({"path": "thumbnails/waveform.png", "kind": "thumbnail", "role": "funscript"})
+            _aj = fdir / f"{stem}.audio.json"
+            if _aj.exists() and _render_audio_png(_aj, thumbs / "audio.png"):
+                artifacts.append({"path": "thumbnails/audio.png", "kind": "thumbnail", "role": "audio"})
+            _sj = fdir / f"{stem}.spectrogram.json"
+            if _sj.exists() and _render_spectrogram_png(_sj, thumbs / "spectrogram.png"):
+                artifacts.append({"path": "thumbnails/spectrogram.png", "kind": "thumbnail", "role": "spectrogram"})
             if args.media and Path(args.media).exists():
                 chap_list = []
                 cj = fdir / f"{stem}.chapters.json"
@@ -1474,6 +1573,11 @@ def cmd_export(args):
         }
         if media_meta:
             manifest["media"] = media_meta
+        # Self-describing descriptor — pace/intensity/mood/arc/tags. Derived
+        # (recomputes on import), so it rides in the manifest, not as a file.
+        _assess = _assessment_summary(motion_src)
+        if _assess:
+            manifest["assessment"] = _assess
         (staging / "manifest.ffmeta").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
         # --- write output ---
@@ -1638,7 +1742,7 @@ def cmd_import(args):
 
         # Authoring sidecars — export flattened the stem (chapters.json); restore
         # the stem-prefixed name the loaders probe for (<stem>.chapters.json).
-        for kind in ("chapters", "phrases", "characters"):
+        for kind in ("chapters", "phrases", "characters", "beats", "audio"):
             sp = root / f"{kind}.json"
             if sp.exists():
                 shutil.copy2(sp, fdir / f"{stem}.{kind}.json")

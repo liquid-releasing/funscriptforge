@@ -262,6 +262,40 @@ class TestExportCLI(unittest.TestCase):
         self.assertIn("audio/stim.wav", names)
         self.assertIn("audio/stim.mp3", names)
 
+    def test_export_analysis_sidecars_and_preview_images(self):
+        # beats.json + audio.json ride for downstream; audio + spectrogram
+        # preview PNGs render media-free from the cached sidecars; the manifest
+        # carries the assessment summary (self-describing bundle).
+        import base64
+        forge = os.path.join(self.tmp, ".scene.forge")
+        os.makedirs(forge, exist_ok=True)
+        with open(os.path.join(forge, "scene.audio.json"), "w") as f:
+            json.dump({"version": "1.0", "hop_ms": 10, "duration_ms": 10000,
+                       "peaks": [abs(math.sin(i / 20)) * 0.9 for i in range(1000)],
+                       "peak_count": 1000}, f)
+        with open(os.path.join(forge, "scene.beats.json"), "w") as f:
+            json.dump({"version": "1.0", "bpm": 120,
+                       "beats": [i * 500 for i in range(20)],
+                       "downbeats": [i * 2000 for i in range(5)]}, f)
+        n_mels, n_frames = 64, 300
+        cells = bytes((i * 7) % 128 for i in range(n_mels * n_frames))
+        with open(os.path.join(forge, "scene.spectrogram.json"), "w") as f:
+            json.dump({"version": "1.0", "hop_ms": 23, "n_mels": n_mels, "n_frames": n_frames,
+                       "duration_ms": 7000, "fmax": 8000, "db_floor": -80.0, "db_ceiling": 0.0,
+                       "cells_b64": base64.b64encode(cells).decode()}, f)
+        out = os.path.join(self.tmp, "rich.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+            manifest = json.loads(z.read("manifest.ffmeta"))
+        self.assertIn("beats.json", names)
+        self.assertIn("audio.json", names)
+        self.assertIn("thumbnails/waveform.png", names)
+        self.assertIn("thumbnails/audio.png", names)
+        self.assertIn("thumbnails/spectrogram.png", names)
+        self.assertIn("assessment", manifest, "manifest missing self-describing assessment summary")
+
     def test_export_never_overwrites_increments(self):
         # Re-exporting to the same path must NOT clobber — it versions up.
         out = os.path.join(self.tmp, "dup.forge")
