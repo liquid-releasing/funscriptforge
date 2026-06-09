@@ -11,7 +11,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Emitter};
+use std::sync::OnceLock;
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::process::Command;
 
 #[derive(Serialize)]
@@ -373,32 +374,94 @@ struct CliMeta {
     auto_tags: Vec<String>,
 }
 
-// Generic cli.py runner. Resolves the venv python + script path from env
-// (FUNSCRIPTFORGE_ROOT / FUNSCRIPTFORGE_PYTHON), runs `cli.py <args...>` with
-// the project root as cwd, and returns stdout as a String. Non-zero exits
-// surface stderr in the error.
-async fn run_cli(args: &[&str]) -> Result<String, String> {
+// ── CLI backend resolution ────────────────────────────────────────────────
+// The Python backend runs two ways:
+//   • dev    — `<root>\.venv\Scripts\python.exe <root>\cli.py <args…>` (today's
+//              shape; FUNSCRIPTFORGE_ROOT / FUNSCRIPTFORGE_PYTHON override it).
+//   • bundled — a PyInstaller `forge-cli` onedir shipped as a Tauri resource;
+//              the program IS the frozen exe (no python / cli.py prefix), and a
+//              bundled `ffmpeg/` dir is prepended to PATH so videoflow's ffmpeg/
+//              ffprobe calls resolve to our copy.
+// Resolved ONCE at startup (`init_cli_invocation` from lib.rs setup), so the
+// many per-command callers read a global instead of threading AppHandle.
+#[derive(Clone)]
+struct CliInvocation {
+    program: PathBuf,
+    prefix_args: Vec<String>,
+    cwd: PathBuf,
+    extra_path: Option<PathBuf>,
+}
+
+static CLI: OnceLock<CliInvocation> = OnceLock::new();
+
+fn dev_cli_invocation() -> CliInvocation {
     let root = std::env::var("FUNSCRIPTFORGE_ROOT")
         .unwrap_or_else(|_| DEV_FUNSCRIPTFORGE_ROOT.to_string());
-    let python = std::env::var("FUNSCRIPTFORGE_PYTHON").unwrap_or_else(|_| {
-        format!(r"{}\.venv\Scripts\python.exe", root)
-    });
-    let cli_py = format!(r"{}\cli.py", root);
+    let python = std::env::var("FUNSCRIPTFORGE_PYTHON")
+        .unwrap_or_else(|_| format!(r"{}\.venv\Scripts\python.exe", root));
+    CliInvocation {
+        program: PathBuf::from(python),
+        prefix_args: vec![format!(r"{}\cli.py", root)],
+        cwd: PathBuf::from(&root),
+        extra_path: None,
+    }
+}
 
-    let mut cmd = Command::new(&python);
-    cmd.arg(&cli_py);
+/// Prefer a bundled `forge-cli` resource (production); fall back to the dev
+/// `.venv` python + cli.py. Called once from lib.rs `setup()`.
+pub fn init_cli_invocation(app: &AppHandle) {
+    let resolved = (|| {
+        let res = app.path().resource_dir().ok()?;
+        let dir = res.join("forge-cli");
+        let exe = dir.join(if cfg!(windows) { "forge-cli.exe" } else { "forge-cli" });
+        if !exe.is_file() {
+            return None;
+        }
+        let ffmpeg = res.join("ffmpeg");
+        Some(CliInvocation {
+            program: exe,
+            prefix_args: vec![],
+            cwd: dir,
+            extra_path: ffmpeg.is_dir().then_some(ffmpeg),
+        })
+    })()
+    .unwrap_or_else(dev_cli_invocation);
+    let _ = CLI.set(resolved);
+}
+
+fn cli_invocation() -> &'static CliInvocation {
+    CLI.get_or_init(dev_cli_invocation)
+}
+
+// Build a tokio Command for the resolved backend with `args` appended.
+fn cli_command(args: &[&str]) -> Command {
+    let inv = cli_invocation();
+    let mut cmd = Command::new(&inv.program);
+    cmd.args(&inv.prefix_args);
     for a in args {
         cmd.arg(a);
     }
-    let output = cmd
-        .current_dir(&root)
+    cmd.current_dir(&inv.cwd);
+    if let Some(dir) = &inv.extra_path {
+        // Prepend the bundled ffmpeg dir to PATH (videoflow shells ffmpeg/ffprobe).
+        let sep = if cfg!(windows) { ";" } else { ":" };
+        let existing = std::env::var("PATH").unwrap_or_default();
+        cmd.env("PATH", format!("{}{}{}", dir.display(), sep, existing));
+    }
+    cmd
+}
+
+// Generic backend runner: runs `<backend> <args…>`, returns stdout. Non-zero
+// exits surface stderr in the error.
+async fn run_cli(args: &[&str]) -> Result<String, String> {
+    let output = cli_command(args)
         .output()
         .await
-        .map_err(|e| format!("spawn python failed: {}", e))?;
+        .map_err(|e| format!("spawn forge-cli failed: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("cli.py {} exited non-zero: {}", args.first().unwrap_or(&""), stderr));
+        return Err(format!("cli {} exited non-zero: {}", args.first().unwrap_or(&""), stderr));
     }
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
@@ -414,13 +477,6 @@ async fn run_cli_with_progress(
     event_name: &str,
     args: &[&str],
 ) -> Result<String, String> {
-    let root = std::env::var("FUNSCRIPTFORGE_ROOT")
-        .unwrap_or_else(|_| DEV_FUNSCRIPTFORGE_ROOT.to_string());
-    let python = std::env::var("FUNSCRIPTFORGE_PYTHON").unwrap_or_else(|_| {
-        format!(r"{}\.venv\Scripts\python.exe", root)
-    });
-    let cli_py = format!(r"{}\cli.py", root);
-
     // Unique temp file for this run. PID + microseconds = unique enough
     // for concurrent commands; isolated from other apps' progress files.
     let pid = std::process::id();
@@ -433,11 +489,8 @@ async fn run_cli_with_progress(
     // Create empty so the poller can open it without racing the child.
     let _ = std::fs::write(&temp_path, "");
 
-    let mut cmd = Command::new(&python);
-    cmd.arg(&cli_py);
-    for a in args { cmd.arg(a); }
-    cmd.env("VIDEOFLOW_PROGRESS_FILE", &temp_path)
-       .current_dir(&root);
+    let mut cmd = cli_command(args);
+    cmd.env("VIDEOFLOW_PROGRESS_FILE", &temp_path);
 
     // Poller: tail the temp file, emit each new line as a Tauri event.
     // Cancelled via oneshot when the child exits. One final flush after

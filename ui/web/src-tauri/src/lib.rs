@@ -5,11 +5,14 @@ mod library;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .setup(|_app| {
+        .setup(|app| {
+            // Resolve the Python backend once: bundled forge-cli resource in a
+            // packaged build, else the dev .venv + cli.py.
+            commands::init_cli_invocation(app.handle());
             #[cfg(debug_assertions)]
             {
                 use tauri::Manager;
-                if let Some(window) = _app.get_webview_window("main") {
+                if let Some(window) = app.get_webview_window("main") {
                     window.open_devtools();
                 }
             }

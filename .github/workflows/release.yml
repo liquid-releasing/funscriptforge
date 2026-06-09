@@ -1,4 +1,15 @@
-name: Release Builds
+name: Release (Tauri)
+
+# Builds the Tauri desktop app + its PyInstaller-frozen Python backend
+# (forge-cli) and publishes installers to liquid-releasing/funscriptforge-releases.
+#
+# Shape (see internal/design + the release memory): the Rust shell calls a
+# bundled `forge-cli` resource (frozen cli.py + librosa/numba/scipy/videoflow +
+# funscript-tools), with a bundled ffmpeg on PATH. tauri.release.conf.json adds
+# the `bundle.resources` overlay so only the packaged build ships them.
+#
+# Windows-first: the dogfood + primary beta platform. macOS/Linux are a
+# follow-up (mainly per-platform static-ffmpeg sourcing + the unsigned-app note).
 
 on:
   push:
@@ -8,16 +19,16 @@ on:
 permissions:
   contents: write
 
+env:
+  PYTHON_VERSION: "3.12"
+
 jobs:
-  # ---------------------------------------------------------------------------
-  # Windows build
-  # ---------------------------------------------------------------------------
   build-windows:
     name: Build — Windows
     runs-on: windows-latest
 
     steps:
-      - name: Checkout funscript-updater
+      - name: Checkout funscriptforge
         uses: actions/checkout@v4
         with:
           path: funscript-updater
@@ -34,249 +45,104 @@ jobs:
           repository: liquid-releasing/forge-ui-components
           path: forge-ui-components
 
+      - name: Checkout videoflow (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/videoflow
+          path: videoflow
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies
+      - name: Install Python deps + freeze forge-cli
         working-directory: funscript-updater
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -r ui/streamlit/requirements.txt
-          pip install -r requirements-desktop.txt
-          pip install -r requirements-dev.txt
+          pip install -e ../videoflow
           pip install -e ../forge-ui-components
+          pip install onnxruntime pyinstaller
+          pyinstaller forge-cli.spec --noconfirm --clean
 
-      - name: Run tests
-        working-directory: funscript-updater
-        run: python cli.py test
-
-      - name: Build with PyInstaller
-        working-directory: funscript-updater
-        run: pyinstaller FunscriptForge.spec --noconfirm --clean
-
-      - name: Verify build
+      - name: Verify forge-cli runs
         working-directory: funscript-updater
         run: |
-          if (!(Test-Path "dist\FunscriptForge\FunscriptForge.exe")) {
-            Write-Error "Build artifact not found"
-            exit 1
-          }
+          if (!(Test-Path "dist\forge-cli\forge-cli.exe")) { Write-Error "forge-cli not built"; exit 1 }
+          & "dist\forge-cli\forge-cli.exe" list-characters --format json > $null
+          if ($LASTEXITCODE -ne 0) { Write-Error "forge-cli smoke test failed"; exit 1 }
 
-      - name: Zip artifact
+      - name: Fetch static ffmpeg
         working-directory: funscript-updater
-        run: Compress-Archive -Path dist\FunscriptForge -DestinationPath dist\FunscriptForge-windows.zip
+        run: |
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+          Invoke-WebRequest -Uri $url -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg_extract -Force
+          $bin = Get-ChildItem -Path ffmpeg_extract -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1 | Split-Path
+          New-Item -ItemType Directory -Force -Path ui\web\src-tauri\resources\ffmpeg | Out-Null
+          Copy-Item "$bin\ffmpeg.exe","$bin\ffprobe.exe" ui\web\src-tauri\resources\ffmpeg\
+
+      - name: Stage forge-cli into Tauri resources
+        working-directory: funscript-updater
+        run: |
+          New-Item -ItemType Directory -Force -Path ui\web\src-tauri\resources | Out-Null
+          Copy-Item -Recurse -Force dist\forge-cli ui\web\src-tauri\resources\forge-cli
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: funscript-updater/ui/web/src-tauri
+
+      - name: Install npm deps
+        working-directory: funscript-updater/ui/web
+        run: npm ci
+
+      - name: Tauri build (with bundled-resources overlay)
+        working-directory: funscript-updater/ui/web
+        run: npx tauri build --config src-tauri/tauri.release.conf.json
+
+      - name: Rename to stable filenames
+        working-directory: funscript-updater
+        shell: bash
+        run: |
+          mkdir -p dist-stable
+          BUNDLE="ui/web/src-tauri/target/release/bundle"
+          cp "$BUNDLE"/msi/*.msi   dist-stable/FunscriptForge-Setup-windows.msi
+          cp "$BUNDLE"/nsis/*.exe  dist-stable/FunscriptForge-Setup-windows.exe
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FunscriptForge-windows
-          path: funscript-updater/dist/FunscriptForge-windows.zip
+          name: funscriptforge-windows
+          if-no-files-found: error
+          path: funscript-updater/dist-stable/*
 
-  # ---------------------------------------------------------------------------
-  # macOS build
-  # ---------------------------------------------------------------------------
-  build-macos:
-    name: Build — macOS
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout funscript-updater
-        uses: actions/checkout@v4
-        with:
-          path: funscript-updater
-
-      - name: Checkout funscript-tools (sibling)
-        uses: actions/checkout@v4
-        with:
-          repository: liquid-releasing/funscript-tools
-          path: funscript-tools
-
-      - name: Checkout forge-ui-components (sibling)
-        uses: actions/checkout@v4
-        with:
-          repository: liquid-releasing/forge-ui-components
-          path: forge-ui-components
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        working-directory: funscript-updater
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r ui/streamlit/requirements.txt
-          pip install -r requirements-desktop.txt
-          pip install -r requirements-dev.txt
-          pip install -e ../forge-ui-components
-
-      - name: Run tests
-        working-directory: funscript-updater
-        run: python cli.py test
-
-      - name: Generate .icns icon
-        working-directory: funscript-updater
-        run: |
-          ICO_SRC="media/funscriptforge_icon.png"
-          ICNS_OUT="media/funscriptforge.icns"
-          if [ -f "$ICO_SRC" ] && [ ! -f "$ICNS_OUT" ]; then
-            ICONSET_DIR="$(mktemp -d)/FunscriptForge.iconset"
-            mkdir -p "$ICONSET_DIR"
-            for SIZE in 16 32 64 128 256 512; do
-              sips -z "$SIZE" "$SIZE" "$ICO_SRC" --out "$ICONSET_DIR/icon_${SIZE}x${SIZE}.png" 2>/dev/null
-              DOUBLE=$((SIZE * 2))
-              sips -z "$DOUBLE" "$DOUBLE" "$ICO_SRC" --out "$ICONSET_DIR/icon_${SIZE}x${SIZE}@2x.png" 2>/dev/null
-            done
-            iconutil -c icns "$ICONSET_DIR" -o "$ICNS_OUT"
-            rm -rf "$(dirname "$ICONSET_DIR")"
-            echo "Generated $ICNS_OUT"
-          fi
-
-      - name: Build with PyInstaller
-        working-directory: funscript-updater
-        run: pyinstaller FunscriptForge.spec --noconfirm --clean
-
-      - name: Verify build
-        working-directory: funscript-updater
-        run: |
-          if [ ! -d "dist/FunscriptForge.app" ] && [ ! -d "dist/FunscriptForge" ]; then
-            echo "Build artifact not found"
-            exit 1
-          fi
-
-      - name: Zip artifact
-        working-directory: funscript-updater
-        run: |
-          cd dist
-          if [ -d "FunscriptForge.app" ]; then
-            zip -r FunscriptForge-macos.zip FunscriptForge.app
-          else
-            zip -r FunscriptForge-macos.zip FunscriptForge
-          fi
-
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: FunscriptForge-macos
-          path: funscript-updater/dist/FunscriptForge-macos.zip
-
-  # ---------------------------------------------------------------------------
-  # Linux build
-  # ---------------------------------------------------------------------------
-  build-linux:
-    name: Build — Linux
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout funscript-updater
-        uses: actions/checkout@v4
-        with:
-          path: funscript-updater
-
-      - name: Checkout funscript-tools (sibling)
-        uses: actions/checkout@v4
-        with:
-          repository: liquid-releasing/funscript-tools
-          path: funscript-tools
-
-      - name: Checkout forge-ui-components (sibling)
-        uses: actions/checkout@v4
-        with:
-          repository: liquid-releasing/forge-ui-components
-          path: forge-ui-components
-
-      - name: Install system dependencies (PyWebView GTK backend)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            python3-gi \
-            gir1.2-gtk-3.0 \
-            gir1.2-webkit2-4.1 \
-            libgirepository1.0-dev \
-            libcairo2-dev
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        working-directory: funscript-updater
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r ui/streamlit/requirements.txt
-          pip install -r requirements-desktop.txt
-          pip install -r requirements-dev.txt
-          pip install -e ../forge-ui-components
-
-      - name: Run tests
-        working-directory: funscript-updater
-        run: python cli.py test
-
-      - name: Build with PyInstaller
-        working-directory: funscript-updater
-        run: pyinstaller FunscriptForge.spec --noconfirm --clean
-
-      - name: Verify build
-        working-directory: funscript-updater
-        run: |
-          if [ ! -f "dist/FunscriptForge/FunscriptForge" ]; then
-            echo "Build artifact not found"
-            exit 1
-          fi
-
-      - name: Create tarball
-        working-directory: funscript-updater
-        run: tar -czf dist/FunscriptForge-linux.tar.gz -C dist FunscriptForge
-
-      - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: FunscriptForge-linux
-          path: funscript-updater/dist/FunscriptForge-linux.tar.gz
-
-  # ---------------------------------------------------------------------------
-  # Create GitHub Release with all artifacts
-  # ---------------------------------------------------------------------------
   release:
     name: Publish Release
-    needs: [build-windows, build-macos, build-linux]
+    needs: [build-windows]
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download Windows artifact
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: FunscriptForge-windows
-          path: artifacts/
-
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: FunscriptForge-macos
-          path: artifacts/
-
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: FunscriptForge-linux
           path: artifacts/
 
       - name: Compute release name
         id: relname
         run: |
           TAG="${GITHUB_REF_NAME}"
-          # Strip leading "v" and turn "-alpha"/"-beta"/"-rc" into a spaced suffix
           STRIPPED="${TAG#v}"
-          NAME="FunscriptForge ${STRIPPED//-/ }"
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          echo "Release name: $NAME"
+          echo "name=FunscriptForge ${STRIPPED//-/ }" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -284,21 +150,34 @@ jobs:
           repository: liquid-releasing/funscriptforge-releases
           token: ${{ secrets.RELEASES_PAT }}
           name: ${{ steps.relname.outputs.name }}
+          tag_name: ${{ github.ref_name }}
           prerelease: false
+          generate_release_notes: true
+          append_body: true
           files: |
-            artifacts/FunscriptForge-windows.zip
-            artifacts/FunscriptForge-macos.zip
-            artifacts/FunscriptForge-linux.tar.gz
+            artifacts/funscriptforge-windows/FunscriptForge-Setup-windows.msi
+            artifacts/funscriptforge-windows/FunscriptForge-Setup-windows.exe
           body: |
-            > ⚠️ **Alpha release.** This build is under active development. Expect rough edges, incomplete features, and occasional breakage. Feedback is welcome.
+            > ⚠️ **Alpha — under active development.** Expect rough edges.
+
+            FunscriptForge — analyze, author, and shape funscripts + haptics for
+            e-stim, strokers, and multi-axis devices. Local desktop app.
 
             ## Downloads
-            - **Windows** — `FunscriptForge-windows.zip` — unzip and run `FunscriptForge.exe`
-            - **macOS** — `FunscriptForge-macos.zip` — unzip and open `FunscriptForge.app`
-            - **Linux** — `FunscriptForge-linux.tar.gz` — extract and run `FunscriptForge/FunscriptForge`
+            - **Windows** — `FunscriptForge-Setup-windows.msi` (recommended) or
+              `FunscriptForge-Setup-windows.exe` (NSIS). The app bundles its own
+              Python backend + ffmpeg — no separate install needed. Unsigned, so
+              Windows SmartScreen may warn on first run (More info → Run anyway).
 
-            See [the documentation](https://liquid-releasing.github.io/funscriptforge/) and [funscriptforge.com](https://funscriptforge.com) for usage.
+            macOS / Linux builds are coming in a follow-up.
 
-            Questions, bug reports, and feedback welcome in [our Discord](https://discord.gg/sZWCqgxY).
-          append_body: true
-          generate_release_notes: true
+      - name: Notify funscriptforge-web (best-effort)
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_PAT }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh api --method POST -H "Accept: application/vnd.github+json" \
+            /repos/liquid-releasing/funscriptforge-web/dispatches \
+            -f event_type='release-published' \
+            -f 'client_payload[tag]'="$TAG_NAME" \
+            || echo "::warning::funscriptforge-web dispatch failed (repo may not listen yet)"
