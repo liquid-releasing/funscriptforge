@@ -162,12 +162,12 @@ export function createChaptersSidecar(funscriptPath, n) {
  *  racing ChaptersTab manual click, or StrictMode double-invoke) merge into
  *  one Rust invocation. The orphan-process incident 2026-05-28 came from
  *  not having this guard. */
-export function analyzeChaptersWithVideoflow(funscriptPath, targetMinutes, mediaPath) {
+export function analyzeChaptersWithVideoflow(funscriptPath, targetMinutes, mediaPath, resume = false) {
   return dedupedCall(
-    `analyze_chapters_with_videoflow::${funscriptPath}`,
+    `analyze_chapters_with_videoflow::${funscriptPath}::${resume ? 'resume' : 'full'}`,
     () => call(
       'analyze_chapters_with_videoflow',
-      { funscriptPath, targetMinutes, mediaPath },
+      { funscriptPath, targetMinutes, mediaPath, resume },
       () => Promise.resolve(synthMockChapters(754000, 6)),
     ),
   );

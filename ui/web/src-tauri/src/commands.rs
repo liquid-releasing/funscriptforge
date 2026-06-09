@@ -723,6 +723,9 @@ pub async fn analyze_chapters_with_videoflow(
     // funscript's stem or live in the same folder. When provided, skip
     // the adjacent-stem scan and use this path directly.
     media_path: Option<String>,
+    // Resume after a killed analyze — pass --resume so videoflow skips any
+    // stage whose sidecar already exists instead of recomputing.
+    resume: Option<bool>,
 ) -> Result<Vec<ChapterRecord>, String> {
     let media = match media_path.filter(|p| !p.is_empty()) {
         Some(p) => p,
@@ -738,19 +741,18 @@ pub async fn analyze_chapters_with_videoflow(
     };
 
     let target = target_minutes.unwrap_or(5.5).to_string();
-    let stdout = run_cli_with_progress(
-        &app,
-        "ff:progress",
-        &[
-            "auto-chapter",
-            &media,
-            "--target-minutes",
-            &target,
-            "--format",
-            "json",
-        ],
-    )
-    .await?;
+    let mut args: Vec<&str> = vec![
+        "auto-chapter",
+        &media,
+        "--target-minutes",
+        &target,
+        "--format",
+        "json",
+    ];
+    if resume.unwrap_or(false) {
+        args.push("--resume");
+    }
+    let stdout = run_cli_with_progress(&app, "ff:progress", &args).await?;
 
     let parsed: CliChaptersAuto = serde_json::from_str(&stdout)
         .map_err(|e| format!("could not parse cli.py auto-chapter output: {}", e))?;

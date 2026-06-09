@@ -3297,6 +3297,7 @@ def cmd_auto_chapter(args):
             args.media,
             target_minutes=args.target_minutes,
             write_sidecar=not args.no_write,
+            resume=args.resume,
             on_progress=_make_stage_event_emitter(),
         )
     except AutoChapterError as exc:
@@ -3808,6 +3809,9 @@ def build_parser() -> argparse.ArgumentParser:
                       help="Average target chapter length in minutes (default: 5.5)")
     p_ac.add_argument("--no-write", action="store_true",
                       help="Skip writing <stem>.chapters.json (default: write it)")
+    p_ac.add_argument("--resume", action="store_true",
+                      help="Skip stages whose sidecar already exists "
+                           "(resume after a killed analyze) instead of recomputing")
     p_ac.add_argument("--format", choices=["table", "json"], default="table",
                       help="Output format (default: table)")
 

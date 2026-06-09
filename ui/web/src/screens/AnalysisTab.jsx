@@ -129,7 +129,12 @@ export default function AnalysisTab({
   // synthetic sample. The Rust command is idempotent — it shells out
   // to videoflow which checks sidecars itself — but skipping the call
   // when chapters already exist avoids a redundant round-trip.
-  const triggerAnalysis = useCallback(async () => {
+  const triggerAnalysis = useCallback(async (opts = {}) => {
+    // `resume: true` (from the Partial banner's Resume CTA) passes --resume so
+    // videoflow skips stages whose sidecar already exists instead of
+    // recomputing. Any other caller (auto-trigger, Re-analyze, Retry — some of
+    // which pass a DOM event here) runs a full pass.
+    const resume = opts?.resume === true;
     if (!projectExists || isSample) return;
     if (!isTauri()) return;
     if (!hasMedia) return; // no media → audio panels stay empty
@@ -141,9 +146,12 @@ export default function AnalysisTab({
     // Drive the global busy banner — App's ff:progress listener only
     // populates `busy.steps` while `busy` is set, so without this the
     // footer stays empty while the pipeline runs.
-    setBusy?.({ message: `Analyzing ${project.title ?? 'project'}…`, steps: [] });
+    setBusy?.({
+      message: `${resume ? 'Resuming' : 'Analyzing'} ${project.title ?? 'project'}…`,
+      steps: [],
+    });
     try {
-      const newChapters = await analyzeChaptersWithVideoflow(project.path, 5.5, project.mediaPath);
+      const newChapters = await analyzeChaptersWithVideoflow(project.path, 5.5, project.mediaPath, resume);
       // Lift the fresh chapter list back to App so other tabs (Chapters,
       // Patterns, Phrases) see it without a project reload. And refresh
       // audio sidecars so the panels that paint real data (next pass)
@@ -332,6 +340,17 @@ export default function AnalysisTab({
     onChaptersChange, setAppError, triggerAnalysis,
   ]);
 
+  // Resume — the Partial banner's default CTA. Unlike Re-analyze it does NOT
+  // wipe .forge/; it re-runs the pipeline with --resume so videoflow skips
+  // every stage whose sidecar already exists (the common "killed mid-analyze
+  // on a long source" case re-runs only what's missing).
+  const handleResume = useCallback(() => {
+    if (!projectExists || isSample) return;
+    if (!isTauri()) return;
+    if (analyzing) return;
+    triggerAnalysis({ resume: true });
+  }, [projectExists, isSample, analyzing, triggerAnalysis]);
+
   // Pull stanzas (videoflow) + phrases (FF) sidecars when a project
   // changes. KPIs + sub-tabs need to populate even when the trigger
   // effect skips reanalysis (project already has sidecars on disk).
@@ -490,6 +509,7 @@ export default function AnalysisTab({
           summary={analysisSummary}
           analyzing={analyzing}
           hasMedia={hasMedia}
+          onResume={handleResume}
           onReanalyze={handleReanalyzeRequest}
         />
 
@@ -683,11 +703,11 @@ const reanalyzeButtonStyle = {
 };
 
 // ─── AnalysisStateBanner ─────────────────────────────────────────
-// Renders only when state === 'partial'. Tells the user which
-// sidecars exist vs missing and offers Re-analyze as the (currently
-// only) recovery CTA. Resume slots in here as the default CTA once
-// videoflow gains per-stage skip-if-exists support.
-function AnalysisStateBanner({ state, summary, analyzing, hasMedia, onReanalyze }) {
+// Renders only when state === 'partial'. Tells the user which sidecars
+// exist vs missing and offers two CTAs: Resume (default — re-runs with
+// --resume so videoflow skips the stages already on disk) and Re-analyze
+// (escape hatch — wipes .forge/ and rebuilds from scratch).
+function AnalysisStateBanner({ state, summary, analyzing, hasMedia, onResume, onReanalyze }) {
   if (state !== 'partial') return null;
   if (analyzing) return null; // pipeline is running — banner would lie within seconds
   if (!hasMedia) return null;
@@ -710,21 +730,46 @@ function AnalysisStateBanner({ state, summary, analyzing, hasMedia, onReanalyze 
         </div>
         <div style={{ color: 'var(--text-muted)' }}>
           {done.length > 0 && <>Have: {done.join(', ')}. </>}
-          Missing: {missing.join(', ')}. Re-analyze rebuilds the missing pieces (and overwrites what's there).
+          Missing: {missing.join(', ')}. Resume finishes the missing pieces; Re-analyze rebuilds from scratch.
         </div>
       </div>
-      {onReanalyze && (
-        <button
-          onClick={onReanalyze}
-          style={reanalyzeButtonStyle}
-          title="Wipe cached sidecars + clips and run the pipeline from scratch"
-        >
-          Re-analyze
-        </button>
-      )}
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+        {onResume && (
+          <button
+            onClick={onResume}
+            style={resumeButtonStyle}
+            title="Re-run the pipeline, skipping the stages already on disk"
+          >
+            Resume
+          </button>
+        )}
+        {onReanalyze && (
+          <button
+            onClick={onReanalyze}
+            style={reanalyzeButtonStyle}
+            title="Wipe cached sidecars + clips and run the pipeline from scratch"
+          >
+            Re-analyze
+          </button>
+        )}
+      </div>
     </div>
   );
 }
+
+// Resume = primary CTA (accent fill); Re-analyze keeps the quieter outline.
+const resumeButtonStyle = {
+  padding: '6px 14px',
+  borderRadius: 6,
+  fontSize: 13,
+  fontWeight: 600,
+  background: 'var(--accent, #4a86c8)',
+  border: '1px solid var(--accent, #4a86c8)',
+  color: '#fff',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+};
 
 // ─── Analysis-state derivation ───────────────────────────────────
 // The four sidecar artifacts we track here. `chapters` is the gate
