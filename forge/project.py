@@ -126,23 +126,6 @@ def save_chain_funscript(project: dict, stage: str, data: dict) -> str:
     folder = _chain_folder(project)
     path = folder / f"_funscript_{stage}.json"
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    # Debug instrumentation: record what stage was written and the
-    # content hash so a "heatmap ≠ funscript" log can compare
-    # successive stages.
-    try:
-        from ui.streamlit.debug import is_debug_enabled, log_event, hash_actions
-        if is_debug_enabled():
-            log_event(
-                "save_chain_funscript",
-                f"Wrote {path.name}",
-                stage=stage,
-                path=str(path),
-                actions_count=len(data.get("actions") or []),
-                actions_hash=hash_actions(data.get("actions")),
-                project_name=project.get("name"),
-            )
-    except Exception:  # noqa: BLE001
-        pass
     return str(path)
 
 
