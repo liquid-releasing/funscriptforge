@@ -531,10 +531,10 @@ export function polishWrite(input, passes) {
 /** Export — collect the project's outputs into a loose folder or a `.forge`
  *  zip (the packager; Polish is the generator). Returns
  *  {mode, path, artifacts, stations, manifest}. Browser mode → null. */
-export function exportWrite(funscriptPath, { mode = 'forge', out = null, blendSeams = false, finalSmooth = false, stem = null, media = null, stimWav = false, stimMp3 = false, exclude = [] } = {}) {
+export function exportWrite(funscriptPath, { mode = 'forge', out = null, blendSeams = false, finalSmooth = false, stem = null, media = null, stimWav = false, stimMp3 = false, includeMedia = false, exclude = [] } = {}) {
   return call(
     'export_write',
-    { funscriptPath, mode, out, blendSeams, finalSmooth, stem, media, stimWav, stimMp3, exclude },
+    { funscriptPath, mode, out, blendSeams, finalSmooth, stem, media, stimWav, stimMp3, includeMedia, exclude },
     () => Promise.resolve(null),
   );
 }
@@ -550,6 +550,68 @@ export function revealPath(path) {
  *  exported file for the user to drop into a stim slot. Browser mode → null. */
 export function openInForgePlayer(path) {
   return call('open_in_forgeplayer', { path }, () => Promise.resolve(null));
+}
+
+/** Import — unpack a `.forge` bundle (or a loose export folder) into a
+ *  re-editable project on disk. The inverse of {@link exportWrite}: lays the
+ *  motion track down as `<dest>/<stem>.funscript` and restores sidecars,
+ *  stamped Polish stations, feel.yml, and the manifest into the forge dir.
+ *  `outDir` defaults (backend-side) to the bundle's own folder. Returns
+ *  `{ funscriptPath, stem, dest, imported, media }`; the caller loads
+ *  `funscriptPath` and prompts to attach media when `media` is null. Browser
+ *  mode → null. */
+export async function importForgeBundle(bundlePath, outDir = null) {
+  const res = await call(
+    'import_forge_bundle',
+    { bundlePath, outDir },
+    () => Promise.resolve(null),
+  );
+  if (!res) return null;
+  // Normalize the snake_case the CLI emits to the camelCase the UI expects.
+  return {
+    funscriptPath: res.funscript_path,
+    stem: res.stem,
+    dest: res.dest,
+    imported: res.imported || [],
+    media: res.media || null,
+    mediaExpected: res.media_expected || null,
+  };
+}
+
+/** Open a `.forge` bundle picker — the first-class onboarding input alongside
+ *  pickFunscriptFile. Returns the absolute path on desktop, null if cancelled
+ *  or in browser mode. */
+export async function pickForgeBundle(defaultPath) {
+  if (isTauri()) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      defaultPath: defaultPath || undefined,
+      filters: [
+        { name: 'Forge bundle', extensions: ['forge'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+    return selected ?? null;
+  }
+  return null;
+}
+
+/** Open a native folder picker (directory mode). Used by Export to choose a
+ *  destination other than the project folder. Returns the absolute folder path
+ *  on desktop, null if cancelled or in browser mode. */
+export async function pickFolder(defaultPath) {
+  if (isTauri()) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const selected = await open({
+      multiple: false,
+      directory: true,
+      defaultPath: defaultPath || undefined,
+    });
+    return selected ?? null;
+  }
+  return null;
 }
 
 /** Apply one transform over `spans`, writing the merged funscript to
@@ -642,6 +704,7 @@ function synthMockChapters(totalMs, n) {
  *  tab. The OS dialog exposes several type-group rows so the user can pick:
  *
  *  - .funscript   → load/replace the project's funscript (re-runs load_project)
+ *  - .forge       → unpack the bundle into a project, then open it
  *  - audio/video  → attach as the project's media file
  *  - .chapters.json → import a chapter sidecar (future)
  *  - .ffmeta / .ffmeta.json → import the combined manifest (future)
@@ -657,6 +720,7 @@ export async function pickProjectFile(defaultPath) {
       defaultPath: defaultPath || undefined,
       filters: [
         { name: 'Funscript',     extensions: ['funscript'] },
+        { name: 'Forge bundle',  extensions: ['forge'] },
         { name: 'Audio',         extensions: ['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac'] },
         { name: 'Video',         extensions: ['mp4', 'mkv', 'mov', 'avi', 'webm', 'm4v'] },
         { name: 'Project meta',  extensions: ['ffmeta', 'json'] },
@@ -918,10 +982,11 @@ export function attachMedia(funscriptPath, mediaPath) {
 }
 
 /** Classify a file by extension into the bucket the Project-tab picker
- *  cares about. Returns 'funscript' | 'media' | 'meta' | 'unknown'. */
+ *  cares about. Returns 'bundle' | 'funscript' | 'media' | 'meta' | 'unknown'. */
 export function classifyProjectFile(path) {
   if (!path) return 'unknown';
   const lower = String(path).toLowerCase();
+  if (lower.endsWith('.forge')) return 'bundle';
   if (lower.endsWith('.funscript')) return 'funscript';
   for (const ext of ['.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac',
                      '.mp4', '.mkv', '.mov', '.avi', '.webm', '.m4v']) {

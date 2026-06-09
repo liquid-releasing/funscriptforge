@@ -47,6 +47,7 @@ pub fn run() {
             commands::polish_read,
             commands::polish_write,
             commands::export_write,
+            commands::import_forge_bundle,
             commands::reveal_path,
             commands::open_in_forgeplayer,
             commands::list_event_recipes,

@@ -23,7 +23,7 @@ import {
   TextInput,
   SectionLabel,
 } from 'forgemoment';
-import { pickFunscriptFile, pickProjectFile, classifyProjectFile } from '../api/forge.js';
+import { pickFunscriptFile, pickProjectFile, classifyProjectFile, importForgeBundle, pickForgeBundle } from '../api/forge.js';
 import { loadProjectFiles, revealInExplorer } from '../api/library.js';
 import { generatePreviewActions, parseDurationToMs } from '../lib/funscriptPreview.js';
 import FunscriptChart from '../components/FunscriptChart.jsx';
@@ -125,6 +125,36 @@ export default function ProjectTab({
   // defaultPath = the project's own folder, so the dialog starts where
   // the user expects (the funscript's neighbourhood), not in whatever
   // folder the OS last remembered.
+  // .forge onboarding: unpack the bundle into a project on disk (beside the
+  // bundle) and open the funscript it produced. Media isn't bundled, so nudge
+  // the user to attach video when the import didn't find a sibling. Shared by
+  // the dedicated "Import a .forge bundle…" start action and the multi-type
+  // "Add or replace…" picker.
+  const importBundleAndOpen = async (path) => {
+    try {
+      const res = await importForgeBundle(path);
+      if (!res?.funscriptPath) {
+        onAppError?.(`Couldn't import bundle: ${basename(path)}`);
+        return;
+      }
+      onOpenScript?.(res.funscriptPath);
+      if (!res.media) {
+        const want = res.mediaExpected ? `“${res.mediaExpected}”` : 'a video';
+        onAppError?.(`Imported ${basename(path)} — attach ${want} with “Add or replace…” to see it in the editor.`);
+      }
+    } catch (e) {
+      onAppError?.(`Import failed: ${String(e?.message || e)}`);
+    }
+  };
+
+  // Left-rail "Import a .forge bundle…" start action — a first-class onboarding
+  // path alongside "Open a funscript…".
+  const handleImportBundle = async () => {
+    const path = await pickForgeBundle();
+    if (!path) return;
+    await importBundleAndOpen(path);
+  };
+
   const handleAddOrReplace = async () => {
     const projectDir = projectDirname(openedProject);
     const path = await pickProjectFile(projectDir);
@@ -132,6 +162,8 @@ export default function ProjectTab({
     const kind = classifyProjectFile(path);
     if (kind === 'funscript') {
       onOpenScript?.(path);
+    } else if (kind === 'bundle') {
+      await importBundleAndOpen(path);
     } else if (kind === 'media') {
       onAttachMedia?.(path);
     } else if (kind === 'meta') {
@@ -161,6 +193,7 @@ export default function ProjectTab({
         onOpen={handleOpen}
         onLoadSample={onLoadSample}
         onPickAndOpen={onPickAndOpen}
+        onImportBundle={handleImportBundle}
         onGoToLibrary={onGoToLibrary}
         loading={false}
       />
@@ -183,9 +216,9 @@ export default function ProjectTab({
 
 function LeftRail({
   projects, active, onPick, search, onSearch, onOpen,
-  onLoadSample, onPickAndOpen, onGoToLibrary,
+  onLoadSample, onPickAndOpen, onImportBundle, onGoToLibrary,
 }) {
-  const hasStartActions = !!(onLoadSample || onPickAndOpen || onGoToLibrary);
+  const hasStartActions = !!(onLoadSample || onPickAndOpen || onImportBundle || onGoToLibrary);
   return (
     <div
       style={{
@@ -221,6 +254,13 @@ function LeftRail({
                       onClick={onPickAndOpen}
                       style={{ justifyContent: 'center' }}>
                 Open a funscript…
+              </Button>
+            )}
+            {onImportBundle && (
+              <Button kind="secondary" size="sm" icon="box"
+                      onClick={onImportBundle}
+                      style={{ justifyContent: 'center' }}>
+                Import a .forge bundle…
               </Button>
             )}
             {onGoToLibrary && (

@@ -228,6 +228,246 @@ class TestExportCLI(unittest.TestCase):
         self.assertIn("audio/stim.wav", names)
         self.assertIn("audio/stim.mp3", names)
 
+    def test_export_never_overwrites_increments(self):
+        # Re-exporting to the same path must NOT clobber — it versions up.
+        out = os.path.join(self.tmp, "dup.forge")
+        r1 = _run("export", self.main, "--mode", "forge", "--out", out)
+        self.assertEqual(r1.returncode, 0, r1.stderr)
+        self.assertEqual(json.loads(r1.stdout)["path"], out)
+        r2 = _run("export", self.main, "--mode", "forge", "--out", out)
+        self.assertEqual(r2.returncode, 0, r2.stderr)
+        p2 = json.loads(r2.stdout)["path"]
+        self.assertTrue(p2.endswith("(1).forge"), p2)
+        self.assertTrue(os.path.exists(out) and os.path.exists(p2))
+
+    def test_lineage_id_stable_version_increments(self):
+        # project_id is stable across exports; project_version is monotonic.
+        o1 = os.path.join(self.tmp, "v1.forge")
+        o2 = os.path.join(self.tmp, "v2.forge")
+        self.assertEqual(_run("export", self.main, "--mode", "forge", "--out", o1).returncode, 0)
+        self.assertEqual(_run("export", self.main, "--mode", "forge", "--out", o2).returncode, 0)
+        with zipfile.ZipFile(o1) as z:
+            m1 = json.loads(z.read("manifest.ffmeta"))
+        with zipfile.ZipFile(o2) as z:
+            m2 = json.loads(z.read("manifest.ffmeta"))
+        self.assertTrue(m1["project_id"])
+        self.assertEqual(m1["project_id"], m2["project_id"])
+        self.assertEqual(m1["project_version"], 1)
+        self.assertEqual(m2["project_version"], 2)
+
+    def test_media_provenance_recorded_lean(self):
+        # Default (lean): no media bytes in the bundle, but the manifest records
+        # a relink key (filename + size + head hash).
+        media = os.path.join(self.tmp, "scene.mp4")
+        with open(media, "wb") as f:
+            f.write(b"\x00\x11\x22" * 100_000)
+        out = os.path.join(self.tmp, "lean.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out, "--media", media)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+            m = json.loads(z.read("manifest.ffmeta"))
+        self.assertFalse(any(n.startswith("media/") for n in names), names)
+        self.assertEqual(m["media"]["filename"], "scene.mp4")
+        self.assertFalse(m["media"]["bundled"])
+        self.assertIn("head_sha256", m["media"])
+
+    def test_include_media_embeds_bytes(self):
+        media = os.path.join(self.tmp, "scene.mp4")
+        with open(media, "wb") as f:
+            f.write(b"forge-media-payload" * 1000)
+        out = os.path.join(self.tmp, "fat.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out, "--media", media, "--include-media")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+            m = json.loads(z.read("manifest.ffmeta"))
+        self.assertIn("media/scene.mp4", names)
+        self.assertTrue(m["media"]["bundled"])
+
+
+@unittest.skipUnless(_cli_importable(), "cli.py app deps not installed in this interpreter")
+class TestImportCLI(unittest.TestCase):
+    """`cli.py import` — unpack a `.forge` bundle back into a re-editable
+    project. Round-trips against the real `export` so the two stay in sync."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="ff_import_test_")
+        self.main = os.path.join(self.tmp, "scene.funscript")
+        acts = [{"at": i * 50, "pos": int(round(50 + 40 * math.sin(i * 50 / 120.0)))} for i in range(200)]
+        with open(self.main, "w") as f:
+            json.dump({"actions": acts}, f)
+        # A forge dir with a chapters sidecar so the bundle carries authoring.
+        self.forge = os.path.join(self.tmp, ".scene.forge")
+        os.makedirs(self.forge, exist_ok=True)
+        with open(os.path.join(self.forge, "scene.chapters.json"), "w") as f:
+            json.dump({"chapters": [{"at_ms": 0, "end_ms": 9950}]}, f)
+
+    def _stamp_handy(self):
+        self.assertEqual(_run("polish-apply", self.main, "--station", "handy").returncode, 0)
+        passes = json.dumps({"passes": {"handy": {"accepted": True, "accepted_at": "2026-06-04T00:00:00Z"}}})
+        self.assertEqual(_run("polish-write", self.main, "--passes-json", passes).returncode, 0)
+
+    def _export_forge(self, name="scene.forge"):
+        out = os.path.join(self.tmp, name)
+        r = _run("export", self.main, "--mode", "forge", "--out", out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return out
+
+    def test_roundtrip_forge_zip_restores_project(self):
+        self._stamp_handy()
+        bundle = self._export_forge()
+        dest = os.path.join(self.tmp, "imported")
+        r = _run("import", bundle, "--out", dest)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        res = json.loads(r.stdout)
+
+        # The funscript the app opens.
+        fs = res["funscript_path"]
+        self.assertEqual(fs, os.path.join(dest, "scene.funscript"))
+        self.assertTrue(os.path.exists(fs))
+        with open(fs) as f:
+            self.assertEqual(len(json.load(f)["actions"]), 200)
+
+        forge = os.path.join(dest, ".scene.forge")
+        # Authoring sidecar restored with its stem-prefixed name.
+        self.assertTrue(os.path.exists(os.path.join(forge, "scene.chapters.json")))
+        # Manifest surfaced as the ffmeta sidecar load_project reads.
+        self.assertTrue(os.path.exists(os.path.join(forge, "scene.ffmeta.json")))
+        # Stamped station restored + a polish.yml marking it accepted.
+        self.assertTrue(os.path.isdir(os.path.join(forge, "polish", "handy")))
+        ppath = os.path.join(forge, "scene.polish.yml")
+        self.assertTrue(os.path.exists(ppath))
+        import yaml
+        passes = (yaml.safe_load(open(ppath, encoding="utf-8").read()) or {}).get("passes") or {}
+        self.assertTrue(passes.get("handy", {}).get("accepted"))
+
+    def test_roundtrip_loose_folder_imports(self):
+        # A loose export folder imports identically to a .forge zip.
+        loose = os.path.join(self.tmp, "scene_export")
+        self.assertEqual(_run("export", self.main, "--mode", "loose", "--out", loose).returncode, 0)
+        dest = os.path.join(self.tmp, "imported_loose")
+        r = _run("import", loose, "--out", dest)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(os.path.exists(os.path.join(dest, "scene.funscript")))
+        self.assertTrue(os.path.exists(os.path.join(dest, ".scene.forge", "scene.chapters.json")))
+
+    def test_import_defaults_dest_to_bundle_folder(self):
+        # No --out: extract beside the bundle.
+        sub = os.path.join(self.tmp, "delivery")
+        os.makedirs(sub, exist_ok=True)
+        bundle = os.path.join(sub, "scene.forge")
+        self.assertEqual(_run("export", self.main, "--mode", "forge", "--out", bundle).returncode, 0)
+        r = _run("import", bundle)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        res = json.loads(r.stdout)
+        self.assertEqual(res["dest"], sub)
+        self.assertTrue(os.path.exists(os.path.join(sub, "scene.funscript")))
+
+    def test_import_rejects_bundle_without_motion(self):
+        # Exporting with strokers excluded drops motion.funscript; import then
+        # has no stroke track to bootstrap a project and must fail cleanly.
+        bundle = os.path.join(self.tmp, "nomotion.forge")
+        self.assertEqual(
+            _run("export", self.main, "--mode", "forge", "--out", bundle, "--exclude", "strokers").returncode, 0)
+        r = _run("import", bundle, "--out", os.path.join(self.tmp, "nope"))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("motion", r.stderr.lower())
+
+    def test_events_roundtrip_reconstructs_feel(self):
+        # Author an event, export (renders events.yml), import (reconstructs
+        # feel.yml). Tolerant: skips if no recipe catalog or events.yml absent.
+        recs = json.loads(_run("list-event-recipes").stdout or "{}")
+        recipes = recs.get("recipes") or recs.get("events") or []
+        if not recipes:
+            self.skipTest("no event recipes available")
+        effect_id = recipes[0].get("id") or recipes[0].get("effectId")
+        if not effect_id:
+            self.skipTest("recipe has no id")
+        events = [{"id": "e1", "beginMs": 1000, "endMs": 4000, "effectId": effect_id,
+                   "intensity": 0.8, "params": {}, "devices": [], "deviceCfg": {}}]
+        ev_json = os.path.join(self.tmp, "ev.json")
+        with open(ev_json, "w") as f:
+            json.dump(events, f)
+        if _run("feel-write", self.main, "--events-json", ev_json).returncode != 0:
+            self.skipTest("feel-write unavailable")
+        bundle = self._export_forge("withevents.forge")
+        with zipfile.ZipFile(bundle) as z:
+            if "events.yml" not in z.namelist():
+                self.skipTest("export did not emit events.yml for this recipe")
+        dest = os.path.join(self.tmp, "ev_imported")
+        self.assertEqual(_run("import", bundle, "--out", dest).returncode, 0)
+        forge = os.path.join(dest, ".scene.forge")
+        # The playable sibling AND the re-editable canonical feel.yml.
+        self.assertTrue(os.path.exists(os.path.join(forge, "scene.events.yml")))
+        feel = os.path.join(forge, "scene.feel.yml")
+        self.assertTrue(os.path.exists(feel))
+        import yaml
+        doc = yaml.safe_load(open(feel, encoding="utf-8").read()) or {}
+        self.assertTrue(doc.get("events"), "feel.yml has no events after reconstruction")
+
+    def test_import_no_clobber_versions_stem(self):
+        # Importing the same bundle into a dir that already has that project
+        # lands as "scene (1)" rather than overwriting the live working copy.
+        bundle = self._export_forge()
+        dest = os.path.join(self.tmp, "twice")
+        self.assertEqual(_run("import", bundle, "--out", dest).returncode, 0)
+        r2 = _run("import", bundle, "--out", dest)
+        self.assertEqual(r2.returncode, 0, r2.stderr)
+        self.assertEqual(os.path.basename(json.loads(r2.stdout)["funscript_path"]), "scene (1).funscript")
+        self.assertTrue(os.path.exists(os.path.join(dest, "scene.funscript")))
+        self.assertTrue(os.path.exists(os.path.join(dest, "scene (1).funscript")))
+
+    def test_import_then_export_continues_lineage(self):
+        # Import inherits the bundle's project_id; a re-export from the imported
+        # working copy is v(N+1) of the SAME project, not a fresh id.
+        bundle = self._export_forge()  # v1
+        with zipfile.ZipFile(bundle) as z:
+            m1 = json.loads(z.read("manifest.ffmeta"))
+        dest = os.path.join(self.tmp, "cont")
+        self.assertEqual(_run("import", bundle, "--out", dest).returncode, 0)
+        fs = os.path.join(dest, "scene.funscript")
+        out2 = os.path.join(dest, "scene-next.forge")
+        self.assertEqual(_run("export", fs, "--mode", "forge", "--out", out2).returncode, 0)
+        with zipfile.ZipFile(out2) as z:
+            m2 = json.loads(z.read("manifest.ffmeta"))
+        self.assertEqual(m2["project_id"], m1["project_id"])
+        self.assertEqual(m2["project_version"], m1["project_version"] + 1)
+
+    def test_import_extracts_bundled_media(self):
+        # --include-media bundle: import extracts the media next to the funscript
+        # (renamed to the project stem so load_project finds it).
+        media = os.path.join(self.tmp, "scene.mp4")
+        with open(media, "wb") as f:
+            f.write(b"payload" * 5000)
+        bundle = os.path.join(self.tmp, "withmedia.forge")
+        self.assertEqual(
+            _run("export", self.main, "--mode", "forge", "--out", bundle,
+                 "--media", media, "--include-media").returncode, 0)
+        dest = os.path.join(self.tmp, "mediaimp")
+        r = _run("import", bundle, "--out", dest)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        res = json.loads(r.stdout)
+        self.assertTrue(res["media"], res)
+        self.assertEqual(os.path.basename(res["media"]), "scene.mp4")
+        self.assertTrue(os.path.exists(os.path.join(dest, "scene.mp4")))
+
+    def test_import_lean_reports_media_expected(self):
+        # Lean bundle imported into a dir with no sibling media: media is null,
+        # media_expected names the file to relink (UI's "locate it" prompt).
+        media = os.path.join(self.tmp, "scene.mp4")
+        with open(media, "wb") as f:
+            f.write(b"x" * 1000)
+        bundle = os.path.join(self.tmp, "leanbundle.forge")
+        self.assertEqual(
+            _run("export", self.main, "--mode", "forge", "--out", bundle, "--media", media).returncode, 0)
+        dest = os.path.join(self.tmp, "leanimp")
+        r = _run("import", bundle, "--out", dest)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        res = json.loads(r.stdout)
+        self.assertIsNone(res["media"])
+        self.assertEqual(res["media_expected"], "scene.mp4")
+
 
 if __name__ == "__main__":
     unittest.main()

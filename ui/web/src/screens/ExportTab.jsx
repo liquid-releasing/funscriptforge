@@ -22,7 +22,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pill, Button, Icon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
-import { exportWrite, revealPath, polishRead, openInForgePlayer, isTauri } from '../api/forge.js';
+import { exportWrite, revealPath, polishRead, openInForgePlayer, isTauri, pickFolder } from '../api/forge.js';
 
 // The Polish stations that are mechanical strokers (ride under the Strokers
 // target). estim3p is the e-stim flagship and lives in its own target.
@@ -46,8 +46,30 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
   // Disk format (the old loose/forge mode) now lives on the disk destination.
   const [mode, setMode] = useState('forge');
   const [stem, setStem] = useState(projectStem);
+  // Destination folder. null = the project folder (the default, == where the
+  // CLI writes when --out is omitted). A user-picked folder overrides it so you
+  // can steer the output somewhere findable / test what lands where.
+  const [outDir, setOutDir] = useState(null);
   // Whether to also launch ForgePlayer after writing.
   const [toForgePlayer, setToForgePlayer] = useState(false);
+
+  // The project's own folder (dirname of the funscript), and the resolved
+  // output path so the user sees exactly where the export lands BEFORE writing.
+  const projectFolder = useMemo(
+    () => (path ? String(path).split(/[/\\]/).slice(0, -1).join('/') : ''),
+    [path],
+  );
+  // Switching projects clears a custom destination so B never writes into the
+  // folder you picked for A.
+  useEffect(() => { setOutDir(null); }, [path]);
+  const folder = outDir || projectFolder;
+  const outName = mode === 'forge' ? `${stem}.forge` : `${stem}_export`;
+  const outPath = folder ? `${folder}/${outName}` : outName;
+
+  const onPickFolder = async () => {
+    const picked = await pickFolder(folder || undefined);
+    if (picked) setOutDir(picked);
+  };
 
   // Render/processing options applied during write (real backend effect).
   const [options, setOptions] = useState({
@@ -55,6 +77,7 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
     finalSmooth: true,
     stimWav: false,
     stimMp3: false,
+    includeMedia: false,
   });
 
   // Polish stamps drive what's forged — Export packs what it finds; we read the
@@ -136,12 +159,16 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
     try {
       const res = await exportWrite(path, {
         mode,
+        // Only send --out when the user picked a folder; otherwise let the CLI
+        // use its default (next to the source), which equals projectFolder.
+        out: outDir ? outPath : null,
         stem: stem !== projectStem ? stem : null,
         media: project?.mediaPath || null,
         blendSeams: options.blendSeams,
         finalSmooth: options.finalSmooth,
         stimWav: options.stimWav,
         stimMp3: options.stimMp3,
+        includeMedia: options.includeMedia,
         exclude: excludeIds,
       });
       if (!res) { setWriteError('Export is unavailable in browser mode.'); return; }
@@ -204,7 +231,10 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
         <DiskDestination
           mode={mode} onMode={setMode}
           stem={stem} onStem={setStem}
-          projectPath={project.path}
+          folder={folder} outName={outName}
+          isCustom={!!outDir}
+          onPickFolder={onPickFolder}
+          onResetFolder={() => setOutDir(null)}
         />
         <ForgePlayerDestination on={toForgePlayer} onToggle={() => setToForgePlayer((v) => !v)} />
         <CloudDestination />
@@ -214,7 +244,7 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
       <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>applied during write</span>}>
         Options
       </SectionLabel>
-      <Options options={options} onChange={setOptions} estimStamped={ctx.estimStamped} />
+      <Options options={options} onChange={setOptions} estimStamped={ctx.estimStamped} hasMedia={hasMedia} />
 
       {/* ACTIONS — the verbs */}
       <ActionsRow
@@ -432,13 +462,13 @@ function DestShell({ color, icon, label, right, children, on = true }) {
   );
 }
 
-function DiskDestination({ mode, onMode, stem, onStem, projectPath }) {
-  const folder = projectPath ? String(projectPath).split(/[/\\]/).slice(0, -1).join('/') : '—';
+function DiskDestination({ mode, onMode, stem, onStem, folder, outName, isCustom, onPickFolder, onResetFolder }) {
+  const fullPath = `${folder || '—'}/${outName}`;
   return (
     <DestShell color="#4dabf7" icon="save" label="Disk"
-               right={<Pill tone="info" dot>default</Pill>}>
+               right={<Pill tone={isCustom ? 'success' : 'info'} dot>{isCustom ? 'custom folder' : 'project folder'}</Pill>}>
       <p style={{ fontSize: 11.5, color: 'var(--text-dim)', margin: 0, lineHeight: 1.45 }}>
-        Write into the project folder. Choose the shape:
+        Choose the shape, then where it lands:
       </p>
       <Segmented
         value={mode}
@@ -448,12 +478,35 @@ function DiskDestination({ mode, onMode, stem, onStem, projectPath }) {
           { value: 'loose', label: 'Loose files', hint: 'sidecars beside the funscript' },
         ]}
       />
-      <div style={{ paddingTop: 6, borderTop: '1px dashed var(--border)', display: 'flex', gap: 10, alignItems: 'center' }}>
-        <Icon name="folder" size={11} style={{ color: 'var(--text-dim)' }} />
-        <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {folder}
+      {/* Resolved output path — shown BEFORE writing so "where did it go?"
+          never comes up. The folder is editable; the filename is derived. */}
+      <div style={{ paddingTop: 8, borderTop: '1px dashed var(--border)', display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1 }}>
+            Lands here
+          </span>
+          {isCustom && (
+            <button onClick={(e) => { e.stopPropagation(); onResetFolder?.(); }}
+                    style={{ fontSize: 9.5, color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+              use project folder
+            </button>
+          )}
+          <button onClick={(e) => { e.stopPropagation(); onPickFolder?.(); }}
+                  style={{
+                    fontSize: 10, fontWeight: 600, color: '#4dabf7', cursor: 'pointer',
+                    background: 'rgba(77,171,247,0.12)', border: '1px solid rgba(77,171,247,0.4)',
+                    borderRadius: 5, padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4,
+                  }}>
+            <Icon name="folder" size={10} /> Change…
+          </button>
+        </div>
+        <span className="mono" title={fullPath}
+              style={{ fontSize: 10.5, color: 'var(--text-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {fullPath}
         </span>
-        <span style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>picker — next</span>
+        <span style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>
+          Never overwrites — adds (1), (2)… if one's already there. Each export is a new snapshot.
+        </span>
       </div>
       {mode === 'loose' && (
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-muted)' }}>
@@ -553,9 +606,10 @@ const OPTION_DEFS = [
   { id: 'finalSmooth', label: 'Final smooth', desc: 'Light global low-pass that removes residual sharp edges.' },
   { id: 'stimWav', label: 'Stim audio · WAV', desc: 'Pre-render e-stim channels to stereo WAV (lossless, ~10 MB/min). Needs a stamped e-stim station.', estim: true },
   { id: 'stimMp3', label: 'Stim audio · MP3', desc: 'Same render as MP3 (compact, the common real-world format). Needs a stamped e-stim station.', estim: true },
+  { id: 'includeMedia', label: 'Include source media', desc: 'Embed the video/audio for a standalone bundle (big — GBs). Off = lean bundle that relinks to the original on disk (the manifest records its name + size).', media: true },
 ];
 
-function Options({ options, onChange, estimStamped }) {
+function Options({ options, onChange, estimStamped, hasMedia }) {
   const toggle = (id) => onChange((p) => ({ ...p, [id]: !p[id] }));
   return (
     <div style={{
@@ -563,7 +617,8 @@ function Options({ options, onChange, estimStamped }) {
       display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8,
     }}>
       {OPTION_DEFS.map((o) => {
-        const disabled = o.estim && !estimStamped;
+        const disabled = (o.estim && !estimStamped) || (o.media && !hasMedia);
+        const disabledHint = o.media ? 'attach media first' : 'stamp e-stim first';
         const on = !!options[o.id] && !disabled;
         return (
           <label key={o.id} style={{
@@ -578,7 +633,7 @@ function Options({ options, onChange, estimStamped }) {
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>
                 {o.label}
-                {disabled && <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 6 }}>· stamp e-stim first</span>}
+                {disabled && <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 6 }}>· {disabledHint}</span>}
               </div>
               <div style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 2, lineHeight: 1.45 }}>{o.desc}</div>
             </div>
@@ -618,6 +673,7 @@ function ActionsRow({
             <Icon name="check" size={12} />
             Wrote {result.artifacts} file{result.artifacts === 1 ? '' : 's'}
             {result.stations?.length ? ` · ${result.stations.length} station${result.stations.length === 1 ? '' : 's'}` : ''}
+            {result.manifest?.project_version ? ` · snapshot v${result.manifest.project_version}` : ''}
             {' → '}
             <span className="mono" style={{ color: 'var(--text-soft)' }}>{shortPath(result.path)}</span>
           </span>

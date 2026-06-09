@@ -1048,6 +1048,76 @@ def _extract_frame(media: str, t_ms: int, out_path: Path) -> bool:
         return False
 
 
+def _next_available_path(base: Path) -> Path:
+    """Return `base` if free, else the first non-colliding ` (N)` sibling —
+    Explorer-style. Works for both a file (`scene.forge` → `scene (1).forge`,
+    extension preserved) and a folder (`scene_export` → `scene_export (1)`). The
+    rule across Export + Import: never overwrite, always version up. The working
+    folder is the source of truth; bundles are immutable snapshots, so a new
+    export is a new snapshot, not a clobber of the last one.
+    """
+    if not base.exists():
+        return base
+    suffix = base.suffix  # ".forge" for a bundle file; "" for a loose folder
+    stem = base.name[:-len(suffix)] if suffix else base.name
+    n = 1
+    while True:
+        cand = base.parent / f"{stem} ({n}){suffix}"
+        if not cand.exists():
+            return cand
+        n += 1
+
+
+_PROVENANCE_VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v"}
+
+
+def _media_provenance(media_path: Path) -> dict:
+    """A cheap, robust relink key for a media file: name + size + a hash of the
+    first 1 MiB (fast even on multi-GB video). Stamped into the bundle manifest
+    so a consumer (e.g. forgeassembler) can relink to the original on disk
+    without the bundle embedding gigabytes of video."""
+    import hashlib
+    st = media_path.stat()
+    h = hashlib.sha256()
+    with open(media_path, "rb") as f:
+        h.update(f.read(1024 * 1024))
+    return {
+        "filename": media_path.name,
+        "size": st.st_size,
+        "head_sha256": h.hexdigest(),
+        "kind": "video" if media_path.suffix.lower() in _PROVENANCE_VIDEO_EXTS else "audio",
+    }
+
+
+def _project_identity_path(target) -> Path:
+    """`<dir>/.<stem>.forge/<stem>.project.json` — the stable lineage marker for
+    a working project: `{project_id, version}`. Lives in the working folder (the
+    source of truth) so it persists across re-exports; bundles carry a *copy* of
+    the identity in their manifest, not this file."""
+    from videoflow.sidecar import forge_dir
+    stem = Path(target).stem
+    return forge_dir(target) / f"{stem}.project.json"
+
+
+def _read_project_identity(target) -> dict:
+    """Load `{project_id, version}` for a working project, or `{}` if unset."""
+    p = _project_identity_path(target)
+    if p.exists():
+        try:
+            doc = json.loads(p.read_text(encoding="utf-8"))
+            if isinstance(doc, dict) and doc.get("project_id"):
+                return {"project_id": doc["project_id"], "version": int(doc.get("version", 0))}
+        except (OSError, json.JSONDecodeError, ValueError, TypeError):
+            pass
+    return {}
+
+
+def _write_project_identity(target, ident: dict) -> None:
+    p = _project_identity_path(target)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(ident, indent=2), encoding="utf-8")
+
+
 @_cli_command
 def cmd_export(args):
     """Collect the project's outputs into a loose folder or a `.forge` zip.
@@ -1256,18 +1326,50 @@ def cmd_export(args):
                     if _render_stim_audio(alpha, beta, adir / f"stim.{fmt}", duration_ms / 1000.0, fmt=fmt):
                         artifacts.append({"path": f"audio/stim.{fmt}", "kind": "audio", "role": "estim", "format": fmt})
 
-        # 7. manifest.ffmeta
+        # 6b. Source media — provenance is ALWAYS recorded (relink key); the
+        # bytes ride only when --include-media is set (opt-in, big). Lean default
+        # keeps the bundle a shareable snapshot; a consumer relinks via the key.
+        media_meta = None
+        if args.media and Path(args.media).exists():
+            media_meta = _media_provenance(Path(args.media))
+            if args.include_media:
+                _emit_progress("Export — bundling the source media…")
+                mdest = staging / "media"
+                mdest.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(args.media, mdest / media_meta["filename"])
+                media_meta["bundled"] = True
+                media_meta["path"] = f"media/{media_meta['filename']}"
+                artifacts.append({"path": media_meta["path"], "kind": "media", "role": "source"})
+            else:
+                media_meta["bundled"] = False
+
+        # 7. manifest.ffmeta — stamped with stable lineage: a project_id that
+        # persists across exports + a monotonic `project_version` bumped each
+        # time. The id/version live in the working folder's project.json (source
+        # of truth); the manifest carries a snapshot so an imported bundle keeps
+        # the lineage. (`version`/`schema` are the manifest FORMAT version, a
+        # different axis from the project's content version.)
+        import datetime as _dt
+        import uuid
+        ident = _read_project_identity(src) or {"project_id": uuid.uuid4().hex, "version": 0}
+        ident["version"] = int(ident.get("version", 0)) + 1
+        _write_project_identity(src, ident)
         manifest = {
             "version": 1, "schema": "ffmeta/v1", "stem": stem,
             "created_with": "FunscriptForge", "duration_ms": duration_ms,
+            "project_id": ident["project_id"], "project_version": ident["version"],
+            "exported_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
             "artifacts": artifacts, "stations": stations_meta,
         }
+        if media_meta:
+            manifest["media"] = media_meta
         (staging / "manifest.ffmeta").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
         # --- write output ---
         if args.mode == "forge":
             _emit_progress("Export — packaging the .forge bundle…")
             out = Path(args.out) if args.out else (Path(src).parent / f"{stem}.forge")
+            out = _next_available_path(out)  # never clobber a prior snapshot
             out.parent.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
                 for fp in sorted(staging.rglob("*")):
@@ -1277,8 +1379,7 @@ def cmd_export(args):
         else:
             _emit_progress("Export — writing the loose folder…")
             out = Path(args.out) if args.out else (Path(src).parent / f"{stem}_export")
-            if out.exists():
-                shutil.rmtree(out, ignore_errors=True)
+            out = _next_available_path(out)  # never clobber a prior snapshot
             shutil.copytree(staging, out)
             result_path = str(out)
 
@@ -1286,6 +1387,239 @@ def cmd_export(args):
             "mode": args.mode, "path": result_path,
             "artifacts": len(artifacts), "stations": list(stations_meta),
             "manifest": manifest,
+        }))
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
+def _feel_from_events_yml(events_path, target) -> int:
+    """Reconstruct the canonical `<stem>.feel.yml` from a playable Edger
+    `events.yml` — the inverse of `_collect_events_yaml`. Used by `import` so a
+    bundle's authored events re-open in the Events tab (the EventsTab reads
+    feel.yml; events.yml is the play-only sibling). Mirrors `cmd_edger_import`
+    (events.yml → canonical) + `cmd_feel_write` (canonical → feel.yml). Events
+    whose name isn't in our vendored definitions are skipped. Returns the count.
+    """
+    import yaml
+    doc = yaml.safe_load(Path(events_path).read_text(encoding="utf-8")) or {}
+    raw = (doc.get("events") or []) if isinstance(doc, dict) else []
+    definitions = _load_edger_definitions().get("definitions", {})
+    canonical, idx = [], 0
+    for ev in raw:
+        if not isinstance(ev, dict) or "time" not in ev or "name" not in ev:
+            continue
+        if ev["name"] not in definitions:
+            continue
+        idx += 1
+        canonical.append(_edger_to_canonical(ev, idx, definitions))
+    canonical.sort(key=lambda c: c["begin_ms"])
+
+    path = _feel_path(target)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    feel_doc = {}
+    if path.exists():
+        try:
+            feel_doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            feel_doc = {}
+    if not isinstance(feel_doc, dict):
+        feel_doc = {}
+    feel_doc["version"] = 1
+    feel_doc["events"] = canonical
+    path.write_text(yaml.safe_dump(feel_doc, sort_keys=False, allow_unicode=True),
+                    encoding="utf-8")
+    return len(canonical)
+
+
+_IMPORT_MEDIA_EXTS = (
+    ".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v",
+    ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac",
+)
+
+
+@_cli_command
+def cmd_import(args):
+    """Unpack a `.forge` bundle into a re-editable project on disk.
+
+    The inverse of `cmd_export`: a `.forge` is a self-contained, shareable work-
+    in-progress, and this onboards it as a first-class project. Reads
+    `manifest.ffmeta`, lays the motion track down as `<dest>/<stem>.funscript`,
+    and restores everything that makes the project re-editable into the
+    per-project forge dir `<dest>/.<stem>.forge/`:
+
+      motion.funscript        -> <dest>/<stem>.funscript   (what the app opens)
+      {chapters,phrases,characters}.json -> <forge>/<stem>.<kind>.json
+      events.yml              -> <forge>/<stem>.events.yml (playable sibling)
+                                 + reconstructed <stem>.feel.yml (re-editable)
+      stations/<id>/*.funscript -> <forge>/polish/<id>/...  (+ rebuilt polish.yml
+                                 marking stamped stations accepted)
+      manifest.ffmeta         -> <forge>/<stem>.ffmeta.json (load_project reads it)
+
+    Accepts either a `.forge` zip or a loose export folder. `--out` chooses the
+    destination folder (default: the bundle's own folder). Prints JSON with the
+    funscript path the caller should then load.
+    """
+    import shutil
+    import tempfile
+    import zipfile
+    from videoflow.sidecar import forge_dir
+
+    src = Path(args.bundle)
+    if not src.exists():
+        raise FileNotFoundError(f"bundle not found: {src}")
+
+    staging = Path(tempfile.mkdtemp(prefix="ff_import_"))
+    try:
+        # A `.forge` is a zip; a loose export is already an unpacked folder.
+        if src.is_dir():
+            root = src
+        else:
+            _emit_progress("Import — unpacking the .forge bundle…")
+            with zipfile.ZipFile(src) as z:
+                z.extractall(staging)
+            root = staging
+
+        manifest = {}
+        manifest_path = root / "manifest.ffmeta"
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                manifest = {}
+
+        stem = args.stem or manifest.get("stem") or src.stem
+        dest = Path(args.out) if args.out else src.parent
+        dest.mkdir(parents=True, exist_ok=True)
+
+        # Never clobber a live project: if `<stem>.funscript` or its working
+        # folder already exists in dest, version the import up ("scene" ->
+        # "scene (1)"). The working folder is the source of truth, so an import
+        # must not overwrite in-progress edits with a snapshot.
+        from videoflow.sidecar import forge_dir as _fd
+        base_stem, n = stem, 0
+        while (dest / f"{stem}.funscript").exists() or _fd(dest / f"{stem}.funscript").exists():
+            n += 1
+            stem = f"{base_stem} ({n})"
+        funscript_path = dest / f"{stem}.funscript"
+
+        # The motion track is the project's funscript — required to bootstrap.
+        motion = root / "motion.funscript"
+        if not motion.exists():
+            raise ValueError(
+                "bundle has no motion.funscript (exported without the Strokers "
+                "target) — there is no stroke track to open as a project."
+            )
+        _emit_progress("Import — restoring the motion track + sidecars…")
+        shutil.copy2(motion, funscript_path)
+        imported = [f"{stem}.funscript"]
+
+        fdir = forge_dir(funscript_path)
+        fdir.mkdir(parents=True, exist_ok=True)
+
+        # Authoring sidecars — export flattened the stem (chapters.json); restore
+        # the stem-prefixed name the loaders probe for (<stem>.chapters.json).
+        for kind in ("chapters", "phrases", "characters"):
+            sp = root / f"{kind}.json"
+            if sp.exists():
+                shutil.copy2(sp, fdir / f"{stem}.{kind}.json")
+                imported.append(f"{kind}.json")
+
+        # Events: keep the playable sibling AND reconstruct the canonical
+        # feel.yml so the Events tab re-opens with the authored events.
+        ev = root / "events.yml"
+        if ev.exists():
+            shutil.copy2(ev, fdir / f"{stem}.events.yml")
+            try:
+                n = _feel_from_events_yml(ev, funscript_path)
+                imported.append(f"events.yml → feel.yml ({n})")
+            except Exception as exc:  # reconstruction is best-effort
+                print(f"feel.yml reconstruction skipped: {exc}", file=sys.stderr)
+                imported.append("events.yml")
+
+        # Polish stations -> <forge>/polish/<id>/. Rebuild <stem>.polish.yml
+        # marking STAMPED (accepted) stations accepted against the freshly
+        # imported source hash so Export re-packs them and they don't read as
+        # stale. Generated stations (manifest `generated`) reproduce from
+        # characters.json — restore the files but skip the polish.yml entry.
+        stations_meta = manifest.get("stations") or {}
+        stations_root = root / "stations"
+        polish_passes = {}
+        if stations_root.is_dir():
+            for sdir in sorted(p for p in stations_root.iterdir() if p.is_dir()):
+                sid = sdir.name
+                files = sorted(sdir.glob("*.funscript"))
+                if not files:
+                    continue
+                dest_sdir = fdir / "polish" / sid
+                dest_sdir.mkdir(parents=True, exist_ok=True)
+                for fp in files:
+                    shutil.copy2(fp, dest_sdir / fp.name)
+                imported.append(f"station:{sid}")
+                if not (stations_meta.get(sid) or {}).get("generated"):
+                    polish_passes[sid] = {"accepted": True}
+        if polish_passes:
+            import yaml
+            src_hash = _polish_source_hash(funscript_path)
+            for st in polish_passes.values():
+                st["source_hash"] = src_hash
+            ppath = _polish_path(funscript_path)
+            ppath.parent.mkdir(parents=True, exist_ok=True)
+            ppath.write_text(
+                yaml.safe_dump(
+                    {"version": 1, "schema": "polish/v1", "passes": polish_passes},
+                    sort_keys=False, allow_unicode=True),
+                encoding="utf-8")
+            imported.append("polish.yml")
+
+        # The manifest itself, as the sidecar load_project surfaces.
+        if manifest:
+            (fdir / f"{stem}.ffmeta.json").write_text(
+                json.dumps(manifest, indent=2), encoding="utf-8")
+            imported.append("ffmeta.json")
+
+        # Continue the lineage: inherit the bundle's project_id + version so the
+        # next export from this working copy is v(N+1) of the SAME project (not a
+        # fresh id). Bundles made before lineage existed simply mint an id on
+        # their first export from here.
+        pid = manifest.get("project_id")
+        if pid:
+            _write_project_identity(
+                funscript_path,
+                {"project_id": pid, "version": int(manifest.get("project_version") or 0)})
+            imported.append("project.json")
+
+        # Source media. If the bundle embedded it (--include-media), extract it
+        # next to the funscript renamed to the project stem so load_project's
+        # adjacent-media probe finds it. Otherwise relink: look for a sibling
+        # (stem match, or the original filename the manifest recorded). `media`
+        # is the resolved path or null; `media_expected` is the relink target so
+        # the UI can prompt "locate <file>" when the original isn't present.
+        mmeta = manifest.get("media") or {}
+        media = None
+        if mmeta.get("bundled"):
+            srcm = root / (mmeta.get("path") or f"media/{mmeta.get('filename', '')}")
+            if srcm.exists():
+                target = dest / f"{stem}{Path(mmeta.get('filename', '')).suffix}"
+                shutil.copy2(srcm, target)
+                media = str(target)
+                imported.append("media")
+        if media is None:
+            for cand in sorted(dest.glob(f"{stem}.*")):
+                if cand.suffix.lower() in _IMPORT_MEDIA_EXTS:
+                    media = str(cand)
+                    break
+            if media is None and mmeta.get("filename"):
+                orig = dest / mmeta["filename"]
+                if orig.exists():
+                    media = str(orig)
+
+        print(json.dumps({
+            "funscript_path": str(funscript_path),
+            "stem": stem,
+            "dest": str(dest),
+            "imported": imported,
+            "media": media,
+            "media_expected": mmeta.get("filename"),
         }))
     finally:
         shutil.rmtree(staging, ignore_errors=True)
@@ -2945,7 +3279,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument("--final-smooth", action="store_true", help="Apply final_smooth to the main funscript.")
     p_exp.add_argument("--stim-wav", action="store_true", help="Render audio/stim.wav from the e-stim channels (opt-in).")
     p_exp.add_argument("--stim-mp3", action="store_true", help="Render audio/stim.mp3 from the e-stim channels (opt-in; via ffmpeg).")
+    p_exp.add_argument("--include-media", action="store_true", help="Embed the source video/audio in the bundle for a standalone handoff (big). Default: lean bundle + manifest relink key.")
     p_exp.add_argument("--exclude", metavar="IDS", default="", help="Comma-separated target groups to leave OUT: strokers,estim,authoring,preview. Default: include all.")
+
+    # --- import (unpack a .forge bundle into a re-editable project) ---
+    p_imp = sub.add_parser(
+        "import",
+        help="Unpack a .forge bundle (or loose export folder) into a re-editable project on disk",
+    )
+    p_imp.add_argument("bundle", help="Path to the .forge zip (or a loose export folder).")
+    p_imp.add_argument("--out", metavar="DIR", help="Destination folder (default: the bundle's own folder).")
+    p_imp.add_argument("--stem", metavar="STEM", help="Override the project stem (default: manifest stem).")
 
     # --- finalize ---
     p_fin = sub.add_parser(
@@ -4405,6 +4749,7 @@ def main():
         "polish-read":      cmd_polish_read,
         "polish-write":     cmd_polish_write,
         "export":           cmd_export,
+        "import":           cmd_import,
         "customize":        cmd_customize,
         "finalize":         cmd_finalize,
         "export-plan":      cmd_export_plan,

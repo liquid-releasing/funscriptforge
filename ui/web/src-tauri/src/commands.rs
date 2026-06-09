@@ -1998,6 +1998,7 @@ pub async fn export_write(
     media: Option<String>,
     stim_wav: bool,
     stim_mp3: bool,
+    include_media: bool,
     exclude: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
     // Pass the ORIGINAL path as the positional (owns stem / sidecars / the
@@ -2033,6 +2034,9 @@ pub async fn export_write(
     if stim_mp3 {
         args.push("--stim-mp3".into());
     }
+    if include_media {
+        args.push("--include-media".into());
+    }
     if let Some(ex) = exclude {
         if !ex.is_empty() {
             args.push("--exclude".into());
@@ -2045,6 +2049,30 @@ pub async fn export_write(
     // stations or renders stim audio, and used to sit on a static "Writing…".
     let out = run_cli_with_progress(&app, "ff:progress", &argv).await?;
     serde_json::from_str(&out).map_err(|e| format!("parse export result: {}", e))
+}
+
+/// Import — unpack a `.forge` bundle (or a loose export folder) into a
+/// re-editable project on disk. The inverse of `export_write`: it lays the
+/// motion track down as `<dest>/<stem>.funscript` and restores the authoring
+/// sidecars, stamped Polish stations, reconstructed feel.yml, and the manifest
+/// into `<dest>/.<stem>.forge/`. Shells `cli.py import`; returns
+/// `{ funscript_path, stem, dest, imported, media }`. The caller then loads
+/// `funscript_path` as the project (and prompts to attach media when `media`
+/// is null). `out_dir` defaults Python-side to the bundle's own folder.
+#[tauri::command]
+pub async fn import_forge_bundle(
+    app: AppHandle,
+    bundle_path: String,
+    out_dir: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut args: Vec<String> = vec!["import".into(), bundle_path];
+    if let Some(d) = out_dir {
+        args.push("--out".into());
+        args.push(d);
+    }
+    let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let out = run_cli_with_progress(&app, "ff:progress", &argv).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse import result: {}", e))
 }
 
 /// Reveal a path in the OS file manager (selects the file on Windows). Best
