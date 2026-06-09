@@ -53,6 +53,17 @@ jobs:
           repository: liquid-releasing/videoflow
           path: videoflow
 
+      - name: Checkout forgemoment (sibling)
+        # The frontend imports the shared `forgemoment` library by bare
+        # specifier; package.json links it as `file:../../../forgemoment`
+        # and vite.config aliases it to that same source tree. vite compiles
+        # forgemoment/src/* directly (no separate build), so it just has to
+        # exist as a sibling of this checkout before `npm ci` + tauri build.
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/forgemoment
+          path: forgemoment
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
