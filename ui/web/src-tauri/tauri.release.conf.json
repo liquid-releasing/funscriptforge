@@ -4,6 +4,11 @@
     "resources": {
       "resources/forge-cli": "forge-cli",
       "resources/ffmpeg": "ffmpeg"
+    },
+    "windows": {
+      "nsis": {
+        "compression": "bzip2"
+      }
     }
   }
 }
