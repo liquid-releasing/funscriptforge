@@ -119,6 +119,13 @@ jobs:
         working-directory: funscript-updater/ui/web
         run: npm ci
 
+      - name: Install forgemoment deps
+        # vite compiles forgemoment/src/* directly, so its runtime deps
+        # (lucide-react; react/react-dom are peers supplied here) must resolve
+        # from forgemoment/node_modules — exactly as in the local dev loop.
+        working-directory: forgemoment
+        run: npm ci
+
       - name: Tauri build (with bundled-resources overlay)
         working-directory: funscript-updater/ui/web
         run: npx tauri build --config src-tauri/tauri.release.conf.json
