@@ -1131,6 +1131,64 @@ def _extract_frame(media: str, t_ms: int, out_path: Path) -> bool:
         return False
 
 
+def _frame_brightness(path) -> float:
+    """Mean luma 0..255 of a PNG (0 = black). Used to reject black hero frames.
+    Returns 255 (don't-reject) when it can't measure."""
+    try:
+        from PIL import Image
+        import numpy as np
+        return float(np.asarray(Image.open(path).convert("L")).mean())
+    except Exception:
+        return 255.0
+
+
+def _extract_hero_frame(media: str, start_ms: int, end_ms: int, out_path: Path) -> bool:
+    """Pick a REPRESENTATIVE, non-black hero frame from [start_ms, end_ms].
+
+    The old behavior grabbed the frame at the chapter's exact start — which is
+    where cuts/fades/black live, so heroes came out black. Instead: (1) run
+    ffmpeg's `thumbnail` filter over a content window seeked a bit past the cut
+    (it favors a content frame over uniform/black ones), and accept it only if
+    it's not near-black; (2) fall back to sampling a few points across the span
+    and keeping the brightest. Face-preference is a future stretch. False on
+    failure / no ffmpeg.
+    """
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        return False
+    span = max(1000, int(end_ms) - int(start_ms))
+    base = max(0, int(start_ms))
+
+    # 1) thumbnail over a window that skips the opening fade.
+    seek = (base + min(int(span * 0.15), 8000)) / 1000.0
+    window_s = min(max(span / 1000.0 * 0.5, 4.0), 20.0)
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-ss", f"{seek:.3f}", "-t", f"{window_s:.1f}",
+             "-i", str(media), "-frames:v", "1",
+             "-vf", "thumbnail=120,scale=320:-1", str(out_path)],
+            capture_output=True, timeout=60,
+        )
+        if out_path.exists() and _frame_brightness(out_path) > 12.0:
+            return True
+    except Exception as exc:
+        print(f"hero thumbnail skipped: {exc}", file=sys.stderr)
+
+    # 2) Fallback: sample across the span, keep the brightest (non-black) grab.
+    best_b = -1.0
+    for frac in (0.25, 0.45, 0.65, 0.85):
+        cand = out_path.with_name(out_path.stem + f".c{int(frac * 100)}.png")
+        if _extract_frame(str(media), base + int(span * frac), cand):
+            b = _frame_brightness(cand)
+            if b > best_b:
+                best_b = b
+                cand.replace(out_path)
+            else:
+                cand.unlink(missing_ok=True)
+    return best_b > 0.0 and out_path.exists()
+
+
 def _next_available_path(base: Path) -> Path:
     """Return `base` if free, else the first non-colliding ` (N)` sibling —
     Explorer-style. Works for both a file (`scene.forge` → `scene (1).forge`,
@@ -1511,8 +1569,11 @@ def cmd_export(args):
                         chap_list = json.loads(cj.read_text(encoding="utf-8")).get("chapters") or []
                     except (OSError, json.JSONDecodeError):
                         chap_list = []
-                hero_t = chap_list[0].get("at_ms") if chap_list else int(duration_ms * 0.05)
-                if _extract_frame(args.media, hero_t or 0, thumbs / "hero.png"):
+                # Hero: a representative, non-black frame from the first chapter
+                # (not the exact cut, which is usually a fade/black).
+                ch0_start = chap_list[0].get("at_ms", 0) if chap_list else 0
+                ch0_end = (chap_list[0].get("end_ms") if chap_list else None) or duration_ms or (ch0_start + 60000)
+                if _extract_hero_frame(args.media, ch0_start, ch0_end, thumbs / "hero.png"):
                     artifacts.append({"path": "thumbnails/hero.png", "kind": "thumbnail", "role": "hero"})
                 for i, ch in enumerate(chap_list):
                     name = f"chapter_{i + 1:02d}.png"

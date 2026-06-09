@@ -20,7 +20,9 @@ permissions:
   contents: write
 
 env:
-  PYTHON_VERSION: "3.12"
+  # Match the locally-proven freeze (the dev .venv that produced a working
+  # bundle is 3.13 — the forge-cli payload is cp313).
+  PYTHON_VERSION: "3.13"
 
 jobs:
   build-windows:
