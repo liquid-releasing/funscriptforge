@@ -6,7 +6,209 @@ verify + commit) · ✅ committed.
 
 ---
 
-## Session 2026-06-09 (Phase 3 dogfood — post streamlit-removal + Resume build)
+## Session 2026-06-11 (Phase 3 dogfood — consolidated pipeline pass)
+
+### 🔴 Open
+
+D1. **🟡 FIXED-UNCOMMITTED 2026-06-11. Duplicate concurrent `auto-chapter` on
+   the same project.** FIX: `commands.rs::kill_existing_analyze(media)` — before
+   `analyze_chapters_with_videoflow` spawns, it reaps any pre-existing/orphaned
+   python `auto-chapter` proc for the SAME media stem (Windows: PowerShell
+   Get-CimInstance filter → `taskkill /PID /T /F`, CREATE_NO_WINDOW, wildcard
+   metachars escaped; Unix: `pkill -9 -f`). Lives in the Rust process so it
+   survives webview reloads (the JS `dedupedCall` map doesn't); runs BEFORE
+   spawn so it only ever targets a stale run, never the new one; stem-matched so
+   a legit parallel analyze of a DIFFERENT project is untouched. Compiles clean.
+   Covers the reload-orphan + Re-analyze-double-fire cases we hit repeatedly.
+   ⚠️ Narrow residual: two TRULY-simultaneous different-trigger fires (both
+   pre-scan before either spawns) — mostly covered by the JS same-key dedup;
+   escalate to a Mutex-guarded PID registry only if it recurs. NEEDS live
+   verify: restart an analyze, trigger a second mid-run → only ONE process.
+   _(original report below)_
+
+D1-orig. **Duplicate concurrent `auto-chapter` on the same project.** While
+   dogfooding VictoriaOaks (4K) two identical `cli.py auto-chapter
+   VictoriaOaks_stingy.original.mp4 --target-minutes 5.5` processes ran at once
+   (PIDs 39792 + 35912, same args), both writing to the same
+   `.VictoriaOaks_stingy.original.forge/` → racing sidecar/clip writes + 2× the
+   ffmpeg load on a 4K source.
+   - **Root cause:** forge.js `dedupedCall` map is in-memory JS. A webview
+     reload (HMR on startup here — the `Couldn't find callback id` warnings)
+     wipes the dedup map but does NOT kill the already-running Rust/python
+     process. Sequence: app auto-started analyze (#1) → reload orphaned its
+     callback → user clicked Reanalyze → #2 spawned with no dedup memory of #1.
+   - **Impact:** orphan's UI callback is dead (output discarded by UI) but it
+     still writes to disk = pure waste + corruption race.
+   - **Fix direction:** dedup/cancel must survive a reload. Options: (a) on
+     analyze-start, have Rust check for & kill any existing `auto-chapter`
+     process for the same target before spawning; (b) a lockfile in `.forge/`
+     that a second analyze refuses/adopts; (c) persist the in-flight key so a
+     reloaded webview can re-attach instead of re-spawning. (a) is simplest and
+     also kills true orphans. Production crash-reload could repro, not just HMR.
+   - **⚠️ REPRODUCED on IPZZ-125 (4K) with NO HMR reload** — just opening +
+     Reanalyze spawned 2 (PIDs 34300 + 39140). So the dedup gap is wider than
+     "reload wipes the map": the analyze trigger itself isn't guarded against
+     double-spawn (project-open auto-analyze colliding with the manual Reanalyze
+     click, OR Reanalyze double-firing). On a 4K source this = TWO concurrent
+     4K→720p transcode passes = 2× CPU/time. Output stays correct via
+     `.tmp.<pid>` + atomic rename, but it's badly wasteful. Raises severity:
+     option (a) (kill-existing-before-spawn in Rust) is the right fix and should
+     land before beta.
+   - **3rd symptom — progress footer desync.** With 2 streams feeding one
+     footer, the headline and the step-list disagree: observed headline
+     "Classifying chapter 12/21" while the step list still showed only
+     extract ✓ / load ✓ / detect (spinning). Two interleaved progress streams →
+     the footer shows an impossible/inconsistent state. Fixing D1 (single
+     process) also fixes this.
+
+D5. **★ MAJOR / BETA-GATE — 🟡 FIXED-UNCOMMITTED 2026-06-11. Resume CTA never
+   appeared in its primary scenario (interrupted during chapter_clips).**
+   FIX: made `deriveAnalysisState` clip-aware. New read-only Rust
+   `count_chapter_clips(media_path)` (counts `.forge/clips/*.mp4`, excludes
+   `.tmp.<pid>.` partials) → `forge.js countChapterClips` → AnalysisTab counts on
+   load + re-counts when `analyzing` flips false → added a `clips` artifact
+   (`expected = chapters.length`, present iff count ≥ expected; null count = not
+   penalized). Now "all sidecars present + clips short" → `'partial'` → Resume
+   CTA shows. LIVE-VERIFIED: simulated 20/21 on IPZZ-125, reopened → banner
+   "Partial analysis — 4 of 5 stages … Missing: chapter clips" + Resume button
+   appeared. Files: commands.rs (+lib.rs handler), forge.js, AnalysisTab.jsx.
+   **D5b — FINAL DESIGN (user, 2026-06-11): no Resume button at all; Accept
+   auto-resumes.** Iterated live: (1) tab banner Resume → (2) global footer
+   strip → (3) user: "why do I need a button? once the user clicks Accept it
+   just resumes." LANDED: lifted `deriveAnalysisState` to `src/lib/analysisState.js`
+   (shared by App + AnalysisTab); App computes a global `analysisPartial` from
+   trackPeaks/spectrogram/beats + project.chapterList(or .chapters) + an
+   App-level `countChapterClips` (recounts when `busy` clears). `handleAccept` is
+   now async: when `analysisPartial`, it awaits `handleAnalysisResume`
+   (analyze --resume → finishes only the missing clips, busy footer shows
+   progress) and only chains on success. Accept label flips to "Finish analysis
+   & chain to <next>" when partial. NO gate, NO separate Resume button, NO footer
+   strip — the existing AnalysisTab banner stays as the detailed status/escape
+   hatch (Re-analyze). vite build green; live-verified the footer strip + resume
+   before the pivot. Files: App.jsx, AnalysisTab.jsx (banner now imports from
+   lib), lib/analysisState.js, commands.rs/lib.rs/forge.js (count_chapter_clips).
+   ⚠️ Pending live retest of the final Accept-auto-resume after a hard reload
+   (Fast Refresh stack-overflow from the rapid edits — needs full reload).
+
+   **D5c — single-chapter edge fix (found while testing).** Timeline1 (1 chapter
+   = whole 615 MB source) has 0 clips by design — the blob-cap skip means a
+   whole-video chapter never extracts a clip (verified: `--resume` produces no
+   chapter_clips stage, 0 clips). The naive `clips < chapters → partial` would
+   flag it perpetually partial → Accept-resume infinite loop. FIX in
+   `deriveAnalysisState`: clips are OPTIONAL when `expectedClips <= 1`; only
+   MULTI-chapter projects can be partial-on-clips. Residual (noted, deferred):
+   a multi-chapter video with a dominant >50%-of-source chapter that skips its
+   own clip could still false-positive — real fix is recording the expected
+   clip count in the sidecar. vite build green.
+
+D5-orig. **(original report)**  Killed IPZZ-125 (4K) mid-`chapter_clips`
+   (20/21 clips done, ALL 4 sidecars fresh), reopened → Analysis tab shows ONLY
+   "Re-analyze", NO "Resume". So the only button wipes 20 clips + 4 sidecars and
+   re-runs the entire 2-hour 4K pipeline — the precise waste Resume was supposed
+   to prevent. **This defeats the Resume beta gate for the case it was designed
+   for.**
+   - **Root cause (UI):** `AnalysisTab.jsx::deriveAnalysisState` (~line 791)
+     defines `partial` purely from `ANALYSIS_ARTIFACTS = [chapters, peaks,
+     spectrogram, beats]` — the 4 audio/chapter SIDECARS. `chapter_clips` is NOT
+     an artifact. With all 4 sidecars present, `missing.length === 0` → state =
+     `'complete'` (line 809) → `AnalysisStateBanner` returns null (renders only
+     on `'partial'`, line 711) → no Resume CTA. Incomplete chapter clips are
+     invisible to the state machine.
+   - **Backend is fine:** videoflow `auto_chapter(resume=True)` Tier-1 short-
+     circuits to chapter_clips when sidecars are fresh. The `--resume` plumbing
+     (cli.py → commands.rs → forge.js → handleResume) all exists. The ONLY gap
+     is that the UI never enters `'partial'` for this case, so `handleResume`
+     (which passes `resume:true`) is never reachable.
+   - **Fix:** make `deriveAnalysisState` clip-aware — add chapter_clips
+     completeness as an input (expected = chapters.length; present = count of
+     clip files in `.forge/clips/`). When clips < chapters AND sidecars done →
+     `'partial'` with missing=['chapter clips'], so Resume shows and finishes
+     just the clips. Needs a Rust/CLI "count clips" call (or have the merged
+     sidecar/manifest record clip completion). Must land before beta.
+   - **Related (user-confirmed) — gate accept-and-chain on TRUE completion.**
+     While analysis is incomplete (busy footer running, OR partial/missing
+     clips) the "accept and chain → Chapters" CTA should be DISABLED so the user
+     can't advance downstream with half-baked analysis. Today the state machine
+     flips to `'complete'` as soon as the 4 sidecars land (clips can still be
+     missing), so accept-and-chain enables too early. The clip-aware fix above
+     makes `'complete'` mean "all sidecars + all clips," which both surfaces
+     Resume AND lets accept-and-chain gate correctly. Same fix, both behaviors.
+
+D6. **Black box overlaying chapter-12 video playback (IPZZ-125).** Clicking
+   chapter 12 (67:42–73:40, "Tone: Build", frame @ 01:07:42.656) shows a large
+   solid-black rectangle over the lower-center of the video frame; the rest of
+   the frame renders correctly and the iris coloring is intact. Clip plays
+   without OOM (it's the >150 MB asset-URL path). UNCLASSIFIED pending a
+   play-through test: (a) moves with content = baked into source (not our bug),
+   (b) fixed screen position = mis-positioned UI overlay, (c) clears on play =
+   WebView2 decode artifact on the asset-URL/first-frame path. TBD.
+
+D4. **🚫 SKIPPED (user, 2026-06-11): Cancel button not wanted in the UI.** The
+   underlying problem (orphaned/duplicate analyze) is fixed automatically by D1
+   (kill-existing-before-spawn) — no user-facing Cancel needed. User: "I'm not
+   sure I want it in the actual UI." Can revisit if a real need surfaces.
+   _(original report below)_
+
+D4-orig. **No Cancel button for a running analyze.** User looked for a way to stop
+   an in-progress `auto-chapter` run and there is none in the UI — the only
+   stops are closing the app or killing the process externally. On a 2-hour 4K
+   source (minutes of clip extraction) this is a real gap: a user who started
+   the wrong project, or wants to abort, is stuck. Beta should add a Cancel
+   that kills the spawned `auto-chapter` process (and its ffmpeg children) and
+   returns the tab to its Partial/idle state. Pairs with D1's fix (Rust already
+   needs process-handle tracking to kill-existing-before-spawn; Cancel reuses
+   the same handle). Note: closing the app mid-analyze exits cleanly (no crash)
+   but orphans the python/ffmpeg children unless they're killed — Cancel +
+   app-close should both reap them.
+
+D3. **Analysis-tab "Phrases" KPI (+ per-chapter phrase counts) show "—" on a
+   freshly-analyzed project.** On IPZZ-125 (4K, fresh): CHAPTERS=21,
+   STANZAS=952 populate, but PHRASES = "—" and every "Chapters at a glance"
+   card shows "—" on the phrases line. Verified on disk: IPZZ forge dir has
+   audio/beats/chapters/spectrogram .json but **no `phrases.json`**; VictoriaOaks
+   (where the Phrases tab WAS opened) has `phrases.json` and its KPI populated.
+   - **Root cause:** phrases ("editing units", derived from funscript actions via
+     `analyzePhrases`→`cmd_assess` Step 1+2 drift analysis) are NOT computed in
+     the `auto-chapter` analyze pipeline — they're lazy-on-Phrases-tab-mount.
+     AnalysisTab.jsx:177 calls `analyzePhrases(project.path)` but no assess
+     process was running (it either didn't fire — gated while `analyzing` — or
+     errored to the silent `console.warn` at :180). The read path
+     (`loadPhrasesSidecar`, :275/:374) finds nothing because no prior run wrote
+     the sidecar. IPZZ HAS a funscript (927 KB) so the data IS computable.
+   - **Impact:** a prominent KPI + per-chapter cards render blank right after
+     analyze → reads as broken to a first-run user.
+   - **Fix:** this is the parked "bundle phrase analysis into the analyze
+     pipeline" item — run phrase detection as a stage of `auto-chapter` (it's
+     sub-second-to-seconds, funscript-only) so `phrases.json` is written during
+     analyze and the KPI populates without visiting the Phrases tab. Confirm:
+     does opening the Phrases tab on IPZZ back-fill the Analysis KPI? If yes, the
+     compute path works and only the bundling/trigger timing is the gap.
+   - **CONFIRMED:** opening the Phrases tab on IPZZ ran the compute (footer:
+     Detecting phases → cycles → patterns → phrases → BPM transitions →
+     Classifying behaviors) and wrote `IPZZ-...phrases.json` (677 slices) — and
+     it was QUICK. So the compute path is fine; the fix is just to run it as an
+     auto-chapter stage (it's fast, funscript-only). **KPI back-fill CONFIRMED:**
+     after the compute, the Analysis tab PHRASES KPI shows 677 and the
+     per-chapter cards fill in their phrase counts (Ch1 20 / Ch2 38 / Ch3 34) on
+     tab re-mount. So back-fill works; this is purely a "not in the pipeline"
+     gap, NOT a refresh bug.
+   - **Sub-note (Checkpoint 7 regression on this path):** the phrase-compute
+     busy-footer headline is a bare "Analyzing…" — it does NOT name the
+     project/what's being analyzed (the auto-chapter footer DID:
+     "Analyzing <project>…"). The inner stages ARE named; just the headline is
+     generic. Give it the same "Analyzing phrases — <project>" headline.
+
+D2. **Phrases tab doesn't auto-refresh when analyze completes.** During the
+   VictoriaOaks run the Phrases tab showed incomplete data mid-analyze; the
+   sidecar on disk was in fact complete (704 phrases across all 17 chapters,
+   no empty chapters). Reopening the tab after completion showed everything.
+   Proximate cause here was tangled with D1 (the UI "done" callback belonged to
+   the orphaned process), but the underlying UX gap stands: a tab that mounted
+   before analyze finished should refetch its sidecar on the completion signal
+   rather than stay stale. Confirm on a clean single-process run whether this is
+   purely a D1 side-effect or a separate missing-refresh bug.
+
+
 
 ### 🟡 Fixed-uncommitted (live in dev build, needs verify + commit)
 

@@ -42,6 +42,8 @@ pub fn run() {
             commands::save_feel_events,
             commands::read_characters,
             commands::save_characters,
+            commands::read_passages,
+            commands::save_passages,
             commands::stim_process,
             commands::multiaxis_process,
             commands::polish_preview,
@@ -64,6 +66,7 @@ pub fn run() {
             commands::load_audio_beats,
             commands::prewarm_media_range,
             commands::extract_chapter_clip,
+            commands::count_chapter_clips,
             commands::wipe_forge_dir,
             // Library — FsAdapter primitives + config path + native ops
             library::library_fs_readdir,

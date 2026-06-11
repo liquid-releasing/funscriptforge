@@ -249,6 +249,19 @@ export function loadAutoChapterStanzas(mediaPath) {
   );
 }
 
+/** Count finished chapter-clip files in a project's `.forge/clips/` dir.
+ *  The Analysis tab compares this to chapters.length to detect an analyze
+ *  interrupted DURING chapter_clips (all sidecars present, clips
+ *  incomplete) — the case that should offer Resume. Fallback 0 outside
+ *  Tauri (clips never block the state machine when the count is unknown). */
+export function countChapterClips(mediaPath) {
+  return call(
+    'count_chapter_clips',
+    { mediaPath },
+    () => Promise.resolve(0),
+  );
+}
+
 /** Overwrite the chapters sidecar with a user-edited chapter list.
  *  Used by ChaptersTab's split / join handlers. Rust read-merges so
  *  videoflow's `phrases` + `energy` keys (written by auto_chapter at
@@ -418,6 +431,27 @@ export function saveCharacters(funscriptPath, characters) {
   return call(
     'save_characters',
     { funscriptPath, characters },
+    () => Promise.resolve(null),
+  );
+}
+
+/** Read the Channels · Passages intensity arcs from `<stem>.passages.json`.
+ *  Returns {version, passages:[...]}; empty list when the sidecar is missing. */
+export function readPassages(funscriptPath) {
+  return call(
+    'read_passages',
+    { funscriptPath },
+    () => Promise.resolve({ version: 1, passages: [] }),
+  );
+}
+
+/** Write the Channels · Passages intensity arcs to `<stem>.passages.json`
+ *  (write-through on edit, mirroring characters). The funscript is never
+ *  touched. Returns {saved, count}. Browser mode → no-op. */
+export function savePassages(funscriptPath, passages) {
+  return call(
+    'save_passages',
+    { funscriptPath, passages },
     () => Promise.resolve(null),
   );
 }

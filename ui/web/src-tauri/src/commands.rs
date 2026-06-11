@@ -541,6 +541,55 @@ async fn run_cli_with_progress(
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+// D1 — kill any pre-existing / orphaned `auto-chapter` run for THIS media
+// before spawning a new one. Two concurrent analyzes on the same source race
+// on the `.forge/` dir (corrupt sidecars, 2× the ffmpeg cost on 4K) and the
+// JS-side dedup (forge.js `dedupedCall`) is in-memory only — it's wiped by a
+// webview reload while the Rust/python child keeps running, so the next
+// trigger spawns a duplicate. This backstop lives in the Rust process (which
+// survives reloads) and runs BEFORE we spawn, so it only ever targets a
+// stale/orphaned prior run, never the one we're about to start. Matched by
+// media stem so a legit parallel analyze of a DIFFERENT project is untouched.
+fn kill_existing_analyze(media: &str) {
+    let stem = Path::new(media)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    if stem.is_empty() {
+        return;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // Escape PowerShell -like wildcard metacharacters in the stem so an
+        // odd filename can't widen (or break) the match.
+        let safe = stem
+            .replace('`', "``")
+            .replace('[', "`[")
+            .replace(']', "`]")
+            .replace('*', "`*")
+            .replace('?', "`?")
+            .replace('\'', "''");
+        // Find python `auto-chapter <…stem…>` procs and kill each process TREE
+        // (taskkill /T also reaps the ffmpeg child).
+        let ps = format!(
+            "Get-CimInstance Win32_Process -Filter \"name='python.exe'\" | \
+             Where-Object {{ $_.CommandLine -like '*auto-chapter*' -and $_.CommandLine -like '*{safe}*' }} | \
+             ForEach-Object {{ & taskkill /PID $_.ProcessId /T /F 2>$null }}"
+        );
+        let _ = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &ps])
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW — no console flash
+            .output();
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = std::process::Command::new("pkill")
+            .args(["-9", "-f", &format!("auto-chapter.*{}", stem)])
+            .output();
+    }
+}
+
 async fn run_cli_meta(funscript_path: &str) -> Result<CliMeta, String> {
     let stdout = run_cli(&["meta", funscript_path, "--format", "json"]).await?;
     serde_json::from_str::<CliMeta>(&stdout)
@@ -739,6 +788,11 @@ pub async fn analyze_chapters_with_videoflow(
             })?
         }
     };
+
+    // D1 — reap any stale/orphaned analyze for this same source before we
+    // spawn (survives webview reloads that wipe the JS dedup map). No-op when
+    // nothing's running; never touches the run we're about to start.
+    kill_existing_analyze(&media);
 
     let target = target_minutes.unwrap_or(5.5).to_string();
     let mut args: Vec<&str> = vec![
@@ -1841,6 +1895,40 @@ pub async fn save_characters(
     serde_json::from_str(&out).map_err(|e| format!("parse characters-write output: {}", e))
 }
 
+/// Read the Channels · Passages intensity arcs from `<stem>.passages.json`.
+/// Returns `{ version, passages: [] }` when the sidecar is missing.
+#[tauri::command]
+pub async fn read_passages(funscript_path: String) -> Result<serde_json::Value, String> {
+    let out = run_cli(&["passages-read", &funscript_path]).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse passages-read output: {}", e))
+}
+
+/// Write the Channels · Passages intensity arcs to `<stem>.passages.json`. The
+/// list is staged to a temp file (run_cli has no stdin) and passed via
+/// --passages-json; the temp file is removed after.
+#[tauri::command]
+pub async fn save_passages(
+    funscript_path: String,
+    passages: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let body = serde_json::to_string(&passages)
+        .map_err(|e| format!("serialize passages: {}", e))?;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let mut tmp = std::env::temp_dir();
+    tmp.push(format!("ff_passages_{}.json", nanos));
+    tokio::fs::write(&tmp, body)
+        .await
+        .map_err(|e| format!("write temp passages: {}", e))?;
+    let tmp_str = tmp.to_string_lossy().into_owned();
+    let res = run_cli(&["passages-write", &funscript_path, "--passages-json", &tmp_str]).await;
+    let _ = tokio::fs::remove_file(&tmp).await;
+    let out = res?;
+    serde_json::from_str(&out).map_err(|e| format!("parse passages-write output: {}", e))
+}
+
 /// Generate e-stim channel funscripts for a window (a chapter) via the
 /// funscript-tools pipeline — the React bridge to the same `process()` the
 /// Streamlit stim tab used. `mode` is "2d" (alpha+beta, fast) or "3phase"
@@ -2558,6 +2646,30 @@ pub struct ChapterClipResult {
     pub actual_start_ms: u64,
     pub actual_end_ms: u64,
     pub cached: bool,
+}
+
+// Count finished chapter-clip files in a project's forge dir. Used by the
+// Analysis tab to detect an analyze that was interrupted DURING
+// chapter_clips: all audio/chapter sidecars are on disk (so the old
+// sidecar-only state machine read 'complete') but fewer than one clip
+// per chapter exist. Comparing this count to chapters.length lets the UI
+// surface the Resume CTA for the "killed during clips" case (the exact
+// scenario Resume was built for). Read-only; returns 0 if the dir is
+// absent. `.tmp.<pid>.` partials (from a killed extraction) are excluded.
+#[tauri::command]
+pub async fn count_chapter_clips(media_path: String) -> Result<usize, String> {
+    let clips_dir = forge_dir(Path::new(&media_path)).join("clips");
+    let mut count = 0usize;
+    if let Ok(entries) = std::fs::read_dir(&clips_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.ends_with(".mp4") && !name.contains(".tmp.") {
+                count += 1;
+            }
+        }
+    }
+    Ok(count)
 }
 
 #[tauri::command]

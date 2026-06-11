@@ -52,12 +52,14 @@ import {
 import {
   analyzeChaptersWithVideoflow,
   analyzePhrases,
+  countChapterClips,
   isTauri,
   loadAutoChapterStanzas,
   loadPhrasesSidecar,
   loadProject,
   wipeForgeDir,
 } from '../api/forge.js';
+import { deriveAnalysisState } from '../lib/analysisState.js';
 
 // FunscriptForge's Analysis tab uses the full default category list.
 // The Phrases sub-tab IS surfaced here — it renders the at-a-glance
@@ -104,6 +106,12 @@ export default function AnalysisTab({
   const stanzasCount = stanzas?.length ?? null;
   const [phrases, setPhrases] = useState(null);
   const phrasesCount = phrases?.length ?? null;
+  // Count of finished chapter-clip files on disk. null = not-yet-counted
+  // (don't penalize the state machine). Compared to chapters.length in
+  // deriveAnalysisState so an analyze interrupted DURING chapter_clips
+  // (all sidecars present, clips incomplete) surfaces as 'partial' → the
+  // Resume CTA. See D5 in internal/beta_test_bugs.md.
+  const [chapterClipsPresent, setChapterClipsPresent] = useState(null);
   // Pipeline-level error — when the whole analysis fails (no media,
   // CLI crash, etc.), every still-loading panel surfaces this and the
   // Retry button re-triggers the same call.
@@ -382,6 +390,25 @@ export default function AnalysisTab({
     }
   }, [project?.path, project?.mediaPath, projectExists, isSample]);
 
+  // Count chapter clips on disk to detect an analyze interrupted DURING
+  // chapter_clips (all sidecars complete, clips short of chapters.length).
+  // Re-counts when `analyzing` flips false (a finished analyze/Resume) so
+  // the Partial banner appears on reopen and clears once the last clip
+  // lands. While analyzing we skip counting (the run owns the clips dir).
+  // D5 — see internal/beta_test_bugs.md.
+  useEffect(() => {
+    if (!projectExists || isSample || !isTauri() || !project?.mediaPath) {
+      setChapterClipsPresent(null);
+      return;
+    }
+    if (analyzing) return; // let the run finish; re-count when it flips false
+    let cancelled = false;
+    countChapterClips(project.mediaPath)
+      .then((n) => { if (!cancelled && typeof n === 'number') setChapterClipsPresent(n); })
+      .catch(() => { if (!cancelled) setChapterClipsPresent(null); });
+    return () => { cancelled = true; };
+  }, [project?.path, project?.mediaPath, projectExists, isSample, analyzing]);
+
   // ── Empty state ─────────────────────────────────────────────────
   if (!projectExists) {
     return (
@@ -486,9 +513,11 @@ export default function AnalysisTab({
     () => deriveAnalysisState({
       hasMedia, analyzing, pipelineError,
       chapterList, trackPeaks, trackSpectrogram, trackBeats,
+      chapterClipsPresent,
     }),
     [hasMedia, analyzing, pipelineError,
-     chapterList, trackPeaks, trackSpectrogram, trackBeats],
+     chapterList, trackPeaks, trackSpectrogram, trackBeats,
+     chapterClipsPresent],
   );
 
   return (
@@ -771,49 +800,9 @@ const resumeButtonStyle = {
   display: 'inline-flex', alignItems: 'center', gap: 6,
 };
 
-// ─── Analysis-state derivation ───────────────────────────────────
-// The four sidecar artifacts we track here. `chapters` is the gate
-// — if it's missing we treat the project as un-analyzed (initial-
-// analyze effect will fire), not partial. Partial = chapters present
-// but at least one of the audio sidecars is missing.
-//
-// Phrases are intentionally omitted: they live on the Phrases tab,
-// not the overview. The videoflow pipeline still produces them as
-// part of auto_chapter; this tab just doesn't claim ownership of
-// the phrases sidecar's freshness story.
-const ANALYSIS_ARTIFACTS = [
-  { key: 'chapters',    label: 'chapters' },
-  { key: 'peaks',       label: 'peaks' },
-  { key: 'spectrogram', label: 'spectrogram' },
-  { key: 'beats',       label: 'beats' },
-];
-
-function deriveAnalysisState({
-  hasMedia, analyzing, pipelineError,
-  chapterList, trackPeaks, trackSpectrogram, trackBeats,
-}) {
-  const present = {
-    chapters:    !!chapterList?.length,
-    peaks:       !!trackPeaks?.peaks?.length,
-    spectrogram: !!trackSpectrogram?.cells?.length,
-    beats:       !!trackBeats?.beatsMs?.length,
-  };
-  const done    = ANALYSIS_ARTIFACTS.filter((a) => present[a.key]).map((a) => a.label);
-  const missing = ANALYSIS_ARTIFACTS.filter((a) => !present[a.key]).map((a) => a.label);
-  const summary = { done, missing };
-
-  if (pipelineError)            return { analysisState: 'error',    analysisSummary: summary };
-  if (analyzing)                return { analysisState: 'loading',  analysisSummary: summary };
-  if (!hasMedia)                return { analysisState: 'empty',    analysisSummary: summary };
-  if (done.length === 0)        return { analysisState: 'empty',    analysisSummary: summary };
-  if (missing.length === 0)     return { analysisState: 'complete', analysisSummary: summary };
-  // Chapters must be present for 'partial' — without them the auto
-  // analyze effect will fire and we're really in 'loading', not
-  // 'partial'. (Belt-and-suspenders: triggerAnalysis bails if
-  // chapterList.length, so we won't oscillate.)
-  if (!present.chapters)        return { analysisState: 'loading',  analysisSummary: summary };
-  return { analysisState: 'partial', analysisSummary: summary };
-}
+// deriveAnalysisState + ANALYSIS_ARTIFACTS moved to ../lib/analysisState.js
+// (2026-06-11) so App.jsx can compute the same state for the global footer
+// Partial/Resume strip + accept-and-chain gate. See D5/D5b.
 
 // ─── Status picker ──────────────────────────────────────────────
 // Resolves four-way status from boolean rules. Order matters: error

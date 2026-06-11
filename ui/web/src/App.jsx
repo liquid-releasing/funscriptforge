@@ -18,7 +18,9 @@ import {
   pickFunscriptFile, pickMediaFile,
   loadAudioPeaks, loadAudioSpectrogram, loadAudioBeats,
   revertWorkingFunscript,
+  countChapterClips, analyzeChaptersWithVideoflow,
 } from './api/forge.js';
+import { deriveAnalysisState } from './lib/analysisState.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
 import AnalysisTab from './screens/AnalysisTab.jsx';
@@ -134,6 +136,12 @@ export default function App() {
   // Rendered as a tick overlay on the Audio waveform; the BPM also
   // surfaces in the AudioDashboard's headline row.
   const [trackBeats, setTrackBeats] = useState(null);
+  // Count of finished chapter-clip files on disk (null = not-yet-counted).
+  // Feeds the global analysis-state derivation so the footer can surface a
+  // Partial/Resume strip when an analyze was interrupted DURING chapter_clips
+  // (all sidecars present, clips short of chapters.length) — visible on every
+  // downstream tab, not just Analysis. D5/D5b.
+  const [chapterClipsPresent, setChapterClipsPresent] = useState(null);
   // selectedDevices is lifted here so it survives tab switches — once the
   // user picks devices in Project, downstream tabs (Device, Stim, Multi-axis)
   // see the same selection without re-prompting.
@@ -362,6 +370,20 @@ export default function App() {
     _doLoadAudioSidecars(openedMediaPath);
   }, [_doLoadAudioSidecars, openedMediaPath]);
 
+  // Count chapter clips on disk for the global analysis-state strip. Recount
+  // when the media changes OR when a busy operation (analyze/Resume) finishes
+  // (busy → null), so the footer Partial/Resume strip appears on reopen and
+  // clears once the last clip lands. Skipped mid-operation. D5/D5b.
+  useEffect(() => {
+    if (!isTauri() || !openedMediaPath) { setChapterClipsPresent(null); return undefined; }
+    if (busy) return undefined; // don't count mid-op; re-count when busy clears
+    let cancelled = false;
+    countChapterClips(openedMediaPath)
+      .then((n) => { if (!cancelled && typeof n === 'number') setChapterClipsPresent(n); })
+      .catch(() => { if (!cancelled) setChapterClipsPresent(null); });
+    return () => { cancelled = true; };
+  }, [openedMediaPath, busy]);
+
   const handleProjectOpened = (project) => {
     setOpenedProject(project);
     if (project && typeof project === 'object' && project.id) {
@@ -554,6 +576,46 @@ export default function App() {
   const inTauri = isTauri();
   const project = typeof openedProject === 'object' ? openedProject : null;
 
+  // Global analysis-state — same derivation AnalysisTab uses, computed here so
+  // the footer surfaces a Partial/Resume strip on every downstream tab and
+  // accept-and-chain gates on true completion (sidecars + clips). `analyzing`
+  // = any busy op (analyze sets busy; during busy the footer already shows
+  // progress, so deriveAnalysisState returns 'loading' and the strip hides).
+  // chapters arrive as `chapterList` (after a tab edits them) or `chapters`
+  // (fresh from loadProject) — read whichever is the array. D5/D5b.
+  const chapterArr = Array.isArray(project?.chapterList)
+    ? project.chapterList
+    : (Array.isArray(project?.chapters) ? project.chapters : null);
+  const { analysisState: globalAnalysisState } = deriveAnalysisState({
+    hasMedia: !!project?.mediaPath,
+    analyzing: !!busy,
+    pipelineError: false,
+    chapterList: chapterArr,
+    trackPeaks, trackSpectrogram, trackBeats,
+    chapterClipsPresent,
+  });
+  const analysisPartial = globalAnalysisState === 'partial';
+
+  // Finish an interrupted analyze — re-run with --resume so videoflow skips
+  // every stage already on disk and only builds the missing chapter clips.
+  // Invoked by Accept (no separate button); the busy footer shows progress.
+  // Returns true on success so the caller knows whether to chain. The
+  // clip-count effect re-runs when busy clears and flips the state to
+  // complete. D5b.
+  const handleAnalysisResume = useCallback(async () => {
+    if (!project?.path) return false;
+    setBusy({ message: `Finishing analysis for ${project.title ?? 'project'}…`, steps: [] });
+    try {
+      await analyzeChaptersWithVideoflow(project.path, 5.5, project.mediaPath, true);
+      return true;
+    } catch (err) {
+      setAppError(`Resume failed: ${err?.message ?? err}`);
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }, [project?.path, project?.mediaPath, project?.title]);
+
   // Scope picker shown in the TopBar — "All chapters" + each chapter the
   // active project has. Lifted from the per-tab state because the scope
   // filter is global (cross-tab) chrome. For now it's only display; the
@@ -618,17 +680,21 @@ export default function App() {
     ? `${(project.title ?? 'project')}.${tab}.json`
     : null;
 
-  const handleAccept = () => {
+  const handleAccept = async () => {
     if (gateMsg) {
       // Gate blocks; nothing to advance. The summary already shows why.
-      // Could escalate to a toast if visibility becomes an issue.
       return;
     }
     if (!nextTab) return;
+    // If analysis was interrupted during chapter_clips (sidecars on disk,
+    // clips short), Accept finishes it first — no separate Resume button
+    // (user, 2026-06-11: "why do I need a button?"). The busy footer shows
+    // the resume progress; only chain once it succeeds. D5b.
+    if (analysisPartial && project?.path) {
+      const ok = await handleAnalysisResume();
+      if (!ok) return; // resume failed — error shown, stay put
+    }
     // TODO: write chain file with the active tab's working state.
-    // For now we just advance; each tab's state persists in its own
-    // state (no chain file produced yet — accept-and-chain workingActions
-    // is the next big wiring task).
     console.log(`accept-and-chain: ${tab} → ${nextTab}`);
     setTab(nextTab);
   };
@@ -880,7 +946,7 @@ export default function App() {
           chainFile={chainFile}
           accepted={false}
           primaryLabel={nextTab
-            ? `Accept and chain to ${TABS.find((t) => t.id === nextTab)?.label ?? nextTab}`
+            ? `${analysisPartial ? 'Finish analysis & chain' : 'Accept and chain'} to ${TABS.find((t) => t.id === nextTab)?.label ?? nextTab}`
             : (tab === 'export' ? 'Write outputs' : 'Accept')}
           onAccept={handleAccept}
           error={appError}
