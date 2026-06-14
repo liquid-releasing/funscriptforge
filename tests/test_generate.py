@@ -87,6 +87,12 @@ def _synthetic_beatmap_json(path, *, beats=240, interval_ms=480):
         "downbeats": beat_ms[::4],
         "stanzas": stanzas,
         "energy": [round(e, 6) for e in energy],
+        # Provenance the cache-hit check matches against (defaults of
+        # _load_or_analyze_beatmap: plp / full / 180s chunks). Without these
+        # the loader treats the sidecar as stale and re-analyzes.
+        "tracker": "plp",
+        "source": "full",
+        "chunk_secs": 180.0,
     }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f)

@@ -3487,7 +3487,19 @@ def _beatmap_sidecar_path(media: str):
     return forge_dir(media) / f"{Path(media).stem}.beatmap.json"
 
 
-def _load_or_analyze_beatmap(media, *, source="full", tracker="plp", force=False, persist=True):
+# Default time-chunk width (seconds) for analysis. Long files are analysed
+# in ~3-minute windows so a multi-hour pass emits per-chunk progress
+# ("chunk 4/12") instead of looking hung inside one monolithic librosa call,
+# and energy is normalised per window (a quiet intro isn't crushed by a loud
+# climax). Mirrors videoflow.audio.DEFAULT_CHUNK_SECS; short files stay a
+# single window (no behaviour change). Pass chunk_secs=None to disable.
+_DEFAULT_CHUNK_SECS = 180.0
+
+
+def _load_or_analyze_beatmap(
+    media, *, source="full", tracker="plp", chunk_secs=_DEFAULT_CHUNK_SECS,
+    force=False, persist=True,
+):
     """Return ``(AudioBeatMap, from_cache, sidecar_path)`` for *media*.
 
     Prefers the persisted full beat map (``<stem>.beatmap.json`` in the forge
@@ -3511,25 +3523,32 @@ def _load_or_analyze_beatmap(media, *, source="full", tracker="plp", force=False
     silently reused)."""
     from videoflow.audio import AudioBeatMap, analyze_beats
     sidecar = _beatmap_sidecar_path(media)
+    # chunk_secs changes the per-window energy normalization, so it is part of
+    # the cache identity alongside tracker/source.
+    chunk_tag = round(float(chunk_secs), 1) if chunk_secs else 0
     if not force and sidecar.exists():
         try:
             cached = json.loads(sidecar.read_text(encoding="utf-8"))
-            if cached.get("tracker") == tracker and cached.get("source", source) == source:
+            if (cached.get("tracker") == tracker
+                    and cached.get("source", source) == source
+                    and cached.get("chunk_secs", chunk_tag) == chunk_tag):
                 return AudioBeatMap.load(sidecar), True, sidecar
         except Exception:
-            pass  # corrupt / stale / different-tracker cache → re-analyze
+            pass  # corrupt / stale / different-provenance cache → re-analyze
     beat_map = analyze_beats(
-        media, source=source, tracker=tracker, on_progress=_make_stage_event_emitter(),
+        media, source=source, tracker=tracker, chunk_secs=chunk_secs,
+        on_progress=_make_stage_event_emitter(),
     )
     if persist:
         sidecar.parent.mkdir(parents=True, exist_ok=True)
         beat_map.save(sidecar)
-        # Annotate provenance so the cache can self-invalidate on tracker/source
-        # change (AudioBeatMap.load ignores these extra keys).
+        # Annotate provenance so the cache can self-invalidate on
+        # tracker/source/chunk change (AudioBeatMap.load ignores extra keys).
         try:
             d = json.loads(sidecar.read_text(encoding="utf-8"))
             d["tracker"] = tracker
             d["source"] = source
+            d["chunk_secs"] = chunk_tag
             sidecar.write_text(json.dumps(d), encoding="utf-8")
         except Exception:
             pass
@@ -3547,7 +3566,8 @@ def cmd_beatmap(args):
     cache unless ``--force``.
     """
     beat_map, from_cache, sidecar = _load_or_analyze_beatmap(
-        args.media, source=args.source, tracker=args.tracker, force=args.force,
+        args.media, source=args.source, tracker=args.tracker,
+        chunk_secs=args.chunk_secs, force=args.force,
     )
     payload = {
         "ok": True,
@@ -3606,7 +3626,8 @@ def cmd_generate(args):
         # Reuse the persisted full beat map when present; analyze + persist on
         # a miss so the next generate (any device) is instant.
         beat_map, from_cache, _ = _load_or_analyze_beatmap(
-            args.media, source=args.source, tracker=args.tracker, force=args.force,
+            args.media, source=args.source, tracker=args.tracker,
+            chunk_secs=args.chunk_secs, force=args.force,
         )
     _emit_progress(f"done::1::beatmap::{len(beat_map.beats)} beats @ {beat_map.bpm:.0f} BPM")
 
@@ -4367,6 +4388,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_bm.add_argument("--tracker", choices=["auto", "beat_track", "plp"], default="plp",
                       help="Beat tracker. Default plp — follows the continuous pulse "
                            "through weak/non-percussive sections beat_track misses.")
+    p_bm.add_argument("--chunk-secs", type=float, default=_DEFAULT_CHUNK_SECS,
+                      help="Analyze long files in time windows of this many seconds "
+                           "(per-chunk progress + energy norm). 0 disables. "
+                           f"Default {_DEFAULT_CHUNK_SECS:.0f}.")
     p_bm.add_argument("--force", action="store_true",
                       help="Re-analyze even if a persisted beatmap exists")
     p_bm.add_argument("--format", choices=["json", "text"], default="text",
@@ -4400,6 +4425,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_gen.add_argument("--tracker", choices=["auto", "beat_track", "plp"], default="plp",
                        help="Beat tracker when --media is used. Default plp (covers "
                             "weak-pulse intros beat_track misses).")
+    p_gen.add_argument("--chunk-secs", type=float, default=_DEFAULT_CHUNK_SECS,
+                       help="Analyze long --media files in time windows of this many "
+                            "seconds (per-chunk progress + energy norm). 0 disables. "
+                            f"Default {_DEFAULT_CHUNK_SECS:.0f}.")
     p_gen.add_argument("--force", action="store_true",
                        help="Re-analyze the media even if a persisted beatmap exists")
     p_gen.add_argument("--emit-actions", action="store_true",
