@@ -3,7 +3,8 @@ import {
   sampleCurve,
   DEFAULT_RANGE, DEFAULT_PACE,
   RANGE_PRESETS, PACE_PRESETS, presetIdOf,
-  generateFromLanes, diagnose, verdictFor, topFix, TARGET_DECILES,
+  generateFromLanes, diagnose, verdictFor, topFix, deadAirNote, TARGET_DECILES,
+  SPEED_CEIL, DEAD_AIR_MS,
 } from './generate.js';
 
 const flat = (v) => [{ t: 0, v }, { t: 1, v }];
@@ -135,6 +136,46 @@ describe('topFix', () => {
     const arcFix = topFix({ rails: 0.5, dynamics: 0.3 });
     expect(RANGE_PRESETS.some((p) => p.id === railsFix.presetId)).toBe(true);
     expect(PACE_PRESETS.some((p) => p.id === arcFix.presetId)).toBe(true);
+  });
+
+  it('eases the pace FIRST when the script is too fast (device safety)', () => {
+    // tooFast outranks a rails problem — a brutal script must not read green.
+    expect(topFix({ rails: 0.05, dynamics: 0.9, tooFast: true }))
+      .toMatchObject({ lane: 'pace', presetId: 'gentle' });
+    expect(PACE_PRESETS.some((p) => p.id === 'gentle')).toBe(true);
+  });
+});
+
+describe('diagnose — speed + coverage honesty', () => {
+  // rail-to-rail strokes 50ms apart => ~2000 units/sec => flash => too fast
+  const fast = Array.from({ length: 40 }, (_, i) => ({ at: i * 50, pos: i % 2 ? 0 : 100 }));
+  // gentle 40<->60 strokes a second apart => ~20 units/sec => safe
+  const gentle = Array.from({ length: 40 }, (_, i) => ({ at: i * 1000, pos: i % 2 ? 40 : 60 }));
+
+  it('flags a brutally fast script as tooFast', () => {
+    const d = diagnose(fast);
+    expect(d.avgSpeed).toBeGreaterThan(SPEED_CEIL);
+    expect(d.flashPct).toBeGreaterThan(0.5);
+    expect(d.tooFast).toBe(true);
+  });
+
+  it('does not flag a gentle script', () => {
+    const d = diagnose(gentle);
+    expect(d.avgSpeed).toBeLessThan(SPEED_CEIL);
+    expect(d.tooFast).toBe(false);
+  });
+
+  it('measures dead air from the lead-in gap when durationMs is known', () => {
+    // first stroke at 30s of a 60s track => 30s of dead air at the top
+    const late = [{ at: 30000, pos: 0 }, { at: 30500, pos: 100 }, { at: 31000, pos: 0 }];
+    const d = diagnose(late, 60000);
+    expect(d.deadAirMs).toBeGreaterThanOrEqual(30000);
+    expect(deadAirNote(d)).toMatch(/no beats/);
+  });
+
+  it('reports no dead air for a well-covered script', () => {
+    expect(deadAirNote(diagnose(gentle, 40000))).toBeNull();
+    expect(DEAD_AIR_MS).toBeGreaterThan(0);
   });
 });
 

@@ -97,19 +97,35 @@ export function generateFromLanes(rangePts, pacePts, durationMs) {
 // (deciles), how much contrast it has over time (dynamics), rail usage, and
 // coverage. This is the implementable half of the "What to fix" panel and is
 // designed to run against REAL engine output unchanged.
-export function diagnose(actions) {
+// Device-safety / coverage thresholds. Calibrated from dogfood (2026-06-14):
+// avg speed ~283 felt great, 488-609 felt severe → flag a too-fast script so
+// the verdict stops showing green on something device-brutal. Dead-air = a
+// long beatless stretch (the audio engine's blind spot — fill with events,
+// not fake motion). Tunable.
+export const SPEED_CEIL = 450;        // pos-units/sec — above this = "too fast"
+export const DEAD_AIR_MS = 20000;     // a gap this long reads as dead air
+
+export function diagnose(actions, durationMs) {
   const deciles = new Array(10).fill(0);
   let lo = 100;
   let hi = 0;
   let sumDepth = 0;
+  let sumSpeed = 0;
+  let flash = 0;
   let n = 0;
+  let maxGap = 0;
   for (let i = 0; i < actions.length; i += 1) {
     const p = actions[i].pos;
     deciles[Math.max(0, Math.min(9, Math.floor(p / 10)))] += 1;
     if (p < lo) lo = p;
     if (p > hi) hi = p;
     if (i > 0) {
+      const dms = Math.max(1, actions[i].at - actions[i - 1].at);
       sumDepth += Math.abs(p - actions[i - 1].pos);
+      const v = (Math.abs(p - actions[i - 1].pos) / dms) * 1000; // units/sec
+      sumSpeed += v;
+      if (v > 600) flash += 1;
+      if (dms > maxGap) maxGap = dms;
       n += 1;
     }
   }
@@ -118,9 +134,17 @@ export function diagnose(actions) {
   const total = actions.length || 1;
   const rails = (deciles[0] + deciles[9]) / total; // mass in bottom+top deciles
   const avgDepth = n ? sumDepth / n : 0; // 0..100
+  const avgSpeed = n ? sumSpeed / n : 0; // units/sec
+  const flashPct = n ? flash / n : 0;
   const coverage = (hi - lo) / 100;
   const dynamics = Math.max(0, Math.min(1, 0.45 * coverage + 0.30 * (avgDepth / 70) + 0.25 * rails * 2.2));
-  return { deciles: norm, dynamics, rails, coverage, avgDepth };
+  // Dead-air: the biggest beatless gap, incl. the lead-in (silence before the
+  // first stroke) and the tail. Needs durationMs to see the lead/tail gaps.
+  const leadGap = actions.length ? actions[0].at : 0;
+  const tailGap = durationMs && actions.length ? Math.max(0, durationMs - actions[actions.length - 1].at) : 0;
+  const deadAirMs = Math.max(maxGap, leadGap, tailGap);
+  const tooFast = avgSpeed > SPEED_CEIL || flashPct > 0.45;
+  return { deciles: norm, dynamics, rails, coverage, avgDepth, avgSpeed, flashPct, deadAirMs, tooFast };
 }
 
 // Headline verdict — one word the user reads in half a second. Drives the
@@ -135,7 +159,12 @@ export function verdictFor(dynamics) {
 // The single highest-impact fix for the current diagnosis. Returns the lane +
 // preset to apply, plus the human label. Coupling the metric to its fix is the
 // whole point — the panel hands the user the button, it doesn't just grade.
-export function topFix({ rails, dynamics }) {
+export function topFix({ rails, dynamics, tooFast }) {
+  // Device safety first: a too-fast script reads "Dynamic" on contrast alone
+  // but is brutal to play. Ease the pace (gentler density) before anything.
+  if (tooFast) {
+    return { lane: 'pace', presetId: 'gentle', label: 'Ease the pace', why: 'too fast for most devices' };
+  }
   if (rails < 0.22) {
     return { lane: 'range', presetId: 'full', label: 'Fill the rails', why: 'strokes hug the middle' };
   }
@@ -143,6 +172,17 @@ export function topFix({ rails, dynamics }) {
     return { lane: 'pace', presetId: 'burn', label: 'Add an arc', why: 'it runs at one level' };
   }
   return null;
+}
+
+// Human-readable dead-air note (or null). A long beatless stretch is the audio
+// engine's blind spot — surface it so the user fills it with events while
+// watching, rather than the engine inventing motion the audio doesn't justify.
+export function deadAirNote(diag) {
+  if (!diag || !diag.deadAirMs || diag.deadAirMs < DEAD_AIR_MS) return null;
+  const s = Math.round(diag.deadAirMs / 1000);
+  const mm = Math.floor(s / 60);
+  const ss = String(s % 60).padStart(2, '0');
+  return `${mm}:${ss} with no beats — author events here while watching.`;
 }
 
 // The target spread for the "where strokes land" histogram — a ghost overlay

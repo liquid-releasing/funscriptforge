@@ -18,8 +18,23 @@ import PresetLane from '../components/PresetLane.jsx';
 import { isTauri, generateFunscript } from '../api/forge.js';
 import {
   DEFAULT_RANGE, DEFAULT_PACE, RANGE_PRESETS, PACE_PRESETS, presetIdOf,
-  sampleCurve, generateFromLanes, diagnose, verdictFor, topFix, TARGET_DECILES,
+  sampleCurve, generateFromLanes, diagnose, verdictFor, topFix, deadAirNote, TARGET_DECILES,
 } from '../data/generate.js';
+
+// The live-preview funscript is a CACHE — it belongs in the hidden .forge dir
+// (overwritten each regenerate), NOT next to the source where it clutters and
+// shadows the original. Permanent, versioned output is the Export tab's job.
+// Mirrors videoflow.sidecar.forge_dir: <dir>/.<stem>.forge/<stem>.generated.funscript
+function forgeGeneratedPath(mediaPath) {
+  const bs = mediaPath.lastIndexOf('\\');
+  const fs = mediaPath.lastIndexOf('/');
+  const i = Math.max(bs, fs);
+  const sep = bs > fs ? '\\' : '/';
+  const dir = i >= 0 ? mediaPath.slice(0, i) : '.';
+  const base = i >= 0 ? mediaPath.slice(i + 1) : mediaPath;
+  const stem = base.replace(/\.[^.]+$/, '');
+  return `${dir}${sep}.${stem}.forge${sep}${stem}.generated.funscript`;
+}
 
 // Sample a control-point curve into N evenly-spaced values for PresetLane and
 // for the CLI curve strings (the engine resamples per-beat from these).
@@ -162,8 +177,17 @@ function DiagnosisPanel({ diag, band, speed, applyFix, railsDone, arcDone }) {
 
       {speed && speed.n > 0 && <SpeedBar speed={speed} />}
 
+      {/* dead air — a beatless stretch the audio engine can't fill; point the
+          user at events rather than inventing motion. */}
+      {deadAirNote(diag) && (
+        <div style={{ fontSize: 11, color: 'var(--warn, #ffb547)', background: 'rgba(255,181,71,0.08)', border: '1px solid var(--warn, #ffb547)', borderRadius: 'var(--r-3, 8px)', padding: '8px 10px', display: 'flex', gap: 6 }}>
+          <span>⚠</span><span>{deadAirNote(diag)}</span>
+        </div>
+      )}
+
       {/* explicit fixes — always paired with their action */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <FixCard icon="gauge" title="Ease the pace" why="too fast to play" done={!diag.tooFast} onClick={() => applyFix({ lane: 'pace', presetId: 'gentle' })} />
         <FixCard icon="maximize" title="Fill the rails" why="reach shallow → full" done={railsDone} onClick={() => applyFix({ lane: 'range', presetId: 'full' })} />
         <FixCard icon="trending-up" title="Add an arc" why="build → climax → ease" done={arcDone} onClick={() => applyFix({ lane: 'pace', presetId: 'burn' })} />
       </div>
@@ -213,7 +237,7 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
     // curve…"). The footer is where the user watches the recalculation happen.
     if (onBusy) onBusy({ message: 'Generating from the beats…', steps: [] });
     generateFunscript({
-      outputPath: `${project.path}.generated.funscript`,
+      outputPath: forgeGeneratedPath(mediaPath),
       mediaPath,
       paceCurve: curveStr(pacePts),
       rangeCurve: curveStr(rangePts),
@@ -240,7 +264,7 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
   }, [useRealEngine, mediaPath, rangePts, pacePts, project?.path, onBusy]);
 
   const actions = gen?.actions?.length ? gen.actions : standIn;
-  const diag = useMemo(() => diagnose(actions), [actions]);
+  const diag = useMemo(() => diagnose(actions, durationMs), [actions, durationMs]);
 
   const applyFix = ({ lane, presetId }) => {
     if (lane === 'range') {
