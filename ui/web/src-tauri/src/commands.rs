@@ -814,6 +814,91 @@ pub async fn analyze_chapters_with_videoflow(
 }
 
 // ---------------------------------------------------------------------------
+// Generate — beat-map → funscript (the forgegen engine, in-app).
+//
+// Shells out to `cli.py generate` (Pace curve → density arc, Range curve →
+// amplitude-gain arc) and returns the parsed payload verbatim as JSON:
+// { ok, output, actions, actions_list, bpm, beats, stats{position,motion,
+// speed,dynamics}, band{...} }. The frontend renders actions_list and the
+// band/speed diagnosis directly. Beat-map persistence on the Python side
+// means a second generate (any device) reuses the cached AudioBeatMap, so
+// only the first call pays the librosa cost — progress streams via ff:progress.
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn generate_funscript(
+    app: AppHandle,
+    output_path: String,
+    media_path: Option<String>,
+    beats_path: Option<String>,
+    pace_curve: Option<String>,
+    range_curve: Option<String>,
+    low: Option<i64>,
+    high: Option<i64>,
+    center: Option<i64>,
+    stroke_density: Option<String>,
+    source: Option<String>,
+    title: Option<String>,
+    force: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let mut args: Vec<String> = vec![
+        "generate".into(),
+        "--output".into(), output_path,
+        "--format".into(), "json".into(),
+        "--emit-actions".into(),
+    ];
+
+    match (media_path.filter(|p| !p.is_empty()), beats_path.filter(|p| !p.is_empty())) {
+        (Some(m), _) => {
+            // D1 — reap any stale analyze for this source before spawning.
+            kill_existing_analyze(&m);
+            args.push("--media".into());
+            args.push(m);
+        }
+        (None, Some(b)) => {
+            args.push("--beats".into());
+            args.push(b);
+        }
+        (None, None) => {
+            return Err("generate_funscript: provide media_path or beats_path".into());
+        }
+    }
+
+    if let Some(p) = pace_curve.filter(|s| !s.is_empty()) {
+        args.push("--pace-curve".into());
+        args.push(p);
+    }
+    if let Some(r) = range_curve.filter(|s| !s.is_empty()) {
+        args.push("--range-curve".into());
+        args.push(r);
+    }
+    if let Some(l) = low { args.push("--low".into()); args.push(l.to_string()); }
+    if let Some(h) = high { args.push("--high".into()); args.push(h.to_string()); }
+    if let Some(c) = center { args.push("--center".into()); args.push(c.to_string()); }
+    if let Some(d) = stroke_density.filter(|s| !s.is_empty()) {
+        args.push("--stroke-density".into());
+        args.push(d);
+    }
+    if let Some(s) = source.filter(|s| !s.is_empty()) {
+        args.push("--source".into());
+        args.push(s);
+    }
+    if let Some(t) = title.filter(|s| !s.is_empty()) {
+        args.push("--title".into());
+        args.push(t);
+    }
+    if force.unwrap_or(false) {
+        args.push("--force".into());
+    }
+
+    let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let stdout = run_cli_with_progress(&app, "ff:progress", &arg_refs).await?;
+
+    serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse cli.py generate output: {}", e))
+}
+
+// ---------------------------------------------------------------------------
 // Audio peaks — pre-computed waveform sidecar for the MediaViewer Audio mode.
 //
 // Shells out to `cli.py audio-peaks <media>` which writes <stem>.audio.json

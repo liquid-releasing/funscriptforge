@@ -173,6 +173,36 @@ export function analyzeChaptersWithVideoflow(funscriptPath, targetMinutes, media
   );
 }
 
+/** Generate a funscript from the project's media via the videoflow engine
+ *  (Pace curve → density arc, Range curve → amplitude-gain arc). Returns the
+ *  parsed payload: { ok, output, actions_list, bpm, beats, from_cache,
+ *  stats:{position,motion,speed,dynamics}, band:{...} }. The first call on an
+ *  un-analyzed source pays the librosa cost (progress streams via ff:progress);
+ *  the persisted beat map makes every later call cheap.
+ *
+ *  Deduped per (output, curves) so a rapid preset re-pick can't stack runs.
+ *  Browser/dev mode returns null — callers fall back to the stand-in
+ *  generator so the verified UI never breaks without a backend. */
+export function generateFunscript(opts) {
+  const {
+    outputPath, mediaPath = null, beatsPath = null,
+    paceCurve = null, rangeCurve = null,
+    low = null, high = null, center = null,
+    strokeDensity = null, source = null, title = null, force = false,
+  } = opts || {};
+  return dedupedCall(
+    `generate_funscript::${outputPath}::${paceCurve || ''}::${rangeCurve || ''}`,
+    () => call(
+      'generate_funscript',
+      {
+        outputPath, mediaPath, beatsPath, paceCurve, rangeCurve,
+        low, high, center, strokeDensity, source, title, force,
+      },
+      () => Promise.resolve(null),
+    ),
+  );
+}
+
 /** Wipe a project's `.forge/` cache (sidecars + clips) so the next analyze
  *  runs fresh from extract. Used by the AnalysisTab's Re-analyze button.
  *

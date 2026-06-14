@@ -26,6 +26,7 @@ pub fn run() {
             commands::load_project,
             commands::create_chapters_sidecar,
             commands::analyze_chapters_with_videoflow,
+            commands::generate_funscript,
             commands::write_chapters_sidecar,
             commands::analyze_phrases,
             commands::load_phrases_sidecar,

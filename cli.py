@@ -3632,6 +3632,10 @@ def cmd_generate(args):
         "density_arc": density_arc is not None,
         "gain_arc": gain_arc is not None,   # Range arc — honoured (step 2)
         "stats": fp,
+        # The UI bridge wants the actions back to render the chart + diagnosis
+        # without a second file read (mirrors the stand-in generateFromLanes
+        # return shape). Off by default to keep batch/CLI payloads lean.
+        "actions_list": actions if args.emit_actions else None,
         "band": {
             "rate_cov": round(rate_cov, 3),
             "rate_cov_band": list(_RATE_COV_BAND),
@@ -4365,6 +4369,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Beat-tracking source when --media is used (default full)")
     p_gen.add_argument("--force", action="store_true",
                        help="Re-analyze the media even if a persisted beatmap exists")
+    p_gen.add_argument("--emit-actions", action="store_true",
+                       help="Include the generated actions in the JSON payload (for the UI bridge)")
     p_gen.add_argument("--title", default=None, help="Funscript metadata title")
     p_gen.add_argument("--format", choices=["json", "text"], default="text",
                        help="Output format (default text)")
