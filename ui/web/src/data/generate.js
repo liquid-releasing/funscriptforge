@@ -97,12 +97,16 @@ export function generateFromLanes(rangePts, pacePts, durationMs) {
 // (deciles), how much contrast it has over time (dynamics), rail usage, and
 // coverage. This is the implementable half of the "What to fix" panel and is
 // designed to run against REAL engine output unchanged.
-// Device-safety / coverage thresholds. Calibrated from dogfood (2026-06-14):
-// avg speed ~283 felt great, 488-609 felt severe → flag a too-fast script so
-// the verdict stops showing green on something device-brutal. Dead-air = a
-// long beatless stretch (the audio engine's blind spot — fill with events,
-// not fake motion). Tunable.
-export const SPEED_CEIL = 450;        // pos-units/sec — above this = "too fast"
+// Device-safety / coverage thresholds. CALIBRATED AGAINST GOLD (2026-06-14):
+// measured avg velocity of hand-made gold spans 350-386 (gentle: VO, ch8,
+// rob) up to 591-664 (hot: sinful, RoD). The old 450 line false-flagged VO's
+// 467 AND two beloved gold scripts; the old flash% > 0.45 clause flagged
+// sinful gold (50% flash). So the ceiling is set just above the hot-gold
+// cluster (only genuinely beyond-gold output, e.g. the 686 ch8 wall, trips
+// it) and the flash clause is dropped (high flash is a genre, not a defect).
+// Dead-air = a long beatless stretch (the audio engine's blind spot — fill
+// with events, not fake motion). Tunable.
+export const SPEED_CEIL = 600;        // pos-units/sec — above the hot-gold cluster
 export const DEAD_AIR_MS = 20000;     // a gap this long reads as dead air
 
 export function diagnose(actions, durationMs) {
@@ -143,7 +147,9 @@ export function diagnose(actions, durationMs) {
   const leadGap = actions.length ? actions[0].at : 0;
   const tailGap = durationMs && actions.length ? Math.max(0, durationMs - actions[actions.length - 1].at) : 0;
   const deadAirMs = Math.max(maxGap, leadGap, tailGap);
-  const tooFast = avgSpeed > SPEED_CEIL || flashPct > 0.45;
+  // Drop the old `|| flashPct > 0.45` clause — gold scripts hit 50-58% flash
+  // (sinful, RoD), so high flash is a genre signal, not a device-safety defect.
+  const tooFast = avgSpeed > SPEED_CEIL;
   return { deciles: norm, dynamics, rails, coverage, avgDepth, avgSpeed, flashPct, deadAirMs, tooFast };
 }
 

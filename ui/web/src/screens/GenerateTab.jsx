@@ -218,6 +218,11 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
   // Per-lane "% influence" (1 = preset as authored; lower = less severe).
   const [rangeAmount, setRangeAmount] = useState(persisted?.rangeAmount ?? 1);
   const [paceAmount, setPaceAmount] = useState(persisted?.paceAmount ?? 1);
+  // Texture/Life — bounded amplitude variation that pulls quiet beats off the
+  // rails for gold's mid shoulder (and lowers speed). Default 0.2; HARD-CAPPED
+  // at 0.35 because the measured sweep showed >=0.4 collapses the bimodal
+  // rails backbone into the refuted centre bell. See data/generate.js.
+  const [texture, setTexture] = useState(persisted?.texture ?? 0.2);
   // Real-engine result (null until/unless the videoflow path runs).
   const [gen, setGen] = useState(null);
   const [generating, setGenerating] = useState(false);
@@ -226,8 +231,8 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
 
   // Mirror curve picks + amounts up to App so they survive this tab unmounting.
   useEffect(() => {
-    if (onPersist) onPersist({ rangePts, pacePts, rangeAmount, paceAmount });
-  }, [rangePts, pacePts, rangeAmount, paceAmount, onPersist]);
+    if (onPersist) onPersist({ rangePts, pacePts, rangeAmount, paceAmount, texture });
+  }, [rangePts, pacePts, rangeAmount, paceAmount, texture, onPersist]);
 
   // The blended (amount-applied) sample arrays drive both the lane curves and
   // the engine, so what you see is what generates.
@@ -268,6 +273,7 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
         mediaPath,
         paceCurve: samplesStr(paceSamples),
         rangeCurve: samplesStr(rangeSamples),
+        texture,
         source: 'percussive',
       })
         .then((payload) => {
@@ -289,7 +295,7 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
         });
     }, 450);
     return () => clearTimeout(timer);
-  }, [useRealEngine, mediaPath, rangeSamples, paceSamples, project?.path, onBusy]);
+  }, [useRealEngine, mediaPath, rangeSamples, paceSamples, texture, project?.path, onBusy]);
 
   const actions = gen?.actions?.length ? gen.actions : standIn;
   const diag = useMemo(() => diagnose(actions, durationMs), [actions, durationMs]);
@@ -397,6 +403,20 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
               samples={paceSamples}
               amount={paceAmount} onAmount={setPaceAmount}
             />
+            {/* Texture/Life — a global generation control (not per-lane): how
+                much the quiet beats pull off the rails for the gold mid
+                shoulder. Hard-capped at 0.35 (>=0.4 breaks the bimodal law). */}
+            <div style={{ borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--warn, #ffb547)', letterSpacing: '0.04em', minWidth: 58 }}>TEXTURE</span>
+              <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>life — quiet beats ease off the rails</span>
+              <input
+                type="range" min={0} max={35} value={Math.round(texture * 100)}
+                onChange={(e) => setTexture(Number(e.target.value) / 100)}
+                style={{ flex: 1, maxWidth: 200, marginLeft: 'auto', accentColor: 'var(--warn, #ffb547)', cursor: 'pointer' }}
+                title="bounded amplitude variation — capped at 0.35 (above that the rails collapse into a bell)"
+              />
+              <span className="mono" style={{ fontSize: 11, color: 'var(--text-soft)', minWidth: 30 }}>{texture.toFixed(2)}</span>
+            </div>
           </div>
         </div>
       </div>

@@ -188,15 +188,15 @@ export function generateFunscript(opts) {
     outputPath, mediaPath = null, beatsPath = null,
     paceCurve = null, rangeCurve = null,
     low = null, high = null, center = null,
-    strokeDensity = null, source = null, title = null, force = false,
+    strokeDensity = null, texture = null, source = null, title = null, force = false,
   } = opts || {};
   return dedupedCall(
-    `generate_funscript::${outputPath}::${paceCurve || ''}::${rangeCurve || ''}`,
+    `generate_funscript::${outputPath}::${paceCurve || ''}::${rangeCurve || ''}::${texture ?? ''}`,
     () => call(
       'generate_funscript',
       {
         outputPath, mediaPath, beatsPath, paceCurve, rangeCurve,
-        low, high, center, strokeDensity, source, title, force,
+        low, high, center, strokeDensity, texture, source, title, force,
       },
       () => Promise.resolve(null),
     ),

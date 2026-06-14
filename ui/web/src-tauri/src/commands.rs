@@ -837,6 +837,7 @@ pub async fn generate_funscript(
     high: Option<i64>,
     center: Option<i64>,
     stroke_density: Option<String>,
+    texture: Option<f64>,
     source: Option<String>,
     title: Option<String>,
     force: Option<bool>,
@@ -878,6 +879,10 @@ pub async fn generate_funscript(
     if let Some(d) = stroke_density.filter(|s| !s.is_empty()) {
         args.push("--stroke-density".into());
         args.push(d);
+    }
+    if let Some(tx) = texture {
+        args.push("--texture".into());
+        args.push(tx.to_string());
     }
     if let Some(s) = source.filter(|s| !s.is_empty()) {
         args.push("--source".into());

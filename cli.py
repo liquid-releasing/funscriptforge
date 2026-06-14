@@ -3649,6 +3649,7 @@ def cmd_generate(args):
         stroke_density=args.stroke_density,
         density_arc=density_arc,
         gain_arc=gain_arc,
+        texture=args.texture,
         title=args.title or "",
         # msg::2 so the App footer's rolling headline shows the stage
         # explanation ("Classifying…", "Generating motion curve…") — the
@@ -4420,6 +4421,10 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Centered stroke model midpoint (default: engine default)")
     p_gen.add_argument("--stroke-density", default="half",
                        help="half|full|1|2|4|8 (actions per beat; default half)")
+    p_gen.add_argument("--texture", type=float, default=0.2,
+                       help="Bounded amplitude texture 0..1 (pulls quiet beats off "
+                            "the rails for the gold mid-shoulder; lowers speed). "
+                            "Measured-safe <=0.3 (stays bimodal); default 0.2.")
     p_gen.add_argument("--source", choices=["full", "percussive"], default="full",
                        help="Beat-tracking source when --media is used (default full)")
     p_gen.add_argument("--tracker", choices=["auto", "beat_track", "plp"], default="plp",
