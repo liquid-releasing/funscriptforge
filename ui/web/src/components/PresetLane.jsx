@@ -82,7 +82,22 @@ export default function PresetLane({
   return (
     <div style={{ borderTop: '1px solid var(--border)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 4px', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 'auto' }}>presets</span>
+        {onAmount ? (
+          // Compact "% influence" inline with the pills — one row, no separate
+          // amount strip competing with the curve below.
+          <span title="how strongly the preset's shape applies — lower is less severe"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 'auto' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>amt</span>
+            <input
+              type="range" min={0} max={100} value={pct}
+              onChange={(e) => onAmount(Number(e.target.value) / 100)}
+              style={{ width: 84, accentColor: color, cursor: 'pointer' }}
+            />
+            <span className="mono" style={{ fontSize: 10, color: 'var(--text-soft)', minWidth: 28 }}>{pct}%</span>
+          </span>
+        ) : (
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 'auto' }}>presets</span>
+        )}
         {presets.map((pr) => {
           const active = pr.id === activeId;
           return (
@@ -102,17 +117,6 @@ export default function PresetLane({
           );
         })}
       </div>
-      {onAmount && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 4px' }}>
-          <span title="how strongly the preset's shape applies — lower is less severe" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>amount</span>
-          <input
-            type="range" min={0} max={100} value={pct}
-            onChange={(e) => onAmount(Number(e.target.value) / 100)}
-            style={{ flex: 1, accentColor: color, cursor: 'pointer' }}
-          />
-          <span className="mono" style={{ fontSize: 11, color: 'var(--text-soft)', width: 34, textAlign: 'right' }}>{pct}%</span>
-        </div>
-      )}
       <Curve title={title} hint={hint} color={color} samples={samples} height={height} />
     </div>
   );

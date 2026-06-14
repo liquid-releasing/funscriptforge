@@ -164,7 +164,7 @@ function DiagnosisPanel({ diag, band, speed, applyFix, railsDone, arcDone }) {
           </Button>
         ) : (
           <div style={{ fontSize: 12, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontWeight: 700 }}>✓</span> Nothing flagged — hit play.
+            <span style={{ fontWeight: 700 }}>✓</span> Nothing flagged — looks good.
           </div>
         )}
         {band && <BandChips band={band} />}
