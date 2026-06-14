@@ -199,6 +199,33 @@ export function deadAirNote(diag) {
   return `${mm}:${ss} with no beats — author events here while watching.`;
 }
 
+// Device position at a given playback time — linear interpolation between the
+// two bracketing actions, so a "depth now" meter can track the generated
+// funscript while it plays (the body decides, not just the deciles). Returns
+// 0..100, or null when there are no actions. Binary search so it stays cheap
+// at ~10Hz over 20k+ actions, and correct under arbitrary seeks (not just
+// monotonic playback). Clamps to the endpoints before/after the script.
+export function positionAtTime(actions, ms) {
+  const n = actions ? actions.length : 0;
+  if (!n) return null;
+  const at = (a) => (a.at ?? a.t ?? 0);
+  const pos = (a) => (a.pos ?? a.v ?? 0);
+  if (ms <= at(actions[0])) return pos(actions[0]);
+  if (ms >= at(actions[n - 1])) return pos(actions[n - 1]);
+  let lo = 0;
+  let hi = n - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (at(actions[mid]) <= ms) lo = mid; else hi = mid;
+  }
+  const a = actions[lo];
+  const b = actions[hi];
+  const span = at(b) - at(a);
+  if (span <= 0) return pos(a);
+  const frac = (ms - at(a)) / span;
+  return pos(a) + (pos(b) - pos(a)) * frac;
+}
+
 // The target spread for the "where strokes land" histogram — a ghost overlay
 // so "good" is visible behind the user's bars. A healthy script spreads across
 // the full range with weight toward the rails (rough U), not a mid-range spike.

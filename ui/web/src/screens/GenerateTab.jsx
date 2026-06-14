@@ -12,13 +12,15 @@
 // oracle (diagnose) runs on whichever actions we have, unchanged.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Pill, SectionLabel, Icon } from 'forgemoment';
+import { Button, Pill, SectionLabel, Icon, MediaViewer } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import PresetLane from '../components/PresetLane.jsx';
 import { isTauri, generateFunscript } from '../api/forge.js';
+import { toMediaUrl } from '../lib/mediaUrl.js';
 import {
   DEFAULT_RANGE, DEFAULT_PACE, RANGE_PRESETS, PACE_PRESETS, presetIdOf,
   sampleCurve, generateFromLanes, diagnose, verdictFor, topFix, deadAirNote, TARGET_DECILES,
+  positionAtTime,
 } from '../data/generate.js';
 
 // The live-preview funscript is a CACHE — it belongs in the hidden .forge dir
@@ -209,6 +211,24 @@ function DiagnosisPanel({ diag, band, speed, applyFix, railsDone, arcDone, paceE
   );
 }
 
+// "Depth now" — the simulated device position at the playhead, so the user
+// feels where the stroke is during playback (0 = shallow, 100 = full reach).
+// A quiet companion to MediaViewer's scrolling tape; the body decides.
+function DepthMeter({ pos }) {
+  const v = pos == null ? null : Math.max(0, Math.min(100, pos));
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', minWidth: 64 }}>depth now</span>
+      <div style={{ flex: 1, height: 8, borderRadius: 4, background: 'var(--surface-3, #232735)', overflow: 'hidden' }}>
+        {v != null && (
+          <div style={{ width: `${v}%`, height: '100%', background: 'var(--accent)', transition: 'width 0.08s linear' }} />
+        )}
+      </div>
+      <span className="mono" style={{ fontSize: 10, color: 'var(--text-soft)', minWidth: 28 }}>{v == null ? '—' : Math.round(v)}</span>
+    </div>
+  );
+}
+
 export default function GenerateTab({ project, onActionsPatch, persisted, onPersist, onBusy }) {
   // Seed from the session-persisted curves (App owns them) so switching tabs
   // and coming back keeps the user's picked presets instead of resetting to
@@ -228,6 +248,12 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
   const [justSet, setJustSet] = useState(false);
+  // Preview transport: 'overview' = the static full-shape chart (pairs with
+  // the diagnosis histogram); 'play' = the MediaViewer playing the generated
+  // funscript against the video so the user can FEEL it ("the body decides").
+  const [viewMode, setViewMode] = useState('overview');
+  const [currentMs, setCurrentMs] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   // Mirror curve picks + amounts up to App so they survive this tab unmounting.
   useEffect(() => {
@@ -365,26 +391,73 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* live result */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-3, 8px)', padding: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 live result · {actions.length.toLocaleString()} actions
                 {gen?.bpm ? ` · ${Math.round(gen.bpm)} BPM` : ''}
                 {generating && <span style={{ color: 'var(--info, #4dabf7)' }}>· recalculating…</span>}
               </span>
-              {onActionsPatch && (
-                <Button
-                  kind={justSet ? 'primary' : 'ghost'} size="sm"
-                  icon="save"
-                  disabled={generating}
-                  onClick={() => { onActionsPatch(actions); setJustSet(true); setTimeout(() => setJustSet(false), 1600); }}
-                >
-                  {justSet ? 'Set ✓' : 'Set as working funscript'}
-                </Button>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* Overview (full shape, pairs with diagnosis) vs Play (feel it
+                    against the video). Play needs a video project. */}
+                <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 'var(--r-pill, 999px)', overflow: 'hidden' }}>
+                  {[['overview', 'Overview'], ['play', 'Play']].map(([m, label]) => {
+                    const active = viewMode === m;
+                    const disabled = m === 'play' && !mediaPath;
+                    return (
+                      <button
+                        key={m}
+                        onClick={() => { if (disabled) return; setViewMode(m); if (m === 'overview') setIsPlaying(false); }}
+                        disabled={disabled}
+                        title={disabled ? 'Open a video project to play the preview' : ''}
+                        style={{
+                          fontFamily: 'inherit', fontSize: 11, fontWeight: 600, padding: '3px 12px',
+                          border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
+                          background: active ? 'var(--accent)' : 'transparent',
+                          color: active ? '#0e1117' : (disabled ? 'var(--text-dim)' : 'var(--text-soft)'),
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {onActionsPatch && (
+                  <Button
+                    kind={justSet ? 'primary' : 'ghost'} size="sm"
+                    icon="save"
+                    disabled={generating}
+                    onClick={() => { onActionsPatch(actions); setJustSet(true); setTimeout(() => setJustSet(false), 1600); }}
+                  >
+                    {justSet ? 'Set ✓' : 'Set as working funscript'}
+                  </Button>
+                )}
+              </div>
             </div>
-            <div style={{ cursor: generating ? 'progress' : 'default', opacity: generating ? 0.6 : 1, transition: 'opacity 0.15s' }}>
-              <FunscriptChart actions={actions} totalMs={durationMs} height={200} railGuides />
-            </div>
+            {viewMode === 'play' && mediaPath ? (
+              <div>
+                <MediaViewer
+                  videoSrc={toMediaUrl(mediaPath)}
+                  funscript={{ actions }}
+                  currentMs={currentMs}
+                  totalMs={durationMs}
+                  isPlaying={isPlaying}
+                  onPlayPause={() => setIsPlaying((p) => !p)}
+                  onSeek={(ms) => setCurrentMs(ms)}
+                  onTimeChange={(ms) => setCurrentMs(ms)}
+                  defaultMode="video"
+                  controls={['back5', 'back1', 'play', 'forward1', 'forward5']}
+                  showMark={false}
+                  width="100%"
+                  height={260}
+                />
+                <DepthMeter pos={positionAtTime(actions, currentMs)} />
+              </div>
+            ) : (
+              <div style={{ cursor: generating ? 'progress' : 'default', opacity: generating ? 0.6 : 1, transition: 'opacity 0.15s' }}>
+                <FunscriptChart actions={actions} totalMs={durationMs} height={200} railGuides />
+              </div>
+            )}
           </div>
 
           {/* the two lanes — same PresetLane widget the Channels Passages lane uses */}

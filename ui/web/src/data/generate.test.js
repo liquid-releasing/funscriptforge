@@ -4,7 +4,7 @@ import {
   DEFAULT_RANGE, DEFAULT_PACE,
   RANGE_PRESETS, PACE_PRESETS, presetIdOf,
   generateFromLanes, diagnose, verdictFor, topFix, deadAirNote, TARGET_DECILES,
-  SPEED_CEIL, DEAD_AIR_MS,
+  SPEED_CEIL, DEAD_AIR_MS, positionAtTime,
 } from './generate.js';
 
 const flat = (v) => [{ t: 0, v }, { t: 1, v }];
@@ -200,6 +200,32 @@ describe('the diagnosis ↔ fix loop closes', () => {
     const after = diagnose(generateFromLanes(RANGE_PRESETS[1].pts, PACE_PRESETS[1].pts, 60000));
     expect(after.dynamics).toBeGreaterThan(before.dynamics);
     expect(verdictFor(after.dynamics).word).not.toBe('Flat');
+  });
+});
+
+describe('positionAtTime', () => {
+  const acts = [{ at: 0, pos: 0 }, { at: 1000, pos: 100 }, { at: 2000, pos: 0 }];
+
+  it('returns null with no actions', () => {
+    expect(positionAtTime([], 500)).toBeNull();
+    expect(positionAtTime(null, 500)).toBeNull();
+  });
+
+  it('clamps to the endpoints before the first / after the last action', () => {
+    expect(positionAtTime(acts, -100)).toBe(0);
+    expect(positionAtTime(acts, 5000)).toBe(0);
+  });
+
+  it('hits the exact action positions at their timestamps', () => {
+    expect(positionAtTime(acts, 0)).toBe(0);
+    expect(positionAtTime(acts, 1000)).toBe(100);
+    expect(positionAtTime(acts, 2000)).toBe(0);
+  });
+
+  it('linearly interpolates between bracketing actions', () => {
+    expect(positionAtTime(acts, 500)).toBeCloseTo(50, 6);   // halfway up
+    expect(positionAtTime(acts, 1500)).toBeCloseTo(50, 6);  // halfway down
+    expect(positionAtTime(acts, 250)).toBeCloseTo(25, 6);
   });
 });
 
