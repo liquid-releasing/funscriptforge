@@ -135,7 +135,17 @@ function FixCard({ icon, title, why, done, onClick }) {
   );
 }
 
-function DiagnosisPanel({ diag, band, speed, applyFix, railsDone, arcDone, paceEased }) {
+function DiagnosisPanel({ diag, band, speed, applyFix, railsDone, arcDone, paceEased, calculating }) {
+  if (calculating) {
+    return (
+      <div style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <SectionLabel>What to fix</SectionLabel>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-3, 8px)', padding: 14, color: 'var(--text-dim)', fontSize: 12, lineHeight: 1.5 }}>
+          Calculating the funscript… the diagnosis appears once the real result is ready.
+        </div>
+      </div>
+    );
+  }
   const verdict = verdictFor(diag.dynamics);
   const fix = topFix({ ...diag, paceEased });
   // The too-fast card escalates: ease the pace first, but once pace is already
@@ -334,6 +344,7 @@ export default function GenerateTab({
             speed: payload.stats?.speed || null,
             fromCache: !!payload.from_cache,
             bpm: payload.bpm,
+            sig,  // tag the result so the UI knows it matches the live settings
           };
           setGen(result);
           doneSigRef.current = sig;
@@ -350,14 +361,24 @@ export default function GenerateTab({
     return () => clearTimeout(timer);
   }, [useRealEngine, sig, onBusy, onResult]);
 
-  const actions = gen?.actions?.length ? gen.actions : standIn;
+  // Do we hold the REAL engine result for the live settings? If so show it.
+  // If the real engine is running (or hasn't produced this sig yet), we're
+  // CALCULATING — show that, never the mid-bunched stand-in, which misrepresents
+  // the real output for the 3-10 min a long generate takes (dogfood 2026-06-14:
+  // "rather see calculating than an incorrect version"). The stand-in is only
+  // for the no-engine browser preview.
+  const haveCurrent = !!(gen && gen.sig === sig && gen.actions?.length);
+  // Calculating only while a real run is pending/in-flight — NOT after an error
+  // (then we fall back to the stand-in with the error note, not a forever spinner).
+  const calculating = useRealEngine && !haveCurrent && !genError;
+  const actions = haveCurrent ? gen.actions : ((useRealEngine && !genError) ? [] : standIn);
   const diag = useMemo(() => diagnose(actions, durationMs), [actions, durationMs]);
 
-  // Lift the current preview up to App so the footer's "Continue with this
-  // funscript" can adopt the draft without an in-tab click.
+  // Lift the REAL preview up to App so the footer's "Continue with this
+  // funscript" adopts the actual draft — never the stand-in or an empty calc.
   useEffect(() => {
-    if (onGenerated) onGenerated(actions);
-  }, [actions, onGenerated]);
+    if (onGenerated && haveCurrent) onGenerated(gen.actions);
+  }, [haveCurrent, gen, onGenerated]);
 
   const applyFix = ({ lane, presetId }) => {
     // Apply the preset as authored (start lift reset to 0). The start lever
@@ -392,11 +413,11 @@ export default function GenerateTab({
 
   // Engine status pill: live (real engine result), generating, or preview
   // (stand-in — no media / browser dev).
-  const statusPill = generating
-    ? <Pill tone="info">generating…</Pill>
-    : gen
+  const statusPill = calculating
+    ? <Pill tone="info">calculating…</Pill>
+    : haveCurrent
       ? <Pill tone="success">{gen.fromCache ? 'live · cached' : 'live'}</Pill>
-      : <Pill tone="neutral">{useRealEngine ? 'stand-in' : 'preview'}</Pill>;
+      : <Pill tone="neutral">preview</Pill>;
 
   return (
     <div style={{ padding: '22px 26px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'auto', height: '100%' }}>
@@ -419,7 +440,7 @@ export default function GenerateTab({
         <DiagnosisPanel
           diag={diag} band={gen?.band} speed={gen?.speed}
           applyFix={applyFix} railsDone={railsDone} arcDone={arcDone}
-          paceEased={paceEased}
+          paceEased={paceEased} calculating={calculating}
         />
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -427,9 +448,9 @@ export default function GenerateTab({
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-3, 8px)', padding: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                live result · {actions.length.toLocaleString()} actions
-                {gen?.bpm ? ` · ${Math.round(gen.bpm)} BPM` : ''}
-                {generating && <span style={{ color: 'var(--info, #4dabf7)' }}>· recalculating…</span>}
+                {calculating
+                  ? <span style={{ color: 'var(--info, #4dabf7)' }}>live result · calculating…</span>
+                  : <>live result · {actions.length.toLocaleString()} actions{gen?.bpm ? ` · ${Math.round(gen.bpm)} BPM` : ''}</>}
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {/* Overview (full shape, pairs with diagnosis) vs Play (feel it
@@ -460,7 +481,7 @@ export default function GenerateTab({
                   <Button
                     kind={justSet ? 'primary' : 'ghost'} size="sm"
                     icon="save"
-                    disabled={generating}
+                    disabled={generating || calculating || !actions.length}
                     onClick={() => { onActionsPatch(actions); setJustSet(true); setTimeout(() => setJustSet(false), 1600); }}
                   >
                     {justSet ? 'Set ✓' : 'Set as working funscript'}
@@ -468,7 +489,17 @@ export default function GenerateTab({
                 )}
               </div>
             </div>
-            {viewMode === 'play' && mediaPath ? (
+            {calculating ? (
+              // Honest placeholder while the real engine runs (3-10 min on a
+              // long file). Never paint the stand-in here — its mid-bunched
+              // shape misrepresents the real bimodal output (dogfood: "rather
+              // see calculating than an incorrect version").
+              <div style={{ height: 200, display: 'grid', placeItems: 'center', gap: 10, color: 'var(--text-dim)' }}>
+                <Icon name="activity" size={22} style={{ color: 'var(--info, #4dabf7)' }} />
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-soft)' }}>Calculating the funscript…</div>
+                <div style={{ fontSize: 11 }}>Analyzing the audio and generating strokes — watch the footer for progress.</div>
+              </div>
+            ) : viewMode === 'play' && mediaPath ? (
               <div>
                 <MediaViewer
                   videoSrc={toMediaUrl(mediaPath)}
@@ -491,9 +522,7 @@ export default function GenerateTab({
                 <DepthMeter pos={positionAtTime(actions, currentMs)} />
               </div>
             ) : (
-              <div style={{ cursor: generating ? 'progress' : 'default', opacity: generating ? 0.6 : 1, transition: 'opacity 0.15s' }}>
-                <FunscriptChart actions={actions} totalMs={durationMs} height={200} railGuides />
-              </div>
+              <FunscriptChart actions={actions} totalMs={durationMs} height={200} railGuides />
             )}
           </div>
 
