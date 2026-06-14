@@ -377,12 +377,12 @@ def cmd_assess(args):
             ],
         }
         if not getattr(args, "no_save", False):
-            output = args.output or _default_path(args.funscript, "_assessment.json")
+            output = args.output or _assessment_path(args.funscript)
             result.save(output)
         print(json.dumps(payload))
         return
 
-    output = args.output or _default_path(args.funscript, "_assessment.json")
+    output = args.output or _assessment_path(args.funscript)
     result.save(output)
 
     print(f"Assessment saved: {output}  ({elapsed:.2f}s)")
@@ -2854,6 +2854,84 @@ def cmd_characters_write(args):
     print(json.dumps({"saved": str(path), "count": len(characters)}))
 
 
+def _passages_path(target) -> Path:
+    """Resolve `<dir>/.<stem>.forge/<stem>.passages.json` — the span-relative
+    intensity envelopes (Channels · Passages) layered over the chapter run.
+    Export reads this to scale e-stim volume + multi-axis amplitude."""
+    from videoflow.sidecar import forge_dir
+    stem = Path(target).stem
+    return forge_dir(target) / f"{stem}.passages.json"
+
+
+def cmd_passages_read(args):
+    """Read `<stem>.passages.json` → `{version, passages:[...]}`. Empty when missing."""
+    path = _passages_path(Path(args.input))
+    if not path.exists():
+        print(json.dumps({"version": 1, "passages": []}))
+        return
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Error reading {path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(doc, dict):
+        doc = {}
+    print(json.dumps({
+        "version": doc.get("version", 1),
+        "passages": doc.get("passages") or [],
+    }))
+
+
+def cmd_passages_write(args):
+    """Write passage records to `<stem>.passages.json`. The list arrives as JSON
+    (`{passages:[...]}` or a bare list) via --passages-json (a path, or '-' for stdin)."""
+    raw = sys.stdin.read() if args.passages_json == "-" \
+        else Path(args.passages_json).read_text(encoding="utf-8")
+    payload = json.loads(raw)
+    if isinstance(payload, dict) and "passages" in payload:
+        items = payload.get("passages") or []
+    elif isinstance(payload, list):
+        items = payload
+    else:
+        items = []
+    path = _passages_path(Path(args.input))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"version": 1, "passages": items}, indent=2),
+        encoding="utf-8",
+    )
+    print(json.dumps({"saved": str(path), "count": len(items)}))
+
+
+def _load_chapters(funscript_path) -> list:
+    """The chapters sidecar list (each with at_ms/end_ms), or [] when absent."""
+    from videoflow.sidecar import forge_dir
+    stem = Path(funscript_path).stem
+    p = forge_dir(funscript_path) / f"{stem}.chapters.json"
+    if not p.exists():
+        return []
+    try:
+        return json.loads(p.read_text(encoding="utf-8")).get("chapters") or []
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _load_resolved_passages(funscript_path, chapters=None) -> list:
+    """Load `<stem>.passages.json` and resolve to absolute-time spans against the
+    chapters (loaded if not supplied). Returns [] when there's nothing usable."""
+    from forge import passages as _passages_mod
+    if chapters is None:
+        chapters = _load_chapters(funscript_path)
+    path = _passages_path(funscript_path)
+    if not path.exists():
+        return []
+    try:
+        recs = json.loads(path.read_text(encoding="utf-8")).get("passages") or []
+    except (OSError, json.JSONDecodeError):
+        return []
+    return _passages_mod.resolve_passages(recs, chapters)
+
+
 def cmd_stim_process(args):
     """Generate e-stim channel funscripts for a window (a chapter) via the
     proven funscript-tools pipeline, and emit them as JSON channel actions.
@@ -2929,6 +3007,14 @@ def cmd_stim_process(args):
             acts = [{"at": a["at"], "pos": a["pos"]} for a in cd.get("actions", [])]
             acts = apply_virtual_envelope(suf, acts, win_lo, win_hi, virtual)
             channels[suf] = {"actions": acts}
+        # Layer Passages (span-relative intensity envelope) onto the volume
+        # channels so the live draw reflects what export bakes. Spans are
+        # absolute time, so a single chapter window gets its correct slice.
+        _passages = _load_resolved_passages(args.input)
+        if _passages:
+            from forge import passages as _passages_mod
+            for suf, cdat in channels.items():
+                cdat["actions"] = _passages_mod.scale_estim(suf, cdat["actions"], _passages)
         print(json.dumps({"available": True, "mode": args.mode, "channels": channels}))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -2961,14 +3047,19 @@ def cmd_multiaxis_process(args):
     phrases = [{"start_ms": pairs[0][0], "end_ms": pairs[-1][0]}]
     res = generate_multiaxis(win, phrases, {0: style}, MULTIAXIS_PRESETS)
 
+    _passages = _load_resolved_passages(args.input)
     axes = {}
     for name in ("twist", "roll", "pitch", "surge", "sway"):
         sig = getattr(res, name)
         if sig and sig.times_ms:
-            axes[name] = {"actions": [
+            acts = [
                 {"at": int(t), "pos": int(round(p))}
                 for t, p in zip(sig.times_ms, sig.positions)
-            ]}
+            ]
+            if _passages:
+                from forge import passages as _passages_mod
+                acts = _passages_mod.scale_axis(acts, _passages)
+            axes[name] = {"actions": acts}
     print(json.dumps({"available": True, "style": style, "axes": axes}))
 
 
@@ -3316,6 +3407,176 @@ def cmd_auto_chapter(args):
                   f"{c['content_type'] or '-':<7}  conf={c['confidence']:.2f}")
         if not args.no_write:
             print(f"\nSidecar written next to: {args.media}")
+
+
+# ------------------------------------------------------------------
+# generate — beat-map → funscript (the forgegen engine, in FSF)
+# ------------------------------------------------------------------
+
+# The proven-band targets from the data-science work (memory:
+# project_forgegen_generation_correctness). Generation aims to land the
+# windowed dynamics INSIDE these bands, not to hit a single gold script.
+_RATE_COV_BAND = (0.37, 0.46)      # density dynamics across windows
+_VELOCITY_COV_BAND = (0.21, 0.30)  # intensity dynamics across windows
+
+
+def _parse_curve(spec: str | None) -> list[float]:
+    """Parse a ``"0.3,0.5,1.0"`` curve spec into a list of [0,1] floats.
+
+    These are control samples spread evenly over the track's [0,1] position
+    range — the UI's Range/Pace lanes sample their preset curves to exactly
+    this shape. Empty / None → ``[]`` (caller decides the fallback)."""
+    if not spec:
+        return []
+    out: list[float] = []
+    for tok in spec.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        out.append(max(0.0, min(1.0, float(tok))))
+    return out
+
+
+def _sample_curve_at(samples: list[float], p: float) -> float:
+    """Linear-interpolate a control-sample curve at normalised position ``p``.
+
+    ``samples`` are evenly spaced over [0,1]; ``p`` is clamped to [0,1].
+    Mirrors ``data/generate.js::sampleCurve`` closely enough for parity (the
+    JS uses smoothstep between control points; here we keep it linear because
+    the curve is already densely sampled before it reaches the CLI)."""
+    if not samples:
+        return 0.5
+    if len(samples) == 1:
+        return samples[0]
+    x = max(0.0, min(1.0, p)) * (len(samples) - 1)
+    i = int(x)
+    if i >= len(samples) - 1:
+        return samples[-1]
+    frac = x - i
+    return samples[i] * (1.0 - frac) + samples[i + 1] * frac
+
+
+def _pace_to_density_arc(pace: list[float], beats: list[int]) -> list[float] | None:
+    """Resample the Pace curve onto per-beat positions → a ``density_arc``.
+
+    This is the step-1 core: the Pace curve is the author declaring the
+    NARRATIVE density arc (energy→density was refuted — busyness is authored,
+    not loudness). ``generate_from_beats`` consumes a per-beat arc list; we
+    map each beat's normalised track position through the Pace curve."""
+    if not pace or not beats:
+        return None
+    b0, b1 = beats[0], beats[-1]
+    span = (b1 - b0) or 1
+    return [_sample_curve_at(pace, (b - b0) / span) for b in beats]
+
+
+def _in_band(value: float, band: tuple[float, float]) -> bool:
+    return band[0] <= value <= band[1]
+
+
+@_cli_command
+def cmd_generate(args):
+    """Generate a funscript from a beat map (videoflow engine, in-process).
+
+    Step 1 of the generation merge: the **Pace** curve drives
+    ``density_arc`` — the proven narrative-density core. **Range** is recorded
+    for provenance but its *shape* is not yet honoured (a per-position
+    amplitude-gain arc lands in step 2); fixed-depth strokes use the engine
+    default depth law. Emits the written funscript plus a quality fingerprint
+    (decile shape + dynamics CoV vs the proven band) so output is gradeable
+    against the oracle without leaving the CLI.
+
+    Beat-map source (exactly one):
+      --beats <full AudioBeatMap json>  (energies + stanzas — what generation needs)
+      --media <file>                    (analyze on the fly; slow, needs librosa+ffmpeg)
+    """
+    from videoflow.audio import AudioBeatMap, analyze_beats
+    from videoflow.generate import generate_from_beats
+    from videoflow.funscript_stats import summarize
+
+    if bool(args.beats) == bool(args.media):
+        raise ValueError("pass exactly one of --beats <beatmap.json> or --media <file>")
+
+    _emit_progress("start::1::beatmap")
+    if args.beats:
+        beat_map = AudioBeatMap.load(args.beats)
+        if not beat_map.energy or not beat_map.stanzas:
+            raise ValueError(
+                f"{args.beats} is a reduced beat sidecar (no energy/stanzas) — "
+                "generation needs a full AudioBeatMap (use --media to analyze, "
+                "or persist the full map during the analyze pass)."
+            )
+    else:
+        beat_map = analyze_beats(
+            args.media, source=args.source, on_progress=_make_stage_event_emitter(),
+        )
+    _emit_progress(f"done::1::beatmap::{len(beat_map.beats)} beats @ {beat_map.bpm:.0f} BPM")
+
+    pace = _parse_curve(args.pace_curve)
+    rng = _parse_curve(args.range_curve)
+    density_arc = _pace_to_density_arc(pace, beat_map.beats)
+
+    _emit_progress("start::1::generate")
+    path = generate_from_beats(
+        beat_map,
+        args.output,
+        low=args.low,
+        high=args.high,
+        center=args.center,
+        stroke_density=args.stroke_density,
+        density_arc=density_arc,
+        title=args.title or "",
+        progress_callback=lambda label: _emit_progress(f"step::2::generate::{label}"),
+    )
+    _emit_progress("done::1::generate")
+
+    # Grade the result against the oracle — the same fingerprint the user
+    # diagnostic lens and the forgegen bench use (videoflow.funscript_stats).
+    actions = json.loads(Path(path).read_text(encoding="utf-8"))["actions"]
+    fp = summarize(actions)
+    dyn = fp.get("dynamics", {})
+    rate_cov = dyn.get("rate_cov", 0.0)
+    vel_cov = dyn.get("velocity_cov", 0.0)
+
+    payload = {
+        "ok": True,
+        "output": str(path),
+        "title": args.title or "",
+        "source": "beats" if args.beats else "media",
+        "beats": len(beat_map.beats),
+        "bpm": round(beat_map.bpm, 1),
+        "duration_ms": beat_map.duration_ms,
+        "actions": len(actions),
+        "pace_points": len(pace),
+        "range_points": len(rng),       # recorded; shape honoured in step 2
+        "density_arc": density_arc is not None,
+        "stats": fp,
+        "band": {
+            "rate_cov": round(rate_cov, 3),
+            "rate_cov_band": list(_RATE_COV_BAND),
+            "rate_cov_in_band": _in_band(rate_cov, _RATE_COV_BAND),
+            "velocity_cov": round(vel_cov, 3),
+            "velocity_cov_band": list(_VELOCITY_COV_BAND),
+            "velocity_cov_in_band": _in_band(vel_cov, _VELOCITY_COV_BAND),
+        },
+    }
+
+    if args.format == "json":
+        print(json.dumps(payload))
+    else:
+        pos = fp.get("position", {})
+        print(f"Generated: {path}")
+        print(f"  {len(actions)} actions | {len(beat_map.beats)} beats | "
+              f"{beat_map.bpm:.0f} BPM | {beat_map.duration_ms / 1000:.0f}s")
+        print(f"  shape: rails {pos.get('rails_pct', 0)}% / "
+              f"mid {pos.get('mid_pct', 0)}% "
+              f"({'bimodal OK' if pos.get('bimodal') else 'centered BAD'})")
+        rmark = "OK " if payload["band"]["rate_cov_in_band"] else "out"
+        vmark = "OK " if payload["band"]["velocity_cov_in_band"] else "out"
+        print(f"  dynamics: rate CoV {rate_cov:.3f} [{rmark}] "
+              f"(band {_RATE_COV_BAND[0]}-{_RATE_COV_BAND[1]}) | "
+              f"vel CoV {vel_cov:.3f} [{vmark}] "
+              f"(band {_VELOCITY_COV_BAND[0]}-{_VELOCITY_COV_BAND[1]})")
 
 
 # ------------------------------------------------------------------
@@ -3855,6 +4116,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_chr.add_argument("input", help="funscript or media path (sidecar lives next to it)")
 
+    # --- passages-write / passages-read (Channels · Passages intensity arcs) ---
+    p_psw = sub.add_parser(
+        "passages-write",
+        help="Write span-relative intensity passages to <stem>.passages.json",
+    )
+    p_psw.add_argument("input", help="funscript or media path (sidecar lives next to it)")
+    p_psw.add_argument("--passages-json", required=True,
+                       help="Path to a JSON {passages:[...]} list, or - for stdin")
+
+    p_psr = sub.add_parser(
+        "passages-read",
+        help="Read span-relative intensity passages from <stem>.passages.json",
+    )
+    p_psr.add_argument("input", help="funscript or media path (sidecar lives next to it)")
+
     # --- stim-process (React bridge to the funscript-tools channel pipeline) ---
     p_stp = sub.add_parser(
         "stim-process",
@@ -3963,6 +4239,35 @@ def build_parser() -> argparse.ArgumentParser:
         "--verbose", "-v", action="store_true",
         help="Show per-character slider details.",
     )
+
+    # --- generate ---
+    p_gen = sub.add_parser(
+        "generate",
+        help="Generate a funscript from a beat map (Pace curve -> density arc)",
+    )
+    p_gen.add_argument("--output", "-o", required=True, help="Output .funscript path")
+    g_src = p_gen.add_mutually_exclusive_group(required=True)
+    g_src.add_argument("--beats", help="Full AudioBeatMap json (energies + stanzas)")
+    g_src.add_argument("--media", help="Media file to analyze on the fly (slow)")
+    p_gen.add_argument(
+        "--pace-curve", metavar="V0,V1,...",
+        help="Comma-separated [0,1] samples of the Pace curve (how busy -> density arc)",
+    )
+    p_gen.add_argument(
+        "--range-curve", metavar="V0,V1,...",
+        help="Comma-separated [0,1] samples of the Range curve (recorded; shape honoured in step 2)",
+    )
+    p_gen.add_argument("--low", type=int, default=10, help="Trough position 0-100 (default 10)")
+    p_gen.add_argument("--high", type=int, default=90, help="Peak position 0-100 (default 90)")
+    p_gen.add_argument("--center", type=int, default=None,
+                       help="Centered stroke model midpoint (default: engine default)")
+    p_gen.add_argument("--stroke-density", default="half",
+                       help="half|full|1|2|4|8 (actions per beat; default half)")
+    p_gen.add_argument("--source", choices=["full", "percussive"], default="full",
+                       help="Beat-tracking source when --media is used (default full)")
+    p_gen.add_argument("--title", default=None, help="Funscript metadata title")
+    p_gen.add_argument("--format", choices=["json", "text"], default="text",
+                       help="Output format (default text)")
 
     # --- test ---
     sub.add_parser("test", help="Run unit tests")
@@ -4390,10 +4695,17 @@ def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> 
     _emit_progress("Forging E-Stim — baking authored events…")
     raw = _bake_events_into_channels(funscript_path, stem, raw, templates)
 
+    # Layer Passages (span-relative intensity envelope) onto the volume
+    # channels before clamping — the slow scene-scale contour the per-chapter
+    # character envelope can't carry. Absolute-time spans over the whole track.
+    _passages = _load_resolved_passages(funscript_path, chapters)
+
     _emit_progress("Forging E-Stim — clamping channels to device limits…")
+    from forge import passages as _passages_mod
     out = {}
     for name, acts in raw.items():
         acts.sort(key=lambda a: a["at"])
+        acts = _passages_mod.scale_estim(name, acts, _passages)
         clamped, _ = polish.apply_pass(acts, station.id, knobs)
         out[name] = {"template": templates.get(name, {}), "actions": clamped}
     return out
@@ -4598,13 +4910,20 @@ def _polish_generate_tcode(funscript_path: str, knobs: dict | None, station) -> 
                     for t, p in zip(sig.times_ms, sig.positions)
                 )
 
+    # Passages scale the SECONDARY-axis amplitude (toward neutral) — never L0,
+    # which is the user's authored stroke. A Release winds the geometry down to
+    # stillness while the primary motion stays intact.
+    _passages = _load_resolved_passages(funscript_path, chapters)
+    from forge import passages as _passages_mod
+
     out = {}
-    # L0 — clamped main, always.
+    # L0 — clamped main, always (untouched by passages).
     main_clamped, _ = polish.apply_pass([{"at": int(t), "pos": int(round(p))} for t, p in pairs],
                                         station.id, knobs)
     out["L0"] = main_clamped
     for name, acts in raw.items():
         acts.sort(key=lambda a: a["at"])
+        acts = _passages_mod.scale_axis(acts, _passages)
         clamped, _ = polish.apply_pass(acts, station.id, knobs)
         out[name] = clamped
     return out
@@ -4824,6 +5143,22 @@ def cmd_polish_write(args):
 def _default_path(source: str, suffix: str) -> str:
     base, _ = os.path.splitext(source)
     return base + suffix
+
+
+def _assessment_path(funscript: str) -> str:
+    """Default assessment output: ``<stem>.forge/<stem>.assessment.json`` so it
+    lives with the other sidecars (chapters/peaks/spectrogram/beats/phrases)
+    instead of scattering a ``<stem>_assessment.json`` next to the source.
+    Falls back to a sibling if videoflow's forge_dir isn't importable (mirrors
+    _write_phrases_slice_sidecar's guard)."""
+    try:
+        from pathlib import Path as _Path
+        from videoflow.sidecar import forge_dir
+        d = forge_dir(funscript)
+        d.mkdir(parents=True, exist_ok=True)
+        return str(d / f"{_Path(funscript).stem}.assessment.json")
+    except Exception:
+        return _default_path(funscript, "_assessment.json")
 
 
 _PHRASES_SIDECAR_VERSION = 1
@@ -5061,6 +5396,8 @@ def main():
         "feel-read":        cmd_feel_read,
         "characters-write": cmd_characters_write,
         "characters-read":  cmd_characters_read,
+        "passages-write":   cmd_passages_write,
+        "passages-read":    cmd_passages_read,
         "stim-process":     cmd_stim_process,
         "multiaxis-process": cmd_multiaxis_process,
         "list-event-recipes": cmd_list_event_recipes,
@@ -5070,6 +5407,7 @@ def main():
         "device-aware":     cmd_device_aware,
         "stim-config":      cmd_stim_config,
         "list-characters":  cmd_list_characters,
+        "generate":         cmd_generate,
     }
     dispatch[args.command](args)
 
