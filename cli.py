@@ -3456,18 +3456,24 @@ def _sample_curve_at(samples: list[float], p: float) -> float:
     return samples[i] * (1.0 - frac) + samples[i + 1] * frac
 
 
-def _pace_to_density_arc(pace: list[float], beats: list[int]) -> list[float] | None:
-    """Resample the Pace curve onto per-beat positions → a ``density_arc``.
+def _curve_to_beat_arc(samples: list[float], beats: list[int]) -> list[float] | None:
+    """Resample a control-sample curve onto per-beat positions.
 
-    This is the step-1 core: the Pace curve is the author declaring the
-    NARRATIVE density arc (energy→density was refuted — busyness is authored,
-    not loudness). ``generate_from_beats`` consumes a per-beat arc list; we
-    map each beat's normalised track position through the Pace curve."""
-    if not pace or not beats:
+    The shared core for both arcs the engine consumes: each beat's normalised
+    track position is mapped through the curve. Empty curve / no beats → None
+    (the engine then uses its flat fallback)."""
+    if not samples or not beats:
         return None
     b0, b1 = beats[0], beats[-1]
     span = (b1 - b0) or 1
-    return [_sample_curve_at(pace, (b - b0) / span) for b in beats]
+    return [_sample_curve_at(samples, (b - b0) / span) for b in beats]
+
+
+def _pace_to_density_arc(pace: list[float], beats: list[int]) -> list[float] | None:
+    """Pace curve → ``density_arc`` (step 1): the author-declared NARRATIVE
+    density arc (energy→density was refuted — busyness is authored, not
+    loudness). Thin alias over :func:`_curve_to_beat_arc`."""
+    return _curve_to_beat_arc(pace, beats)
 
 
 def _in_band(value: float, band: tuple[float, float]) -> bool:
@@ -3478,13 +3484,14 @@ def _in_band(value: float, band: tuple[float, float]) -> bool:
 def cmd_generate(args):
     """Generate a funscript from a beat map (videoflow engine, in-process).
 
-    Step 1 of the generation merge: the **Pace** curve drives
-    ``density_arc`` — the proven narrative-density core. **Range** is recorded
-    for provenance but its *shape* is not yet honoured (a per-position
-    amplitude-gain arc lands in step 2); fixed-depth strokes use the engine
-    default depth law. Emits the written funscript plus a quality fingerprint
-    (decile shape + dynamics CoV vs the proven band) so output is gradeable
-    against the oracle without leaving the CLI.
+    Steps 1-2 of the generation merge. The **Pace** curve drives
+    ``density_arc`` (how busy — the proven narrative-density core) and the
+    **Range** curve drives ``gain_arc`` (how far — a per-position amplitude
+    gain that scales the fixed mode depth, so reach can rise over the track
+    without reintroducing the refuted energy→amplitude law). Emits the written
+    funscript plus a quality fingerprint (decile shape + dynamics CoV vs the
+    proven band) so output is gradeable against the oracle without leaving
+    the CLI.
 
     Beat-map source (exactly one):
       --beats <full AudioBeatMap json>  (energies + stanzas — what generation needs)
@@ -3515,6 +3522,10 @@ def cmd_generate(args):
     pace = _parse_curve(args.pace_curve)
     rng = _parse_curve(args.range_curve)
     density_arc = _pace_to_density_arc(pace, beat_map.beats)
+    # Range curve → per-beat amplitude-GAIN arc (step 2): scales the fixed
+    # mode depth, so "Range" can rise over the track without reintroducing
+    # the refuted energy→amplitude law. See generate.beats_to_curve(gain_arc=).
+    gain_arc = _curve_to_beat_arc(rng, beat_map.beats)
 
     _emit_progress("start::1::generate")
     path = generate_from_beats(
@@ -3525,6 +3536,7 @@ def cmd_generate(args):
         center=args.center,
         stroke_density=args.stroke_density,
         density_arc=density_arc,
+        gain_arc=gain_arc,
         title=args.title or "",
         progress_callback=lambda label: _emit_progress(f"step::2::generate::{label}"),
     )
@@ -3548,8 +3560,9 @@ def cmd_generate(args):
         "duration_ms": beat_map.duration_ms,
         "actions": len(actions),
         "pace_points": len(pace),
-        "range_points": len(rng),       # recorded; shape honoured in step 2
+        "range_points": len(rng),
         "density_arc": density_arc is not None,
+        "gain_arc": gain_arc is not None,   # Range arc — honoured (step 2)
         "stats": fp,
         "band": {
             "rate_cov": round(rate_cov, 3),
@@ -4255,7 +4268,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_gen.add_argument(
         "--range-curve", metavar="V0,V1,...",
-        help="Comma-separated [0,1] samples of the Range curve (recorded; shape honoured in step 2)",
+        help="Comma-separated [0,1] samples of the Range curve (how far -> amplitude-gain arc)",
     )
     p_gen.add_argument("--low", type=int, default=10, help="Trough position 0-100 (default 10)")
     p_gen.add_argument("--high", type=int, default=90, help="Peak position 0-100 (default 90)")

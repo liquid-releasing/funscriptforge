@@ -92,12 +92,12 @@ def _synthetic_beatmap_json(path, *, beats=240, interval_ms=480):
         json.dump(data, f)
 
 
-def _run_generate(beatmap_path, out_path, pace):
-    result = subprocess.run(
-        [PYTHON, CLI, "generate", "--beats", beatmap_path,
-         "--output", out_path, "--pace-curve", pace, "--format", "json"],
-        capture_output=True, text=True,
-    )
+def _run_generate(beatmap_path, out_path, pace, range_curve=None):
+    cmd = [PYTHON, CLI, "generate", "--beats", beatmap_path,
+           "--output", out_path, "--pace-curve", pace, "--format", "json"]
+    if range_curve is not None:
+        cmd += ["--range-curve", range_curve]
+    result = subprocess.run(cmd, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout.strip().splitlines()[-1])
 
@@ -155,6 +155,35 @@ class TestGenerateEndToEnd(unittest.TestCase):
         )
         # a flat pace should be (near-)monotone density
         self.assertLess(flat["band"]["rate_cov"], 0.1)
+
+    def test_range_curve_drives_reach(self):
+        """Step-2 thesis: the Range curve controls how FAR strokes go. Same
+        source + same Pace; only Range differs. A low Range produces a smaller
+        average stroke (shallower reach) than a full Range."""
+        full_out = os.path.join(self.tmp, "rfull.funscript")
+        shallow_out = os.path.join(self.tmp, "rshallow.funscript")
+        pace = "0.5,0.6,0.7,0.6,0.5"
+        full = _run_generate(self.beatmap, full_out, pace, range_curve="1.0,1.0,1.0,1.0,1.0")
+        shallow = _run_generate(self.beatmap, shallow_out, pace, range_curve="0.4,0.4,0.4,0.4,0.4")
+        self.assertTrue(full["gain_arc"])
+        self.assertTrue(shallow["gain_arc"])
+        self.assertLess(
+            shallow["stats"]["motion"]["avg_stroke"],
+            full["stats"]["motion"]["avg_stroke"],
+            "a low Range curve should produce shallower strokes",
+        )
+
+    def test_rising_range_keeps_rails_at_the_top(self):
+        """A Range that rises to 1.0 must still reach the rails late — the
+        depth law (bimodal at full reach) is preserved, not flattened."""
+        out = os.path.join(self.tmp, "rising.funscript")
+        _run_generate(self.beatmap, out, "0.6,0.6,0.6,0.6,0.6",
+                      range_curve="0.3,0.5,0.7,0.9,1.0")
+        a = json.load(open(out))["actions"]
+        # late strokes should reach near the rails (full Range at the end)
+        late = [x["pos"] for x in a if x["at"] >= a[-1]["at"] - 5000]
+        self.assertGreaterEqual(max(late), 95)
+        self.assertLessEqual(min(late), 5)
 
 
 if __name__ == "__main__":
