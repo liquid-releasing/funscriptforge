@@ -67,6 +67,7 @@ nav:
     - Forge Your First Funscript: getting-started/forge-your-first-funscript.md
   - Concepts: concepts.md
   - Guide:
+    - Generating Funscripts: guide/generating-funscripts.md
     - Phrase Editor: guide/phrase-editor.md
     - Pattern Editor: guide/pattern-editor.md
     - Export: guide/export.md
