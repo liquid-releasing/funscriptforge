@@ -245,50 +245,60 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
   const runId = useRef(0);
   useEffect(() => {
     if (!useRealEngine) { setGen(null); setGenerating(false); return undefined; }
-    const id = (runId.current += 1);
-    setGenerating(true);
-    setGenError(null);
-    // Open the App footer's progress strip — the ff:progress stream then fills
-    // it with the stage explanation ("Detecting beats…", "Generating motion
-    // curve…"). The footer is where the user watches the recalculation happen.
-    if (onBusy) onBusy({ message: 'Generating from the beats…', steps: [] });
-    generateFunscript({
-      outputPath: forgeGeneratedPath(mediaPath),
-      mediaPath,
-      paceCurve: samplesStr(paceSamples),
-      rangeCurve: samplesStr(rangeSamples),
-      source: 'percussive',
-    })
-      .then((payload) => {
-        if (id !== runId.current) return;
-        if (!payload) { setGen(null); return; }
-        setGen({
-          actions: payload.actions_list || [],
-          band: payload.band || null,
-          speed: payload.stats?.speed || null,
-          fromCache: !!payload.from_cache,
-          bpm: payload.bpm,
-        });
+    // Debounce: dragging the amount slider (or rapid preset picks) re-fires
+    // this effect on every tick. Wait until the curves settle (~450ms) before
+    // generating — otherwise a long file runs a multi-minute analyze per drag
+    // pixel. The lane curves still update live; only generation waits.
+    const timer = setTimeout(() => {
+      const id = (runId.current += 1);
+      setGenerating(true);
+      setGenError(null);
+      // Open the App footer's progress strip — the ff:progress stream then
+      // fills it with the stage explanation ("Detecting beats…", "Generating
+      // motion curve…"). The footer is where the recalculation is watched.
+      if (onBusy) onBusy({ message: 'Generating from the beats…', steps: [] });
+      generateFunscript({
+        outputPath: forgeGeneratedPath(mediaPath),
+        mediaPath,
+        paceCurve: samplesStr(paceSamples),
+        rangeCurve: samplesStr(rangeSamples),
+        source: 'percussive',
       })
-      .catch((e) => { if (id === runId.current) setGenError(String(e?.message || e)); })
-      .finally(() => {
-        if (id !== runId.current) return;
-        setGenerating(false);
-        if (onBusy) onBusy(null);
-      });
-    return undefined;
+        .then((payload) => {
+          if (id !== runId.current) return;
+          if (!payload) { setGen(null); return; }
+          setGen({
+            actions: payload.actions_list || [],
+            band: payload.band || null,
+            speed: payload.stats?.speed || null,
+            fromCache: !!payload.from_cache,
+            bpm: payload.bpm,
+          });
+        })
+        .catch((e) => { if (id === runId.current) setGenError(String(e?.message || e)); })
+        .finally(() => {
+          if (id !== runId.current) return;
+          setGenerating(false);
+          if (onBusy) onBusy(null);
+        });
+    }, 450);
+    return () => clearTimeout(timer);
   }, [useRealEngine, mediaPath, rangeSamples, paceSamples, project?.path, onBusy]);
 
   const actions = gen?.actions?.length ? gen.actions : standIn;
   const diag = useMemo(() => diagnose(actions, durationMs), [actions, durationMs]);
 
   const applyFix = ({ lane, presetId }) => {
+    // A fix applies at FULL strength — otherwise a low amount slider caps it
+    // and clicking "Fill the rails" appears to do nothing (dogfood 2026-06-14).
     if (lane === 'range') {
       const pr = RANGE_PRESETS.find((p) => p.id === presetId);
       if (pr) setRangePts(pr.pts.map((p) => ({ ...p })));
+      setRangeAmount(1);
     } else {
       const pr = PACE_PRESETS.find((p) => p.id === presetId);
       if (pr) setPacePts(pr.pts.map((p) => ({ ...p })));
+      setPaceAmount(1);
     }
   };
 
