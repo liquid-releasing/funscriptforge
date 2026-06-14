@@ -144,6 +144,19 @@ describe('topFix', () => {
       .toMatchObject({ lane: 'pace', presetId: 'gentle' });
     expect(PACE_PRESETS.some((p) => p.id === 'gentle')).toBe(true);
   });
+
+  it('escalates to SHORTEN THE RANGE when pace is already eased but still too fast', () => {
+    // The dead-end fix: easing the pace can't pull a near-full-range track
+    // under the speed ceiling — the remaining lever is shorter strokes.
+    const fix = topFix({ rails: 0.5, dynamics: 0.9, tooFast: true, paceEased: true });
+    expect(fix).toMatchObject({ lane: 'range', presetId: 'tease' });
+    expect(RANGE_PRESETS.some((p) => p.id === fix.presetId)).toBe(true);
+  });
+
+  it('still eases the pace first when pace is NOT yet eased', () => {
+    expect(topFix({ rails: 0.5, dynamics: 0.9, tooFast: true, paceEased: false }))
+      .toMatchObject({ lane: 'pace', presetId: 'gentle' });
+  });
 });
 
 describe('diagnose — speed + coverage honesty', () => {

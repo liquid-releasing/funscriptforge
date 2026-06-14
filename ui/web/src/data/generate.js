@@ -159,10 +159,18 @@ export function verdictFor(dynamics) {
 // The single highest-impact fix for the current diagnosis. Returns the lane +
 // preset to apply, plus the human label. Coupling the metric to its fix is the
 // whole point — the panel hands the user the button, it doesn't just grade.
-export function topFix({ rails, dynamics, tooFast }) {
+export function topFix({ rails, dynamics, tooFast, paceEased }) {
   // Device safety first: a too-fast script reads "Dynamic" on contrast alone
-  // but is brutal to play. Ease the pace (gentler density) before anything.
+  // but is brutal to play. Speed is how-far x how-often — so ease the PACE
+  // (fewer strokes) first. But once the pace is already gentle and it is STILL
+  // too fast, the strokes themselves are too long: the only lever left is
+  // RANGE — shorter strokes cover less distance per unit time, so avg speed
+  // drops. Without this escalation the loop dead-ends (you ease the pace, it
+  // doesn't clear, and there is no next button). See dogfood 2026-06-14.
   if (tooFast) {
+    if (paceEased) {
+      return { lane: 'range', presetId: 'tease', label: 'Shorten the range', why: 'pace is already gentle — long strokes are what is fast now' };
+    }
     return { lane: 'pace', presetId: 'gentle', label: 'Ease the pace', why: 'too fast for most devices' };
   }
   if (rails < 0.22) {

@@ -141,9 +141,15 @@ function FixCard({ icon, title, why, done, onClick }) {
   );
 }
 
-function DiagnosisPanel({ diag, band, speed, applyFix, railsDone, arcDone }) {
+function DiagnosisPanel({ diag, band, speed, applyFix, railsDone, arcDone, paceEased }) {
   const verdict = verdictFor(diag.dynamics);
-  const fix = topFix(diag);
+  const fix = topFix({ ...diag, paceEased });
+  // The too-fast card escalates: ease the pace first, but once pace is already
+  // gentle and it's STILL too fast, the lever is RANGE (shorter strokes). Keeps
+  // the card from dead-ending on a button that can no longer help.
+  const speedFix = diag.tooFast && paceEased
+    ? { title: 'Shorten the range', why: 'long strokes are what’s fast now', fix: { lane: 'range', presetId: 'tease' } }
+    : { title: 'Ease the pace', why: 'too fast to play', fix: { lane: 'pace', presetId: 'gentle' } };
   const toneColor = { success: 'var(--success)', info: 'var(--info, #4dabf7)', warn: 'var(--warn, #ffb547)' }[verdict.tone];
   return (
     <div style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -195,7 +201,7 @@ function DiagnosisPanel({ diag, band, speed, applyFix, railsDone, arcDone }) {
 
       {/* explicit fixes — always paired with their action */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <FixCard icon="gauge" title="Ease the pace" why="too fast to play" done={!diag.tooFast} onClick={() => applyFix({ lane: 'pace', presetId: 'gentle' })} />
+        <FixCard icon="gauge" title={speedFix.title} why={speedFix.why} done={!diag.tooFast} onClick={() => applyFix(speedFix.fix)} />
         <FixCard icon="maximize" title="Fill the rails" why="reach shallow → full" done={railsDone} onClick={() => applyFix({ lane: 'range', presetId: 'full' })} />
         <FixCard icon="trending-up" title="Add an arc" why="build → climax → ease" done={arcDone} onClick={() => applyFix({ lane: 'pace', presetId: 'burn' })} />
       </div>
@@ -304,6 +310,10 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
 
   const railsDone = diag.rails >= 0.22;
   const arcDone = diag.dynamics >= 0.55;
+  // Pace is "already eased" once it's the gentle preset at (near) full strength
+  // — at that point easing further can't help, so the too-fast fix escalates
+  // to the RANGE lever instead of nagging on a maxed-out pace.
+  const paceEased = presetIdOf(pacePts, PACE_PRESETS) === 'gentle' && paceAmount >= 0.99;
 
   if (!project?.path) {
     return (
@@ -343,6 +353,7 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
         <DiagnosisPanel
           diag={diag} band={gen?.band} speed={gen?.speed}
           applyFix={applyFix} railsDone={railsDone} arcDone={arcDone}
+          paceEased={paceEased}
         />
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
