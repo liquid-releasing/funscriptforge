@@ -11,116 +11,18 @@
 import { useMemo, useState } from 'react';
 import { Button, Pill, SectionLabel, Icon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
+import PresetLane from '../components/PresetLane.jsx';
 import {
   DEFAULT_RANGE, DEFAULT_PACE, RANGE_PRESETS, PACE_PRESETS, presetIdOf,
-  generateFromLanes, diagnose, verdictFor, topFix, TARGET_DECILES,
+  sampleCurve, generateFromLanes, diagnose, verdictFor, topFix, TARGET_DECILES,
 } from '../data/generate.js';
 
-// ── read-only lane curve (presets-only) ────────────────────────────────────
-// Renders the chosen preset as a smooth SVG curve so the author SEES the shape
-// they picked. No drag handles in beta. padL reserves room for the label.
-function smoothPath(px) {
-  if (px.length < 2) return '';
-  let d = `M${px[0].x.toFixed(1)},${px[0].y.toFixed(1)}`;
-  for (let i = 0; i < px.length - 1; i += 1) {
-    const p0 = px[i - 1] || px[i];
-    const p1 = px[i];
-    const p2 = px[i + 1];
-    const p3 = px[i + 2] || px[i + 1];
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
-  }
-  return d;
-}
-
-function LaneCurve({ title, hint, color, pts, height = 84 }) {
-  const W = 720;
-  const padL = 58;
-  const padR = 10;
-  const padT = 12;
-  const padB = 12;
-  const plotW = W - padL - padR;
-  const plotH = height - padT - padB;
-  const N = 64;
-  const px = useMemo(() => {
-    const out = [];
-    for (let i = 0; i <= N; i += 1) {
-      const t = i / N;
-      // sample the same curve the generator uses
-      let v = pts[0].v;
-      if (t >= pts[pts.length - 1].t) v = pts[pts.length - 1].v;
-      else if (t > pts[0].t) {
-        let k = 0;
-        while (k < pts.length - 1 && pts[k + 1].t < t) k += 1;
-        const a = pts[k];
-        const b = pts[k + 1];
-        const f = (t - a.t) / Math.max(1e-6, b.t - a.t);
-        v = a.v + (b.v - a.v) * (f * f * (3 - 2 * f));
-      }
-      out.push({ x: padL + t * plotW, y: padT + (1 - Math.max(0, Math.min(1, v))) * plotH });
-    }
-    return out;
-  }, [pts, plotW, plotH]);
-  const yOf = (v) => padT + (1 - v) * plotH;
-  const curveD = smoothPath(px);
-  const areaD = curveD
-    ? `${curveD} L${(padL + plotW).toFixed(1)},${yOf(0).toFixed(1)} L${padL.toFixed(1)},${yOf(0).toFixed(1)} Z`
-    : '';
-  return (
-    <svg
-      viewBox={`0 0 ${W} ${height}`}
-      preserveAspectRatio="none"
-      style={{ display: 'block', width: '100%', height }}
-    >
-      <defs>
-        <linearGradient id={`lg-${title}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.30" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-      <text x={8} y={padT + 11} fill={color} fontSize={11} fontWeight={800} style={{ letterSpacing: '0.04em' }}>{title}</text>
-      <text x={8} y={padT + 25} fill="var(--text-dim)" fontSize={9}>{hint}</text>
-      {[0.5, 1].map((g) => (
-        <line key={g} x1={padL} x2={W - padR} y1={yOf(g)} y2={yOf(g)} stroke="var(--border)" strokeWidth={1} strokeDasharray="2 5" opacity={0.55} />
-      ))}
-      <path d={areaD} fill={`url(#lg-${title})`} />
-      <path d={curveD} fill="none" stroke={color} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-// ── one lane block: label + preset pills + read-only curve ──────────────────
-function Lane({ title, hint, color, pts, setPts, presets }) {
-  const activeId = presetIdOf(pts, presets);
-  return (
-    <div style={{ borderTop: '1px solid var(--border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 4px', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 'auto' }}>presets</span>
-        {presets.map((pr) => {
-          const active = pr.id === activeId;
-          return (
-            <button
-              key={pr.id}
-              onClick={() => setPts(pr.pts.map((p) => ({ ...p })))}
-              style={{
-                fontFamily: 'inherit', fontSize: 11, fontWeight: 600, padding: '3px 10px',
-                borderRadius: 'var(--r-pill, 999px)', cursor: 'pointer',
-                background: active ? color : 'var(--surface-2)',
-                border: `1px solid ${color}`,
-                color: active ? '#0e1117' : color,
-              }}
-            >
-              {pr.label}
-            </button>
-          );
-        })}
-      </div>
-      <LaneCurve title={title} hint={hint} color={color} pts={pts} />
-    </div>
-  );
+// Sample a control-point curve into N evenly-spaced values for PresetLane.
+const LANE_SAMPLES = 64;
+function curveSamples(pts) {
+  const out = [];
+  for (let i = 0; i < LANE_SAMPLES; i += 1) out.push(sampleCurve(pts, i / (LANE_SAMPLES - 1)));
+  return out;
 }
 
 // ── "What to fix" diagnosis — verdict → evidence → one-click fix ────────────
@@ -276,10 +178,20 @@ export default function GenerateTab({ project, onActionsPatch }) {
             <FunscriptChart actions={actions} totalMs={durationMs} height={200} />
           </div>
 
-          {/* the two lanes */}
+          {/* the two lanes — same PresetLane widget the Channels Passages lane uses */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-3, 8px)', overflow: 'hidden' }}>
-            <Lane title="RANGE" hint="how far" color="var(--accent)" pts={rangePts} setPts={setRangePts} presets={RANGE_PRESETS} />
-            <Lane title="PACE" hint="how busy" color="var(--info, #4dabf7)" pts={pacePts} setPts={setPacePts} presets={PACE_PRESETS} />
+            <PresetLane
+              title="RANGE" hint="how far" color="var(--accent)"
+              presets={RANGE_PRESETS} activeId={presetIdOf(rangePts, RANGE_PRESETS)}
+              onPick={(id) => { const pr = RANGE_PRESETS.find((p) => p.id === id); if (pr) setRangePts(pr.pts.map((p) => ({ ...p }))); }}
+              samples={curveSamples(rangePts)}
+            />
+            <PresetLane
+              title="PACE" hint="how busy" color="var(--info, #4dabf7)"
+              presets={PACE_PRESETS} activeId={presetIdOf(pacePts, PACE_PRESETS)}
+              onPick={(id) => { const pr = PACE_PRESETS.find((p) => p.id === id); if (pr) setPacePts(pr.pts.map((p) => ({ ...p }))); }}
+              samples={curveSamples(pacePts)}
+            />
           </div>
         </div>
       </div>
