@@ -20,7 +20,7 @@ import { toMediaUrl } from '../lib/mediaUrl.js';
 import {
   DEFAULT_RANGE, DEFAULT_PACE, RANGE_PRESETS, PACE_PRESETS, presetIdOf,
   sampleCurve, generateFromLanes, diagnose, verdictFor, topFix, deadAirNote, TARGET_DECILES,
-  positionAtTime,
+  positionAtTime, liftStart,
 } from '../data/generate.js';
 
 // The live-preview funscript is a CACHE — it belongs in the hidden .forge dir
@@ -45,14 +45,6 @@ function curveSamples(pts) {
   const out = [];
   for (let i = 0; i < LANE_SAMPLES; i += 1) out.push(sampleCurve(pts, i / (LANE_SAMPLES - 1)));
   return out;
-}
-// "% influence" — blend a sampled curve toward its own mean. amount=1 keeps
-// the preset as authored; lower flattens the shape toward neutral (less
-// severe), e.g. "Grow to rails" starts higher and ends less extreme.
-function blendAmount(samples, amount) {
-  if (amount == null || amount >= 1) return samples;
-  const mean = samples.reduce((a, b) => a + b, 0) / (samples.length || 1);
-  return samples.map((v) => mean + (v - mean) * amount);
 }
 function samplesStr(samples) {
   return samples.map((v) => Math.max(0, Math.min(1, v)).toFixed(3)).join(',');
@@ -235,9 +227,11 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
   // the flat default — the "why is it Flat again?" dogfood finding.
   const [rangePts, setRangePts] = useState(persisted?.rangePts || DEFAULT_RANGE);
   const [pacePts, setPacePts] = useState(persisted?.pacePts || DEFAULT_PACE);
-  // Per-lane "% influence" (1 = preset as authored; lower = less severe).
-  const [rangeAmount, setRangeAmount] = useState(persisted?.rangeAmount ?? 1);
-  const [paceAmount, setPaceAmount] = useState(persisted?.paceAmount ?? 1);
+  // Per-lane START height (0 = preset as authored; up = begin higher, same
+  // rail, gentler slope). Replaces the old "% influence" toward-the-mean blend
+  // — see liftStart. Seeds tolerate the old rangeAmount key (ignored).
+  const [rangeStart, setRangeStart] = useState(persisted?.rangeStart ?? 0);
+  const [paceStart, setPaceStart] = useState(persisted?.paceStart ?? 0);
   // Texture/Life — bounded amplitude variation that pulls quiet beats off the
   // rails for gold's mid shoulder (and lowers speed). Default 0.2; HARD-CAPPED
   // at 0.35 because the measured sweep showed >=0.4 collapses the bimodal
@@ -255,15 +249,16 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
   const [currentMs, setCurrentMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // Mirror curve picks + amounts up to App so they survive this tab unmounting.
+  // Mirror curve picks + start-heights up to App so they survive this tab
+  // unmounting.
   useEffect(() => {
-    if (onPersist) onPersist({ rangePts, pacePts, rangeAmount, paceAmount, texture });
-  }, [rangePts, pacePts, rangeAmount, paceAmount, texture, onPersist]);
+    if (onPersist) onPersist({ rangePts, pacePts, rangeStart, paceStart, texture });
+  }, [rangePts, pacePts, rangeStart, paceStart, texture, onPersist]);
 
-  // The blended (amount-applied) sample arrays drive both the lane curves and
-  // the engine, so what you see is what generates.
-  const rangeSamples = useMemo(() => blendAmount(curveSamples(rangePts), rangeAmount), [rangePts, rangeAmount]);
-  const paceSamples = useMemo(() => blendAmount(curveSamples(pacePts), paceAmount), [pacePts, paceAmount]);
+  // The start-lifted sample arrays drive both the lane curves and the engine,
+  // so what you see is what generates.
+  const rangeSamples = useMemo(() => liftStart(curveSamples(rangePts), rangeStart), [rangePts, rangeStart]);
+  const paceSamples = useMemo(() => liftStart(curveSamples(pacePts), paceStart), [pacePts, paceStart]);
 
   const durationMs = project?.durationMs || 595000;
   const mediaPath = project?.mediaPath || null;
@@ -327,16 +322,16 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
   const diag = useMemo(() => diagnose(actions, durationMs), [actions, durationMs]);
 
   const applyFix = ({ lane, presetId }) => {
-    // A fix applies at FULL strength — otherwise a low amount slider caps it
-    // and clicking "Fill the rails" appears to do nothing (dogfood 2026-06-14).
+    // Apply the preset as authored (start lift reset to 0). The start lever
+    // never caps reach, so a fix always lands its full shape.
     if (lane === 'range') {
       const pr = RANGE_PRESETS.find((p) => p.id === presetId);
       if (pr) setRangePts(pr.pts.map((p) => ({ ...p })));
-      setRangeAmount(1);
+      setRangeStart(0);
     } else {
       const pr = PACE_PRESETS.find((p) => p.id === presetId);
       if (pr) setPacePts(pr.pts.map((p) => ({ ...p })));
-      setPaceAmount(1);
+      setPaceStart(0);
     }
   };
 
@@ -467,14 +462,14 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
               presets={RANGE_PRESETS} activeId={presetIdOf(rangePts, RANGE_PRESETS)}
               onPick={(id) => { const pr = RANGE_PRESETS.find((p) => p.id === id); if (pr) setRangePts(pr.pts.map((p) => ({ ...p }))); }}
               samples={rangeSamples}
-              amount={rangeAmount} onAmount={setRangeAmount}
+              startLift={rangeStart} onStartLift={setRangeStart}
             />
             <PresetLane
               title="PACE" hint="how busy" color="var(--info, #4dabf7)"
               presets={PACE_PRESETS} activeId={presetIdOf(pacePts, PACE_PRESETS)}
               onPick={(id) => { const pr = PACE_PRESETS.find((p) => p.id === id); if (pr) setPacePts(pr.pts.map((p) => ({ ...p }))); }}
               samples={paceSamples}
-              amount={paceAmount} onAmount={setPaceAmount}
+              startLift={paceStart} onStartLift={setPaceStart}
             />
             {/* Texture/Life — a global generation control (not per-lane): how
                 much the quiet beats pull off the rails for the gold mid

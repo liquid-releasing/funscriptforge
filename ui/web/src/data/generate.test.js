@@ -4,7 +4,7 @@ import {
   DEFAULT_RANGE, DEFAULT_PACE,
   RANGE_PRESETS, PACE_PRESETS, presetIdOf,
   generateFromLanes, diagnose, verdictFor, topFix, deadAirNote, TARGET_DECILES,
-  SPEED_CEIL, DEAD_AIR_MS, positionAtTime,
+  SPEED_CEIL, DEAD_AIR_MS, positionAtTime, liftStart,
 } from './generate.js';
 
 const flat = (v) => [{ t: 0, v }, { t: 1, v }];
@@ -200,6 +200,37 @@ describe('the diagnosis ↔ fix loop closes', () => {
     const after = diagnose(generateFromLanes(RANGE_PRESETS[1].pts, PACE_PRESETS[1].pts, 60000));
     expect(after.dynamics).toBeGreaterThan(before.dynamics);
     expect(verdictFor(after.dynamics).word).not.toBe('Flat');
+  });
+});
+
+describe('liftStart', () => {
+  const grow = [0.35, 0.5, 0.7, 0.96]; // a "grow to rails" shape
+
+  it('is identity at lift 0 (preset as authored)', () => {
+    expect(liftStart(grow, 0)).toEqual(grow);
+    expect(liftStart(grow, null)).toEqual(grow);
+  });
+
+  it('keeps the rail (max) fixed while raising the start', () => {
+    const lifted = liftStart(grow, 0.5);
+    expect(Math.max(...lifted)).toBeCloseTo(0.96, 6); // top unchanged
+    expect(lifted[0]).toBeGreaterThan(grow[0]);       // start raised
+    // start lifted halfway toward the top: 0.35 + 0.5*(0.96-0.35) = 0.655
+    expect(lifted[0]).toBeCloseTo(0.655, 6);
+  });
+
+  it('flattens to the top at lift 1 (full reach throughout)', () => {
+    expect(liftStart(grow, 1)).toEqual([0.96, 0.96, 0.96, 0.96]);
+  });
+
+  it('lowers the slope as the start rises (toward-rail, not toward-mean)', () => {
+    const slope = (s) => s[s.length - 1] - s[0];
+    expect(slope(liftStart(grow, 0.5))).toBeLessThan(slope(grow));
+  });
+
+  it('clamps lift into [0,1] and tolerates empty input', () => {
+    expect(liftStart([], 0.5)).toEqual([]);
+    expect(liftStart(grow, 2)).toEqual([0.96, 0.96, 0.96, 0.96]);
   });
 });
 

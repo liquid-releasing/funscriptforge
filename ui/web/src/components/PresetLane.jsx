@@ -72,28 +72,32 @@ function Curve({ title, hint, color, samples, height }) {
 
 export default function PresetLane({
   title, hint, color, presets, activeId, onPick, samples, height = 84,
-  // Optional "% influence" — the spiritual successor to tone-%. When onAmount
-  // is provided, a slider lets the user dial how strongly the preset's SHAPE
-  // applies (100% = full preset; lower = blended toward neutral = less severe).
-  // Passages can adopt it later; omit it and the lane stays presets-only.
-  amount, onAmount,
+  // Optional START-height lever. When onStartLift is provided, a slider lifts
+  // the curve's beginning toward its own peak (the rail) — "same rail, start
+  // higher", which with the top pinned is the same as flattening the slope.
+  // startLift is 0..1 (0 = preset as authored). The readout shows the RESULTING
+  // start height (samples[0]) — what the user actually cares about — not the
+  // lift fraction. Same widget on Generate's Range/Pace and Channels Passages.
+  startLift, onStartLift,
 }) {
-  const pct = Math.round((amount ?? 1) * 100);
+  const liftPct = Math.round((startLift ?? 0) * 100);
+  // Resulting start height = the (already-lifted) curve's first sample.
+  const startPct = samples && samples.length ? Math.round(Math.max(0, Math.min(1, samples[0])) * 100) : 0;
   return (
     <div style={{ borderTop: '1px solid var(--border)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 4px', flexWrap: 'wrap' }}>
-        {onAmount ? (
-          // Compact "% influence" inline with the pills — one row, no separate
-          // amount strip competing with the curve below.
-          <span title="how strongly the preset's shape applies — lower is less severe"
+        {onStartLift ? (
+          // Compact START-height lever inline with the pills — one row, no
+          // separate strip competing with the curve below.
+          <span title="raise where the arc begins — same rail, higher start (gentler slope)"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 'auto' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>amt</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>start</span>
             <input
-              type="range" min={0} max={100} value={pct}
-              onChange={(e) => onAmount(Number(e.target.value) / 100)}
+              type="range" min={0} max={100} value={liftPct}
+              onChange={(e) => onStartLift(Number(e.target.value) / 100)}
               style={{ width: 84, accentColor: color, cursor: 'pointer' }}
             />
-            <span className="mono" style={{ fontSize: 10, color: 'var(--text-soft)', minWidth: 28 }}>{pct}%</span>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--text-soft)', minWidth: 32 }}>{startPct}%</span>
           </span>
         ) : (
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 'auto' }}>presets</span>

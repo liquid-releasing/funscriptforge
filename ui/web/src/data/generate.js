@@ -199,6 +199,22 @@ export function deadAirNote(diag) {
   return `${mm}:${ss} with no beats — author events here while watching.`;
 }
 
+// Start-height lever — raise a sampled curve's START toward its own peak
+// (the "rail"), keeping the destination fixed. This is the control the user
+// actually reaches for: "same rail, but start higher" — which, with the top
+// pinned, is the same as flattening the slope. lift=0 → preset as authored;
+// lift=1 → flat at the curve's own max (full reach throughout). Replaces the
+// old blend-toward-the-mean ("% influence"), which muddied the shape toward
+// neutral; this never caps the reach (the rail is always hit), so "more"
+// monotonically means "stronger sooner". Used by every PresetLane (Generate
+// Range/Pace + Channels Passages).
+export function liftStart(samples, lift) {
+  if (!samples || !samples.length || !lift) return samples;
+  const k = Math.max(0, Math.min(1, lift));
+  const top = Math.max(...samples);
+  return samples.map((v) => v + k * (top - v));
+}
+
 // Device position at a given playback time — linear interpolation between the
 // two bracketing actions, so a "depth now" meter can track the generated
 // funscript while it plays (the body decides, not just the deciles). Returns
