@@ -107,6 +107,10 @@ export default function App() {
   // the tab unmounting — without this, returning to Generate reset to the flat
   // default and re-generated a "Flat" script (dogfood 2026-06-14).
   const [genCurves, setGenCurves] = useState(null);
+  // The Generate tab's CURRENT preview actions, lifted here so the footer's
+  // "Continue with this funscript" can roll the draft into the working script
+  // without the user first clicking "Set as working funscript" in-tab.
+  const [genActions, setGenActions] = useState(null);
   // Every project loaded this session — drives the Project tab's left
   // rail "Recent projects" list. Held at the App level so it survives
   // tab unmounts. In-memory only; cross-session persistence is the
@@ -693,6 +697,41 @@ export default function App() {
     ? `${(project.title ?? 'project')}.${tab}.json`
     : null;
 
+  // Per-tab footer fork. Most tabs are a single accept-and-chain; two tabs
+  // offer a CHOICE the footer surfaces as primary (default, highlighted) +
+  // secondary (quiet, left):
+  //   • Project  — "Generate new funscript" vs "Edit this funscript" (skip
+  //                generation, go straight to editing). The skip path still
+  //                runs analysis (the next chain step) — much of it is already
+  //                cached from a prior generate. The secondary is hidden when
+  //                there's no funscript to edit (video-only → generate is the
+  //                only door).
+  //   • Generate — "Continue with this funscript" (adopt the draft as the
+  //                working script) vs "Keep the original".
+  let footerPrimaryLabel = nextTab
+    ? `${analysisPartial ? 'Finish analysis & chain' : 'Accept and chain'} to ${TABS.find((t) => t.id === nextTab)?.label ?? nextTab}`
+    : (tab === 'export' ? 'Write outputs' : 'Accept');
+  let footerOnPrimary = null; // null → use handleAccept
+  let footerSecondary = null; // { label, onClick }
+  if (tab === 'project' && !gateMsg && !busy) {
+    footerPrimaryLabel = 'Generate new funscript';
+    footerOnPrimary = () => setTab('generate');
+    if (project?.path) {
+      footerSecondary = { label: 'Edit this funscript', onClick: () => setTab('analysis') };
+      footerSummary = 'Generate a new funscript from the media — or skip and edit this one.';
+    } else {
+      footerSummary = 'Generate a funscript from the media.';
+    }
+  } else if (tab === 'generate' && !gateMsg && !busy) {
+    footerPrimaryLabel = 'Continue with this funscript';
+    footerOnPrimary = () => {
+      if (Array.isArray(genActions) && genActions.length) handleActionsPatch(genActions);
+      setTab('analysis');
+    };
+    footerSecondary = { label: 'Keep the original', onClick: () => setTab('analysis') };
+    footerSummary = 'Continue with the generated funscript, or keep the original.';
+  }
+
   const handleAccept = async () => {
     if (gateMsg) {
       // Gate blocks; nothing to advance. The summary already shows why.
@@ -825,6 +864,7 @@ export default function App() {
             onActionsPatch={handleActionsPatch}
             persisted={genCurves}
             onPersist={setGenCurves}
+            onGenerated={setGenActions}
             onBusy={setBusy}
           />
         )}
@@ -967,10 +1007,10 @@ export default function App() {
           summary={footerSummary}
           chainFile={chainFile}
           accepted={false}
-          primaryLabel={nextTab
-            ? `${analysisPartial ? 'Finish analysis & chain' : 'Accept and chain'} to ${TABS.find((t) => t.id === nextTab)?.label ?? nextTab}`
-            : (tab === 'export' ? 'Write outputs' : 'Accept')}
-          onAccept={handleAccept}
+          primaryLabel={footerPrimaryLabel}
+          onAccept={footerOnPrimary || handleAccept}
+          secondaryLabel={footerSecondary?.label}
+          onSecondary={footerSecondary?.onClick}
           error={appError}
           onClearError={() => setAppError(null)}
           busy={busy}

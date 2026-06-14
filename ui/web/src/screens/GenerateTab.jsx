@@ -221,7 +221,7 @@ function DepthMeter({ pos }) {
   );
 }
 
-export default function GenerateTab({ project, onActionsPatch, persisted, onPersist, onBusy }) {
+export default function GenerateTab({ project, onActionsPatch, persisted, onPersist, onGenerated, onBusy }) {
   // Seed from the session-persisted curves (App owns them) so switching tabs
   // and coming back keeps the user's picked presets instead of resetting to
   // the flat default — the "why is it Flat again?" dogfood finding.
@@ -320,6 +320,12 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
 
   const actions = gen?.actions?.length ? gen.actions : standIn;
   const diag = useMemo(() => diagnose(actions, durationMs), [actions, durationMs]);
+
+  // Lift the current preview up to App so the footer's "Continue with this
+  // funscript" can adopt the draft without an in-tab click.
+  useEffect(() => {
+    if (onGenerated) onGenerated(actions);
+  }, [actions, onGenerated]);
 
   const applyFix = ({ lane, presetId }) => {
     // Apply the preset as authored (start lift reset to 0). The start lever
