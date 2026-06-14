@@ -3487,7 +3487,7 @@ def _beatmap_sidecar_path(media: str):
     return forge_dir(media) / f"{Path(media).stem}.beatmap.json"
 
 
-def _load_or_analyze_beatmap(media, *, source="full", force=False, persist=True):
+def _load_or_analyze_beatmap(media, *, source="full", tracker="plp", force=False, persist=True):
     """Return ``(AudioBeatMap, from_cache, sidecar_path)`` for *media*.
 
     Prefers the persisted full beat map (``<stem>.beatmap.json`` in the forge
@@ -3495,20 +3495,44 @@ def _load_or_analyze_beatmap(media, *, source="full", force=False, persist=True)
     ``analyze_beats``) and persists the result. This is the shared substrate:
     every device generator — 1-axis, shaker, multi-axis — reads the SAME
     beats + energy + stanzas without re-running librosa. Generation rides the
-    analyze pass (hide work inside an existing wait)."""
+    analyze pass (hide work inside an existing wait).
+
+    Tracker defaults to **PLP** (predominant local pulse), not the global
+    ``beat_track``: PLP follows the continuous pulse and places beats through
+    weak / non-percussive sections (a soft intro with no bass or click) that
+    ``beat_track`` thresholds out entirely. Proven on VO ch8 (2026-06-14):
+    beat_track found 0 beats before 61.5s; PLP found 118 in the first minute,
+    matching what a hand/PythonDancer script covers. The mode classifier then
+    scales those low-energy beats down, so the intro strokes are present but
+    gentle — depth still never scales with the signal.
+
+    The cache stores its ``tracker``/``source`` provenance and self-invalidates
+    when they differ (so an old beat_track map that misses the intro is not
+    silently reused)."""
     from videoflow.audio import AudioBeatMap, analyze_beats
     sidecar = _beatmap_sidecar_path(media)
     if not force and sidecar.exists():
         try:
-            return AudioBeatMap.load(sidecar), True, sidecar
+            cached = json.loads(sidecar.read_text(encoding="utf-8"))
+            if cached.get("tracker") == tracker and cached.get("source", source) == source:
+                return AudioBeatMap.load(sidecar), True, sidecar
         except Exception:
-            pass  # corrupt / stale cache → re-analyze
+            pass  # corrupt / stale / different-tracker cache → re-analyze
     beat_map = analyze_beats(
-        media, source=source, on_progress=_make_stage_event_emitter(),
+        media, source=source, tracker=tracker, on_progress=_make_stage_event_emitter(),
     )
     if persist:
         sidecar.parent.mkdir(parents=True, exist_ok=True)
         beat_map.save(sidecar)
+        # Annotate provenance so the cache can self-invalidate on tracker/source
+        # change (AudioBeatMap.load ignores these extra keys).
+        try:
+            d = json.loads(sidecar.read_text(encoding="utf-8"))
+            d["tracker"] = tracker
+            d["source"] = source
+            sidecar.write_text(json.dumps(d), encoding="utf-8")
+        except Exception:
+            pass
     return beat_map, False, sidecar
 
 
@@ -3523,7 +3547,7 @@ def cmd_beatmap(args):
     cache unless ``--force``.
     """
     beat_map, from_cache, sidecar = _load_or_analyze_beatmap(
-        args.media, source=args.source, force=args.force,
+        args.media, source=args.source, tracker=args.tracker, force=args.force,
     )
     payload = {
         "ok": True,
@@ -3582,7 +3606,7 @@ def cmd_generate(args):
         # Reuse the persisted full beat map when present; analyze + persist on
         # a miss so the next generate (any device) is instant.
         beat_map, from_cache, _ = _load_or_analyze_beatmap(
-            args.media, source=args.source, force=args.force,
+            args.media, source=args.source, tracker=args.tracker, force=args.force,
         )
     _emit_progress(f"done::1::beatmap::{len(beat_map.beats)} beats @ {beat_map.bpm:.0f} BPM")
 
@@ -4340,6 +4364,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_bm.add_argument("media", help="Media file to analyze")
     p_bm.add_argument("--source", choices=["full", "percussive"], default="full",
                       help="Beat-tracking source (default full)")
+    p_bm.add_argument("--tracker", choices=["auto", "beat_track", "plp"], default="plp",
+                      help="Beat tracker. Default plp — follows the continuous pulse "
+                           "through weak/non-percussive sections beat_track misses.")
     p_bm.add_argument("--force", action="store_true",
                       help="Re-analyze even if a persisted beatmap exists")
     p_bm.add_argument("--format", choices=["json", "text"], default="text",
@@ -4370,6 +4397,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="half|full|1|2|4|8 (actions per beat; default half)")
     p_gen.add_argument("--source", choices=["full", "percussive"], default="full",
                        help="Beat-tracking source when --media is used (default full)")
+    p_gen.add_argument("--tracker", choices=["auto", "beat_track", "plp"], default="plp",
+                       help="Beat tracker when --media is used. Default plp (covers "
+                            "weak-pulse intros beat_track misses).")
     p_gen.add_argument("--force", action="store_true",
                        help="Re-analyze the media even if a persisted beatmap exists")
     p_gen.add_argument("--emit-actions", action="store_true",
