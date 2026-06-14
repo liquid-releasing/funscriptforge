@@ -38,9 +38,11 @@ import {
 } from '../data/characters.js';
 import {
   listCharacters, readCharacters, saveCharacters, stimProcess, multiaxisProcess,
+  readPassages, savePassages,
 } from '../api/forge.js';
 import { useChapterClip } from '../hooks/useChapterClip.js';
 import MechanicalPanel from './MechanicalPanel.jsx';
+import PassagesPanel from './PassagesPanel.jsx';
 import { activeAxes, DEFAULT_STYLE } from '../data/multiaxis.js';
 
 // Merge the canonical Python catalog (id / label / description / sliders)
@@ -372,6 +374,24 @@ export default function CharactersTab({
   const resetMech = () => setStagedMechStyle(appliedMechStyle);
   const mechAxisCount = activeAxes(stagedMechStyle).length;
 
+  // ── Passages — span-relative intensity arcs over the chapter run. Loaded
+  // from `<stem>.passages.json` and written through on every edit (no Accept,
+  // mirroring the Events feel.yml pattern). Export bakes them into e-stim
+  // volume + multi-axis amplitude. (See project_passage_arcs_cross_modality.)
+  const [passages, setPassages] = useState([]);
+  useEffect(() => {
+    if (!path) { setPassages([]); return undefined; }
+    let cancelled = false;
+    readPassages(path)
+      .then((res) => { if (!cancelled) setPassages(res?.passages || []); })
+      .catch(() => { if (!cancelled) setPassages([]); });
+    return () => { cancelled = true; };
+  }, [path]);
+  const commitPassages = (next) => {
+    setPassages(next);
+    if (path) savePassages(path, next).catch(() => {});
+  };
+
   // ── Real per-chapter channel draw (all 9, live) ───────────────────
   // Generate the full 3-phase channel set for the active chapter's
   // character via the funscript-tools pipeline (the proven Streamlit
@@ -624,12 +644,22 @@ export default function CharactersTab({
         onMode={setEditorMode}
         characterLabel={appliedChar?.label || (isNothingApplied ? NOTHING.label : null)}
         mechCount={mechAxisCount}
+        passageCount={passages.length}
       />
 
+      {editorMode === 'passages' ? (
+        <div style={{ marginTop: 8 }}>
+          <PassagesPanel chapters={chapters} passages={passages} onChange={commitPassages} />
+        </div>
+      ) : (
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(280px, 1fr) minmax(420px, 1.4fr)',
+          // Chapter rail is a compact fixed width — it only needs room for the
+          // color bar + ch# + m:ss range (user nit: it was eating ~40% of the
+          // row in empty space). Narrowing it pulls the editor + the nine
+          // channels left, closer to where the chapter is picked.
+          gridTemplateColumns: '216px minmax(420px, 1fr)',
           gap: 16, marginTop: 8, alignItems: 'start',
         }}
       >
@@ -670,6 +700,7 @@ export default function CharactersTab({
           />
         )}
       </div>
+      )}
 
       {editorMode === 'character' && (
         <ChannelGrid
@@ -693,12 +724,16 @@ export default function CharactersTab({
 // intent line restates what the active editor authors. (See
 // project_channels_character_merge memory for the why.)
 // ──────────────────────────────────────────────────────────────
-function EditorStrip({ mode, onMode, characterLabel, mechCount }) {
+function EditorStrip({ mode, onMode, characterLabel, mechCount, passageCount }) {
   const items = [
     { id: 'character', label: 'Character', meta: characterLabel || '—' },
     {
       id: 'mechanical', label: 'Mechanical',
       meta: mechCount === 0 ? 'stroke only' : `${mechCount} ax${mechCount === 1 ? 'is' : 'es'}`,
+    },
+    {
+      id: 'passages', label: 'Passages',
+      meta: passageCount > 0 ? `${passageCount} arc${passageCount === 1 ? '' : 's'}` : 'none',
     },
     { id: 'body', label: 'Body', meta: 'soon', disabled: true },
   ];
@@ -706,7 +741,9 @@ function EditorStrip({ mode, onMode, characterLabel, mechCount }) {
     ? 'Sensation — how the e-stim feels'
     : mode === 'mechanical'
       ? 'Geometric — the toy moves in these directions'
-      : 'Anatomical — which body regions fire';
+      : mode === 'passages'
+        ? 'Dynamic — how intensity rises and falls over the scene'
+        : 'Anatomical — which body regions fire';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 16 }}>
       <div style={{
@@ -756,10 +793,15 @@ function EditorStrip({ mode, onMode, characterLabel, mechCount }) {
 // ──────────────────────────────────────────────────────────────
 function Header({ mode, character, mechStyle, mechAxisCount }) {
   const isMech = mode === 'mechanical';
-  const eyebrow = isMech
-    ? 'Channels · Mechanical — per-chapter motion'
-    : 'Channels · Character — per-chapter sensation feel';
-  const title = isMech ? 'Pick a motion style per chapter' : 'Pick a character per chapter';
+  const isPassages = mode === 'passages';
+  const eyebrow = isPassages
+    ? 'Channels · Passages — intensity over scene-scale spans'
+    : isMech
+      ? 'Channels · Mechanical — per-chapter motion'
+      : 'Channels · Character — per-chapter sensation feel';
+  const title = isPassages
+    ? 'Shape how intensity rises and falls'
+    : isMech ? 'Pick a motion style per chapter' : 'Pick a character per chapter';
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
@@ -779,7 +821,15 @@ function Header({ mode, character, mechStyle, mechAxisCount }) {
           fontSize: 11.5, color: 'var(--text-dim)', marginTop: 4,
           maxWidth: 720, lineHeight: 1.45,
         }}>
-          {isMech ? (
+          {isPassages ? (
+            <>
+              <strong>Passages</strong> lay a slow intensity arc over a run of chapters — the
+              scene-scale rise and fall a single 3–5&nbsp;min chapter is too short to carry. Pick a
+              shape (Build, Sustain, Release, Swell) and the range it travels; the envelope bakes
+              into the e-stim volume and the multi-axis amplitude at export. Per-chapter Character
+              and Mechanical say <em>what</em>; a passage says <em>how much</em>.
+            </>
+          ) : isMech ? (
             <>
               <strong>Mechanical</strong> drives a multi-axis toy — each chapter's position style
               generates a separate funscript per axis (R0&nbsp;twist, R1&nbsp;roll, R2&nbsp;pitch,
@@ -801,7 +851,7 @@ function Header({ mode, character, mechStyle, mechAxisCount }) {
           ? (mechStyle && mechStyle !== 'None' && (
               <Pill tone="info" dot>{mechStyle} · {mechAxisCount} {mechAxisCount === 1 ? 'axis' : 'axes'}</Pill>
             ))
-          : (character && <Pill tone="info" dot>{character.label}</Pill>)}
+          : (!isPassages && character && <Pill tone="info" dot>{character.label}</Pill>)}
       </div>
     </div>
   );
