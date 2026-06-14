@@ -221,7 +221,19 @@ function DepthMeter({ pos }) {
   );
 }
 
-export default function GenerateTab({ project, onActionsPatch, persisted, onPersist, onGenerated, onBusy }) {
+export default function GenerateTab({
+  project, onActionsPatch, persisted, onPersist, onGenerated, onBusy,
+  // The last real engine result + the input signature that produced it,
+  // owned by App so it survives this tab unmounting. Without this, returning
+  // to Generate re-ran the full (10-minute) analyze+generate and flashed the
+  // smooth stand-in meanwhile (dogfood 2026-06-14: "has to start over / all
+  // blue / mismatch with Chapters"). persistedResult = { sig, payload }.
+  persistedResult, onResult,
+  // Audio sidecars (same ones the Chapters player uses) so the Play view's
+  // Audio/Spectro modes show the real waveform + spectrogram, not the blocky
+  // placeholder.
+  trackPeaks, trackSpectrogram, trackBeats,
+}) {
   // Seed from the session-persisted curves (App owns them) so switching tabs
   // and coming back keeps the user's picked presets instead of resetting to
   // the flat default — the "why is it Flat again?" dogfood finding.
@@ -237,8 +249,10 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
   // at 0.35 because the measured sweep showed >=0.4 collapses the bimodal
   // rails backbone into the refuted centre bell. See data/generate.js.
   const [texture, setTexture] = useState(persisted?.texture ?? 0.2);
-  // Real-engine result (null until/unless the videoflow path runs).
-  const [gen, setGen] = useState(null);
+  // Real-engine result — seeded from App's persisted result so returning to
+  // this tab shows the REAL funscript immediately instead of re-running the
+  // multi-minute analyze+generate and flashing the mid-bunched stand-in.
+  const [gen, setGen] = useState(() => persistedResult?.payload || null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
   const [justSet, setJustSet] = useState(false);
@@ -272,15 +286,29 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
     [rangePts, pacePts, durationMs],
   );
 
-  // Drive the real engine on curve change. Stale-guarded so a rapid re-pick
+  // A signature of everything that changes the generated output. Regeneration
+  // is gated on this so it only re-runs when a SETTING actually changed — not
+  // on every remount (the dogfood "10 minutes to recreate on every return").
+  const sig = useMemo(
+    () => `${mediaPath || ''}|${samplesStr(paceSamples)}|${samplesStr(rangeSamples)}|${texture}`,
+    [mediaPath, paceSamples, rangeSamples, texture],
+  );
+
+  // Drive the real engine on SETTING change. Stale-guarded so a rapid re-pick
   // doesn't paint an older result; errors fall back silently to the stand-in.
   const runId = useRef(0);
+  // The sig whose result we already hold (seeded from App on remount). When it
+  // matches the current sig, the effect short-circuits — no re-run.
+  const doneSigRef = useRef(persistedResult?.sig || null);
   useEffect(() => {
-    if (!useRealEngine) { setGen(null); setGenerating(false); return undefined; }
-    // Debounce: dragging the amount slider (or rapid preset picks) re-fires
-    // this effect on every tick. Wait until the curves settle (~450ms) before
-    // generating — otherwise a long file runs a multi-minute analyze per drag
-    // pixel. The lane curves still update live; only generation waits.
+    if (!useRealEngine) { setGen(null); setGenerating(false); doneSigRef.current = null; return undefined; }
+    // Already have the result for these exact settings → don't re-run the
+    // multi-minute generate just because the tab remounted.
+    if (doneSigRef.current === sig) return undefined;
+    // Debounce: dragging a slider (or rapid preset picks) re-fires this on
+    // every tick. Wait until the curves settle (~450ms) before generating —
+    // otherwise a long file runs a multi-minute analyze per drag pixel. The
+    // lane curves still update live; only generation waits.
     const timer = setTimeout(() => {
       const id = (runId.current += 1);
       setGenerating(true);
@@ -300,13 +328,17 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
         .then((payload) => {
           if (id !== runId.current) return;
           if (!payload) { setGen(null); return; }
-          setGen({
+          const result = {
             actions: payload.actions_list || [],
             band: payload.band || null,
             speed: payload.stats?.speed || null,
             fromCache: !!payload.from_cache,
             bpm: payload.bpm,
-          });
+          };
+          setGen(result);
+          doneSigRef.current = sig;
+          // Persist up to App so this survives the tab unmounting.
+          if (onResult) onResult({ sig, payload: result });
         })
         .catch((e) => { if (id === runId.current) setGenError(String(e?.message || e)); })
         .finally(() => {
@@ -316,7 +348,7 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
         });
     }, 450);
     return () => clearTimeout(timer);
-  }, [useRealEngine, mediaPath, rangeSamples, paceSamples, texture, project?.path, onBusy]);
+  }, [useRealEngine, sig, onBusy, onResult]);
 
   const actions = gen?.actions?.length ? gen.actions : standIn;
   const diag = useMemo(() => diagnose(actions, durationMs), [actions, durationMs]);
@@ -441,6 +473,9 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
                 <MediaViewer
                   videoSrc={toMediaUrl(mediaPath)}
                   funscript={{ actions }}
+                  audioWaveform={trackPeaks?.peaks?.length ? trackPeaks : null}
+                  spectrogram={trackSpectrogram}
+                  beats={trackBeats}
                   currentMs={currentMs}
                   totalMs={durationMs}
                   isPlaying={isPlaying}

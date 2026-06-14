@@ -111,6 +111,10 @@ export default function App() {
   // "Continue with this funscript" can roll the draft into the working script
   // without the user first clicking "Set as working funscript" in-tab.
   const [genActions, setGenActions] = useState(null);
+  // The Generate tab's last real engine result + the settings signature that
+  // produced it — held here so returning to the tab restores it instead of
+  // re-running the multi-minute generate (dogfood: "10 minutes to recreate").
+  const [genResult, setGenResult] = useState(null);
   // Every project loaded this session — drives the Project tab's left
   // rail "Recent projects" list. Held at the App level so it survives
   // tab unmounts. In-memory only; cross-session persistence is the
@@ -865,6 +869,11 @@ export default function App() {
             persisted={genCurves}
             onPersist={setGenCurves}
             onGenerated={setGenActions}
+            persistedResult={genResult}
+            onResult={setGenResult}
+            trackPeaks={trackPeaks}
+            trackSpectrogram={trackSpectrogram}
+            trackBeats={trackBeats}
             onBusy={setBusy}
           />
         )}

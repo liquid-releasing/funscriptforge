@@ -84,20 +84,26 @@ export default function FunscriptChart({
     return actions.filter((a) => a.at >= view.start && a.at <= view.end);
   }, [actions, view.start, view.end]);
 
-  // Absolute velocity max for the colormap denominator. Computed from
-  // the FULL actions array, not visibleActions, so the velocity colormap
-  // is stable across zoom — the same segment renders the same color at
-  // 100% zoom and 10× zoom. Without this, Sparkline normalizes per-
-  // window and identical segments shift between blue/red as you scroll.
+  // Velocity colormap denominator. Computed from the FULL actions array (not
+  // visibleActions) so the colormap is stable across zoom — the same segment
+  // renders the same color at 100% and 10× zoom. Uses the p98 of velocities,
+  // NOT the absolute max: a handful of flash strokes (one 2000 u/s spike on a
+  // long track) would otherwise push the denominator so high that the entire
+  // bulk renders flat blue, while the per-chapter views (local scaling) show
+  // the same data as a lively green/orange. p98 keeps the bulk in the
+  // meaningful color range and lets only genuine outliers saturate red — so
+  // the full-track Overview reads like the per-chapter heatmaps (dogfood
+  // 2026-06-14: "blue and boring here, golden in Chapters").
   const maxVelocity = useMemo(() => {
     if (!actions || actions.length < 2) return 0;
-    let max = 0;
+    const vs = [];
     for (let i = 1; i < actions.length; i++) {
       const dt = Math.max(1, actions[i].at - actions[i - 1].at);
-      const v = Math.abs(actions[i].pos - actions[i - 1].pos) / dt;
-      if (v > max) max = v;
+      vs.push(Math.abs(actions[i].pos - actions[i - 1].pos) / dt);
     }
-    return max;
+    if (!vs.length) return 0;
+    vs.sort((a, b) => a - b);
+    return vs[Math.min(vs.length - 1, Math.floor(vs.length * 0.98))] || vs[vs.length - 1];
   }, [actions]);
 
   const handleMouseDown = (e) => {
