@@ -23,6 +23,7 @@ import {
 import { deriveAnalysisState } from './lib/analysisState.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
+import GenerateTab from './screens/GenerateTab.jsx';
 import AnalysisTab from './screens/AnalysisTab.jsx';
 import PolishTab from './screens/PolishTab.jsx';
 import ChaptersTab from './screens/ChaptersTab.jsx';
@@ -37,6 +38,13 @@ import AboutDialog from './components/AboutDialog.jsx';
 const TABS = [
   { id: 'library',   label: 'Library' },
   { id: 'project',   label: 'Project' },
+  // 'generate' (2026-06-14) sits between Project and Analysis — the front
+  // door for CREATING the main funscript by shaping two macro curves: Range
+  // (how far each stroke goes) and Pace (how busy). Beta = presets only. The
+  // generator is a stand-in (data/generate.js ENGINE SEAM) until videoflow's
+  // --density-arc / --center-trajectory are exposed through the bridge. See
+  // DESIGN_DECISIONS.md + memory project_generator_into_funscriptforge.
+  { id: 'generate',  label: 'Generate' },
   // 'analysis' (2026-05-24) sits between Project and Chapters. Read-only
   // overview surface — chapter strip, script overview, pitch line, beat
   // strength bars, energy heatmap, KPI strip, category drill-down. Runs
@@ -629,7 +637,8 @@ export default function App() {
   // ≥1 selected target (moved here from Project 2026-05-17 along with
   // the device picker itself).
   const TAB_CHAIN = {
-    project:  'analysis',
+    project:  'generate',
+    generate: 'analysis',
     analysis: 'chapters',
     chapters: 'phrases',
     phrases:  'stanzas',
@@ -645,7 +654,7 @@ export default function App() {
     if (id === 'project') {
       if (!project?.path && !isLoadingProject) return 'Open a funscript before continuing.';
     }
-    if (['analysis', 'polish', 'chapters', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
+    if (['generate', 'analysis', 'polish', 'chapters', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
         && !project?.path && !isLoadingProject) {
       return 'Open a funscript before continuing.';
     }
@@ -806,6 +815,12 @@ export default function App() {
             isLoadingProject={isLoadingProject}
           />
         )}
+        {tab === 'generate' && (
+          <GenerateTab
+            project={typeof openedProject === 'object' ? openedProject : null}
+            onActionsPatch={handleActionsPatch}
+          />
+        )}
         {tab === 'analysis' && (
           <AnalysisTab
             project={typeof openedProject === 'object' ? openedProject : null}
@@ -910,7 +925,7 @@ export default function App() {
           />
         )}
         {tab === 'catalog' && <CatalogTab />}
-        {tab !== 'library' && tab !== 'project' && tab !== 'analysis' && tab !== 'polish' && tab !== 'chapters' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && tab !== 'catalog' && (
+        {tab !== 'library' && tab !== 'project' && tab !== 'generate' && tab !== 'analysis' && tab !== 'polish' && tab !== 'chapters' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && tab !== 'catalog' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>
