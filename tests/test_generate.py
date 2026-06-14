@@ -186,5 +186,32 @@ class TestGenerateEndToEnd(unittest.TestCase):
         self.assertLessEqual(min(late), 5)
 
 
+class TestBeatmapPersistence(unittest.TestCase):
+    """The persisted full beat map is the shared substrate. A cache hit must
+    load it WITHOUT re-analyzing (no librosa) — proven here by pointing at an
+    empty media file whose forge dir already holds a beatmap sidecar."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def test_sidecar_path_in_forge_dir(self):
+        p = cli._beatmap_sidecar_path(os.path.join(self.tmp, "clip.mp4"))
+        self.assertTrue(str(p).endswith("clip.beatmap.json"))
+        self.assertIn(".clip.forge", str(p))
+
+    def test_cache_hit_loads_without_analysis(self):
+        media = os.path.join(self.tmp, "clip.mp4")
+        open(media, "wb").close()  # empty — analysis would fail, so a cache
+        sidecar = cli._beatmap_sidecar_path(media)   # hit is the only way through
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        _synthetic_beatmap_json(str(sidecar))
+        bm, from_cache, path = cli._load_or_analyze_beatmap(media, force=False)
+        self.assertTrue(from_cache)
+        self.assertEqual(str(path), str(sidecar))
+        self.assertEqual(len(bm.beats), 240)
+        self.assertEqual(len(bm.stanzas), 15)
+        self.assertTrue(bm.energy)  # full map — energy present
+
+
 if __name__ == "__main__":
     unittest.main()

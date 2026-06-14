@@ -3480,6 +3480,70 @@ def _in_band(value: float, band: tuple[float, float]) -> bool:
     return band[0] <= value <= band[1]
 
 
+def _beatmap_sidecar_path(media: str):
+    """Path to the persisted FULL beat map for *media* (forge dir)."""
+    from pathlib import Path
+    from videoflow.sidecar import forge_dir
+    return forge_dir(media) / f"{Path(media).stem}.beatmap.json"
+
+
+def _load_or_analyze_beatmap(media, *, source="full", force=False, persist=True):
+    """Return ``(AudioBeatMap, from_cache, sidecar_path)`` for *media*.
+
+    Prefers the persisted full beat map (``<stem>.beatmap.json`` in the forge
+    dir); analyzes on a miss (the octave guard is applied inside
+    ``analyze_beats``) and persists the result. This is the shared substrate:
+    every device generator — 1-axis, shaker, multi-axis — reads the SAME
+    beats + energy + stanzas without re-running librosa. Generation rides the
+    analyze pass (hide work inside an existing wait)."""
+    from videoflow.audio import AudioBeatMap, analyze_beats
+    sidecar = _beatmap_sidecar_path(media)
+    if not force and sidecar.exists():
+        try:
+            return AudioBeatMap.load(sidecar), True, sidecar
+        except Exception:
+            pass  # corrupt / stale cache → re-analyze
+    beat_map = analyze_beats(
+        media, source=source, on_progress=_make_stage_event_emitter(),
+    )
+    if persist:
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        beat_map.save(sidecar)
+    return beat_map, False, sidecar
+
+
+@_cli_command
+def cmd_beatmap(args):
+    """Analyze + PERSIST the full AudioBeatMap (the shared generation substrate).
+
+    Runs ``videoflow.analyze_beats`` (octave guard folded in) and saves the
+    full map — beats + energy + stanzas + downbeats + corrected BPM — to
+    ``<stem>.beatmap.json`` in the forge dir. This is the one analysis every
+    device generator reads, so generation never re-runs librosa. Reuses the
+    cache unless ``--force``.
+    """
+    beat_map, from_cache, sidecar = _load_or_analyze_beatmap(
+        args.media, source=args.source, force=args.force,
+    )
+    payload = {
+        "ok": True,
+        "beatmap": str(sidecar),
+        "from_cache": from_cache,
+        "beats": len(beat_map.beats),
+        "bpm": round(beat_map.bpm, 1),
+        "stanzas": len(beat_map.stanzas),
+        "duration_ms": beat_map.duration_ms,
+    }
+    if args.format == "json":
+        print(json.dumps(payload))
+    else:
+        src = "cache" if from_cache else "analyzed"
+        print(f"Beatmap ({src}): {sidecar}")
+        print(f"  {len(beat_map.beats)} beats | {beat_map.bpm:.0f} BPM | "
+              f"{len(beat_map.stanzas)} stanzas | "
+              f"{beat_map.duration_ms / 1000:.0f}s")
+
+
 @_cli_command
 def cmd_generate(args):
     """Generate a funscript from a beat map (videoflow engine, in-process).
@@ -3497,7 +3561,7 @@ def cmd_generate(args):
       --beats <full AudioBeatMap json>  (energies + stanzas — what generation needs)
       --media <file>                    (analyze on the fly; slow, needs librosa+ffmpeg)
     """
-    from videoflow.audio import AudioBeatMap, analyze_beats
+    from videoflow.audio import AudioBeatMap
     from videoflow.generate import generate_from_beats
     from videoflow.funscript_stats import summarize
 
@@ -3505,6 +3569,7 @@ def cmd_generate(args):
         raise ValueError("pass exactly one of --beats <beatmap.json> or --media <file>")
 
     _emit_progress("start::1::beatmap")
+    from_cache = False
     if args.beats:
         beat_map = AudioBeatMap.load(args.beats)
         if not beat_map.energy or not beat_map.stanzas:
@@ -3514,8 +3579,10 @@ def cmd_generate(args):
                 "or persist the full map during the analyze pass)."
             )
     else:
-        beat_map = analyze_beats(
-            args.media, source=args.source, on_progress=_make_stage_event_emitter(),
+        # Reuse the persisted full beat map when present; analyze + persist on
+        # a miss so the next generate (any device) is instant.
+        beat_map, from_cache, _ = _load_or_analyze_beatmap(
+            args.media, source=args.source, force=args.force,
         )
     _emit_progress(f"done::1::beatmap::{len(beat_map.beats)} beats @ {beat_map.bpm:.0f} BPM")
 
@@ -3555,6 +3622,7 @@ def cmd_generate(args):
         "output": str(path),
         "title": args.title or "",
         "source": "beats" if args.beats else "media",
+        "from_cache": from_cache,
         "beats": len(beat_map.beats),
         "bpm": round(beat_map.bpm, 1),
         "duration_ms": beat_map.duration_ms,
@@ -3590,6 +3658,10 @@ def cmd_generate(args):
               f"(band {_RATE_COV_BAND[0]}-{_RATE_COV_BAND[1]}) | "
               f"vel CoV {vel_cov:.3f} [{vmark}] "
               f"(band {_VELOCITY_COV_BAND[0]}-{_VELOCITY_COV_BAND[1]})")
+        spd = fp.get("speed", {})
+        if spd.get("n"):
+            parts = [f"{b} {p}%" for b, p in zip(spd["bins"], spd["pct"]) if p > 0]
+            print(f"  speed: {' / '.join(parts)}")
 
 
 # ------------------------------------------------------------------
@@ -4253,6 +4325,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show per-character slider details.",
     )
 
+    # --- beatmap ---
+    p_bm = sub.add_parser(
+        "beatmap",
+        help="Analyze + persist the full AudioBeatMap (<stem>.beatmap.json — the generation substrate)",
+    )
+    p_bm.add_argument("media", help="Media file to analyze")
+    p_bm.add_argument("--source", choices=["full", "percussive"], default="full",
+                      help="Beat-tracking source (default full)")
+    p_bm.add_argument("--force", action="store_true",
+                      help="Re-analyze even if a persisted beatmap exists")
+    p_bm.add_argument("--format", choices=["json", "text"], default="text",
+                      help="Output format (default text)")
+
     # --- generate ---
     p_gen = sub.add_parser(
         "generate",
@@ -4278,6 +4363,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="half|full|1|2|4|8 (actions per beat; default half)")
     p_gen.add_argument("--source", choices=["full", "percussive"], default="full",
                        help="Beat-tracking source when --media is used (default full)")
+    p_gen.add_argument("--force", action="store_true",
+                       help="Re-analyze the media even if a persisted beatmap exists")
     p_gen.add_argument("--title", default=None, help="Funscript metadata title")
     p_gen.add_argument("--format", choices=["json", "text"], default="text",
                        help="Output format (default text)")
@@ -5420,6 +5507,7 @@ def main():
         "device-aware":     cmd_device_aware,
         "stim-config":      cmd_stim_config,
         "list-characters":  cmd_list_characters,
+        "beatmap":          cmd_beatmap,
         "generate":         cmd_generate,
     }
     dispatch[args.command](args)
