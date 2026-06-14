@@ -343,10 +343,11 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
 
   const railsDone = diag.rails >= 0.22;
   const arcDone = diag.dynamics >= 0.55;
-  // Pace is "already eased" once it's the gentle preset at (near) full strength
-  // — at that point easing further can't help, so the too-fast fix escalates
-  // to the RANGE lever instead of nagging on a maxed-out pace.
-  const paceEased = presetIdOf(pacePts, PACE_PRESETS) === 'gentle' && paceAmount >= 0.99;
+  // Pace is "already eased" once it's the gentle preset with the start NOT
+  // lifted (start=0 = the authored, calmest gentle shape; raising start makes
+  // it busier). At that point easing further can't help, so the too-fast fix
+  // escalates to the RANGE lever instead of nagging on the pace.
+  const paceEased = presetIdOf(pacePts, PACE_PRESETS) === 'gentle' && paceStart <= 0.01;
 
   if (!project?.path) {
     return (
