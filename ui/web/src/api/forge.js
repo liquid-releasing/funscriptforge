@@ -189,6 +189,9 @@ export function generateFunscript(opts) {
     paceCurve = null, rangeCurve = null,
     low = null, high = null, center = null,
     strokeDensity = null, texture = null, source = null, title = null, force = false,
+    // Opaque blob (curves/start/texture + sig) persisted verbatim into
+    // <stem>.generate.json so the tab restores on app restart. JSON string.
+    uiState = null,
   } = opts || {};
   return dedupedCall(
     `generate_funscript::${outputPath}::${paceCurve || ''}::${rangeCurve || ''}::${texture ?? ''}`,
@@ -196,10 +199,24 @@ export function generateFunscript(opts) {
       'generate_funscript',
       {
         outputPath, mediaPath, beatsPath, paceCurve, rangeCurve,
-        low, high, center, strokeDensity, texture, source, title, force,
+        low, high, center, strokeDensity, texture, source, title, force, uiState,
       },
       () => Promise.resolve(null),
     ),
+  );
+}
+
+/** Restore a persisted Generate-tab session for `mediaPath` (a cheap JSON
+ *  read off `<stem>.generate.json`, no analysis). Returns the session object
+ *  ({ ok:true, sig, ui, output, bpm, band, speed, … }) on a hit, or
+ *  { ok:false, reason } when absent / stale / the generated funscript was
+ *  deleted. Browser/dev (no backend) resolves to a miss. */
+export function generateRead(mediaPath) {
+  if (!mediaPath) return Promise.resolve({ ok: false, reason: 'no-media' });
+  return call(
+    'generate_read',
+    { mediaPath },
+    () => Promise.resolve({ ok: false, reason: 'no-backend' }),
   );
 }
 

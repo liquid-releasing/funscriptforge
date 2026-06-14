@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Pill, SectionLabel, Icon, MediaViewer } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import PresetLane from '../components/PresetLane.jsx';
-import { isTauri, generateFunscript } from '../api/forge.js';
+import { isTauri, generateFunscript, generateRead, loadProject } from '../api/forge.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 import {
   DEFAULT_RANGE, DEFAULT_PACE, RANGE_PRESETS, PACE_PRESETS, presetIdOf,
@@ -272,6 +272,11 @@ export default function GenerateTab({
   const [viewMode, setViewMode] = useState('overview');
   const [currentMs, setCurrentMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  // Gate the generate effect until we've checked the on-disk session
+  // (<stem>.generate.json). On a cold app start App has no in-memory result,
+  // so without this gate the effect would kick off a fresh 3-10 min generate
+  // before the restore lands. Starts true when there's nothing to restore.
+  const [restoreChecked, setRestoreChecked] = useState(false);
 
   // Mirror curve picks + start-heights up to App so they survive this tab
   // unmounting.
@@ -312,6 +317,9 @@ export default function GenerateTab({
   const doneSigRef = useRef(persistedResult?.sig || null);
   useEffect(() => {
     if (!useRealEngine) { setGen(null); setGenerating(false); doneSigRef.current = null; return undefined; }
+    // Wait for the on-disk session check (restore effect) before deciding to
+    // generate — otherwise a cold start regenerates before the restore lands.
+    if (!restoreChecked) return undefined;
     // Already have the result for these exact settings → don't re-run the
     // multi-minute generate just because the tab remounted.
     if (doneSigRef.current === sig) return undefined;
@@ -334,6 +342,9 @@ export default function GenerateTab({
         rangeCurve: samplesStr(rangeSamples),
         texture,
         source: 'percussive',
+        // Persisted verbatim into <stem>.generate.json so the tab restores the
+        // exact presets + result on app restart (see the restore effect below).
+        uiState: JSON.stringify({ sig, rangePts, pacePts, rangeStart, paceStart, texture }),
       })
         .then((payload) => {
           if (id !== runId.current) return;
@@ -359,7 +370,56 @@ export default function GenerateTab({
         });
     }, 450);
     return () => clearTimeout(timer);
-  }, [useRealEngine, sig, onBusy, onResult]);
+  }, [useRealEngine, sig, onBusy, onResult, restoreChecked]);
+
+  // Restore the persisted Generate session from disk on a cold start (App
+  // holds no in-memory result). Reads <stem>.generate.json + the already-saved
+  // generated funscript, seeds the picked presets + the real result, and marks
+  // its sig done so the generate effect short-circuits instead of re-running
+  // the multi-minute analyze+generate (dogfood 2026-06-14: "10 minutes to
+  // recreate / never remember the settings"). A miss (fresh project) just
+  // clears the gate so a normal first generate proceeds.
+  useEffect(() => {
+    let cancelled = false;
+    if (!useRealEngine || persistedResult) { setRestoreChecked(true); return undefined; }
+    setRestoreChecked(false);
+    generateRead(mediaPath).then(async (sc) => {
+      if (cancelled) return;
+      if (sc && sc.ok && sc.output) {
+        try {
+          const ui = sc.ui || {};
+          const rPts = ui.rangePts || DEFAULT_RANGE;
+          const pPts = ui.pacePts || DEFAULT_PACE;
+          const rStart = ui.rangeStart ?? 0;
+          const pStart = ui.paceStart ?? 0;
+          const tx = ui.texture ?? 0.2;
+          // Recompute the sig the SAME way the live memo does, so haveCurrent
+          // holds regardless of any cross-session formatting drift in sc.sig.
+          const pSamp = liftStart(curveSamples(pPts), pStart);
+          const rSamp = liftStart(curveSamples(rPts), rStart);
+          const restoredSig = `${mediaPath || ''}|${samplesStr(pSamp)}|${samplesStr(rSamp)}|${tx}`;
+          const proj = await loadProject(sc.output).catch(() => null);
+          const acts = Array.isArray(proj?.actions) ? proj.actions : [];
+          if (cancelled) return;
+          if (acts.length) {
+            const result = {
+              actions: acts, band: sc.band || null, speed: sc.speed || null,
+              fromCache: true, bpm: sc.bpm, sig: restoredSig,
+            };
+            setRangePts(rPts); setPacePts(pPts);
+            setRangeStart(rStart); setPaceStart(pStart); setTexture(tx);
+            setGen(result);
+            doneSigRef.current = restoredSig;
+            if (onResult) onResult({ sig: restoredSig, payload: result });
+            if (onPersist) onPersist({ rangePts: rPts, pacePts: pPts, rangeStart: rStart, paceStart: pStart, texture: tx });
+          }
+        } catch { /* unreadable → fall through to a fresh generate */ }
+      }
+      if (!cancelled) setRestoreChecked(true);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useRealEngine, persistedResult, mediaPath]);
 
   // Do we hold the REAL engine result for the live settings? If so show it.
   // If the real engine is running (or hasn't produced this sig yet), we're

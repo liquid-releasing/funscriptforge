@@ -841,6 +841,7 @@ pub async fn generate_funscript(
     source: Option<String>,
     title: Option<String>,
     force: Option<bool>,
+    ui_state: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mut args: Vec<String> = vec![
         "generate".into(),
@@ -895,12 +896,37 @@ pub async fn generate_funscript(
     if force.unwrap_or(false) {
         args.push("--force".into());
     }
+    // Opaque UI blob (curves/start/texture + sig) — cli.py stores it verbatim
+    // in <stem>.generate.json so the tab restores on app restart.
+    if let Some(u) = ui_state.filter(|s| !s.is_empty()) {
+        args.push("--ui-state".into());
+        args.push(u);
+    }
 
     let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let stdout = run_cli_with_progress(&app, "ff:progress", &arg_refs).await?;
 
     serde_json::from_str(&stdout)
         .map_err(|e| format!("could not parse cli.py generate output: {}", e))
+}
+
+// ---------------------------------------------------------------------------
+// generate_read — restore a persisted Generate-tab session for `media_path`.
+//
+// Shells `cli.py generate-read --media <m>` (a cheap JSON read, no analysis)
+// and returns the parsed payload: { ok, sig, ui, output, bpm, band, speed, ...}
+// on a hit, or { ok: false, reason } when absent / stale / the generated
+// funscript was deleted. The tab seeds its curves + the real result from this
+// on mount instead of re-running the multi-minute analyze+generate.
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn generate_read(
+    media_path: String,
+) -> Result<serde_json::Value, String> {
+    let stdout = run_cli(&["generate-read", "--media", media_path.as_str()]).await?;
+    serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse cli.py generate-read output: {}", e))
 }
 
 // ---------------------------------------------------------------------------
@@ -1869,7 +1895,25 @@ pub async fn save_working_funscript(
         .await
         .map_err(|e| format!("write manifest {}: {}", manifest_path.display(), e))?;
 
-    Ok(serde_json::json!({ "saved": work_str, "edited_at": edited_at }))
+    // Invalidate the funscript-DERIVED analysis. `<stem>.phrases.json` is the
+    // only sidecar computed from the actions (chapters/audio/spectro/beats are
+    // media-derived; characters/passages are chapter-keyed), so saving new
+    // actions makes it stale. Deleting it forces the Phrases/Analysis tabs to
+    // rebuild against the new shape instead of serving the prior funscript's
+    // phrases (dogfood 2026-06-14: "analyze didn't redo after we built the new
+    // funscript / phrases showed old data"). Best-effort: absence is fine.
+    let phrases_sidecar = forge.join(format!("{}.phrases.json", stem_name));
+    let phrases_invalidated = match tokio::fs::remove_file(&phrases_sidecar).await {
+        Ok(()) => true,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => false,
+    };
+
+    Ok(serde_json::json!({
+        "saved": work_str,
+        "edited_at": edited_at,
+        "phrases_invalidated": phrases_invalidated,
+    }))
 }
 
 /// Revert to the original funscript by deleting the working copy + its

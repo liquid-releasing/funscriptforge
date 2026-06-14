@@ -3487,6 +3487,24 @@ def _beatmap_sidecar_path(media: str):
     return forge_dir(media) / f"{Path(media).stem}.beatmap.json"
 
 
+def _generate_sidecar_path(media: str):
+    """Path to the persisted Generate-tab session for *media* (forge dir).
+
+    ``<dir>/.<stem>.forge/<stem>.generate.json`` — the small record that lets
+    the Generate tab restore on app restart: the picked curves/start/texture
+    (opaque UI blob), the result metadata (band/speed/bpm), and a pointer to
+    the already-persisted generated funscript. The actions themselves are NOT
+    stored here (they live in the generated .funscript); the UI reads them
+    back from the ``output`` pointer. Mirrors ``_beatmap_sidecar_path``.
+    """
+    from pathlib import Path
+    from videoflow.sidecar import forge_dir
+    return forge_dir(media) / f"{Path(media).stem}.generate.json"
+
+
+_GENERATE_SIDECAR_VERSION = 1
+
+
 # Default time-chunk width (seconds) for analysis. Long files are analysed
 # in ~3-minute windows so a multi-hour pass emits per-chunk progress
 # ("chunk 4/12") instead of looking hung inside one monolithic librosa call,
@@ -3695,6 +3713,41 @@ def cmd_generate(args):
         },
     }
 
+    # Persist the Generate-tab session (media path only — the sidecar is
+    # media-keyed). Lets the tab restore the picked curves + the real result on
+    # app restart instead of re-running the 3-10 min analyze+generate. Small by
+    # design: result metadata + a pointer to the generated funscript, never the
+    # actions (those live in the .funscript and are re-read from `output`). The
+    # UI blob (--ui-state) is stored verbatim so JS owns its own shape.
+    if args.media:
+        ui_state = None
+        if getattr(args, "ui_state", None):
+            try:
+                ui_state = json.loads(args.ui_state)
+            except (ValueError, TypeError):
+                ui_state = None
+        sc = {
+            "version": _GENERATE_SIDECAR_VERSION,
+            "ok": True,
+            "media": str(args.media),
+            "output": str(path),
+            "sig": (ui_state or {}).get("sig") if isinstance(ui_state, dict) else None,
+            "ui": ui_state,
+            "bpm": payload["bpm"],
+            "duration_ms": payload["duration_ms"],
+            "actions": payload["actions"],
+            "from_cache": from_cache,
+            "band": payload["band"],
+            "speed": fp.get("speed"),
+        }
+        try:
+            scp = _generate_sidecar_path(args.media)
+            scp.parent.mkdir(parents=True, exist_ok=True)
+            scp.write_text(json.dumps(sc), encoding="utf-8")
+            payload["sidecar"] = str(scp)
+        except OSError:
+            pass  # non-fatal: generation succeeded; persistence is best-effort
+
     if args.format == "json":
         print(json.dumps(payload))
     else:
@@ -3715,6 +3768,37 @@ def cmd_generate(args):
         if spd.get("n"):
             parts = [f"{b} {p}%" for b, p in zip(spd["bins"], spd["pct"]) if p > 0]
             print(f"  speed: {' / '.join(parts)}")
+
+
+@_cli_command
+def cmd_generate_read(args):
+    """Read the persisted Generate-tab session for *media* (or report absence).
+
+    The Generate tab calls this on mount: a hit restores the picked curves +
+    the real result without re-running analyze+generate. Returns
+    ``{ok: false}`` when no sidecar exists (a fresh project) or it's a
+    different schema version — the tab then falls back to its defaults.
+    """
+    scp = _generate_sidecar_path(args.media)
+    if not scp.exists():
+        print(json.dumps({"ok": False, "reason": "absent"}))
+        return
+    try:
+        data = json.loads(scp.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        print(json.dumps({"ok": False, "reason": "unreadable"}))
+        return
+    if data.get("version") != _GENERATE_SIDECAR_VERSION:
+        print(json.dumps({"ok": False, "reason": "version"}))
+        return
+    # Don't serve a session whose generated funscript has since been deleted —
+    # the actions are read from `output`, so a dangling pointer is a miss.
+    out = data.get("output")
+    if out and not Path(out).exists():
+        print(json.dumps({"ok": False, "reason": "output_missing"}))
+        return
+    data["ok"] = True
+    print(json.dumps(data))
 
 
 # ------------------------------------------------------------------
@@ -4439,8 +4523,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_gen.add_argument("--emit-actions", action="store_true",
                        help="Include the generated actions in the JSON payload (for the UI bridge)")
     p_gen.add_argument("--title", default=None, help="Funscript metadata title")
+    p_gen.add_argument("--ui-state", default=None,
+                       help="Opaque JSON blob (the Generate tab's curves/start/"
+                            "texture + sig) stored verbatim in <stem>.generate.json "
+                            "so the tab restores on app restart")
     p_gen.add_argument("--format", choices=["json", "text"], default="text",
                        help="Output format (default text)")
+
+    # --- generate-read ---
+    p_genr = sub.add_parser(
+        "generate-read",
+        help="Read the persisted Generate-tab session (<stem>.generate.json)",
+    )
+    p_genr.add_argument("--media", required=True, help="Media file the session is keyed to")
 
     # --- test ---
     sub.add_parser("test", help="Run unit tests")
@@ -5582,6 +5677,7 @@ def main():
         "list-characters":  cmd_list_characters,
         "beatmap":          cmd_beatmap,
         "generate":         cmd_generate,
+        "generate-read":    cmd_generate_read,
     }
     dispatch[args.command](args)
 

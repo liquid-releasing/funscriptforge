@@ -17,7 +17,7 @@ import {
   isTauri, ping, loadProject, loadSampleProject, attachMedia,
   pickFunscriptFile, pickMediaFile,
   loadAudioPeaks, loadAudioSpectrogram, loadAudioBeats,
-  revertWorkingFunscript,
+  revertWorkingFunscript, saveWorkingFunscript,
   countChapterClips, analyzeChaptersWithVideoflow,
 } from './api/forge.js';
 import { deriveAnalysisState } from './lib/analysisState.js';
@@ -472,6 +472,39 @@ export default function App() {
     }
   };
 
+  // Adopt a freshly GENERATED funscript as the project's working script. Unlike
+  // the in-memory `handleActionsPatch` (Chapters/Phrases call that AND persist
+  // separately), generation is the one place that authors a wholly NEW funscript
+  // — so adopting it must (1) roll it forward in memory, (2) persist it to disk
+  // (save_working_funscript also deletes the now-stale <stem>.phrases.json), and
+  // (3) drop the App-level phrase/stanza caches so the Phrases/Analysis tabs
+  // rebuild against the new shape instead of the prior funscript's analysis
+  // (dogfood 2026-06-14: "analyze didn't redo after we built the new funscript /
+  // phrases showed old data"). Best-effort persistence — the in-memory adopt
+  // always lands so the user is never blocked by a disk error.
+  const adoptGeneratedFunscript = async (nextActions) => {
+    if (!Array.isArray(nextActions) || !nextActions.length) return;
+    handleActionsPatch(nextActions);
+    const path = typeof openedProject === 'object' ? openedProject?.path : null;
+    if (!path) return; // video-only project (no funscript path yet) — item D
+    try {
+      await saveWorkingFunscript(path, nextActions);
+    } catch (err) {
+      console.error('App: saveWorkingFunscript (adopt generated) failed', err);
+    }
+    // Invalidate the funscript-derived analysis caches so a return to Phrases
+    // /Analysis re-runs assess against the new actions (the on-disk
+    // phrases.json was just deleted by save_working_funscript).
+    setPhrasesByPath((prev) => {
+      if (!(path in prev)) return prev;
+      const next = { ...prev }; delete next[path]; return next;
+    });
+    setStanzasByPath((prev) => {
+      if (!(path in prev)) return prev;
+      const next = { ...prev }; delete next[path]; return next;
+    });
+  };
+
   // Pop the OS file picker and run the chosen funscript through the
   // standard load pipeline. Used by TopBar "Open" and Project tab's
   // empty state — the entry point for "open from anywhere," outside
@@ -729,7 +762,7 @@ export default function App() {
   } else if (tab === 'generate' && !gateMsg && !busy) {
     footerPrimaryLabel = 'Continue with this funscript';
     footerOnPrimary = () => {
-      if (Array.isArray(genActions) && genActions.length) handleActionsPatch(genActions);
+      if (Array.isArray(genActions) && genActions.length) adoptGeneratedFunscript(genActions);
       setTab('analysis');
     };
     footerSecondary = { label: 'Keep the original', onClick: () => setTab('analysis') };
@@ -865,7 +898,7 @@ export default function App() {
         {tab === 'generate' && (
           <GenerateTab
             project={typeof openedProject === 'object' ? openedProject : null}
-            onActionsPatch={handleActionsPatch}
+            onActionsPatch={adoptGeneratedFunscript}
             persisted={genCurves}
             onPersist={setGenCurves}
             onGenerated={setGenActions}
