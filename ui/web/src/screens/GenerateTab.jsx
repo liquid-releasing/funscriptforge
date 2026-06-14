@@ -44,8 +44,16 @@ function curveSamples(pts) {
   for (let i = 0; i < LANE_SAMPLES; i += 1) out.push(sampleCurve(pts, i / (LANE_SAMPLES - 1)));
   return out;
 }
-function curveStr(pts) {
-  return curveSamples(pts).map((v) => v.toFixed(3)).join(',');
+// "% influence" — blend a sampled curve toward its own mean. amount=1 keeps
+// the preset as authored; lower flattens the shape toward neutral (less
+// severe), e.g. "Grow to rails" starts higher and ends less extreme.
+function blendAmount(samples, amount) {
+  if (amount == null || amount >= 1) return samples;
+  const mean = samples.reduce((a, b) => a + b, 0) / (samples.length || 1);
+  return samples.map((v) => mean + (v - mean) * amount);
+}
+function samplesStr(samples) {
+  return samples.map((v) => Math.max(0, Math.min(1, v)).toFixed(3)).join(',');
 }
 
 // Speed-band palette: cool (slow) → hot (flash). Mirrors the heatmap users know.
@@ -201,16 +209,24 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
   // the flat default — the "why is it Flat again?" dogfood finding.
   const [rangePts, setRangePts] = useState(persisted?.rangePts || DEFAULT_RANGE);
   const [pacePts, setPacePts] = useState(persisted?.pacePts || DEFAULT_PACE);
+  // Per-lane "% influence" (1 = preset as authored; lower = less severe).
+  const [rangeAmount, setRangeAmount] = useState(persisted?.rangeAmount ?? 1);
+  const [paceAmount, setPaceAmount] = useState(persisted?.paceAmount ?? 1);
   // Real-engine result (null until/unless the videoflow path runs).
   const [gen, setGen] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
   const [justSet, setJustSet] = useState(false);
 
-  // Mirror curve picks up to App so they survive this tab unmounting.
+  // Mirror curve picks + amounts up to App so they survive this tab unmounting.
   useEffect(() => {
-    if (onPersist) onPersist({ rangePts, pacePts });
-  }, [rangePts, pacePts, onPersist]);
+    if (onPersist) onPersist({ rangePts, pacePts, rangeAmount, paceAmount });
+  }, [rangePts, pacePts, rangeAmount, paceAmount, onPersist]);
+
+  // The blended (amount-applied) sample arrays drive both the lane curves and
+  // the engine, so what you see is what generates.
+  const rangeSamples = useMemo(() => blendAmount(curveSamples(rangePts), rangeAmount), [rangePts, rangeAmount]);
+  const paceSamples = useMemo(() => blendAmount(curveSamples(pacePts), paceAmount), [pacePts, paceAmount]);
 
   const durationMs = project?.durationMs || 595000;
   const mediaPath = project?.mediaPath || null;
@@ -239,8 +255,8 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
     generateFunscript({
       outputPath: forgeGeneratedPath(mediaPath),
       mediaPath,
-      paceCurve: curveStr(pacePts),
-      rangeCurve: curveStr(rangePts),
+      paceCurve: samplesStr(paceSamples),
+      rangeCurve: samplesStr(rangeSamples),
       source: 'percussive',
     })
       .then((payload) => {
@@ -261,7 +277,7 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
         if (onBusy) onBusy(null);
       });
     return undefined;
-  }, [useRealEngine, mediaPath, rangePts, pacePts, project?.path, onBusy]);
+  }, [useRealEngine, mediaPath, rangeSamples, paceSamples, project?.path, onBusy]);
 
   const actions = gen?.actions?.length ? gen.actions : standIn;
   const diag = useMemo(() => diagnose(actions, durationMs), [actions, durationMs]);
@@ -350,13 +366,15 @@ export default function GenerateTab({ project, onActionsPatch, persisted, onPers
               title="RANGE" hint="how far" color="var(--accent)"
               presets={RANGE_PRESETS} activeId={presetIdOf(rangePts, RANGE_PRESETS)}
               onPick={(id) => { const pr = RANGE_PRESETS.find((p) => p.id === id); if (pr) setRangePts(pr.pts.map((p) => ({ ...p }))); }}
-              samples={curveSamples(rangePts)}
+              samples={rangeSamples}
+              amount={rangeAmount} onAmount={setRangeAmount}
             />
             <PresetLane
               title="PACE" hint="how busy" color="var(--info, #4dabf7)"
               presets={PACE_PRESETS} activeId={presetIdOf(pacePts, PACE_PRESETS)}
               onPick={(id) => { const pr = PACE_PRESETS.find((p) => p.id === id); if (pr) setPacePts(pr.pts.map((p) => ({ ...p }))); }}
-              samples={curveSamples(pacePts)}
+              samples={paceSamples}
+              amount={paceAmount} onAmount={setPaceAmount}
             />
           </div>
         </div>
