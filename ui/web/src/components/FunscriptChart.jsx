@@ -43,6 +43,11 @@ export default function FunscriptChart({
   // `bare` to suppress them. Lets the parent stack two compact charts
   // without redundant time labels.
   bare = false,
+  // Draw faint horizontal rails at pos 0 / 50 / 100 with labels, so the
+  // reader can see whether strokes actually reach the rails (the Sparkline's
+  // 0-100 domain is fixed: pos 100 = top, pos 0 = bottom). Off by default;
+  // the Generate tab turns it on to answer "are we hitting the rails?".
+  railGuides = false,
   // Added to time-axis tick LABELS only (not the curve or viewport, which
   // stay 0-based so the transform preview keeps working). Used by slice
   // previews (per-phrase before/after) so the axis reads the phrase's real
@@ -191,6 +196,7 @@ export default function FunscriptChart({
           filled
           height={height - 28}
         />
+        {railGuides && <RailGuides plotH={height - 28} />}
         <TimeAxis startMs={view.start} endMs={view.end} originMs={axisOffsetMs} compact={bare} />
       </div>
       {!bare && <StatsRow stats={stats} />}
@@ -231,6 +237,25 @@ function TimeAxis({ startMs, endMs, originMs = 0, compact = false }) {
       {ticks.map((t, i) => (
         <span key={i}>{t}</span>
       ))}
+    </div>
+  );
+}
+
+// Faint rails at pos 100 (top) / 50 (mid) / 0 (bottom). The Sparkline maps
+// pos linearly to its full height (viewBox 0-100, no padding), so these align
+// exactly with where strokes land. Top/bottom solid = the rails; mid dashed.
+function RailGuides({ plotH }) {
+  const rail = (label, topPct, dashed) => (
+    <div style={{ position: 'absolute', left: 0, right: 0, top: `${topPct}%`, display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'none' }}>
+      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', opacity: 0.7, width: 22, textAlign: 'right' }}>{label}</span>
+      <div style={{ flex: 1, borderTop: `1px ${dashed ? 'dashed' : 'solid'} var(--border-strong, #2a3142)`, opacity: dashed ? 0.5 : 0.8 }} />
+    </div>
+  );
+  return (
+    <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: plotH, pointerEvents: 'none' }}>
+      {rail('100', 0, false)}
+      {rail('50', 50, true)}
+      {rail('0', 100, false)}
     </div>
   );
 }

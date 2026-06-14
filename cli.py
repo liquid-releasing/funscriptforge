@@ -3605,7 +3605,10 @@ def cmd_generate(args):
         density_arc=density_arc,
         gain_arc=gain_arc,
         title=args.title or "",
-        progress_callback=lambda label: _emit_progress(f"step::2::generate::{label}"),
+        # msg::2 so the App footer's rolling headline shows the stage
+        # explanation ("Classifying…", "Generating motion curve…") — the
+        # footer is where the user watches generation happen.
+        progress_callback=lambda label: _emit_progress(f"msg::2::generate::{label}"),
     )
     _emit_progress("done::1::generate")
 

@@ -103,6 +103,10 @@ export default function App() {
   const [tab, setTab] = useState('library');
   const [pong, setPong] = useState(null);
   const [openedProject, setOpenedProject] = useState(null);
+  // Generate-tab curve picks (Range/Pace presets). Held here so they survive
+  // the tab unmounting — without this, returning to Generate reset to the flat
+  // default and re-generated a "Flat" script (dogfood 2026-06-14).
+  const [genCurves, setGenCurves] = useState(null);
   // Every project loaded this session — drives the Project tab's left
   // rail "Recent projects" list. Held at the App level so it survives
   // tab unmounts. In-memory only; cross-session persistence is the
@@ -819,6 +823,9 @@ export default function App() {
           <GenerateTab
             project={typeof openedProject === 'object' ? openedProject : null}
             onActionsPatch={handleActionsPatch}
+            persisted={genCurves}
+            onPersist={setGenCurves}
+            onBusy={setBusy}
           />
         )}
         {tab === 'analysis' && (

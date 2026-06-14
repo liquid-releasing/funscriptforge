@@ -82,7 +82,7 @@ function SpeedBar({ speed }) {
 function BandChips({ band }) {
   const chip = (ok, label) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '2px 7px', borderRadius: 999, background: ok ? 'rgba(62,213,152,0.12)' : 'var(--surface-3, #232735)', color: ok ? 'var(--success)' : 'var(--text-dim)', border: `1px solid ${ok ? 'var(--success)' : 'var(--border)'}` }}>
-      <Icon name={ok ? 'check' : 'minus'} size={10} /> {label}
+      <span style={{ fontWeight: 700 }}>{ok ? '✓' : '–'}</span> {label}
     </span>
   );
   return (
@@ -107,7 +107,7 @@ function FixCard({ icon, title, why, done, onClick }) {
       }}
     >
       <span style={{ display: 'grid', placeItems: 'center', width: 26, height: 26, borderRadius: 6, flexShrink: 0, background: done ? 'var(--success)' : 'var(--surface-3, #232735)', color: done ? '#0e1117' : 'var(--text-soft)' }}>
-        <Icon name={done ? 'check' : icon} size={15} />
+        {done ? <span style={{ fontSize: 15, fontWeight: 800 }}>✓</span> : <Icon name={icon} size={15} />}
       </span>
       <span style={{ flex: 1 }}>
         <span style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>{title}</span>
@@ -136,12 +136,12 @@ function DiagnosisPanel({ diag, band, speed, applyFix, railsDone, arcDone }) {
           <div style={{ width: `${Math.round(diag.dynamics * 100)}%`, height: '100%', background: toneColor }} />
         </div>
         {fix ? (
-          <Button kind="primary" size="sm" icon="wand-2" onClick={() => applyFix(fix)} style={{ width: '100%' }}>
+          <Button kind="primary" size="sm" icon="zap" onClick={() => applyFix(fix)} style={{ width: '100%' }}>
             Biggest win: {fix.label}
           </Button>
         ) : (
           <div style={{ fontSize: 12, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="check-circle" size={14} /> Nothing flagged — hit play.
+            <span style={{ fontWeight: 700 }}>✓</span> Nothing flagged — hit play.
           </div>
         )}
         {band && <BandChips band={band} />}
@@ -164,20 +164,29 @@ function DiagnosisPanel({ diag, band, speed, applyFix, railsDone, arcDone }) {
 
       {/* explicit fixes — always paired with their action */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <FixCard icon="maximize-2" title="Fill the rails" why="reach shallow → full" done={railsDone} onClick={() => applyFix({ lane: 'range', presetId: 'full' })} />
+        <FixCard icon="maximize" title="Fill the rails" why="reach shallow → full" done={railsDone} onClick={() => applyFix({ lane: 'range', presetId: 'full' })} />
         <FixCard icon="trending-up" title="Add an arc" why="build → climax → ease" done={arcDone} onClick={() => applyFix({ lane: 'pace', presetId: 'burn' })} />
       </div>
     </div>
   );
 }
 
-export default function GenerateTab({ project, onActionsPatch }) {
-  const [rangePts, setRangePts] = useState(DEFAULT_RANGE);
-  const [pacePts, setPacePts] = useState(DEFAULT_PACE);
+export default function GenerateTab({ project, onActionsPatch, persisted, onPersist, onBusy }) {
+  // Seed from the session-persisted curves (App owns them) so switching tabs
+  // and coming back keeps the user's picked presets instead of resetting to
+  // the flat default — the "why is it Flat again?" dogfood finding.
+  const [rangePts, setRangePts] = useState(persisted?.rangePts || DEFAULT_RANGE);
+  const [pacePts, setPacePts] = useState(persisted?.pacePts || DEFAULT_PACE);
   // Real-engine result (null until/unless the videoflow path runs).
   const [gen, setGen] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState(null);
+  const [justSet, setJustSet] = useState(false);
+
+  // Mirror curve picks up to App so they survive this tab unmounting.
+  useEffect(() => {
+    if (onPersist) onPersist({ rangePts, pacePts });
+  }, [rangePts, pacePts, onPersist]);
 
   const durationMs = project?.durationMs || 595000;
   const mediaPath = project?.mediaPath || null;
@@ -199,6 +208,10 @@ export default function GenerateTab({ project, onActionsPatch }) {
     const id = (runId.current += 1);
     setGenerating(true);
     setGenError(null);
+    // Open the App footer's progress strip — the ff:progress stream then fills
+    // it with the stage explanation ("Detecting beats…", "Generating motion
+    // curve…"). The footer is where the user watches the recalculation happen.
+    if (onBusy) onBusy({ message: 'Generating from the beats…', steps: [] });
     generateFunscript({
       outputPath: `${project.path}.generated.funscript`,
       mediaPath,
@@ -218,9 +231,13 @@ export default function GenerateTab({ project, onActionsPatch }) {
         });
       })
       .catch((e) => { if (id === runId.current) setGenError(String(e?.message || e)); })
-      .finally(() => { if (id === runId.current) setGenerating(false); });
+      .finally(() => {
+        if (id !== runId.current) return;
+        setGenerating(false);
+        if (onBusy) onBusy(null);
+      });
     return undefined;
-  }, [useRealEngine, mediaPath, rangePts, pacePts, project?.path]);
+  }, [useRealEngine, mediaPath, rangePts, pacePts, project?.path, onBusy]);
 
   const actions = gen?.actions?.length ? gen.actions : standIn;
   const diag = useMemo(() => diagnose(actions), [actions]);
@@ -282,17 +299,25 @@ export default function GenerateTab({ project, onActionsPatch }) {
           {/* live result */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-3, 8px)', padding: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 live result · {actions.length.toLocaleString()} actions
                 {gen?.bpm ? ` · ${Math.round(gen.bpm)} BPM` : ''}
+                {generating && <span style={{ color: 'var(--info, #4dabf7)' }}>· recalculating…</span>}
               </span>
               {onActionsPatch && (
-                <Button kind="ghost" size="sm" icon="check" onClick={() => onActionsPatch(actions)}>
-                  Set as working funscript
+                <Button
+                  kind={justSet ? 'primary' : 'ghost'} size="sm"
+                  icon="save"
+                  disabled={generating}
+                  onClick={() => { onActionsPatch(actions); setJustSet(true); setTimeout(() => setJustSet(false), 1600); }}
+                >
+                  {justSet ? 'Set ✓' : 'Set as working funscript'}
                 </Button>
               )}
             </div>
-            <FunscriptChart actions={actions} totalMs={durationMs} height={200} />
+            <div style={{ cursor: generating ? 'progress' : 'default', opacity: generating ? 0.6 : 1, transition: 'opacity 0.15s' }}>
+              <FunscriptChart actions={actions} totalMs={durationMs} height={200} railGuides />
+            </div>
           </div>
 
           {/* the two lanes — same PresetLane widget the Channels Passages lane uses */}
