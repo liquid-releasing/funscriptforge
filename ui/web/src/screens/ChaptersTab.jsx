@@ -65,7 +65,8 @@ function applyRemap(remap, { tones, params, accepted }) {
 
 // Stamp each chapter record with its chosen tone id so the sidecar write
 // persists the user's tone choices. `tones` is the tonesByChapter map; a
-// chapter with no entry falls back to 'build' (same default seedTones uses).
+// chapter with no entry falls back to 'none'/Untoned — the same pass-through
+// default seedTones reads back, now that auto-seeding is off (2026-06-15).
 // Every sidecar write goes through this so tones survive split / join /
 // accept and round-trip on reopen (Rust write_chapters_sidecar serializes
 // the `tone` field; videoflow Chapter.from_dict reads it back).
