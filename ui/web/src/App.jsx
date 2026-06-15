@@ -999,7 +999,7 @@ export default function App() {
       </nav>
 
       <main className="ff-main">
-        {tab === 'library' && <LibraryScreen onOpen={handleOpenScript} onAppError={setAppError} />}
+        {tab === 'library' && <LibraryScreen onOpen={handleOpenScript} onOpenMedia={handleOpenMedia} onAppError={setAppError} />}
         {tab === 'project' && (
           <ProjectTab
             openedProject={openedProject}

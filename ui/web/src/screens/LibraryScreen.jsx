@@ -37,7 +37,7 @@ const SORT_OPTIONS = [
   { id: 'duration',   label: 'Duration' },
 ];
 
-export default function LibraryScreen({ onOpen, onAppError }) {
+export default function LibraryScreen({ onOpen, onOpenMedia, onAppError }) {
   const [config, setConfig] = useState(null);
   // Map<rootPath, ScanResult>
   const [scans, setScans] = useState(new Map());
@@ -154,15 +154,16 @@ export default function LibraryScreen({ onOpen, onAppError }) {
   };
 
   const handleCardClick = (project) => {
-    // Raw projects (video/audio only, no .funscript) can't go through
-    // the load_project pipeline — it parses the path as a funscript.
-    // Surface a friendly message instead of triggering the UTF-8 crash.
-    // Future: route raw projects to a "create funscript from media" flow.
+    // Raw projects (video/audio only, no .funscript) open as a VIDEO-ONLY
+    // project — the generate-first path (item D). load_project can't parse a
+    // media file as a funscript, so route to onOpenMedia, which probes the
+    // media and seeds a project whose Generate tab creates the funscript.
     if (!project.pills.funscript) {
-      onAppError?.(
-        `${project.title} has no funscript yet. Drop one into the folder, ` +
-        `or open the funscript on the Project tab via "Add or replace…".`,
-      );
+      if (project.mediaPath) {
+        onOpenMedia?.(project.mediaPath);
+      } else {
+        onAppError?.(`${project.title} has no media file to open.`);
+      }
       return;
     }
     // Prefer the matched filename (handles prefix-with-boundary cases —

@@ -462,7 +462,10 @@ export default function GenerateTab({
   // escalates to the RANGE lever instead of nagging on the pace.
   const paceEased = presetIdOf(pacePts, PACE_PRESETS) === 'gentle' && paceStart <= 0.01;
 
-  if (!project?.path) {
+  // A project is usable here if it has a funscript to REGENERATE *or* media
+  // to GENERATE FROM (the video-only / item-D path). Only a truly empty
+  // shell falls through to the placeholder.
+  if (!project?.path && !project?.mediaPath) {
     return (
       <div className="ff-placeholder" style={{ padding: 40 }}>
         <h2>Generate</h2>
@@ -470,6 +473,11 @@ export default function GenerateTab({
       </div>
     );
   }
+
+  // Video-only: there's no funscript yet, so this is CREATING the project's
+  // first funscript, not regenerating one — the header says so.
+  const isVideoOnly = !project?.path && !!project?.mediaPath;
+  const mediaName = (mediaPath || '').split(/[\\/]/).pop() || 'the video';
 
   // Engine status pill: live (real engine result), generating, or preview
   // (stand-in — no media / browser dev).
@@ -483,10 +491,22 @@ export default function GenerateTab({
     <div style={{ padding: '22px 26px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'auto', height: '100%' }}>
       <div>
         <SectionLabel>Generate</SectionLabel>
-        <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', margin: '2px 0 2px' }}>Author the funscript</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', margin: '2px 0 2px' }}>
+          {isVideoOnly ? 'Generating your funscript' : 'Author the funscript'}
+        </h1>
         <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 13 }}>
-          Shape two curves — <strong style={{ color: 'var(--accent)' }}>Range</strong> (how far) and{' '}
-          <strong style={{ color: 'var(--info, #4dabf7)' }}>Pace</strong> (how busy). Intensity is what you watch.
+          {isVideoOnly ? (
+            <>
+              Building a new funscript from <strong>{mediaName}</strong> — shape{' '}
+              <strong style={{ color: 'var(--accent)' }}>Range</strong> (how far) and{' '}
+              <strong style={{ color: 'var(--info, #4dabf7)' }}>Pace</strong> (how busy) to steer it.
+            </>
+          ) : (
+            <>
+              Shape two curves — <strong style={{ color: 'var(--accent)' }}>Range</strong> (how far) and{' '}
+              <strong style={{ color: 'var(--info, #4dabf7)' }}>Pace</strong> (how busy). Intensity is what you watch.
+            </>
+          )}
           <span style={{ marginLeft: 8 }}>{statusPill}</span>
         </p>
         {genError && (

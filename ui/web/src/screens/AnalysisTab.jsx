@@ -175,19 +175,12 @@ export default function AnalysisTab({
           .then((arr) => { if (Array.isArray(arr)) setStanzas(arr); })
           .catch(() => { /* sidecar absent — render empty state */ });
       }
-      // Bundle phrase analysis into the analyze flow so the phrases
-      // sidecar exists for downstream tabs (Structure / Stanzas /
-      // Phrases sub-tabs all consume it). Same pattern as ChaptersTab's
-      // Analyze button; AnalysisTab's auto-trigger was missing it.
-      // Cheap on real-length funscripts (~seconds); deduped at forge.js
-      // so parallel calls from multiple surfaces merge to one Rust run.
-      if (project.path) {
-        analyzePhrases(project.path)
-          .then((arr) => { if (Array.isArray(arr)) setPhrases(arr); })
-          .catch((err) => {
-            console.warn('AnalysisTab: bundled analyzePhrases failed (non-fatal)', err);
-          });
-      }
+      // Phrase analysis is NOT bundled here anymore — gating it behind this
+      // await meant it waited on the full pipeline incl. the slow
+      // chapter_clips tail ("phrases missing halfway through chapter clips").
+      // It only needs the funscript + the chapters sidecar, both of which
+      // land EARLY, so it now fires on the `chapters_sidecar` progress event
+      // below — seconds in, not minutes.
     } catch (err) {
       console.error('AnalysisTab: analyze failed', err);
       const message = err?.message ? String(err.message) : String(err);
@@ -276,16 +269,24 @@ export default function AnalysisTab({
           // both chapters_sidecar (in case a prior run produced phrases)
           // and sidecar done events — cheap JSON read off disk.
           if ((leaf === 'chapters_sidecar' || leaf === 'sidecar') && project?.path) {
-            // loadPhrasesSidecar returns `{ version, slices }` — an OBJECT,
-            // NOT an array (unlike analyzePhrases, which returns a bare
-            // array). Extract `.slices` or the count silently stays "—".
-            // PhrasesTab consumes the same shape; keep them in sync.
+            // Phrases land the moment chapters do — they're funscript-derived
+            // (cmd_assess) and only need the funscript + the just-written
+            // chapters sidecar, NOT the slow chapter_clips. Load an existing
+            // sidecar; if absent (fresh / just-adopted funscript), COMPUTE it
+            // now so the Phrases KPI + sub-tab fill seconds after detect,
+            // not minutes later behind clip extraction. analyzePhrases is
+            // deduped at forge.js, so a racing call coalesces to one run.
+            // loadPhrasesSidecar returns `{ version, slices }` (an OBJECT);
+            // analyzePhrases returns a bare array — PhrasesTab uses both shapes.
             loadPhrasesSidecar(project.path)
               .then((data) => {
                 const slices = Array.isArray(data?.slices) ? data.slices : null;
-                if (slices) setPhrases(slices);
+                if (slices && slices.length) { setPhrases(slices); return undefined; }
+                return analyzePhrases(project.path).then((arr) => {
+                  if (Array.isArray(arr)) setPhrases(arr);
+                });
               })
-              .catch(() => { /* phrases sidecar absent — leave null */ });
+              .catch(() => { /* non-fatal — leave phrases null */ });
           }
         }
       });
@@ -303,7 +304,25 @@ export default function AnalysisTab({
   // load_project hydrates it from chapters.json if present.
   useEffect(() => {
     if (!projectExists || isSample) return;
-    if (chapterList?.length) return; // already analyzed
+    if (chapterList?.length) {
+      // Already analyzed (chapters on disk) → the pipeline won't re-run, so
+      // no chapters_sidecar event fires to populate phrases. Load the phrases
+      // sidecar, or COMPUTE it if missing (e.g. after adopting a generated
+      // funscript invalidated it), so the Phrases KPI + sub-tab fill without
+      // a trip to the Phrases tab.
+      if (project?.path) {
+        loadPhrasesSidecar(project.path)
+          .then((data) => {
+            const slices = Array.isArray(data?.slices) ? data.slices : null;
+            if (slices && slices.length) { setPhrases(slices); return undefined; }
+            return analyzePhrases(project.path).then((arr) => {
+              if (Array.isArray(arr)) setPhrases(arr);
+            });
+          })
+          .catch(() => { /* non-fatal */ });
+      }
+      return; // already analyzed — don't re-run the pipeline
+    }
     if (analyzing) return;
     triggerAnalysis();
     // eslint-disable-next-line react-hooks/exhaustive-deps

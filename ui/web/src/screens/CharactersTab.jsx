@@ -684,32 +684,38 @@ export default function CharactersTab({
             onReset={resetMech}
           />
         ) : (
-          <CharacterPanel
-            catalog={catalog}
-            stagedChar={stagedChar}
-            isNothingStaged={isNothingStaged}
-            stagedParams={staged.params}
-            onSelectCharacter={setStagedCharacter}
-            onParamChange={setStagedParam}
-            onAccept={acceptChange}
-            onReset={resetStaged}
-            dirty={dirty}
-            isLastChapter={chapters.findIndex((c) => c.id === activeChapterId) >= chapters.length - 1}
-            estimSelected={estimSelected}
-            catalogWarning={catalogWarning}
-          />
+          // Right column: the character selection, with the 9-channel preview
+          // tucked DIRECTLY UNDER it. It used to render as a detached
+          // full-width section at the very bottom of the tab (below the chapter
+          // list too); grouping it under the cards keeps "pick a character →
+          // here's the 9 channels it produces" in one visual unit.
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+            <CharacterPanel
+              catalog={catalog}
+              stagedChar={stagedChar}
+              isNothingStaged={isNothingStaged}
+              stagedParams={staged.params}
+              onSelectCharacter={setStagedCharacter}
+              onParamChange={setStagedParam}
+              onAccept={acceptChange}
+              onReset={resetStaged}
+              dirty={dirty}
+              isLastChapter={chapters.findIndex((c) => c.id === activeChapterId) >= chapters.length - 1}
+              estimSelected={estimSelected}
+              catalogWarning={catalogWarning}
+            />
+            {editorMode === 'character' && (
+              <ChannelGrid
+                character={appliedChar}
+                estimSelected={estimSelected}
+                channelData={channelData}
+                loading={channelsLoading}
+                chapter={activeChapter}
+              />
+            )}
+          </div>
         )}
       </div>
-      )}
-
-      {editorMode === 'character' && (
-        <ChannelGrid
-          character={appliedChar}
-          estimSelected={estimSelected}
-          channelData={channelData}
-          loading={channelsLoading}
-          chapter={activeChapter}
-        />
       )}
     </div>
   );
