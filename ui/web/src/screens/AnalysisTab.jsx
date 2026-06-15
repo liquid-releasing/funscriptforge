@@ -128,7 +128,10 @@ export default function AnalysisTab({
 
   const projectExists = !!project?.path;
   const isSample = String(project?.path ?? '').startsWith('sample://');
-  const chapterList = project?.chapterList ?? null;
+  // Default to [] (not null) so the CategoryPanel + chapter consumers below
+  // never see a null `chapters` to .map/.length on for a bare funscript. Every
+  // readiness check here uses `?.length`, so [] reads the same as null.
+  const chapterList = project?.chapterList ?? [];
   const durationMs = project?.durationMs ?? null;
   const hasMedia = !!project?.mediaPath;
 

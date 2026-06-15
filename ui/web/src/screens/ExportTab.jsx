@@ -124,6 +124,11 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
     stem,
     hasMedia,
     actionCount: project?.actionCount ?? (project?.actions?.length ?? 0),
+    // Chapters are the root of all forge metadata — phrases, per-chapter
+    // characters and events all require chapters first. No chapters → a bare
+    // funscript → the authoring bundle would hold only motion.funscript, so
+    // the Forge-metadata card must not claim sidecars it can't write.
+    hasChapters: (project?.chapterList?.length ?? project?.chapters ?? 0) > 0,
     stampedStations,
     stampedStrokers: stampedStations.filter((id) => STROKER_STATIONS.includes(id)),
     estimStamped: stampedStations.includes('estim3p'),
@@ -358,7 +363,18 @@ const TARGET_GROUPS = [
     icon: 'file-cog',
     color: '#a3e635',
     consumer: 'reopen in FunscriptForge · Edger',
-    derive() {
+    derive(ctx) {
+      // Honest empty state for a bare funscript: with no chapters there's no
+      // forge metadata to pack, so don't show a green "present" card listing
+      // sidecars that don't exist.
+      if (!ctx.hasChapters) {
+        return {
+          state: 'none',
+          hint: 'No forge metadata yet — detect chapters (Chapters tab), then add phrase tags, per-chapter characters, or events. Until then a bundle holds only the motion funscript.',
+          stat: [{ label: 'sidecars', value: 'none yet' }],
+          files: [],
+        };
+      }
       return {
         state: 'present',
         hint: 'The re-editable project: chapter boundaries, phrase tags, per-chapter characters, and the events sidecar. Pack it to reopen and reproduce this exact output later — leave it out for a play-only bundle.',
