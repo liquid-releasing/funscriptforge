@@ -50,11 +50,11 @@ function applyRemap(remap, { tones, params, accepted }) {
   const newAccepted = new Set();
   remap.forEach((oldId, newId) => {
     if (oldId == null) {
-      newTones[newId] = 'build';
+      newTones[newId] = 'none';  // brand-new half → Untoned (defaults off)
       newParams[newId] = defaultToneParams();
       return;
     }
-    newTones[newId] = tones[oldId] ?? 'build';
+    newTones[newId] = tones[oldId] ?? 'none';
     newParams[newId] = params[oldId]
       ? JSON.parse(JSON.stringify(params[oldId]))
       : defaultToneParams();
@@ -70,7 +70,7 @@ function applyRemap(remap, { tones, params, accepted }) {
 // accept and round-trip on reopen (Rust write_chapters_sidecar serializes
 // the `tone` field; videoflow Chapter.from_dict reads it back).
 function attachTones(chapterList, tones) {
-  return chapterList.map((c) => ({ ...c, tone: tones?.[c.id] ?? 'build' }));
+  return chapterList.map((c) => ({ ...c, tone: tones?.[c.id] ?? 'none' }));
 }
 
 // The six canonical tones + one UI-only 'none' opt-out sentinel.
@@ -174,21 +174,20 @@ function defaultToneParams() {
   return out;
 }
 
-// Per-chapter initial tone map. Reads the persisted per-chapter `tone`
-// first (a user choice written to the sidecar on Accept — including the
-// 'none'/Untoned and 'tame' sentinels), then the analyzer's chapter.intent,
-// then the project's analyzer-suggested tone, then 'build'. Used both on
-// first render and on project change / chapter creation. The persisted-tone
-// precedence is what makes accepted tones survive close/reopen instead of
-// resetting to the suggestion (which was "Climax" everywhere on some files).
-function seedTones(chapters, projectTone) {
+// Per-chapter initial tone map. Reads the persisted per-chapter `tone` (a user
+// choice written to the sidecar on Accept — incl. the 'none'/Untoned and
+// 'tame' sentinels); a chapter with no persisted tone starts UNTONED ('none',
+// pass-through).
+//
+// Default tones are OFF (user decision 2026-06-15): we do NOT auto-seed a tone
+// from the analyzer intent / project suggestion. Auto-seeding made every
+// chapter show e.g. "Climax" (the project toneSuggestion), which read as a
+// committed choice the user never made. The user picks a tone deliberately;
+// persisted tones still win so accepted tones survive reopen.
+function seedTones(chapters) {
   const out = {};
   chapters.forEach((c) => {
-    out[c.id] =
-      intentToToneId(c.tone) ??
-      intentToToneId(c.intent) ??
-      intentToToneId(projectTone) ??
-      'build';
+    out[c.id] = intentToToneId(c.tone) ?? 'none';
   });
   return out;
 }
@@ -341,7 +340,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   const [activeId, setActiveId] = useState(chapters[0]?.id ?? null);
   // tonesByChapter: { ch1: 'build', ch2: 'edge', ... }
   const [tonesByChapter, setTonesByChapter] = useState(() =>
-    seedTones(chapters, project?.toneSuggestion),
+    seedTones(chapters),
   );
   // paramsByChapter: { ch1: { tender: {...}, build: {...}, ... }, ... }
   const [paramsByChapter, setParamsByChapter] = useState(() =>
@@ -365,7 +364,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     const next = Array.isArray(project?.chapterList) ? project.chapterList : [];
     setChapters(next);
     setActiveId(next[0]?.id ?? null);
-    setTonesByChapter(seedTones(next, project?.toneSuggestion));
+    setTonesByChapter(seedTones(next));
     setParamsByChapter(seedParams(next));
     setAcceptedChapterIds(new Set());
   }, [project?.path]);
@@ -407,7 +406,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   const hydrateFromChapterList = (created) => {
     setChapters(created);
     setActiveId(created[0]?.id ?? null);
-    setTonesByChapter(seedTones(created, project?.toneSuggestion));
+    setTonesByChapter(seedTones(created));
     setParamsByChapter(seedParams(created));
     // Lift the new chapter list back to App.jsx so downstream tabs
     // (Patterns, Phrases) see the same chapters. Without this push, they
@@ -497,7 +496,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // active falls back to a zero-length sentinel so the useMemo deps stay
   // stable when chapters is empty.
   const active = chapters.find((c) => c.id === activeId) ?? chapters[0] ?? EMPTY_CHAPTER;
-  const toneId = tonesByChapter[active.id] ?? 'build';
+  const toneId = tonesByChapter[active.id] ?? 'none';
   const tone = findTone(toneId);
   const toneParams = paramsByChapter[active.id]?.[tone.id] ?? {};
 
@@ -788,6 +787,35 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     }
   };
 
+  // Re-derive phrases after a chapter boundary change (split / join). Step 1
+  // is chapter-scoped, so moving a boundary invalidates the phrase spans —
+  // their chapter_ids now point at the wrong slot. This re-runs the quick
+  // (seconds) phrase pass and refreshes the per-path cache so PhrasesTab /
+  // AnalysisTab see fresh data without a manual reload.
+  //
+  // It SHOWS a busy indicator: analyzePhrases is a real backend call with no
+  // pipeline progress of its own, so without a label the recompute reads as a
+  // frozen app — the "phantom analyze that looked stuck / not the usual
+  // analysis" from the 2026-06-15 dogfood. The label names what's happening.
+  const recomputePhrasesAfterChapterChange = (reason) => {
+    if (!setPhrasesByPath || !project?.path) return;
+    // `title` is the persistent frame (the ff:progress stream from `assess`
+    // overwrites `message`/`steps` as its stages roll, but never `title`), so
+    // the user always sees WHY this is running. `steps: []` lets the assess
+    // sub-stages populate the checklist beneath the title.
+    setBusy?.({ title: 'Recomputing phrases — chapters changed', message: '', steps: [] });
+    analyzePhrases(project.path)
+      .then((phraseRows) => {
+        if (!Array.isArray(phraseRows)) return;
+        setPhrasesByPath((prev) => ({
+          ...prev,
+          [project.path]: { phrases: phraseRows, loaded: true },
+        }));
+      })
+      .catch((err) => console.warn(`ChaptersTab: phrase re-run after ${reason} failed`, err))
+      .finally(() => setBusy?.(null));
+  };
+
   // Split the band's chapter at the playhead. The pure transform (and the
   // ≥500ms clearance check) lives in chapterOps.splitAt; this handler is
   // the orchestrator that lifts state, persists, and re-extracts clips
@@ -815,21 +843,9 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       [newChapters[newActiveIdx - 1], newChapters[newActiveIdx]],
       newTones,
     );
-    // Chapters changed → phrase boundaries are stale (Step 1 is chapter-
-    // scoped; chapter_ids on existing phrases now point at the wrong slot).
-    // Re-run + refresh the per-path phrases cache so PhrasesTab / AnalysisTab
-    // see fresh data without a manual reload.
-    if (setPhrasesByPath) {
-      analyzePhrases(project.path)
-        .then((phraseRows) => {
-          if (!Array.isArray(phraseRows)) return;
-          setPhrasesByPath((prev) => ({
-            ...prev,
-            [project.path]: { phrases: phraseRows, loaded: true },
-          }));
-        })
-        .catch((err) => console.warn('ChaptersTab: phrase re-run after split failed', err));
-    }
+    // Chapters changed → phrase boundaries are stale; re-derive (with a
+    // visible "Recomputing phrases…" indicator).
+    recomputePhrasesAfterChapterChange('split');
   };
 
   // Join the band's chapter with its previous / next neighbour. Pure
@@ -859,18 +875,8 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     setIsPlaying(false);
     onChaptersChange?.(newChapters);
     await persistAndExtract(newChapters, [newChapters[newActiveIdx]], newTones);
-    // Chapters changed → phrase boundaries stale; re-run + refresh cache.
-    if (setPhrasesByPath) {
-      analyzePhrases(project.path)
-        .then((phraseRows) => {
-          if (!Array.isArray(phraseRows)) return;
-          setPhrasesByPath((prev) => ({
-            ...prev,
-            [project.path]: { phrases: phraseRows, loaded: true },
-          }));
-        })
-        .catch((err) => console.warn('ChaptersTab: phrase re-run after join failed', err));
-    }
+    // Chapters changed → phrase boundaries stale; re-derive (with indicator).
+    recomputePhrasesAfterChapterChange('join');
   };
 
   return (
