@@ -42,7 +42,7 @@ import {
 } from '../api/forge.js';
 import { useChapterClip } from '../hooks/useChapterClip.js';
 import MechanicalPanel from './MechanicalPanel.jsx';
-import PassagesPanel, { EnvelopeRibbon } from './PassagesPanel.jsx';
+import { EnvelopeRibbon } from './PassagesPanel.jsx';
 import ArcSlider from '../components/ArcSlider.jsx';
 import {
   PASSAGE_PRESETS, PASSAGE_SHAPES, passagesForPreset, activePassagePreset,
@@ -719,7 +719,6 @@ export default function CharactersTab({
           passageName={passageName}
           onPick={(id) => commitPassages(passagesForPreset(id, chapters.length))}
           onArcChange={(arc) => commitPassages(passagesFromArc(arc, chapters.length))}
-          onPassagesChange={commitPassages}
         />
       )}
 
@@ -813,12 +812,11 @@ export default function CharactersTab({
 // the chapters. "Fine-tune" jumps to the full Passages editor for
 // per-span Build/Release/Swell shaping.
 // ──────────────────────────────────────────────────────────────
-function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPick, onArcChange, onPassagesChange }) {
+function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPick, onArcChange }) {
   const activeId = activePassagePreset(passages);
   const ACCENT = '#ff8c42';
   const fmt = (v) => `×${(v ?? 1).toFixed(2)}`;
   const [adjustOpen, setAdjustOpen] = useState(false);
-  const [perSpanOpen, setPerSpanOpen] = useState(false);
   // Live arc params (the four sliders edit ONE full-span passage). Reads back
   // from the current passages, so a preset click repositions the sliders too.
   const arc = arcFromPassages(passages);
@@ -891,19 +889,6 @@ function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPi
           >
             Adjust {adjustOpen ? '▾' : '▸'}
           </button>
-          <button
-            onClick={() => setPerSpanOpen((v) => !v)}
-            title="Lay different arcs over different chapter ranges (advanced)"
-            style={{
-              fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
-              padding: '3px 10px', borderRadius: 999, cursor: 'pointer',
-              background: perSpanOpen ? ACCENT : 'transparent',
-              border: `1px solid ${perSpanOpen ? ACCENT : 'var(--border)'}`,
-              color: perSpanOpen ? '#0e1117' : 'var(--text-dim)',
-            }}
-          >
-            Per-span {perSpanOpen ? '▾' : '▸'}
-          </button>
         </div>
       </div>
 
@@ -945,14 +930,6 @@ function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPi
           <span>No arc over Ch {activeIdx + 1} — volume here is the character's own level (×1.00). Pick a preset to shape it.</span>
         )}
       </div>
-
-      {/* Per-span (advanced): different arcs over different chapter ranges,
-          inline so the lane stays put — same 4-slider model per passage. */}
-      {perSpanOpen && (
-        <div style={{ padding: 10, borderTop: '1px solid var(--border)', background: 'var(--surface-2)' }}>
-          <PassagesPanel chapters={chapters} passages={passages} onChange={onPassagesChange} />
-        </div>
-      )}
     </div>
   );
 }
