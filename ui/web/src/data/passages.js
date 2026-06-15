@@ -17,28 +17,59 @@ export const PASSAGE_SHAPES = [
 
 export const SHAPE_BY_ID = Object.fromEntries(PASSAGE_SHAPES.map((s) => [s.id, s]));
 
-// Multiplier at fractional position `frac` (0..1) along a passage span.
-// Mirrors forge/passages.py::shape_factor exactly.
-export function shapeFactor(shape, frac, floor, ceiling) {
+// The arc is ONE eased parametric envelope; the five named shapes are presets
+// of it (rise_point, fall_point). Mirrors forge/passages.py::SHAPE_POINTS.
+export const SHAPE_POINTS = {
+  steady:  [0.0, 1.0],
+  build:   [1.0, 1.0],
+  sustain: [0.0, 1.0],
+  release: [0.0, 0.0],
+  swell:   [0.5, 0.5],
+};
+
+function smoothstep(t) {
+  const x = t < 0 ? 0 : (t > 1 ? 1 : t);
+  return x * x * (3 - 2 * x);
+}
+
+// Eased multiplier at `frac`: rise floor→ceiling by `risePoint`, hold to
+// `fallPoint`, ease back to floor by the end. Mirrors envelope_factor().
+export function envelopeFactor(frac, floor, ceiling, risePoint, fallPoint) {
   const f = frac < 0 ? 0 : (frac > 1 ? 1 : frac);
   const lo = floor;
   const hi = ceiling;
-  switch ((shape || 'steady').toLowerCase()) {
-    case 'steady':  return 1.0;
-    case 'sustain': return hi;
-    case 'build':   return lo + (hi - lo) * f;
-    case 'release': return hi - (hi - lo) * f;
-    case 'swell':   return lo + (hi - lo) * (1 - Math.abs(2 * f - 1));
-    default:        return 1.0;
-  }
+  let rp = risePoint < 0 ? 0 : (risePoint > 1 ? 1 : risePoint);
+  let fp = fallPoint < 0 ? 0 : (fallPoint > 1 ? 1 : fallPoint);
+  if (fp < rp) fp = rp;
+  if (f <= rp) return rp <= 0 ? hi : lo + (hi - lo) * smoothstep(f / rp);
+  if (f <= fp) return hi;
+  if (fp >= 1) return hi;
+  return hi - (hi - lo) * smoothstep((f - fp) / (1 - fp));
+}
+
+// Multiplier at fractional position `frac` (0..1). Explicit rise/fall win;
+// else derived from the named shape. Mirrors forge/passages.py::shape_factor.
+export function shapeFactor(shape, frac, floor, ceiling, risePoint, fallPoint) {
+  const s = (shape || 'steady').toLowerCase();
+  if (s === 'steady' && risePoint == null && fallPoint == null) return 1.0;
+  const [rpDef, fpDef] = SHAPE_POINTS[s] || [1.0, 1.0];
+  const rp = risePoint == null ? rpDef : risePoint;
+  const fp = fallPoint == null ? fpDef : fallPoint;
+  return envelopeFactor(frac, floor, ceiling, rp, fp);
+}
+
+// Effective rise/fall for a record (explicit, else the shape's preset points).
+export function effectivePoints(rec) {
+  const [rpDef, fpDef] = SHAPE_POINTS[(rec?.shape || 'steady').toLowerCase()] || [1.0, 1.0];
+  return [rec?.risePoint ?? rpDef, rec?.fallPoint ?? fpDef];
 }
 
 // Sample a passage's envelope as N points in [0,1] (for sparkline previews).
-export function sampleEnvelope(shape, floor, ceiling, n = 24) {
+export function sampleEnvelope(shape, floor, ceiling, n = 24, risePoint, fallPoint) {
   const out = [];
   for (let i = 0; i < n; i += 1) {
     const frac = n === 1 ? 0 : i / (n - 1);
-    out.push(shapeFactor(shape, frac, floor, ceiling));
+    out.push(shapeFactor(shape, frac, floor, ceiling, risePoint, fallPoint));
   }
   return out;
 }
@@ -50,8 +81,11 @@ export function newPassageId() {
 }
 
 // A fresh passage spanning the given chapter index range, defaulting to Build.
+// Carries explicit rise/fall handles (the parametric model) seeded from the
+// shape so a hand-made passage is fully defined.
 export function makePassage(beginIdx, endIdx, shape = 'build') {
-  return { id: newPassageId(), shape, beginIdx, endIdx, floor: 0.4, ceiling: 1.0 };
+  const [risePoint, fallPoint] = SHAPE_POINTS[shape] || [1.0, 1.0];
+  return { id: newPassageId(), shape, beginIdx, endIdx, floor: 0.4, ceiling: 1.0, risePoint, fallPoint };
 }
 
 // ── Passage PRESETS — the resolved "one shared arc, preset-selected" model ──
@@ -61,11 +95,16 @@ export function makePassage(beginIdx, endIdx, shape = 'build') {
 // as Generate's Range/Pace lanes. Each preset maps onto the EXISTING passage
 // data model (a single full-span passage of one shape), so forge/passages.py is
 // untouched. See DESIGN_DECISIONS.md (Passages section).
+// Each preset is a tuple of the four envelope params (start/floor, peak/ceiling,
+// risePoint, fallPoint) over one full-span passage — "our own set", same spirit
+// as Generate's Range/Pace presets. The sliders fine-tune any of them.
 export const PASSAGE_PRESETS = [
-  { id: 'hold',  label: 'Hold steady',     shape: 'steady',  floor: 1.0,  ceiling: 1.0,  hint: 'no arc — flat throughout' },
-  { id: 'hum',   label: 'Warm hum',        shape: 'sustain', floor: 0.55, ceiling: 0.58, hint: 'a low, steady presence' },
-  { id: 'build', label: 'Build the charge', shape: 'build',  floor: 0.3,  ceiling: 1.0,  hint: 'rises across the whole run' },
-  { id: 'edge',  label: 'Edge & release',  shape: 'swell',   floor: 0.35, ceiling: 1.0,  hint: 'peak in the middle, then ease' },
+  { id: 'hold',      label: 'Hold steady',     shape: 'steady',  floor: 1.0,  ceiling: 1.0,  risePoint: 0.0,  fallPoint: 1.0,  hint: 'no arc — flat throughout' },
+  { id: 'hum',       label: 'Warm hum',        shape: 'sustain', floor: 0.55, ceiling: 0.58, risePoint: 0.0,  fallPoint: 1.0,  hint: 'a low, steady presence' },
+  { id: 'build',     label: 'Build the charge', shape: 'build',  floor: 0.3,  ceiling: 1.0,  risePoint: 1.0,  fallPoint: 1.0,  hint: 'rises across the whole run' },
+  { id: 'hold-high', label: 'Build & hold',    shape: 'build',   floor: 0.35, ceiling: 1.0,  risePoint: 0.55, fallPoint: 1.0,  hint: 'climbs, then holds at the top' },
+  { id: 'edge',      label: 'Edge & release',  shape: 'swell',   floor: 0.35, ceiling: 1.0,  risePoint: 0.5,  fallPoint: 0.6,  hint: 'peak in the middle, then ease' },
+  { id: 'release',   label: 'Long release',    shape: 'release', floor: 0.25, ceiling: 0.95, risePoint: 0.0,  fallPoint: 0.15, hint: 'starts high, eases down' },
 ];
 
 // Build the passages array for a preset over `n` chapters. The neutral
@@ -74,13 +113,13 @@ export function passagesForPreset(presetId, n) {
   const pr = PASSAGE_PRESETS.find((p) => p.id === presetId);
   if (!pr || pr.shape === 'steady' || n <= 0) return [];
   const p = makePassage(0, Math.max(0, n - 1), pr.shape);
-  return [{ ...p, floor: pr.floor, ceiling: pr.ceiling }];
+  return [{ ...p, floor: pr.floor, ceiling: pr.ceiling, risePoint: pr.risePoint, fallPoint: pr.fallPoint }];
 }
 
 // Sample a preset's envelope (0..1) for the read-only lane preview.
 export function presetSamples(presetId, count = 48) {
   const pr = PASSAGE_PRESETS.find((p) => p.id === presetId) || PASSAGE_PRESETS[0];
-  return sampleEnvelope(pr.shape, pr.floor, pr.ceiling, count);
+  return sampleEnvelope(pr.shape, pr.floor, pr.ceiling, count, pr.risePoint, pr.fallPoint);
 }
 
 // ── Resolve + sample at absolute time (mirrors forge/passages.py) ──
@@ -111,6 +150,8 @@ export function resolvePassageSpans(passages, chapters) {
     out.push({
       lo, hi, shape, beginIdx: bi, endIdx: ei,
       floor: Number(rec.floor ?? 0.2), ceiling: Number(rec.ceiling ?? 1.0),
+      risePoint: rec.risePoint != null ? Number(rec.risePoint) : undefined,
+      fallPoint: rec.fallPoint != null ? Number(rec.fallPoint) : undefined,
     });
   }
   return out;
@@ -123,7 +164,7 @@ export function passageFactorAt(spans, t) {
     if (p.lo == null || p.hi == null || p.hi <= p.lo) continue;
     if (t >= p.lo && t <= p.hi) {
       const frac = (t - p.lo) / Math.max(1, p.hi - p.lo);
-      return shapeFactor(p.shape, frac, p.floor, p.ceiling);
+      return shapeFactor(p.shape, frac, p.floor, p.ceiling, p.risePoint, p.fallPoint);
     }
   }
   return 1.0;
@@ -162,10 +203,14 @@ export function activePassagePreset(passages) {
   if (!passages || passages.length === 0) return 'hold';
   if (passages.length !== 1) return null;
   const p = passages[0];
-  const hit = PASSAGE_PRESETS.find(
-    (pr) => pr.shape === p.shape
+  const [prp, pfp] = effectivePoints(p);
+  const hit = PASSAGE_PRESETS.find((pr) => {
+    const [rp, fp] = effectivePoints(pr);
+    return pr.shape === p.shape
       && Math.abs(pr.floor - p.floor) < 0.001
-      && Math.abs(pr.ceiling - p.ceiling) < 0.001,
-  );
+      && Math.abs(pr.ceiling - p.ceiling) < 0.001
+      && Math.abs(rp - prp) < 0.001
+      && Math.abs(fp - pfp) < 0.001;
+  });
   return hit ? hit.id : null;
 }

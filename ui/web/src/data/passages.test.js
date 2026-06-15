@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   PASSAGE_PRESETS, passagesForPreset, presetSamples, activePassagePreset,
-  shapeFactor, resolvePassageSpans, passageFactorAt, passageInfoForChapter,
+  shapeFactor, envelopeFactor, resolvePassageSpans, passageFactorAt, passageInfoForChapter,
 } from './passages.js';
 
 // Three equal 10s chapters (camelCase, the Channels shape).
@@ -65,6 +65,38 @@ describe('activePassagePreset — round-trips with passagesForPreset', () => {
     expect(activePassagePreset(custom)).toBeNull();
     // multiple passages also clear the highlight
     expect(activePassagePreset([...passagesForPreset('build', 5), ...passagesForPreset('edge', 5)])).toBeNull();
+  });
+});
+
+describe('eased parametric envelope (mirror of forge/passages.py)', () => {
+  it('build is eased (smoothstep), not a straight ramp', () => {
+    expect(shapeFactor('build', 0.25, 0, 1)).toBeLessThan(0.25);
+    expect(shapeFactor('build', 0.75, 0, 1)).toBeGreaterThan(0.75);
+    expect(shapeFactor('build', 0.5, 0, 1)).toBeCloseTo(0.5, 6);
+    expect(shapeFactor('build', 0, 0, 1)).toBe(0);
+    expect(shapeFactor('build', 1, 0, 1)).toBe(1);
+  });
+
+  it('explicit rise/fall handles override the shape default', () => {
+    // Build & hold: reach the top by 0.5, hold to the end.
+    expect(envelopeFactor(0.5, 0.3, 1.0, 0.5, 1.0)).toBeCloseTo(1.0, 6);
+    expect(envelopeFactor(0.8, 0.3, 1.0, 0.5, 1.0)).toBeCloseTo(1.0, 6);
+    expect(shapeFactor('build', 0.8, 0.3, 1.0, 0.5, 1.0)).toBeCloseTo(1.0, 6);
+  });
+
+  it('hold plateau between rise and fall', () => {
+    const f = (x) => envelopeFactor(x, 0.2, 1.0, 0.3, 0.7);
+    expect(f(0.5)).toBeCloseTo(1.0, 6);
+    expect(f(0.3)).toBeCloseTo(1.0, 6);
+    expect(f(0.7)).toBeCloseTo(1.0, 6);
+    expect(f(0)).toBeCloseTo(0.2, 6);
+    expect(f(1)).toBeCloseTo(0.2, 6);
+  });
+
+  it('presets round-trip through activePassagePreset with rise/fall', () => {
+    for (const pr of PASSAGE_PRESETS.filter((p) => p.id !== 'hold')) {
+      expect(activePassagePreset(passagesForPreset(pr.id, 5))).toBe(pr.id);
+    }
   });
 });
 

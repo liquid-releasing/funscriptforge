@@ -212,7 +212,7 @@ export function EnvelopeRibbon({ chapters, passages, height = 64, activeIdx = -1
       const x0 = b * cellW;
       const span = Math.max(1, (e + 1) * cellW - x0);
       const frac = Math.max(0, Math.min(1, (cx - x0) / span));
-      marker = { cx, cy: yFor(shapeFactor(cover.shape, frac, cover.floor, cover.ceiling)) };
+      marker = { cx, cy: yFor(shapeFactor(cover.shape, frac, cover.floor, cover.ceiling, cover.risePoint, cover.fallPoint)) };
     } else {
       marker = { cx, cy: null };
     }
@@ -247,7 +247,7 @@ export function EnvelopeRibbon({ chapters, passages, height = 64, activeIdx = -1
           for (let i = 0; i <= STEPS; i += 1) {
             const frac = i / STEPS;
             const x = x0 + frac * span;
-            const y = yFor(shapeFactor(p.shape, frac, p.floor, p.ceiling));
+            const y = yFor(shapeFactor(p.shape, frac, p.floor, p.ceiling, p.risePoint, p.fallPoint));
             pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
           }
           const area = `${x0},${H} ${pts.join(' ')} ${x1},${H}`;
