@@ -786,6 +786,9 @@ export default function App() {
     stim:     'polish',
     polish:   'export',
   };
+  // Tabs that CONSUME the analysis sidecars (chapters/phrases/channels/etc).
+  // Analysis itself is deliberately excluded — it's where the work happens.
+  const ANALYSIS_CONSUMER_TABS = ['chapters', 'phrases', 'stanzas', 'events', 'stim', 'polish', 'export'];
   const tabGate = (id) => {
     // Suppress "open a funscript" while a load is in flight — the busy
     // banner is already saying "Loading <file>…", so a parallel gate
@@ -809,6 +812,20 @@ export default function App() {
     if (['analysis', 'polish', 'chapters', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
         && !hasFunscript) {
       return 'Generate or open a funscript before continuing.';
+    }
+    // Analysis is REQUIRED before any consuming tab is meaningful — chapters,
+    // phrases, channels, events, polish + export all read sidecars the analyze
+    // pass produces. Until it's complete those tabs would show seeded defaults
+    // over missing/stale data and let the user "advance before it's ready", so
+    // we gate them (disables the footer Accept + shows why) until the analysis
+    // state reads 'complete', then they light up. The Analysis tab itself is
+    // NOT gated here — its footer doubles as Resume when partial, and it's
+    // where the work runs. Only gate when there's media to analyze (a
+    // funscript-only project has nothing to analyze and stays editable).
+    if (ANALYSIS_CONSUMER_TABS.includes(id) && hasMedia && globalAnalysisState !== 'complete') {
+      return globalAnalysisState === 'loading'
+        ? 'Analyzing… finish on the Analysis tab before continuing.'
+        : 'Finish analyzing on the Analysis tab before this is ready.';
     }
     return null;
   };
