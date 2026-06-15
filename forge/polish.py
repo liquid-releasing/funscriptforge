@@ -99,6 +99,17 @@ STATIONS: dict[str, Station] = {
         default_knobs={"maxBpm": 120, "smoothing": 0.45, "latency": 60, "quantize": 1},
         constraint_hint="BPM ceiling · carriage acceleration",
     ),
+    "ossm": Station(
+        id="ossm",
+        label="OSSM",
+        sublabel="1-axis stepper machine",
+        kind="stroker",
+        device_keys=["ossm"],
+        axes=["L0"],
+        output_template="{stem}.ossm.funscript",
+        default_knobs={"maxBpm": 150, "smoothing": 0.35, "latency": 14, "quantize": 1},
+        constraint_hint="Stepper depth-rate coupling · belt slew",
+    ),
     # OSR2 and SR6 share one station: we always write the full 6-axis TCode set
     # (L0 stroke + surge/sway/twist/roll/pitch). OSR2 owners play the 4 axes
     # their 2-servo build supports; SR6 owners play all 6. Same files, the
@@ -256,6 +267,7 @@ def lag_for_device(station_id: str) -> float:
     """Mechanical lag time-constant (ms) per station. Preview only."""
     return {
         "handy": 22,     # electric motor — fast
+        "ossm": 12,      # NEMA stepper + belt — wired, stiff, low lag
         "tcode": 18,     # direct servo (OSR2 / SR6)
         "lovense": 35,   # Bluetooth — higher command latency
         "vacuglide": 28, # Autoblow stroker — cloud-synced

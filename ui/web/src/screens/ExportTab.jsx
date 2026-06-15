@@ -84,7 +84,10 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
     blendSeams: true,
     finalSmooth: true,
     stimWav: false,
-    stimMp3: false,
+    // Stim MP3 ON by default — the two rendered stim tracks (normal +
+    // prostate) are the e-stim flagship deliverable; users expect them in the
+    // bundle, not an opt-in they have to discover. WAV stays opt-in (large).
+    stimMp3: true,
     includeMedia: false,
   });
 

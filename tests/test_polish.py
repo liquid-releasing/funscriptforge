@@ -29,7 +29,7 @@ def _jerky(n=200, dt=20):
 class TestStationCatalog(unittest.TestCase):
 
     def test_v1_stations_present(self):
-        self.assertEqual(set(polish.STATIONS), {"estim3p", "handy", "tcode", "lovense", "vacuglide"})
+        self.assertEqual(set(polish.STATIONS), {"estim3p", "handy", "ossm", "tcode", "lovense", "vacuglide"})
 
     def test_every_station_resolves_in_device_specs(self):
         specs = load_device_specs()

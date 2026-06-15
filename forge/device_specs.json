@@ -23,6 +23,18 @@
       "max_delta": 100,
       "notes": "Confidence: MEDIUM. 400 pos/s is community consensus. Marketing says '10 strokes/s' but practical max is ~400mm/s at typical stroke lengths. No official vendor spec published. Verify at handyfeeling.com/docs. No Handy v2 exists as of 2026-04-12."
     },
+    "ossm": {
+      "name": "OSSM",
+      "type": "stroker",
+      "max_speed": 550,
+      "max_bpm": 150,
+      "min_cycle_ms": 200,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 5000,
+      "max_delta": 100,
+      "notes": "Open Source Sex Machine — NEMA stepper + belt linear actuator. Strong and fast, but the stepper enforces depth-rate coupling (can't slam full-range strokes at very high rates), so the speed clamp is the primary protection. Owner-verified hardware. Confidence: MEDIUM."
+    },
     "osr2": {
       "name": "OSR2",
       "type": "stroker",

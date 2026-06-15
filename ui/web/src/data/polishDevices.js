@@ -55,6 +55,25 @@ export const POLISH_DEVICES = [
     ],
   },
   {
+    id: 'ossm',
+    label: 'OSSM',
+    sublabel: '1-axis stepper machine',
+    kind: 'stroker',
+    deviceKeys: ['ossm'],                 // NEMA stepper + belt: 150 BPM / 550 pos/s
+    axes: ['L0'],
+    severity: 2.5,                        // capable wired stroker — between Handy and TCode
+    ember: '#5ad17a',
+    glyph: 'stroker-1ax',
+    constraintHint: 'Stepper depth-rate coupling · belt slew',
+    outputFile: '{stem}.ossm.funscript',
+    knobs: [
+      { key: 'maxBpm',    label: 'Max BPM',     min: 60,  max: 200, step: 5,    unit: 'bpm', default: 150, cap: 150, help: 'Stepper carriage ceiling — full-range strokes are depth-rate coupled.' },
+      { key: 'smoothing', label: 'Smoothing',   min: 0,   max: 1,   step: 0.05, unit: '',    default: 0.35, help: 'Low-pass on the position curve. The belt drive is stiff, so it needs less.' },
+      { key: 'latency',   label: 'Lead-time',   min: -20, max: 200, step: 5,    unit: 'ms',  default: 14,   help: 'Wired stepper — low command latency, small pre-roll.' },
+      { key: 'quantize',  label: 'Position step', min: 1, max: 10,  step: 1,    unit: '%',   default: 1,    help: 'Smallest position increment the machine resolves.' },
+    ],
+  },
+  {
     // OSR2 and SR6 share one station — always writes the full 6-axis TCode set.
     // OSR2 owners play the 4 axes their 2-servo build supports; SR6 owners play
     // all 6. Same files, the player picks. OSR2/SR6 caps are identical (150/500).
