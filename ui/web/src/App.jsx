@@ -515,6 +515,7 @@ export default function App() {
             title: current?.title,
             mediaPath,
             mediaKind: current?.mediaKind,
+            landTab: 'analysis', // adopt → straight to Analysis, no Project bounce
           });
           // The project just changed identity (video-only → funscript). Drop
           // the now-stale `media:` recents entry so it isn't a duplicate of
@@ -653,7 +654,11 @@ export default function App() {
     setIsLoadingProject(true);
     setAppError(null);
     setBusy({ message: `Loading ${filename}…` });
-    setTab('project');
+    // Default landing is the Project tab, but a caller mid-flow can pin a
+    // different destination (e.g. adopt-then-Analysis) so the reopen doesn't
+    // bounce the user through Project. The placeholder already carries `path`,
+    // so editing tabs pass their gate immediately.
+    setTab(meta.landTab || 'project');
     try {
       const project = await loadProject(path);
       // Apply caller hints over Rust defaults. Library is the main

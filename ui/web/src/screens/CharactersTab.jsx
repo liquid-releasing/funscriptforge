@@ -697,14 +697,10 @@ export default function CharactersTab({
       )}
 
       {/* Persistent passage-arc lane — the scene-scale "how much" arc, always
-          visible between the viewer and the per-channel editors (the user
-          wanted Passages surfaced as a ROW with presets, not hidden behind a
-          strip tab). One preset sets the overall direction for e-stim /
-          mechanical / body together; the chapter-aligned ribbon mirrors the
-          ChapterRibbon above. "Fine-tune" opens the full Passages editor for
-          per-span shaping. Hidden while the Passages editor itself is open
-          (the full panel carries its own preset lane). */}
-      {chapters.length > 0 && editorMode !== 'passages' && (
+          visible between the viewer and the per-channel editors. Presets +
+          Adjust (4 sliders) + Per-span (inline multi-arc editor) all live here;
+          Passages is no longer a strip tab. */}
+      {chapters.length > 0 && (
         <PassageArcLane
           chapters={chapters}
           passages={passages}
@@ -713,7 +709,7 @@ export default function CharactersTab({
           passageName={passageName}
           onPick={(id) => commitPassages(passagesForPreset(id, chapters.length))}
           onArcChange={(arc) => commitPassages(passagesFromArc(arc, chapters.length))}
-          onFineTune={() => setEditorMode('passages')}
+          onPassagesChange={commitPassages}
         />
       )}
 
@@ -727,11 +723,6 @@ export default function CharactersTab({
         passageCount={passages.length}
       />
 
-      {editorMode === 'passages' ? (
-        <div style={{ marginTop: 8 }}>
-          <PassagesPanel chapters={chapters} passages={passages} onChange={commitPassages} />
-        </div>
-      ) : (
       <div
         style={{
           display: 'grid',
@@ -798,7 +789,6 @@ export default function CharactersTab({
           </div>
         )}
       </div>
-      )}
     </div>
   );
 }
@@ -813,11 +803,12 @@ export default function CharactersTab({
 // the chapters. "Fine-tune" jumps to the full Passages editor for
 // per-span Build/Release/Swell shaping.
 // ──────────────────────────────────────────────────────────────
-function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPick, onArcChange, onFineTune }) {
+function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPick, onArcChange, onPassagesChange }) {
   const activeId = activePassagePreset(passages);
   const ACCENT = '#ff8c42';
   const fmt = (v) => `×${(v ?? 1).toFixed(2)}`;
   const [adjustOpen, setAdjustOpen] = useState(false);
+  const [perSpanOpen, setPerSpanOpen] = useState(false);
   // Live arc params (the four sliders edit ONE full-span passage). Reads back
   // from the current passages, so a preset click repositions the sliders too.
   const arc = arcFromPassages(passages);
@@ -891,16 +882,17 @@ function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPi
             Adjust {adjustOpen ? '▾' : '▸'}
           </button>
           <button
-            onClick={onFineTune}
-            title="Open the full Passages editor for per-span (multi-arc) shaping"
+            onClick={() => setPerSpanOpen((v) => !v)}
+            title="Lay different arcs over different chapter ranges (advanced)"
             style={{
               fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
               padding: '3px 10px', borderRadius: 999, cursor: 'pointer',
-              background: 'transparent', border: '1px solid var(--border)',
-              color: 'var(--text-dim)',
+              background: perSpanOpen ? ACCENT : 'transparent',
+              border: `1px solid ${perSpanOpen ? ACCENT : 'var(--border)'}`,
+              color: perSpanOpen ? '#0e1117' : 'var(--text-dim)',
             }}
           >
-            Per-span →
+            Per-span {perSpanOpen ? '▾' : '▸'}
           </button>
         </div>
       </div>
@@ -943,6 +935,14 @@ function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPi
           <span>No arc over Ch {activeIdx + 1} — volume here is the character's own level (×1.00). Pick a preset to shape it.</span>
         )}
       </div>
+
+      {/* Per-span (advanced): different arcs over different chapter ranges,
+          inline so the lane stays put — same 4-slider model per passage. */}
+      {perSpanOpen && (
+        <div style={{ padding: 10, borderTop: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+          <PassagesPanel chapters={chapters} passages={passages} onChange={onPassagesChange} />
+        </div>
+      )}
     </div>
   );
 }
@@ -957,15 +957,15 @@ function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPi
 // project_channels_character_merge memory for the why.)
 // ──────────────────────────────────────────────────────────────
 function EditorStrip({ mode, onMode, characterLabel, mechCount, passageCount }) {
+  // Passages is NOT a strip tab anymore — it lives entirely in the persistent
+  // arc lane above (presets + Adjust sliders + Per-span). The strip is just the
+  // per-chapter "what" editors. (user 2026-06-15: "we don't need a passages
+  // button anymore … sliders along the top to control stuff".)
   const items = [
     { id: 'character', label: 'Character', meta: characterLabel || '—' },
     {
       id: 'mechanical', label: 'Mechanical',
       meta: mechCount === 0 ? 'stroke only' : `${mechCount} ax${mechCount === 1 ? 'is' : 'es'}`,
-    },
-    {
-      id: 'passages', label: 'Passages',
-      meta: passageCount > 0 ? `${passageCount} arc${passageCount === 1 ? '' : 's'}` : 'none',
     },
     { id: 'body', label: 'Body', meta: 'soon', disabled: true },
   ];
