@@ -166,9 +166,19 @@ export default function CharactersTab({
     const fallback = () => {
       done();
       if (cancelled) return;
-      setCharactersByPath((prev) => (prev[path]
-        ? prev
-        : { ...prev, [path]: seedCharacterAssignments(chapters) }));
+      // No saved assignments → seed the journey-arc defaults across all chapters
+      // AND persist them to <stem>.characters.json immediately. The defaults were
+      // previously in-memory only, so a fresh project exported (or generated)
+      // without ever pressing Accept found an empty sidecar and produced no
+      // e-stim. Persisting on seed makes "defaults assigned" actually durable.
+      const seeded = seedCharacterAssignments(chapters);
+      let didSeed = false;
+      setCharactersByPath((prev) => {
+        if (prev[path]) return prev;
+        didSeed = true;
+        return { ...prev, [path]: seeded };
+      });
+      if (didSeed) saveCharacters(path, seeded).catch(() => {});
     };
     readCharacters(path)
       .then((res) => {
