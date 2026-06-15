@@ -20,6 +20,7 @@ import {
   loadAudioPeaks, loadAudioSpectrogram, loadAudioBeats,
   revertWorkingFunscript, saveWorkingFunscript,
   countChapterClips, analyzeChaptersWithVideoflow,
+  analyzerVersionStale,
 } from './api/forge.js';
 import { deriveAnalysisState } from './lib/analysisState.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
@@ -789,6 +790,12 @@ export default function App() {
   // Tabs that CONSUME the analysis sidecars (chapters/phrases/channels/etc).
   // Analysis itself is deliberately excluded — it's where the work happens.
   const ANALYSIS_CONSUMER_TABS = ['chapters', 'phrases', 'stanzas', 'events', 'stim', 'polish', 'export'];
+  // "Genuinely un-analyzed" = no chapters in memory, or the on-disk analysis
+  // was produced by a stale analyzer version (a re-analyze is queued). This is
+  // the gate signal — deliberately independent of `busy`, so a channel-preview
+  // recompute on a fully-analyzed project never reads as "Analyzing…".
+  const analysisUnready =
+    !chapterArr?.length || analyzerVersionStale(project?.analyzerVersion);
   const tabGate = (id) => {
     // Suppress "open a funscript" while a load is in flight — the busy
     // banner is already saying "Loading <file>…", so a parallel gate
@@ -815,15 +822,18 @@ export default function App() {
     }
     // Analysis is REQUIRED before any consuming tab is meaningful — chapters,
     // phrases, channels, events, polish + export all read sidecars the analyze
-    // pass produces. Until it's complete those tabs would show seeded defaults
-    // over missing/stale data and let the user "advance before it's ready", so
-    // we gate them (disables the footer Accept + shows why) until the analysis
-    // state reads 'complete', then they light up. The Analysis tab itself is
-    // NOT gated here — its footer doubles as Resume when partial, and it's
-    // where the work runs. Only gate when there's media to analyze (a
-    // funscript-only project has nothing to analyze and stays editable).
-    if (ANALYSIS_CONSUMER_TABS.includes(id) && hasMedia && globalAnalysisState !== 'complete') {
-      return globalAnalysisState === 'loading'
+    // pass produces. Gate those tabs ONLY when the project is genuinely
+    // un-analyzed: CHAPTERS missing (chapters are the gate artifact — they
+    // arrive in-memory via load_project), or the analyzer version is stale (we
+    // shipped a better algorithm → a re-analyze is queued). Once chapters
+    // exist the consuming tabs have what they need and seed their defaults, so
+    // a transient busy op on the tab itself (e.g. the 9-channel preview calc)
+    // must NOT trip this gate. Peaks/spectrogram/beats/clips load lazily and
+    // are display niceties — they intentionally do NOT gate. The Analysis tab
+    // is never gated here (its footer doubles as Resume when partial). Only
+    // matters when there's media (a funscript-only project stays editable).
+    if (ANALYSIS_CONSUMER_TABS.includes(id) && hasMedia && analysisUnready) {
+      return busy
         ? 'Analyzing… finish on the Analysis tab before continuing.'
         : 'Finish analyzing on the Analysis tab before this is ready.';
     }
