@@ -34,6 +34,7 @@ import {
   CHARACTERS as STYLE_CATALOG,
   ESTIM_CHANNELS,
   seedCharacterAssignments,
+  backfillCharacterAssignments,
   defaultParamsFor,
 } from '../data/characters.js';
 import {
@@ -181,9 +182,15 @@ export default function CharactersTab({
         if (cancelled) return;
         const disk = res?.characters;
         if (disk && Object.keys(disk).length > 0) {
+          // Backfill old sidecars: entries predating the mechStyle seed (or a
+          // missing character/params) get the journey-arc defaults filled in —
+          // user-chosen values are never overwritten. Write through only when
+          // something was actually filled.
+          const { map, changed } = backfillCharacterAssignments(disk, chapters);
           setCharactersByPath((prev) => (
-            prev[path] && Object.keys(prev[path]).length > 0 ? prev : { ...prev, [path]: disk }
+            prev[path] && Object.keys(prev[path]).length > 0 ? prev : { ...prev, [path]: map }
           ));
+          if (changed) saveCharacters(path, map).catch(() => {});
         } else {
           seedAndSave();
         }
@@ -900,20 +907,20 @@ function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPi
           Edits ONE full-span passage; presets just preset these four. */}
       {adjustOpen && (
         <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px',
+          display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px 16px',
           padding: '8px 14px 10px', borderTop: '1px solid var(--border)',
           background: 'var(--surface-2)',
         }}>
-          <ArcSlider label="Start depth" hint="where the arc begins"
+          <ArcSlider label="Start depth" hint="where the arc begins" compact
                      value={arc.floor} accent={ACCENT}
                      onChange={(v) => setArc({ floor: v, ceiling: Math.max(v, arc.ceiling) })} />
-          <ArcSlider label="Peak" hint="how high it reaches"
+          <ArcSlider label="Peak" hint="how high it reaches" compact
                      value={arc.ceiling} accent={ACCENT}
                      onChange={(v) => setArc({ ceiling: v, floor: Math.min(v, arc.floor) })} />
-          <ArcSlider label="Rise point" hint="where it finishes climbing"
+          <ArcSlider label="Rise point" hint="where it finishes climbing" compact
                      value={arc.risePoint} accent={ACCENT}
                      onChange={(v) => setArc({ risePoint: v, fallPoint: Math.max(v, arc.fallPoint) })} />
-          <ArcSlider label="Fall point" hint="where it starts easing down"
+          <ArcSlider label="Fall point" hint="where it starts easing down" compact
                      value={arc.fallPoint} accent={ACCENT}
                      onChange={(v) => setArc({ fallPoint: v, risePoint: Math.min(v, arc.risePoint) })} />
         </div>

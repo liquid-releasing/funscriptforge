@@ -171,3 +171,41 @@ export function seedCharacterAssignments(chapters) {
   });
   return out;
 }
+
+// Backfill an existing (possibly old) assignment map against the current
+// chapter list: older sidecars predate the mechStyle seed (or a character
+// pick) and leave entries with blank fields, and chapters added after the
+// sidecar was written have no entry at all. For each chapter we fill ONLY the
+// missing pieces from the journey-arc seed — never overwriting a value the
+// user already chose. Returns { map, changed } so the caller can write-through
+// only when something was actually filled.
+export function backfillCharacterAssignments(disk, chapters) {
+  const map = { ...(disk || {}) };
+  if (!chapters || chapters.length === 0) return { map, changed: false };
+  const n = chapters.length;
+  let changed = false;
+  chapters.forEach((c, i) => {
+    const entry = map[c.id];
+    if (!entry || typeof entry !== 'object') {
+      const characterId = characterForPosition(i, n);
+      map[c.id] = { characterId, params: defaultParamsFor(characterId), mechStyle: mechStyleForPosition(i, n) };
+      changed = true;
+      return;
+    }
+    const next = { ...entry };
+    if (!next.characterId) {
+      next.characterId = characterForPosition(i, n);
+      changed = true;
+    }
+    if (!next.params || Object.keys(next.params).length === 0) {
+      next.params = defaultParamsFor(next.characterId);
+      changed = true;
+    }
+    if (!next.mechStyle) {
+      next.mechStyle = mechStyleForPosition(i, n);
+      changed = true;
+    }
+    if (next !== entry) map[c.id] = next;
+  });
+  return { map, changed };
+}

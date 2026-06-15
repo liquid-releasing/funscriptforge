@@ -42,6 +42,50 @@ export default function MechanicalPanel({
   const axes = style.axes || {};
   const activeCount = Object.keys(axes).length;
 
+  // Accept / Reset — mirrors the Character editor's accept-and-advance. The
+  // pick is staged; Accept commits it to this chapter and moves on. Rendered
+  // directly under the style cards (not at the panel bottom) so pick → commit
+  // is one tight loop; the diagram + per-axis previews below it read as a
+  // "here's what it produces" confirmation.
+  const acceptRow = (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8, marginTop: 12,
+      paddingTop: 12, borderTop: '1px solid var(--border)',
+    }}>
+      <button
+        onClick={onAccept}
+        title={`Commit ${style.label} motion to this chapter and move on`}
+        style={{
+          padding: '8px 14px', fontSize: 12.5, fontWeight: 700,
+          background: ACTIVE, color: '#fff', border: 'none', borderRadius: 6,
+          cursor: 'pointer', fontFamily: 'inherit',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}
+      >
+        <Icon name="check" size={13} />
+        Use {style.label} {isLastChapter ? '(last chapter)' : '· next chapter'}
+      </button>
+      {dirty && (
+        <button
+          onClick={onReset}
+          title="Discard the staged style for this chapter"
+          style={{
+            padding: '6px 10px', fontSize: 11.5, fontWeight: 600,
+            background: 'transparent', color: 'var(--text-muted)',
+            border: '1px solid var(--border)', borderRadius: 5,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          Reset
+        </button>
+      )}
+      <span style={{ flex: 1 }} />
+      {dirty && (
+        <span style={{ fontSize: 10.5, color: ACTIVE }}>unsaved changes</span>
+      )}
+    </div>
+  );
+
   return (
     <div>
       <SectionLabel right={(
@@ -84,9 +128,12 @@ export default function MechanicalPanel({
           })}
         </div>
 
+        {/* Accept sits directly under the cards — pick → commit in one place. */}
+        {acceptRow}
+
         <div style={{
           fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5,
-          marginBottom: 14, paddingBottom: 14,
+          marginTop: 14, marginBottom: 14, paddingBottom: 14,
           borderBottom: '1px solid var(--border)',
         }}>
           {style.desc}
@@ -150,45 +197,6 @@ export default function MechanicalPanel({
           {activeCount === 0
             ? 'Stroke passes through untouched — no secondary-axis files generated.'
             : 'All five axes are derived algorithmically from the L0 stroke at export. Surge & sway only export to SR6-class devices.'}
-        </div>
-
-        {/* Accept / Reset — mirrors the Character editor's accept-and-advance.
-            The pick is staged; Accept commits it to this chapter and moves on. */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, marginTop: 12,
-          paddingTop: 12, borderTop: '1px solid var(--border)',
-        }}>
-          <button
-            onClick={onAccept}
-            title={`Commit ${style.label} motion to this chapter and move on`}
-            style={{
-              padding: '8px 14px', fontSize: 12.5, fontWeight: 700,
-              background: ACTIVE, color: '#fff', border: 'none', borderRadius: 6,
-              cursor: 'pointer', fontFamily: 'inherit',
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            <Icon name="check" size={13} />
-            Use {style.label} {isLastChapter ? '(last chapter)' : '· next chapter'}
-          </button>
-          {dirty && (
-            <button
-              onClick={onReset}
-              title="Discard the staged style for this chapter"
-              style={{
-                padding: '6px 10px', fontSize: 11.5, fontWeight: 600,
-                background: 'transparent', color: 'var(--text-muted)',
-                border: '1px solid var(--border)', borderRadius: 5,
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
-              Reset
-            </button>
-          )}
-          <span style={{ flex: 1 }} />
-          {dirty && (
-            <span style={{ fontSize: 10.5, color: ACTIVE }}>unsaved changes</span>
-          )}
         </div>
       </div>
     </div>
