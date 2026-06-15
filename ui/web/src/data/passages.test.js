@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import {
   PASSAGE_PRESETS, passagesForPreset, presetSamples, activePassagePreset,
-  shapeFactor,
+  shapeFactor, resolvePassageSpans, passageFactorAt, passageInfoForChapter,
 } from './passages.js';
+
+// Three equal 10s chapters (camelCase, the Channels shape).
+const CH3 = [
+  { id: 'a', atMs: 0, endMs: 10000 },
+  { id: 'b', atMs: 10000, endMs: 20000 },
+  { id: 'c', atMs: 20000, endMs: 30000 },
+];
 
 describe('passage presets', () => {
   it('every preset names a shape shapeFactor understands', () => {
@@ -58,5 +65,42 @@ describe('activePassagePreset — round-trips with passagesForPreset', () => {
     expect(activePassagePreset(custom)).toBeNull();
     // multiple passages also clear the highlight
     expect(activePassagePreset([...passagesForPreset('build', 5), ...passagesForPreset('edge', 5)])).toBeNull();
+  });
+});
+
+describe('resolve + factor-at (mirror of forge/passages.py)', () => {
+  it('resolves a full-span Build to absolute time, dropping Steady', () => {
+    const spans = resolvePassageSpans(passagesForPreset('build', 3), CH3);
+    expect(spans).toHaveLength(1);
+    expect(spans[0]).toMatchObject({ lo: 0, hi: 30000, shape: 'build', beginIdx: 0, endIdx: 2 });
+    expect(resolvePassageSpans(passagesForPreset('hold', 3), CH3)).toEqual([]);
+  });
+
+  it('Build factor climbs floor→ceiling continuously across the whole span', () => {
+    const spans = resolvePassageSpans(passagesForPreset('build', 3), CH3);
+    const f0 = passageFactorAt(spans, 0);       // start
+    const fMid = passageFactorAt(spans, 15000);  // middle
+    const fEnd = passageFactorAt(spans, 30000);  // end
+    expect(f0).toBeCloseTo(0.3, 6);   // preset floor
+    expect(fEnd).toBeCloseTo(1.0, 6); // preset ceiling
+    expect(fMid).toBeGreaterThan(f0);
+    expect(fMid).toBeLessThan(fEnd);
+    // continuous, not per-chapter reset: ch2-start > ch1-start
+    expect(passageFactorAt(spans, 10000)).toBeGreaterThan(f0);
+  });
+
+  it('no covering passage → 1.0 (untouched)', () => {
+    expect(passageFactorAt([], 5000)).toBe(1.0);
+  });
+
+  it('passageInfoForChapter reports the per-chapter multiplier + trajectory', () => {
+    const ps = passagesForPreset('build', 3);
+    const ch0 = passageInfoForChapter(ps, CH3, 0);
+    const ch2 = passageInfoForChapter(ps, CH3, 2);
+    expect(ch0.shape).toBe('build');
+    expect(ch2.factor).toBeGreaterThan(ch0.factor);   // later chapter sits higher
+    expect(ch0.endIdx).toBe(2);
+    // Hold steady covers nothing → null
+    expect(passageInfoForChapter(passagesForPreset('hold', 3), CH3, 1)).toBeNull();
   });
 });

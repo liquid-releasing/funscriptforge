@@ -43,7 +43,10 @@ import {
 import { useChapterClip } from '../hooks/useChapterClip.js';
 import MechanicalPanel from './MechanicalPanel.jsx';
 import PassagesPanel, { EnvelopeRibbon } from './PassagesPanel.jsx';
-import { PASSAGE_PRESETS, passagesForPreset, activePassagePreset } from '../data/passages.js';
+import {
+  PASSAGE_PRESETS, PASSAGE_SHAPES, passagesForPreset, activePassagePreset,
+  passageInfoForChapter,
+} from '../data/passages.js';
 import { activeAxes, DEFAULT_STYLE } from '../data/multiaxis.js';
 
 // Merge the canonical Python catalog (id / label / description / sliders)
@@ -384,18 +387,49 @@ export default function CharactersTab({
   // mirroring the Events feel.yml pattern). Export bakes them into e-stim
   // volume + multi-axis amplitude. (See project_passage_arcs_cross_modality.)
   const [passages, setPassages] = useState([]);
+  // Bumped AFTER a passages write lands on disk, so the 9-channel recompute
+  // (which reads passages from disk via stim-process / multiaxis-process)
+  // re-runs against fresh data — picking a preset reshapes the volume/motion
+  // drawing live, with no read-stale-then-redraw race.
+  const [passagesNonce, setPassagesNonce] = useState(0);
   useEffect(() => {
     if (!path) { setPassages([]); return undefined; }
     let cancelled = false;
     readPassages(path)
-      .then((res) => { if (!cancelled) setPassages(res?.passages || []); })
+      .then((res) => { if (!cancelled) { setPassages(res?.passages || []); setPassagesNonce((k) => k + 1); } })
       .catch(() => { if (!cancelled) setPassages([]); });
     return () => { cancelled = true; };
   }, [path]);
   const commitPassages = (next) => {
     setPassages(next);
-    if (path) savePassages(path, next).catch(() => {});
+    if (path) {
+      savePassages(path, next)
+        .then(() => setPassagesNonce((k) => k + 1))
+        .catch(() => {});
+    } else {
+      setPassagesNonce((k) => k + 1);
+    }
   };
+  // Index of the chapter being edited, and how (if at all) the active passage
+  // shapes it — drives the provenance badge, the ribbon "you-are-here" marker,
+  // and the per-channel ×factor tag, so the passage→volume link is legible.
+  const activeChapterIdx = useMemo(
+    () => chapters.findIndex((c) => c.id === activeChapterId),
+    [chapters, activeChapterId],
+  );
+  const passageInfo = useMemo(
+    () => passageInfoForChapter(passages, chapters, activeChapterIdx),
+    [passages, chapters, activeChapterIdx],
+  );
+  // Human label for the active arc: the matched preset's name, else the shape.
+  const passageName = useMemo(() => {
+    if (!passageInfo) return null;
+    const presetId = activePassagePreset(passages);
+    const preset = presetId && PASSAGE_PRESETS.find((p) => p.id === presetId);
+    if (preset) return preset.label;
+    const sh = PASSAGE_SHAPES.find((s) => s.id === passageInfo.shape);
+    return sh ? sh.label : passageInfo.shape;
+  }, [passageInfo, passages]);
 
   // ── Real per-chapter channel draw (all 9, live) ───────────────────
   // Generate the full 3-phase channel set for the active chapter's
@@ -450,7 +484,7 @@ export default function CharactersTab({
       if (startedBusy) onBusy?.(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, activeChapterId, stagedChar?.id, editorMode, stagedParamsKey]);
+  }, [path, activeChapterId, stagedChar?.id, editorMode, stagedParamsKey, passagesNonce]);
 
   // ── Real per-chapter Mechanical draw ──────────────────────────────
   // Generate the secondary-axis funscripts (twist/roll/pitch/surge/sway)
@@ -479,7 +513,7 @@ export default function CharactersTab({
     }, 150);
     return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, activeChapterId, stagedMechStyle, editorMode]);
+  }, [path, activeChapterId, stagedMechStyle, editorMode, passagesNonce]);
 
   if (!project?.path) {
     return (
@@ -669,6 +703,9 @@ export default function CharactersTab({
         <PassageArcLane
           chapters={chapters}
           passages={passages}
+          activeIdx={activeChapterIdx}
+          info={passageInfo}
+          passageName={passageName}
           onPick={(id) => commitPassages(passagesForPreset(id, chapters.length))}
           onFineTune={() => setEditorMode('passages')}
         />
@@ -748,6 +785,8 @@ export default function CharactersTab({
                 channelData={channelData}
                 loading={channelsLoading}
                 chapter={activeChapter}
+                passageFactor={passageInfo?.factor ?? null}
+                passageName={passageName}
               />
             )}
           </div>
@@ -768,9 +807,26 @@ export default function CharactersTab({
 // the chapters. "Fine-tune" jumps to the full Passages editor for
 // per-span Build/Release/Swell shaping.
 // ──────────────────────────────────────────────────────────────
-function PassageArcLane({ chapters, passages, onPick, onFineTune }) {
+function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPick, onFineTune }) {
   const activeId = activePassagePreset(passages);
   const ACCENT = '#ff8c42';
+  const fmt = (v) => `×${(v ?? 1).toFixed(2)}`;
+  // Provenance line: what shapes THIS chapter, by how much, and where it's
+  // headed — so the volume drawing below is never an unexplained number.
+  let provenance = null;
+  if (info) {
+    const here = `${fmt(info.factor)} at Ch ${activeIdx + 1}`;
+    let trend = '';
+    if (info.shape === 'build') trend = `, rising to ${fmt(info.ceiling)} by Ch ${info.endIdx + 1}`;
+    else if (info.shape === 'release') trend = `, easing to ${fmt(info.floor)} by Ch ${info.endIdx + 1}`;
+    else if (info.shape === 'sustain') trend = ' (held across the run)';
+    else if (info.shape === 'swell') trend = ` (peaks mid-run, eases by Ch ${info.endIdx + 1})`;
+    provenance = (
+      <span>
+        Volume &amp; motion here follow the <strong style={{ color: ACCENT }}>{passageName}</strong> arc — <span className="mono">{here}</span>{trend}.
+      </span>
+    );
+  }
   return (
     <div style={{
       marginTop: 12,
@@ -825,7 +881,19 @@ function PassageArcLane({ chapters, passages, onPick, onFineTune }) {
         </div>
       </div>
       <div style={{ borderTop: '1px solid var(--border)' }}>
-        <EnvelopeRibbon chapters={chapters} passages={passages} height={52} />
+        <EnvelopeRibbon chapters={chapters} passages={passages} height={52} activeIdx={activeIdx} />
+      </div>
+      {/* Provenance note — names where the active chapter's intensity comes
+          from, so the per-channel volume drawing is self-explaining. When no
+          passage covers this chapter, say so plainly (the volume is the
+          character's own level). */}
+      <div style={{
+        padding: '6px 12px', borderTop: '1px solid var(--border)',
+        fontSize: 10.5, color: 'var(--text-dim)', lineHeight: 1.45,
+      }}>
+        {provenance || (
+          <span>No arc over Ch {activeIdx + 1} — volume here is the character's own level (×1.00). Pick a preset to shape it.</span>
+        )}
       </div>
     </div>
   );
@@ -1356,7 +1424,12 @@ const _CHANNEL_SUFFIX = {
   vprost: 'volume-prostate',
 };
 
-function ChannelGrid({ character, estimSelected, channelData = null, loading = false, chapter = null }) {
+// Channels the passage envelope actually scales (intensity). Mirrors
+// forge/passages.py::ESTIM_INTENSITY_CHANNELS so the ×factor tag only appears
+// where the multiplier really applies (phase/freq channels pass through).
+const _PASSAGE_SCALED_SUFFIXES = new Set(['volume', 'volume-prostate']);
+
+function ChannelGrid({ character, estimSelected, channelData = null, loading = false, chapter = null, passageFactor = null, passageName = null }) {
   const liveCount = channelData
     ? Object.values(channelData).filter((c) => c?.actions?.length).length
     : 0;
@@ -1385,6 +1458,10 @@ function ChannelGrid({ character, estimSelected, channelData = null, loading = f
           const accent = character ? character.color : ch.color;
           const data = channelData?.[_CHANNEL_SUFFIX[ch.id]];
           const live = !!(data?.actions?.length);
+          // Show the passage multiplier only on the channels it actually scales,
+          // and only when an arc is in effect (factor < ~1).
+          const scaled = passageFactor != null && passageFactor < 0.995
+            && _PASSAGE_SCALED_SUFFIXES.has(_CHANNEL_SUFFIX[ch.id]);
           return (
             <div key={ch.id} style={{
               background: 'var(--surface)',
@@ -1399,6 +1476,18 @@ function ChannelGrid({ character, estimSelected, channelData = null, loading = f
                   width: 8, height: 8, borderRadius: 2, background: accent,
                 }} />
                 <span style={{ fontSize: 11.5, fontWeight: 600 }}>{ch.label}</span>
+                {scaled && (
+                  <span
+                    className="mono"
+                    title={`Scaled by the ${passageName || 'passage'} arc at this chapter`}
+                    style={{
+                      fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
+                      background: '#ff8c4222', color: '#ff8c42', border: '1px solid #ff8c4255',
+                    }}
+                  >
+                    ×{passageFactor.toFixed(2)}
+                  </span>
+                )}
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-dim)', marginLeft: 'auto' }}>
                   {live ? 'live' : ch.id}
                 </span>

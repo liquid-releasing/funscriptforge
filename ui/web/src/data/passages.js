@@ -83,6 +83,78 @@ export function presetSamples(presetId, count = 48) {
   return sampleEnvelope(pr.shape, pr.floor, pr.ceiling, count);
 }
 
+// ── Resolve + sample at absolute time (mirrors forge/passages.py) ──
+// These let the UI show the SAME multiplier the Python engine bakes, so the
+// provenance badge / per-channel tag numbers match the rendered output.
+
+// Resolve authored passage records to absolute-time spans against the chapter
+// list. `chapters` carry atMs/endMs (camelCase) or at_ms/end_ms. Steady and
+// degenerate spans are dropped (no-ops). Mirrors resolve_passages().
+export function resolvePassageSpans(passages, chapters) {
+  const n = chapters?.length || 0;
+  if (!n) return [];
+  const out = [];
+  for (const rec of passages || []) {
+    const shape = (rec.shape || 'steady').toLowerCase();
+    if (shape === 'steady') continue;
+    let bi = Number(rec.beginIdx ?? 0);
+    let ei = Number(rec.endIdx ?? n - 1);
+    if (Number.isNaN(bi) || Number.isNaN(ei)) continue;
+    bi = Math.max(0, Math.min(bi, n - 1));
+    ei = Math.max(0, Math.min(ei, n - 1));
+    if (ei < bi) { const t = bi; bi = ei; ei = t; }
+    const begin = chapters[bi];
+    const end = chapters[ei];
+    const lo = begin.atMs ?? begin.at_ms ?? begin.start_ms;
+    const hi = end.endMs ?? end.end_ms;
+    if (lo == null || hi == null || hi <= lo) continue;
+    out.push({
+      lo, hi, shape, beginIdx: bi, endIdx: ei,
+      floor: Number(rec.floor ?? 0.2), ceiling: Number(rec.ceiling ?? 1.0),
+    });
+  }
+  return out;
+}
+
+// Combined multiplier at absolute time `t` (ms) over resolved spans. First
+// covering span wins; no cover → 1.0. Mirrors factor_at().
+export function passageFactorAt(spans, t) {
+  for (const p of spans || []) {
+    if (p.lo == null || p.hi == null || p.hi <= p.lo) continue;
+    if (t >= p.lo && t <= p.hi) {
+      const frac = (t - p.lo) / Math.max(1, p.hi - p.lo);
+      return shapeFactor(p.shape, frac, p.floor, p.ceiling);
+    }
+  }
+  return 1.0;
+}
+
+// What passage (if any) shapes chapter `idx`, and by how much? Returns the
+// covering span plus the multiplier at the chapter's MIDPOINT (representative)
+// and at its start/end (the trajectory through the chapter), or null when no
+// live passage covers it.
+export function passageInfoForChapter(passages, chapters, idx) {
+  const n = chapters?.length || 0;
+  if (idx < 0 || idx >= n) return null;
+  const spans = resolvePassageSpans(passages, chapters);
+  if (!spans.length) return null;
+  const ch = chapters[idx];
+  const lo = ch.atMs ?? ch.at_ms ?? ch.start_ms;
+  const hi = ch.endMs ?? ch.end_ms;
+  if (lo == null || hi == null) return null;
+  const mid = (lo + hi) / 2;
+  const span = spans.find((s) => mid >= s.lo && mid <= s.hi);
+  if (!span) return null;
+  return {
+    shape: span.shape,
+    beginIdx: span.beginIdx, endIdx: span.endIdx,
+    floor: span.floor, ceiling: span.ceiling,
+    factor: passageFactorAt([span], mid),
+    factorStart: passageFactorAt([span], lo),
+    factorEnd: passageFactorAt([span], hi),
+  };
+}
+
 // Which preset (if any) does the current passages array represent? Empty = the
 // neutral "Hold steady"; a single full-span passage matching a preset's shape +
 // floor/ceiling = that preset; anything hand-edited = null (no pill highlighted).

@@ -187,7 +187,7 @@ function ChapterSelect({ n, value, onChange }) {
 // SVG ribbon: equal-width chapter cells with boundary ticks, and each passage's
 // envelope drawn as a filled polyline over the cells it spans (top = 100%).
 // Exported so the persistent Channels arc lane reuses the exact same drawing.
-export function EnvelopeRibbon({ chapters, passages, height = 64 }) {
+export function EnvelopeRibbon({ chapters, passages, height = 64, activeIdx = -1 }) {
   const n = chapters.length;
   const W = 1000;
   const H = height;
@@ -196,11 +196,38 @@ export function EnvelopeRibbon({ chapters, passages, height = 64 }) {
 
   const livePassages = passages.filter((p) => (p.shape || 'steady') !== 'steady');
 
+  // "You-are-here" marker: the chapter being edited. A translucent cell band
+  // plus, when a passage covers it, a dot on the curve at the chapter's center
+  // — so the arc visibly ties to the volume drawn below.
+  const hasActive = activeIdx >= 0 && activeIdx < n;
+  let marker = null;
+  if (hasActive) {
+    const cx = (activeIdx + 0.5) * cellW;
+    const cover = livePassages.find(
+      (p) => activeIdx >= Math.min(p.beginIdx, p.endIdx) && activeIdx <= Math.max(p.beginIdx, p.endIdx),
+    );
+    if (cover) {
+      const b = Math.min(cover.beginIdx, cover.endIdx);
+      const e = Math.max(cover.beginIdx, cover.endIdx);
+      const x0 = b * cellW;
+      const span = Math.max(1, (e + 1) * cellW - x0);
+      const frac = Math.max(0, Math.min(1, (cx - x0) / span));
+      marker = { cx, cy: yFor(shapeFactor(cover.shape, frac, cover.floor, cover.ceiling)) };
+    } else {
+      marker = { cx, cy: null };
+    }
+  }
+
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden',
-                  background: 'var(--surface-2)' }}>
+    <div style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 8,
+                  overflow: 'hidden', background: 'var(--surface-2)' }}>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
            style={{ display: 'block', width: '100%', height: H }}>
+        {/* active chapter highlight band (behind everything) */}
+        {hasActive && (
+          <rect x={activeIdx * cellW} y={0} width={cellW} height={H}
+                fill="var(--text)" fillOpacity={0.07} />
+        )}
         {/* chapter cell boundaries */}
         {Array.from({ length: n + 1 }, (_, i) => (
           <line key={i} x1={i * cellW} y1={0} x2={i * cellW} y2={H}
@@ -231,12 +258,31 @@ export function EnvelopeRibbon({ chapters, passages, height = 64 }) {
             </g>
           );
         })}
+        {/* you-are-here marker: vertical tick (the dot rides as a CSS overlay
+            below so it stays round under the non-uniform x/y scale) */}
+        {marker && (
+          <line x1={marker.cx} x2={marker.cx} y1={0} y2={H}
+                stroke="var(--text)" strokeOpacity={0.35} strokeWidth={1} />
+        )}
         {/* chapter numbers */}
         {chapters.map((c, i) => (
-          <text key={i} x={i * cellW + cellW / 2} y={H - 5} fill="var(--text-dim)"
-                fontSize={9} textAnchor="middle">{i + 1}</text>
+          <text key={i} x={i * cellW + cellW / 2} y={H - 5}
+                fill={i === activeIdx ? 'var(--text)' : 'var(--text-dim)'}
+                fontSize={9} fontWeight={i === activeIdx ? 700 : 400}
+                textAnchor="middle">{i + 1}</text>
         ))}
       </svg>
+      {/* round you-are-here dot on the curve (CSS, so it's not stretched) */}
+      {marker && marker.cy != null && (
+        <div style={{
+          position: 'absolute',
+          left: `${(marker.cx / W) * 100}%`,
+          top: `${(marker.cy / H) * 100}%`,
+          width: 7, height: 7, borderRadius: '50%',
+          background: '#fff', border: `1.6px solid ${ACCENT}`,
+          transform: 'translate(-50%, -50%)', pointerEvents: 'none',
+        }} />
+      )}
     </div>
   );
 }
