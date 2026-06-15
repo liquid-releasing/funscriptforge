@@ -483,10 +483,10 @@ const TARGET_GROUPS = [
       return {
         state: ctx.hasMedia ? 'ready' : 'optional',
         hint: ctx.hasMedia
-          ? 'Funscript waveform + hero & per-chapter frame snapshots (media attached).'
-          : 'Funscript waveform PNG always rides. Attach media for hero + per-chapter frames.',
-        stat: [{ label: 'waveform', value: 'always' }, { label: 'frames', value: ctx.hasMedia ? 'hero + chapters' : 'needs media' }],
-        files: ['thumbnails/waveform.png', ...(ctx.hasMedia ? ['thumbnails/hero.png', 'thumbnails/chapter_*.png'] : [])],
+          ? 'Funscript · audio · spectrogram lane images (the player’s own render) + hero & per-chapter frames (media attached).'
+          : 'Funscript / audio / spectrogram lane images always ride (the player’s own render). Attach media for hero + per-chapter frames.',
+        stat: [{ label: 'lanes', value: 'funscript · audio · spectro' }, { label: 'frames', value: ctx.hasMedia ? 'hero + chapters' : 'needs media' }],
+        files: ['thumbnails/funscript.png', 'thumbnails/audio.png', 'thumbnails/spectrogram.png', ...(ctx.hasMedia ? ['thumbnails/hero.png', 'thumbnails/chapter_*.png'] : [])],
       };
     },
   },

@@ -144,7 +144,7 @@ class TestExportCLI(unittest.TestCase):
         r = _run("export", self.main, "--mode", "forge", "--out", out)
         self.assertEqual(r.returncode, 0, r.stderr)
         with zipfile.ZipFile(out) as z:
-            self.assertIn("thumbnails/waveform.png", z.namelist())
+            self.assertIn("thumbnails/funscript.png", z.namelist())
 
     def test_exclude_drops_target_groups(self):
         # --exclude leaves out whole target groups (the Export-tab checkboxes).
@@ -291,7 +291,7 @@ class TestExportCLI(unittest.TestCase):
             manifest = json.loads(z.read("manifest.ffmeta"))
         self.assertIn("beats.json", names)
         self.assertIn("audio.json", names)
-        self.assertIn("thumbnails/waveform.png", names)
+        self.assertIn("thumbnails/funscript.png", names)
         self.assertIn("thumbnails/audio.png", names)
         self.assertIn("thumbnails/spectrogram.png", names)
         self.assertIn("assessment", manifest, "manifest missing self-describing assessment summary")

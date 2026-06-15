@@ -1846,8 +1846,11 @@ def cmd_export(args):
 
             _aj = fdir / f"{stem}.audio.json"
             _sj = fdir / f"{stem}.spectrogram.json"
-            _pack_preview(args.preview_funscript, "funscript", "waveform.png",
-                          lambda: _render_waveform_png(actions, thumbs / "waveform.png"))
+            # funscript.png = the velocity-colored stroke curve (the funscript
+            # PICTURE). Named for what it is — the legacy "waveform.png" was
+            # confusing next to audio.png (the actual audio waveform).
+            _pack_preview(args.preview_funscript, "funscript", "funscript.png",
+                          lambda: _render_waveform_png(actions, thumbs / "funscript.png"))
             _pack_preview(args.preview_audio, "audio", "audio.png",
                           lambda: _aj.exists() and _render_audio_png(_aj, thumbs / "audio.png"))
             _pack_preview(args.preview_spectrogram, "spectrogram", "spectrogram.png",
