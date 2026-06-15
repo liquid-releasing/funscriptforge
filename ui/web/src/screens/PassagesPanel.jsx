@@ -8,26 +8,13 @@
 
 import { Button, Icon, Pill } from 'forgemoment';
 import PresetLane from '../components/PresetLane.jsx';
+import ArcSlider from '../components/ArcSlider.jsx';
 import {
-  PASSAGE_SHAPES, SHAPE_BY_ID, shapeFactor, makePassage,
+  SHAPE_BY_ID, shapeFactor, makePassage, arcShapeId,
   PASSAGE_PRESETS, passagesForPreset, presetSamples, activePassagePreset,
 } from '../data/passages.js';
 
 const ACCENT = '#ff8c42';
-
-// One CSS injection for the dual-thumb range (pseudo-element thumb rules can't
-// be inline-styled). Scoped to .pg-range; mounted once with the panel.
-const RANGE_CSS = `
-.pg-range { position: relative; height: 26px; }
-.pg-range input { -webkit-appearance: none; appearance: none; background: transparent;
-  position: absolute; left: 0; right: 0; top: 0; width: 100%; height: 26px; margin: 0;
-  pointer-events: none; }
-.pg-range input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
-  pointer-events: auto; width: 15px; height: 15px; border-radius: 50%; background: ${ACCENT};
-  border: 2px solid var(--surface); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
-.pg-range input::-moz-range-thumb { pointer-events: auto; width: 15px; height: 15px;
-  border-radius: 50%; background: ${ACCENT}; border: 2px solid var(--surface); cursor: pointer; }
-`;
 
 export default function PassagesPanel({ chapters, passages, onChange }) {
   const n = chapters.length;
@@ -49,8 +36,6 @@ export default function PassagesPanel({ chapters, passages, onChange }) {
 
   return (
     <Panel>
-      <style>{RANGE_CSS}</style>
-
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 700 }}>Passages</span>
         <span style={{ fontSize: 11, color: 'var(--text-dim)', flex: 1 }}>
@@ -99,37 +84,28 @@ export default function PassagesPanel({ chapters, passages, onChange }) {
 }
 
 function PassageRow({ passage, n, onChange, onRemove }) {
-  const shape = SHAPE_BY_ID[passage.shape] || SHAPE_BY_ID.steady;
   const begin = Math.min(passage.beginIdx, passage.endIdx);
   const end = Math.max(passage.beginIdx, passage.endIdx);
-  const pct = (v) => `${Math.round(v * 100)}%`;
-
-  const setFloor = (v) => onChange({ floor: Math.min(v, passage.ceiling) });
-  const setCeiling = (v) => onChange({ ceiling: Math.max(v, passage.floor) });
+  // Same 4-slider arc model as the Channels lane — no shape dropdown / dual-thumb
+  // range. The shape is INFERRED from the params (shown as a glyph) so the row
+  // still reads at a glance.
+  const shape = SHAPE_BY_ID[arcShapeId(passage)] || SHAPE_BY_ID.build;
+  const [rp, fp] = [passage.risePoint ?? 1.0, passage.fallPoint ?? 1.0];
 
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: '128px 150px 1fr 22px',
-      gap: 12, alignItems: 'center',
+      gridTemplateColumns: '150px 1fr 22px',
+      gap: 14, alignItems: 'center',
       padding: '10px 12px', borderRadius: 8,
       background: 'var(--surface-2)', border: '1px solid var(--border)',
     }}>
-      {/* Shape */}
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <Eyebrow>Shape</Eyebrow>
-        <select value={passage.shape}
-                onChange={(e) => onChange({ shape: e.target.value })}
-                style={selectStyle}>
-          {PASSAGE_SHAPES.map((s) => (
-            <option key={s.id} value={s.id}>{s.glyph}  {s.label}</option>
-          ))}
-        </select>
-      </label>
-
-      {/* Span */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <Eyebrow>Span</Eyebrow>
+      {/* Span + inferred shape glyph */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <Eyebrow>
+          <span style={{ marginRight: 6, color: ACCENT, fontFamily: 'var(--font-mono)' }}>{shape.glyph}</span>
+          {shape.label}
+        </Eyebrow>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <ChapterSelect n={n} value={begin}
                          onChange={(v) => onChange({ beginIdx: Math.min(v, end) })} />
@@ -139,28 +115,16 @@ function PassageRow({ passage, n, onChange, onRemove }) {
         </div>
       </div>
 
-      {/* Range (two-headed) */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Eyebrow>{shape.id === 'steady' ? 'Range · (no-op)' : 'Range'}</Eyebrow>
-          <span className="mono" style={{ fontSize: 10, color: 'var(--text-soft)' }}>
-            {pct(passage.floor)} ◀▶ {pct(passage.ceiling)}
-          </span>
-        </div>
-        <div className="pg-range">
-          {/* track + active fill */}
-          <div style={{ position: 'absolute', top: 11, left: 0, right: 0, height: 4,
-                        background: 'var(--border)', borderRadius: 2 }} />
-          <div style={{ position: 'absolute', top: 11, height: 4, borderRadius: 2,
-                        background: shape.id === 'steady' ? 'var(--text-dim)' : ACCENT,
-                        left: `${passage.floor * 100}%`,
-                        width: `${(passage.ceiling - passage.floor) * 100}%` }} />
-          <input type="range" min={0} max={1} step={0.01} value={passage.floor}
-                 onChange={(e) => setFloor(parseFloat(e.target.value))} />
-          <input type="range" min={0} max={1} step={0.01} value={passage.ceiling}
-                 onChange={(e) => setCeiling(parseFloat(e.target.value))} />
-        </div>
-        <span style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>{shape.desc}</span>
+      {/* The four arc sliders */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 18px' }}>
+        <ArcSlider label="Start depth" hint="where the arc begins" value={passage.floor} accent={ACCENT} compact
+                   onChange={(v) => onChange({ floor: v, ceiling: Math.max(v, passage.ceiling) })} />
+        <ArcSlider label="Peak" hint="how high it reaches" value={passage.ceiling} accent={ACCENT} compact
+                   onChange={(v) => onChange({ ceiling: v, floor: Math.min(v, passage.floor) })} />
+        <ArcSlider label="Rise point" hint="where it finishes climbing" value={rp} accent={ACCENT} compact
+                   onChange={(v) => onChange({ risePoint: v, fallPoint: Math.max(v, fp) })} />
+        <ArcSlider label="Fall point" hint="where it starts easing down" value={fp} accent={ACCENT} compact
+                   onChange={(v) => onChange({ fallPoint: v, risePoint: Math.min(v, rp) })} />
       </div>
 
       {/* Delete */}

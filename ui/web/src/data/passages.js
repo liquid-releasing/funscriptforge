@@ -235,6 +235,16 @@ export function passagesFromArc(arc, n) {
   return [{ ...p, floor, ceiling, risePoint: rp, fallPoint: fp }];
 }
 
+// The shape a passage reads as, inferred from its arc params (so the per-span
+// editor can show a glyph without a shape dropdown).
+export function arcShapeId(rec) {
+  const floor = _clamp01(rec?.floor ?? 0.2);
+  const ceiling = Math.max(floor, _clamp01(rec?.ceiling ?? 1.0));
+  const [rp, fp] = effectivePoints(rec);
+  if (ceiling >= 0.999 && floor >= 0.999) return 'steady';
+  return _inferArcShape(floor, ceiling, _clamp01(rp), Math.max(_clamp01(rp), _clamp01(fp)));
+}
+
 // Which preset (if any) does the current passages array represent? Empty = the
 // neutral "Hold steady"; a single full-span passage matching a preset's shape +
 // floor/ceiling = that preset; anything hand-edited = null (no pill highlighted).

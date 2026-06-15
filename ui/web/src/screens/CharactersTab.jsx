@@ -43,6 +43,7 @@ import {
 import { useChapterClip } from '../hooks/useChapterClip.js';
 import MechanicalPanel from './MechanicalPanel.jsx';
 import PassagesPanel, { EnvelopeRibbon } from './PassagesPanel.jsx';
+import ArcSlider from '../components/ArcSlider.jsx';
 import {
   PASSAGE_PRESETS, PASSAGE_SHAPES, passagesForPreset, activePassagePreset,
   passageInfoForChapter, arcFromPassages, passagesFromArc,
@@ -943,28 +944,6 @@ function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPi
         )}
       </div>
     </div>
-  );
-}
-
-// One labeled 0–100% slider for the arc editor. Value is 0..1; the readout
-// shows a percentage.
-function ArcSlider({ label, hint, value, accent, onChange }) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
-                       textTransform: 'uppercase', color: 'var(--text-dim)' }}>{label}</span>
-        <span className="mono" style={{ fontSize: 10, color: 'var(--text-soft)', marginLeft: 'auto' }}>
-          {Math.round((value ?? 0) * 100)}%
-        </span>
-      </span>
-      <input
-        type="range" min={0} max={100} value={Math.round((value ?? 0) * 100)}
-        onChange={(e) => onChange(Number(e.target.value) / 100)}
-        title={hint}
-        style={{ width: '100%', accentColor: accent, cursor: 'pointer' }}
-      />
-    </label>
   );
 }
 

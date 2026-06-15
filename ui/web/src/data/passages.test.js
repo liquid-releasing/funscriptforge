@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   PASSAGE_PRESETS, passagesForPreset, presetSamples, activePassagePreset,
   shapeFactor, envelopeFactor, resolvePassageSpans, passageFactorAt, passageInfoForChapter,
-  arcFromPassages, passagesFromArc,
+  arcFromPassages, passagesFromArc, arcShapeId,
 } from './passages.js';
 
 // Three equal 10s chapters (camelCase, the Channels shape).
@@ -126,6 +126,14 @@ describe('arc ⇄ passages (the 4-slider editor model)', () => {
     const ps = passagesFromArc({ floor: 0.8, ceiling: 0.4, risePoint: 0.9, fallPoint: 0.2 }, 3);
     expect(ps[0].ceiling).toBeGreaterThanOrEqual(ps[0].floor);
     expect(ps[0].fallPoint).toBeGreaterThanOrEqual(ps[0].risePoint);
+  });
+
+  it('arcShapeId infers the shape a passage reads as (for the per-span glyph)', () => {
+    expect(arcShapeId({ floor: 0.3, ceiling: 1.0, risePoint: 1.0, fallPoint: 1.0 })).toBe('build');
+    expect(arcShapeId({ floor: 0.3, ceiling: 1.0, risePoint: 0.0, fallPoint: 0.0 })).toBe('release');
+    expect(arcShapeId({ floor: 0.3, ceiling: 1.0, risePoint: 0.4, fallPoint: 0.6 })).toBe('swell');
+    expect(arcShapeId({ floor: 0.3, ceiling: 1.0, risePoint: 0.0, fallPoint: 1.0 })).toBe('sustain');
+    expect(arcShapeId({ floor: 1.0, ceiling: 1.0, risePoint: 0.0, fallPoint: 1.0 })).toBe('steady');
   });
 });
 
