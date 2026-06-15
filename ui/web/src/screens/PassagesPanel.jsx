@@ -186,10 +186,11 @@ function ChapterSelect({ n, value, onChange }) {
 
 // SVG ribbon: equal-width chapter cells with boundary ticks, and each passage's
 // envelope drawn as a filled polyline over the cells it spans (top = 100%).
-function EnvelopeRibbon({ chapters, passages }) {
+// Exported so the persistent Channels arc lane reuses the exact same drawing.
+export function EnvelopeRibbon({ chapters, passages, height = 64 }) {
   const n = chapters.length;
   const W = 1000;
-  const H = 64;
+  const H = height;
   const cellW = W / n;
   const yFor = (factor) => H - 4 - factor * (H - 12);  // 4px pad top/bottom
 

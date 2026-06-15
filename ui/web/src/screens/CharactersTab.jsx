@@ -42,7 +42,8 @@ import {
 } from '../api/forge.js';
 import { useChapterClip } from '../hooks/useChapterClip.js';
 import MechanicalPanel from './MechanicalPanel.jsx';
-import PassagesPanel from './PassagesPanel.jsx';
+import PassagesPanel, { EnvelopeRibbon } from './PassagesPanel.jsx';
+import { PASSAGE_PRESETS, passagesForPreset, activePassagePreset } from '../data/passages.js';
 import { activeAxes, DEFAULT_STYLE } from '../data/multiaxis.js';
 
 // Merge the canonical Python catalog (id / label / description / sliders)
@@ -656,6 +657,23 @@ export default function CharactersTab({
         </>
       )}
 
+      {/* Persistent passage-arc lane — the scene-scale "how much" arc, always
+          visible between the viewer and the per-channel editors (the user
+          wanted Passages surfaced as a ROW with presets, not hidden behind a
+          strip tab). One preset sets the overall direction for e-stim /
+          mechanical / body together; the chapter-aligned ribbon mirrors the
+          ChapterRibbon above. "Fine-tune" opens the full Passages editor for
+          per-span shaping. Hidden while the Passages editor itself is open
+          (the full panel carries its own preset lane). */}
+      {chapters.length > 0 && editorMode !== 'passages' && (
+        <PassageArcLane
+          chapters={chapters}
+          passages={passages}
+          onPick={(id) => commitPassages(passagesForPreset(id, chapters.length))}
+          onFineTune={() => setEditorMode('passages')}
+        />
+      )}
+
       {/* Editor strip — picks which channel editor runs below. The
           chapter selected above is the shared scope for all of them. */}
       <EditorStrip
@@ -736,6 +754,79 @@ export default function CharactersTab({
         )}
       </div>
       )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// PassageArcLane — the persistent, preset-driven "how much" arc row.
+// Sits between the viewer and the per-channel editors so the scene-scale
+// arc is always visible (the user asked for Passages as a ROW with
+// presets, not buried in a strip tab). Preset pills set ONE full-run arc
+// that steers e-stim / mechanical / body together; the chapter-aligned
+// EnvelopeRibbon (same component the full editor uses) previews it under
+// the chapters. "Fine-tune" jumps to the full Passages editor for
+// per-span Build/Release/Swell shaping.
+// ──────────────────────────────────────────────────────────────
+function PassageArcLane({ chapters, passages, onPick, onFineTune }) {
+  const activeId = activePassagePreset(passages);
+  const ACCENT = '#ff8c42';
+  return (
+    <div style={{
+      marginTop: 12,
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderRadius: 8, overflow: 'hidden',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '8px 12px', flexWrap: 'wrap',
+      }}>
+        <span style={{
+          fontSize: 10, fontWeight: 800, letterSpacing: '0.06em',
+          textTransform: 'uppercase', color: ACCENT,
+        }}>
+          Passage arc
+        </span>
+        <span style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>
+          overall direction · e-stim · mechanical · body
+        </span>
+        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
+          {PASSAGE_PRESETS.map((pr) => {
+            const active = pr.id === activeId;
+            return (
+              <button
+                key={pr.id}
+                onClick={() => onPick(pr.id)}
+                title={pr.hint}
+                style={{
+                  fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
+                  padding: '3px 10px', borderRadius: 999, cursor: 'pointer',
+                  background: active ? ACCENT : 'var(--surface-2)',
+                  border: `1px solid ${ACCENT}`,
+                  color: active ? '#0e1117' : ACCENT,
+                }}
+              >
+                {pr.label}
+              </button>
+            );
+          })}
+          <button
+            onClick={onFineTune}
+            title="Open the full Passages editor for per-span shaping"
+            style={{
+              fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
+              padding: '3px 10px', borderRadius: 999, cursor: 'pointer',
+              background: 'transparent', border: '1px solid var(--border)',
+              color: 'var(--text-dim)',
+            }}
+          >
+            Fine-tune →
+          </button>
+        </div>
+      </div>
+      <div style={{ borderTop: '1px solid var(--border)' }}>
+        <EnvelopeRibbon chapters={chapters} passages={passages} height={52} />
+      </div>
     </div>
   );
 }
