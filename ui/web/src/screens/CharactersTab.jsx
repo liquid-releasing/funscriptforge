@@ -851,7 +851,7 @@ function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPi
           fontSize: 10, fontWeight: 800, letterSpacing: '0.06em',
           textTransform: 'uppercase', color: ACCENT,
         }}>
-          Passage arc
+          Intensity arc
         </span>
         <span style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>
           overall direction · e-stim · mechanical · body
