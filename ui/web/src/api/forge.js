@@ -15,6 +15,23 @@ export function isTauri() {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
 
+// Analyzer (algorithm) version — MIRROR of videoflow's
+// `sidecar.py ANALYZER_VERSION`. Bump BOTH together when the analyze
+// algorithm changes such that existing chapters.json sidecars should be
+// regenerated. load_project surfaces the stamped value as
+// `project.analyzerVersion`; the auto-analyze gate re-runs when it's present
+// AND differs from this constant. A MISSING stamp (legacy projects analyzed
+// before the stamp existed) is grandfathered — NOT re-ground — so a rollout
+// never re-grinds everyone; only an explicit version mismatch forces a re-run.
+export const ANALYZER_VERSION = '1';
+
+// True when an already-analyzed project's stamped analyzer version is stale
+// vs. the current build (present AND different). Missing → false (legacy
+// projects are grandfathered, not re-analyzed).
+export function analyzerVersionStale(stampedVersion) {
+  return stampedVersion != null && stampedVersion !== ANALYZER_VERSION;
+}
+
 // Set VITE_API_BASE_URL at build time to point the web build at a Python
 // server (FastAPI/uvicorn wrapper around the funscriptforge CLI). When
 // unset, browser mode falls through to mocks.

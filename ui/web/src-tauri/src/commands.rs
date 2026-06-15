@@ -177,6 +177,10 @@ pub struct LoadedProject {
     // full chapter list lives in `chapter_list` and drives the Chapters tab.
     chapters: u32,
     chapter_list: Vec<ChapterRecord>,
+    // Analyzer (algorithm) version stamped into chapters.json. None when the
+    // sidecar is absent or predates the stamp. The JS auto-analyze gate
+    // compares this to its ANALYZER_VERSION mirror and re-runs on mismatch.
+    analyzer_version: Option<String>,
     edited: String,
     // True when a `<stem>.work.funscript` is present — the loaded actions
     // are edited working state, not the pristine original. Drives the
@@ -280,18 +284,34 @@ pub async fn load_project(path: String) -> Result<LoadedProject, String> {
     let forge = forge_dir(Path::new(&path));
     let mut sidecars_found = Vec::new();
     let mut ffmeta: Option<serde_json::Value> = None;
+    // The analyzer (algorithm) version stamped into chapters.json by
+    // videoflow's analyze pass (sidecar.py ANALYZER_VERSION). Surfaced so the
+    // JS auto-analyze gate can re-run when we ship a newer analyzer. None when
+    // the sidecar is absent OR predates the stamp (legacy = grandfathered: the
+    // JS side does NOT re-grind a missing version, only an explicit mismatch).
+    let mut analyzer_version: Option<String> = None;
     for suffix in ["ffmeta.json", "chapters.json"] {
         let p = forge.join(format!("{}.{}", stem_name, suffix));
         if tokio::fs::metadata(&p).await.is_ok() {
             let p_str = p.to_string_lossy().into_owned();
             sidecars_found.push(p_str.clone());
-            // ffmeta.json: parse it through. Other sidecars (chapters.json)
-            // are consumed by their dedicated paths; we just record presence.
+            // ffmeta.json: parse it through. chapters.json: we read just the
+            // top-level analyzer_version stamp (the chapter list itself comes
+            // via the CLI resolver below); other fields stay untouched.
             if suffix == "ffmeta.json" {
                 if let Ok(raw) = tokio::fs::read_to_string(&p).await {
                     match serde_json::from_str::<serde_json::Value>(&raw) {
                         Ok(v)  => ffmeta = Some(v),
                         Err(e) => eprintln!("ffmeta.json parse error at {}: {}", p_str, e),
+                    }
+                }
+            } else if suffix == "chapters.json" {
+                if let Ok(raw) = tokio::fs::read_to_string(&p).await {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                        analyzer_version = v
+                            .get("analyzer_version")
+                            .and_then(|x| x.as_str())
+                            .map(|s| s.to_string());
                     }
                 }
             }
@@ -337,6 +357,7 @@ pub async fn load_project(path: String) -> Result<LoadedProject, String> {
         phrases: 0,  // populated when we parse phrase sidecars
         chapters: chapter_count,
         chapter_list,
+        analyzer_version,
         edited: "just now".to_string(),
         has_working_edits,
         actions,

@@ -52,6 +52,7 @@ import {
 import {
   analyzeChaptersWithVideoflow,
   analyzePhrases,
+  analyzerVersionStale,
   countChapterClips,
   isTauri,
   loadAutoChapterStanzas,
@@ -299,12 +300,16 @@ export default function AnalysisTab({
     };
   }, [refreshAudioSidecars, project?.path, onChaptersChange]);
 
-  // Fire the analysis when the project lands without chapters. The
-  // chapterList check is the cheap "is this analyzed?" probe — Rust's
-  // load_project hydrates it from chapters.json if present.
+  // Fire the analysis when the project lands without chapters — OR when the
+  // chapters on disk were produced by a STALE analyzer version (we've since
+  // shipped a better algorithm). The chapterList check is the cheap "is this
+  // analyzed?" probe; the version check is the "is it still current?" probe.
+  // load_project surfaces the stamped version as project.analyzerVersion; a
+  // MISSING stamp (legacy pre-stamp projects) is grandfathered, not re-ground.
   useEffect(() => {
     if (!projectExists || isSample) return;
-    if (chapterList?.length) {
+    const versionStale = analyzerVersionStale(project?.analyzerVersion);
+    if (chapterList?.length && !versionStale) {
       // Already analyzed (chapters on disk) → the pipeline won't re-run, so
       // no chapters_sidecar event fires to populate phrases. Load the phrases
       // sidecar, or COMPUTE it if missing (e.g. after adopting a generated
@@ -326,7 +331,7 @@ export default function AnalysisTab({
     if (analyzing) return;
     triggerAnalysis();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.path]);
+  }, [project?.path, project?.analyzerVersion]);
 
   // Re-analyze flow. Step 1 (Re-analyze button) flips confirmingReanalyze
   // on — Header swaps in a two-button inline confirm. Step 2 (Confirm
