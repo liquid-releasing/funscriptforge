@@ -72,7 +72,6 @@ export function useChapterClip(mediaPath, chapter) {
         // Best-effort; never blocks playback.
         prewarmMediaRange(mediaPath, startMs, endMs, probe.duration_ms || 0).catch(() => {});
         if (cancelled) return;
-        console.log('useChapterClip: DIRECT-PLAY (single-file streaming, no clip) — chapter', id, `[${probe.codec_name}/${probe.pix_fmt}/${probe.fps_mode}]`);
         setClip({ url: toMediaUrl(mediaPath), offsetMs: 0, chapterId: id, direct: true });
         setLoading(false);
         return;
