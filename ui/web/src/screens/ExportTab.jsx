@@ -19,10 +19,18 @@
 // Channels), events, authoring sidecars, thumbnails, and a manifest. It only
 // writes new files — nothing destructive.
 
-import { useEffect, useMemo, useState } from 'react';
-import { Pill, Button, Icon } from 'forgemoment';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pill, Button, Icon, TrackStack } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { exportWrite, revealPath, polishRead, openInForgePlayer, isTauri, pickFolder } from '../api/forge.js';
+import { svgElementToPngDataUrl } from '../lib/laneSnapshot.js';
+
+// Width/height the hidden export lanes render at — wide enough that the
+// snapshot reads as a full-track overview (matches the player's lanes), not so
+// wide it overflows the browser canvas cap. Each lane is captured at 2× for
+// crispness in the bundle.
+const PREVIEW_W = 1280;
+const PREVIEW_LANE_H = { funscript: 150, audio: 90, spectro: 90 };
 
 // The Polish stations that are mechanical strokers (ride under the Strokers
 // target). estim3p is the e-stim flagship and lives in its own target.
@@ -31,7 +39,10 @@ const STROKER_STATIONS = ['handy', 'tcode', 'lovense', 'vacuglide'];
 // ──────────────────────────────────────────────────────────────
 // ExportTab
 // ──────────────────────────────────────────────────────────────
-export default function ExportTab({ project, setBusy = () => {}, setAppError = () => {} }) {
+export default function ExportTab({
+  project, trackPeaks = null, trackSpectrogram = null,
+  setBusy = () => {}, setAppError = () => {},
+}) {
   const projectStem = useMemo(() => {
     if (!project?.path) return 'project';
     const file = String(project.path).split(/[/\\]/).pop() || 'project';
@@ -163,6 +174,44 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
 
   const shapeLabel = (s) => (s === 'forge' ? 'the .forge bundle' : 'the loose folder');
 
+  // Hidden full-track lanes — the player's EXACT TrackStack render, captured to
+  // PNG so the bundle's Preview images can't drift from what the editor shows.
+  const funscriptLaneRef = useRef(null);
+  const audioLaneRef = useRef(null);
+  const spectroLaneRef = useRef(null);
+  const previewActions = useMemo(
+    () => (Array.isArray(project?.actions) ? project.actions : []),
+    [project?.actions],
+  );
+  const previewDurationMs = useMemo(() => {
+    if (project?.durationMs) return project.durationMs;
+    const last = previewActions.length ? previewActions[previewActions.length - 1].at : 0;
+    return Math.max(1, last);
+  }, [project?.durationMs, previewActions]);
+  const previewScope = useMemo(
+    () => ({ start: 0, end: previewDurationMs }),
+    [previewDurationMs],
+  );
+  const hasWaveform = !!(trackPeaks?.peaks?.length);
+  const hasSpectro = !!(trackSpectrogram?.cells?.length && trackSpectrogram?.nFrames);
+
+  // Snapshot each present lane's <svg> to a PNG data URL. Returns an object
+  // keyed by export role; absent lanes are simply omitted (the CLI falls back
+  // to its matplotlib render for any role we don't supply).
+  const capturePreviews = async () => {
+    const svgOf = (ref) => ref.current?.querySelector('svg') || null;
+    const out = {};
+    const [funscript, audio, spectrogram] = await Promise.all([
+      previewActions.length ? svgElementToPngDataUrl(svgOf(funscriptLaneRef)) : Promise.resolve(null),
+      hasWaveform ? svgElementToPngDataUrl(svgOf(audioLaneRef)) : Promise.resolve(null),
+      hasSpectro ? svgElementToPngDataUrl(svgOf(spectroLaneRef)) : Promise.resolve(null),
+    ]);
+    if (funscript) out.funscript = funscript;
+    if (audio) out.audio = audio;
+    if (spectrogram) out.spectrogram = spectrogram;
+    return out;
+  };
+
   const doWrite = async () => {
     if (!canWrite || !modes.length) return;
     setWriting(true); setWriteError(null); setResults(null);
@@ -181,6 +230,10 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
         });
       }
     } catch { /* listener is best-effort; the export still runs */ }
+    // Snapshot the player's lanes to PNGs ONCE (same images for every shape);
+    // best-effort, a capture failure just lets the CLI fall back per role.
+    let previews = {};
+    try { previews = await capturePreviews(); } catch { previews = {}; }
     try {
       // One write per selected shape (the CLI takes a single --mode). Sequential
       // so the footer progress reads cleanly; each lands as its own snapshot.
@@ -188,6 +241,7 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
       for (const m of modes) {
         const res = await exportWrite(path, {
           mode: m,
+          previews,
           // Only send --out when the user picked a folder; otherwise let the CLI
           // use its default (next to the source), which equals projectFolder.
           out: outDir ? pathForShape(m) : null,
@@ -234,6 +288,41 @@ export default function ExportTab({ project, setBusy = () => {}, setAppError = (
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '22px 28px', background: 'var(--bg)' }}>
+      {/* Hidden full-track lanes — the player's EXACT TrackStack render, kept
+          in the DOM (offscreen, NOT display:none so the ResizeObserver sizes
+          them) so doWrite can snapshot each <svg> to a Preview PNG. One lane
+          each, full-track scope, no baton. */}
+      <div aria-hidden style={{ position: 'absolute', left: -99999, top: 0, width: PREVIEW_W, pointerEvents: 'none' }}>
+        <div ref={funscriptLaneRef} style={{ width: PREVIEW_W }}>
+          <TrackStack
+            scope={previewScope}
+            actions={previewActions}
+            lanes={['funscript']}
+            funscriptColorMode="velocity"
+            baton="none"
+            laneHeights={{ funscript: PREVIEW_LANE_H.funscript }}
+          />
+        </div>
+        <div ref={audioLaneRef} style={{ width: PREVIEW_W }}>
+          <TrackStack
+            scope={previewScope}
+            waveform={hasWaveform ? trackPeaks : null}
+            lanes={['audio']}
+            baton="none"
+            laneHeights={{ audio: PREVIEW_LANE_H.audio }}
+          />
+        </div>
+        <div ref={spectroLaneRef} style={{ width: PREVIEW_W }}>
+          <TrackStack
+            scope={previewScope}
+            spectrogram={hasSpectro ? trackSpectrogram : null}
+            lanes={['spectro']}
+            baton="none"
+            laneHeights={{ spectro: PREVIEW_LANE_H.spectro }}
+          />
+        </div>
+      </div>
+
       <Header stem={stem} stationCount={stampedStations.length} readyCount={readyCount} total={targets.length} />
 
       <ExportPreview project={project} stem={stem} />

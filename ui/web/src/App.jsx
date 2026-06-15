@@ -1164,6 +1164,8 @@ export default function App() {
           <ExportTab
             project={typeof openedProject === 'object' ? openedProject : null}
             selectedDevices={selectedDevices}
+            trackPeaks={trackPeaks}
+            trackSpectrogram={trackSpectrogram}
             setBusy={setBusy}
             setAppError={setAppError}
           />

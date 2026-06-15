@@ -2356,6 +2356,48 @@ pub async fn polish_write(
     serde_json::from_str(&out).map_err(|e| format!("parse polish-write: {}", e))
 }
 
+// Decode a standard-alphabet base64 string (no padding-strictness) to bytes.
+// Dependency-free so we don't add a crate just to unpack a data URL. Returns
+// None on any invalid character so a malformed preview is simply skipped.
+fn decode_base64(s: &str) -> Option<Vec<u8>> {
+    fn val(c: u8) -> Option<u8> {
+        match c {
+            b'A'..=b'Z' => Some(c - b'A'),
+            b'a'..=b'z' => Some(c - b'a' + 26),
+            b'0'..=b'9' => Some(c - b'0' + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+    let mut out = Vec::with_capacity(s.len() / 4 * 3);
+    let mut buf = 0u32;
+    let mut bits = 0u32;
+    for &c in s.as_bytes() {
+        if c == b'=' || c == b'\n' || c == b'\r' || c == b' ' { continue; }
+        let v = val(c)? as u32;
+        buf = (buf << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+        }
+    }
+    Some(out)
+}
+
+// Write a PNG data URL ("data:image/png;base64,….") to a temp file; returns its
+// path. None on a malformed URL or write failure.
+async fn write_preview_temp(role: &str, data_url: &str, nanos: u128) -> Option<String> {
+    let b64 = data_url.split(',').nth(1)?;
+    let bytes = decode_base64(b64)?;
+    if bytes.is_empty() { return None; }
+    let mut tmp = std::env::temp_dir();
+    tmp.push(format!("ff_preview_{}_{}.png", role, nanos));
+    tokio::fs::write(&tmp, &bytes).await.ok()?;
+    Some(tmp.to_string_lossy().into_owned())
+}
+
 /// Export — collect the project's outputs into a loose folder or a `.forge`
 /// zip. Reads the EFFECTIVE funscript; packs the main motion track, Polish's
 /// stamped station files, a fresh events.yml, authoring sidecars, and a
@@ -2374,6 +2416,10 @@ pub async fn export_write(
     stim_mp3: bool,
     include_media: bool,
     exclude: Option<Vec<String>>,
+    // role -> PNG data URL, snapshotted from the player's lanes. Written to
+    // temp files + passed as --preview-<role> so the bundle ships the viewer's
+    // own pixels instead of the matplotlib stand-ins.
+    previews: Option<std::collections::HashMap<String, String>>,
 ) -> Result<serde_json::Value, String> {
     // Pass the ORIGINAL path as the positional (owns stem / sidecars / the
     // character + style assignments the export generators read); hand the
@@ -2417,11 +2463,33 @@ pub async fn export_write(
             args.push(ex.join(","));
         }
     }
+    // App-rendered Preview PNGs → temp files → --preview-<role> args. Each role
+    // the app supplies overrides the CLI's matplotlib render for that image.
+    let mut preview_tmps: Vec<String> = Vec::new();
+    if let Some(pv) = previews {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        for role in ["funscript", "audio", "spectrogram"] {
+            if let Some(data_url) = pv.get(role) {
+                if let Some(p) = write_preview_temp(role, data_url, nanos).await {
+                    args.push(format!("--preview-{}", role));
+                    args.push(p.clone());
+                    preview_tmps.push(p);
+                }
+            }
+        }
+    }
     let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     // Stream per-step progress (motion → stations → thumbnails → audio →
     // packaging) to the footer; export can be slow when it generates unstamped
     // stations or renders stim audio, and used to sit on a static "Writing…".
-    let out = run_cli_with_progress(&app, "ff:progress", &argv).await?;
+    let out = run_cli_with_progress(&app, "ff:progress", &argv).await;
+    for p in &preview_tmps {
+        let _ = tokio::fs::remove_file(p).await;
+    }
+    let out = out?;
     serde_json::from_str(&out).map_err(|e| format!("parse export result: {}", e))
 }
 

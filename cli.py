@@ -1826,17 +1826,32 @@ def cmd_export(args):
             _emit_progress("Export — rendering thumbnails…")
             thumbs = staging / "thumbnails"
             thumbs.mkdir(parents=True, exist_ok=True)
-            # Funscript core image (always). Plus the audio + spectrogram images
-            # rendered MEDIA-FREE from the cached sidecars (work even for a lean
-            # bundle with no source video) — the three previews the user wants.
-            if _render_waveform_png(actions, thumbs / "waveform.png"):
-                artifacts.append({"path": "thumbnails/waveform.png", "kind": "thumbnail", "role": "funscript"})
+            # The three previews are the funscript-player's EXACT lane renders
+            # when the app supplies them (--preview-*), packed verbatim so they
+            # can't drift from the editor. Each role independently falls back to
+            # the matplotlib render (headless/CLI exports, or a lane with no
+            # data). `_pack_preview` copies an app PNG or runs the fallback.
+            def _pack_preview(app_png, role, out_name, fallback):
+                dest = thumbs / out_name
+                src = Path(app_png) if app_png else None
+                if src and src.exists():
+                    try:
+                        shutil.copy2(src, dest)
+                        artifacts.append({"path": f"thumbnails/{out_name}", "kind": "thumbnail", "role": role})
+                        return
+                    except OSError:
+                        pass  # fall through to the matplotlib render
+                if fallback():
+                    artifacts.append({"path": f"thumbnails/{out_name}", "kind": "thumbnail", "role": role})
+
             _aj = fdir / f"{stem}.audio.json"
-            if _aj.exists() and _render_audio_png(_aj, thumbs / "audio.png"):
-                artifacts.append({"path": "thumbnails/audio.png", "kind": "thumbnail", "role": "audio"})
             _sj = fdir / f"{stem}.spectrogram.json"
-            if _sj.exists() and _render_spectrogram_png(_sj, thumbs / "spectrogram.png"):
-                artifacts.append({"path": "thumbnails/spectrogram.png", "kind": "thumbnail", "role": "spectrogram"})
+            _pack_preview(args.preview_funscript, "funscript", "waveform.png",
+                          lambda: _render_waveform_png(actions, thumbs / "waveform.png"))
+            _pack_preview(args.preview_audio, "audio", "audio.png",
+                          lambda: _aj.exists() and _render_audio_png(_aj, thumbs / "audio.png"))
+            _pack_preview(args.preview_spectrogram, "spectrogram", "spectrogram.png",
+                          lambda: _sj.exists() and _render_spectrogram_png(_sj, thumbs / "spectrogram.png"))
             if args.media and Path(args.media).exists():
                 chap_list = []
                 cj = fdir / f"{stem}.chapters.json"
@@ -4369,6 +4384,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument("--beat-mp3", action=argparse.BooleanOptionalAction, default=True, help="Render audio/beat.mp3 (metronome click track) from the beatmap sidecar. On by default; --no-beat-mp3 to skip.")
     p_exp.add_argument("--include-media", action="store_true", help="Embed the source video/audio in the bundle for a standalone handoff (big). Default: lean bundle + manifest relink key.")
     p_exp.add_argument("--exclude", metavar="IDS", default="", help="Comma-separated target groups to leave OUT: strokers,estim,authoring,preview. Default: include all.")
+    # Pre-rendered Preview PNGs from the app (the funscript player's EXACT lane
+    # render). When supplied, these are packed verbatim instead of the
+    # matplotlib stand-ins, so the bundle's previews match the editor. The
+    # matplotlib renderers remain the fallback for headless/CLI exports.
+    p_exp.add_argument("--preview-funscript", metavar="PNG", default=None, help="Pre-rendered funscript preview PNG (overrides the matplotlib render).")
+    p_exp.add_argument("--preview-audio", metavar="PNG", default=None, help="Pre-rendered audio-waveform preview PNG.")
+    p_exp.add_argument("--preview-spectrogram", metavar="PNG", default=None, help="Pre-rendered spectrogram preview PNG.")
 
     # --- import (unpack a .forge bundle into a re-editable project) ---
     p_imp = sub.add_parser(
