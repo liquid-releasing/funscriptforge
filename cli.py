@@ -967,7 +967,13 @@ def _collect_events_yaml(target) -> str | None:
 
 def _render_waveform_png(actions: list, out_path: Path, width: int = 480, height: int = 140) -> bool:
     """Render a compact MiniWave-style funscript curve PNG (library-card image).
-    Pure matplotlib (Agg backend, headless). Returns False on any failure."""
+    Pure matplotlib (Agg backend, headless). Returns False on any failure.
+
+    DEPRECATED (2026-06-15): scheduled for removal. Export previews must be
+    rendered by the funscript video player's EXACT canvas code (forgemoment
+    funscript chart), not this separate matplotlib path, so they can't drift
+    from what the editor shows. Do not extend. See project_funscriptforge_pending
+    "Export — Preview images should be COPIES OF THE APP'S VIDEO-EDITOR VIEWS"."""
     if not actions:
         return False
     try:
@@ -998,7 +1004,12 @@ def _render_waveform_png(actions: list, out_path: Path, width: int = 480, height
 
 def _render_audio_png(audio_json_path: Path, out_path: Path, width: int = 480, height: int = 140) -> bool:
     """Render the audio peak envelope (from `<stem>.audio.json`) as a PNG.
-    Media-free — reads the cached RMS-per-hop peaks sidecar. False on failure."""
+    Media-free — reads the cached RMS-per-hop peaks sidecar. False on failure.
+
+    DEPRECATED (2026-06-15): scheduled for removal — to be replaced by the
+    funscript video player's EXACT WaveformCanvas render (crude unipolar
+    matplotlib envelope here vs the player's real waveform). Do not extend.
+    See project_funscriptforge_pending (export-previews-from-app note)."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1030,7 +1041,11 @@ def _render_audio_png(audio_json_path: Path, out_path: Path, width: int = 480, h
 
 def _render_spectrogram_png(spectro_json_path: Path, out_path: Path, width: int = 480, height: int = 140) -> bool:
     """Render the mel spectrogram (from `<stem>.spectrogram.json` int8 cells) as
-    a magma PNG, low frequencies at the bottom. Media-free. False on failure."""
+    a magma PNG, low frequencies at the bottom. Media-free. False on failure.
+
+    DEPRECATED (2026-06-15): scheduled for removal — to be replaced by the
+    funscript video player's EXACT SpectrogramCanvas render. Do not extend.
+    See project_funscriptforge_pending (export-previews-from-app note)."""
     try:
         import base64
         import numpy as np
