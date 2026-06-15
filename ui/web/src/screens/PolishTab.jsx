@@ -68,6 +68,7 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
   const [stampError, setStampError] = useState({}); // id -> message
   const [channelData, setChannelData] = useState(null);   // {station, window, channels} for e-stim preview
   const [channelsLoading, setChannelsLoading] = useState(false);
+  const [showPreviewInfo, setShowPreviewInfo] = useState(false);  // (i) popover by the heading
 
   const focusedDevice = POLISH_DEVICES.find((d) => d.id === focused) || POLISH_DEVICES[0];
   const ember = focusedDevice.ember;
@@ -289,6 +290,40 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }}>Polish</h1>
         <span style={{ fontSize: 13, color: '#9ba3c4' }}>
           One pipeline. Each station forges a device-ready file from your Channels output.
+        </span>
+        {/* (i) — explains what the previews window vs. what Stamp forges */}
+        <span style={{ position: 'relative', alignSelf: 'center', display: 'inline-flex' }}>
+          <button
+            onClick={() => setShowPreviewInfo((v) => !v)}
+            title="About the preview windows"
+            aria-label="About the preview windows"
+            style={{
+              width: 18, height: 18, borderRadius: 9, cursor: 'pointer',
+              border: `1px solid ${showPreviewInfo ? '#9ba3c4' : '#3a3f5c'}`,
+              background: showPreviewInfo ? '#2d3148' : 'transparent',
+              color: '#9ba3c4', fontSize: 11, fontWeight: 700, lineHeight: 1,
+              fontStyle: 'italic', fontFamily: 'Georgia, "Times New Roman", serif',
+              display: 'grid', placeItems: 'center', padding: 0,
+            }}
+          >
+            i
+          </button>
+          {showPreviewInfo && (
+            <div style={{
+              position: 'absolute', top: 24, left: 0, zIndex: 30, width: 340,
+              padding: '10px 12px', background: '#1a1d27', border: '1px solid #3a3f5c',
+              borderRadius: 8, fontSize: 11.5, lineHeight: 1.55, color: '#c8cce0',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.55)', fontWeight: 400, fontStyle: 'normal',
+            }}>
+              <strong style={{ color: '#fafafa' }}>What the previews show</strong>
+              <div style={{ marginTop: 5 }}>
+                The conveyor <strong>cards</strong> show the <strong>whole funscript</strong>, sampled
+                to ~240 points so it fits the thumbnail. The <strong>bench</strong> preview zooms the
+                first ~{Math.round(windowLen / 1000)} seconds for knob precision.
+                <strong> Stamp</strong> forges the whole track at full resolution.
+              </div>
+            </div>
+          )}
         </span>
         <span style={{ flex: 1 }} />
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#6b7390' }}>
