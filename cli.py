@@ -1712,16 +1712,30 @@ def cmd_export(args):
         # delivery format (smaller). A full-length WAV is large (~10 MB/min); the
         # channel funscripts remain the primary e-stim artifact.
         stim_formats = (["wav"] if args.stim_wav else []) + (["mp3"] if args.stim_mp3 else [])
-        if inc_estim and stim_formats:
+        if inc_estim and stim_formats and duration_ms > 0:
             est_dir = staging / "stations" / "estim3p"
-            alpha, beta = est_dir / f"{stem}.alpha.funscript", est_dir / f"{stem}.beta.funscript"
-            if alpha.exists() and beta.exists() and duration_ms > 0:
-                adir = staging / "audio"
+            adir = staging / "audio"
+            # Each phase PAIR renders to its own stereo control signal. The
+            # NORMAL set (alpha/beta) and the PROSTATE set (alpha-prostate/
+            # beta-prostate) are independent 2-channel renders → two audio
+            # files (stim.* + stim-prostate.*), so someone with a prostate
+            # electrode gets its own track, not just the normal mix. The
+            # prostate render is skipped when those channels weren't generated.
+            stim_pairs = [
+                ("stim", "estim", "stim",
+                 f"{stem}.alpha.funscript", f"{stem}.beta.funscript"),
+                ("stim-prostate", "estim-prostate", "prostate stim",
+                 f"{stem}.alpha-prostate.funscript", f"{stem}.beta-prostate.funscript"),
+            ]
+            for base, role, label, a_name, b_name in stim_pairs:
+                a, b = est_dir / a_name, est_dir / b_name
+                if not (a.exists() and b.exists()):
+                    continue
                 adir.mkdir(parents=True, exist_ok=True)
                 for fmt in stim_formats:
-                    _emit_progress(f"Export — rendering stim audio ({fmt.upper()})…")
-                    if _render_stim_audio(alpha, beta, adir / f"stim.{fmt}", duration_ms / 1000.0, fmt=fmt):
-                        artifacts.append({"path": f"audio/stim.{fmt}", "kind": "audio", "role": "estim", "format": fmt})
+                    _emit_progress(f"Export — rendering {label} audio ({fmt.upper()})…")
+                    if _render_stim_audio(a, b, adir / f"{base}.{fmt}", duration_ms / 1000.0, fmt=fmt):
+                        artifacts.append({"path": f"audio/{base}.{fmt}", "kind": "audio", "role": role, "format": fmt})
 
         # 6b. Source media — provenance is ALWAYS recorded (relink key); the
         # bytes ride only when --include-media is set (opt-in, big). Lean default
