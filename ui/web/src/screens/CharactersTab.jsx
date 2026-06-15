@@ -35,6 +35,7 @@ import {
   ESTIM_CHANNELS,
   seedCharacterAssignments,
   backfillCharacterAssignments,
+  characterForPosition,
   defaultParamsFor,
 } from '../data/characters.js';
 import {
@@ -49,7 +50,7 @@ import {
   PASSAGE_PRESETS, PASSAGE_SHAPES, passagesForPreset, activePassagePreset,
   passageInfoForChapter, arcFromPassages, passagesFromArc,
 } from '../data/passages.js';
-import { activeAxes, DEFAULT_STYLE } from '../data/multiaxis.js';
+import { activeAxes, DEFAULT_STYLE, mechStyleForPosition } from '../data/multiaxis.js';
 
 // Merge the canonical Python catalog (id / label / description / sliders)
 // with the JS-side UI overlay (color / tagline / devices) by id. Same
@@ -443,6 +444,18 @@ export default function CharactersTab({
     () => chapters.findIndex((c) => c.id === activeChapterId),
     [chapters, activeChapterId],
   );
+
+  // The journey-arc default for THIS chapter's position — what the auto-seed
+  // would assign. Exposed as an explicit "Use default" button under each grid
+  // so the user can snap a chapter (or one whose sidecar saved blank) back to
+  // the recommended character / mechanical style without hunting for it.
+  const safeIdx = Math.max(0, activeChapterIdx);
+  const n = chapters.length;
+  const defaultCharId = n ? characterForPosition(safeIdx, n) : null;
+  const defaultMechId = n ? mechStyleForPosition(safeIdx, n) : DEFAULT_STYLE;
+  const defaultCharLabel = defaultCharId ? (findChar(defaultCharId)?.label ?? null) : null;
+  const useDefaultCharacter = () => { if (defaultCharId) setStagedCharacter(defaultCharId); };
+  const useDefaultMech = () => setStagedMechStyle(defaultMechId);
   const passageInfo = useMemo(
     () => passageInfoForChapter(passages, chapters, activeChapterIdx),
     [passages, chapters, activeChapterIdx],
@@ -773,6 +786,8 @@ export default function CharactersTab({
             isLastChapter={chapters.findIndex((c) => c.id === activeChapterId) >= chapters.length - 1}
             onAccept={acceptMech}
             onReset={resetMech}
+            onUseDefault={useDefaultMech}
+            defaultStyleId={defaultMechId}
           />
         ) : (
           // Right column: the character selection, with the 9-channel preview
@@ -790,6 +805,8 @@ export default function CharactersTab({
               onParamChange={setStagedParam}
               onAccept={acceptChange}
               onReset={resetStaged}
+              onUseDefault={useDefaultCharacter}
+              defaultLabel={defaultCharLabel}
               dirty={dirty}
               isLastChapter={chapters.findIndex((c) => c.id === activeChapterId) >= chapters.length - 1}
               estimSelected={estimSelected}
@@ -1239,7 +1256,8 @@ function CharacterCard({ label, tagline, color, icon, selected, onClick }) {
 function CharacterPanel({
   catalog,
   stagedChar, isNothingStaged, stagedParams,
-  onSelectCharacter, onParamChange, onAccept, onReset, dirty, isLastChapter,
+  onSelectCharacter, onParamChange, onAccept, onReset, onUseDefault, defaultLabel,
+  dirty, isLastChapter,
   estimSelected, catalogWarning,
 }) {
   // Card grid auto-sizes — usually 5 + Nothing = 6, but accommodates a
@@ -1384,6 +1402,8 @@ function CharacterPanel({
           isLastChapter={isLastChapter}
           onAccept={onAccept}
           onReset={onReset}
+          onUseDefault={onUseDefault}
+          defaultLabel={defaultLabel}
         />
       </div>
     </div>
@@ -1395,7 +1415,7 @@ function CharacterPanel({
 // commit-and-advance affordance the user asked for; it's enabled
 // even when nothing is dirty so the user can power-walk through
 // chapters where the seeded default already fits.
-function ActionRow({ stagedChar, isNothingStaged, dirty, isLastChapter, onAccept, onReset }) {
+function ActionRow({ stagedChar, isNothingStaged, dirty, isLastChapter, onAccept, onReset, onUseDefault, defaultLabel }) {
   const label = stagedChar?.label
     || (isNothingStaged ? NOTHING.label : null);
   const color = stagedChar?.color
@@ -1425,6 +1445,22 @@ function ActionRow({ stagedChar, isNothingStaged, dirty, isLastChapter, onAccept
         <Icon name="check" size={13} />
         {verb} {suffix}
       </button>
+      {onUseDefault && (
+        <button
+          onClick={onUseDefault}
+          style={{
+            padding: '6px 10px', fontSize: 11.5, fontWeight: 600,
+            background: 'transparent', color: 'var(--text-muted)',
+            border: '1px solid var(--border)', borderRadius: 5,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+          title={defaultLabel
+            ? `Use the recommended character for this chapter (${defaultLabel})`
+            : 'Use the recommended character for this chapter'}
+        >
+          Use default{defaultLabel ? ` · ${defaultLabel}` : ''}
+        </button>
+      )}
       {dirty && (
         <button
           onClick={onReset}

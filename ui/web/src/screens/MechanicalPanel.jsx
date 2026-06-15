@@ -37,8 +37,10 @@ export default function MechanicalPanel({
   styleId, onSelectStyle,
   axisData = null, loading = false, chapter = null,
   dirty = false, isLastChapter = false, onAccept, onReset,
+  onUseDefault, defaultStyleId,
 }) {
   const style = styleById(styleId);
+  const defaultStyleLabel = defaultStyleId ? styleById(defaultStyleId).label : null;
   const axes = style.axes || {};
   const activeCount = Object.keys(axes).length;
 
@@ -65,6 +67,22 @@ export default function MechanicalPanel({
         <Icon name="check" size={13} />
         Use {style.label} {isLastChapter ? '(last chapter)' : '· next chapter'}
       </button>
+      {onUseDefault && (
+        <button
+          onClick={onUseDefault}
+          title={defaultStyleLabel
+            ? `Use the recommended mechanical style for this chapter (${defaultStyleLabel})`
+            : 'Use the recommended mechanical style for this chapter'}
+          style={{
+            padding: '6px 10px', fontSize: 11.5, fontWeight: 600,
+            background: 'transparent', color: 'var(--text-muted)',
+            border: '1px solid var(--border)', borderRadius: 5,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          Use default{defaultStyleLabel ? ` · ${defaultStyleLabel}` : ''}
+        </button>
+      )}
       {dirty && (
         <button
           onClick={onReset}

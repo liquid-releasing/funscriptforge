@@ -147,7 +147,7 @@ export const ESTIM_CHANNELS = [
 // the recorded default (see project_funscriptforge_pending); "Afterglow" is
 // the Scene Closer finale (the standalone Afterglow character was shelved —
 // see project_funscriptforge_post_beta).
-function characterForPosition(i, n) {
+export function characterForPosition(i, n) {
   if (n <= 1) return 'scene_builder';
   if (i === 0) return 'scene_builder';        // opener
   if (i === n - 1) return 'scene_closer';     // finale — winds down
