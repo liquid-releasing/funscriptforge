@@ -63,6 +63,16 @@ function applyRemap(remap, { tones, params, accepted }) {
   return { newTones, newParams, newAccepted };
 }
 
+// Stamp each chapter record with its chosen tone id so the sidecar write
+// persists the user's tone choices. `tones` is the tonesByChapter map; a
+// chapter with no entry falls back to 'build' (same default seedTones uses).
+// Every sidecar write goes through this so tones survive split / join /
+// accept and round-trip on reopen (Rust write_chapters_sidecar serializes
+// the `tone` field; videoflow Chapter.from_dict reads it back).
+function attachTones(chapterList, tones) {
+  return chapterList.map((c) => ({ ...c, tone: tones?.[c.id] ?? 'build' }));
+}
+
 // The six canonical tones + one UI-only 'none' opt-out sentinel.
 // Source of truth for the six: forge/tabs/tone_tab.py::_TONES in the
 // Python side — the IDs MUST match (tender/build/tease/edge/climax/
@@ -164,13 +174,18 @@ function defaultToneParams() {
   return out;
 }
 
-// Per-chapter initial tone map. Reads chapter.intent first, then falls back
-// to the project's analyzer-suggested tone, then 'build'. Used both on first
-// render and on project change / chapter creation.
+// Per-chapter initial tone map. Reads the persisted per-chapter `tone`
+// first (a user choice written to the sidecar on Accept — including the
+// 'none'/Untoned and 'tame' sentinels), then the analyzer's chapter.intent,
+// then the project's analyzer-suggested tone, then 'build'. Used both on
+// first render and on project change / chapter creation. The persisted-tone
+// precedence is what makes accepted tones survive close/reopen instead of
+// resetting to the suggestion (which was "Climax" everywhere on some files).
 function seedTones(chapters, projectTone) {
   const out = {};
   chapters.forEach((c) => {
     out[c.id] =
+      intentToToneId(c.tone) ??
       intentToToneId(c.intent) ??
       intentToToneId(projectTone) ??
       'build';
@@ -685,6 +700,19 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       setActiveId(nextId);
     };
 
+    // Persist the per-chapter tone choices to the sidecar so they survive
+    // close/reopen instead of resetting to the analyzer suggestion. Writes
+    // the whole tones map (cheap) with the just-accepted chapter's tone
+    // guaranteed present. Best-effort — a write failure never blocks the
+    // in-session edit. The sourcePath mirrors the split/join writer.
+    const persistTones = () => {
+      const sourcePath = project?.mediaPath ?? project?.path;
+      if (!sourcePath) return;
+      const tones = { ...tonesByChapter, [active.id]: tone.id };
+      writeChaptersSidecar(sourcePath, attachTones(chapters, tones))
+        .catch((err) => console.warn('ChaptersTab: tone persist failed', err));
+    };
+
     // Tame runs the REAL backend transform over the chapter span and rolls
     // the merged result into the working funscript (same path as the
     // Phrases/Stanzas Apply), so the device-aware groove + cycle-drop are
@@ -710,6 +738,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
         setBusy?.(null);
       }
       setAcceptedChapterIds((prev) => new Set(prev).add(active.id));
+      persistTones();
       advance();
       return;
     }
@@ -725,6 +754,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       params: paramsByChapter,
     });
     onActionsPatch?.(merged);
+    persistTones();
     advance();
   };
 
@@ -733,11 +763,11 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // local state has been swapped, so the UI reflects the new chapter
   // layout immediately; the new active chapter's clip extract dedups with
   // useChapterClip's own fetch (see useChapterClip.js __pendingExtracts).
-  const persistAndExtract = async (newChapters, affectedChapters) => {
+  const persistAndExtract = async (newChapters, affectedChapters, tones = tonesByChapter) => {
     const sourcePath = project?.mediaPath ?? project?.path;
     if (sourcePath) {
       try {
-        await writeChaptersSidecar(sourcePath, newChapters);
+        await writeChaptersSidecar(sourcePath, attachTones(newChapters, tones));
       } catch (err) {
         console.warn('ChaptersTab: writeChaptersSidecar failed', err);
         setAppError?.(`Could not write chapters sidecar: ${err?.message ?? err}`);
@@ -783,6 +813,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     await persistAndExtract(
       newChapters,
       [newChapters[newActiveIdx - 1], newChapters[newActiveIdx]],
+      newTones,
     );
     // Chapters changed → phrase boundaries are stale (Step 1 is chapter-
     // scoped; chapter_ids on existing phrases now point at the wrong slot).
@@ -827,7 +858,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     setCurrentMs(newChapters[newActiveIdx].atMs);
     setIsPlaying(false);
     onChaptersChange?.(newChapters);
-    await persistAndExtract(newChapters, [newChapters[newActiveIdx]]);
+    await persistAndExtract(newChapters, [newChapters[newActiveIdx]], newTones);
     // Chapters changed → phrase boundaries stale; re-run + refresh cache.
     if (setPhrasesByPath) {
       analyzePhrases(project.path)

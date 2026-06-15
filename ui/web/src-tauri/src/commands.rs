@@ -159,6 +159,10 @@ pub struct ChapterRecord {
     // file color chapters the same way. Tone-set assignments override on the
     // Chapters tab.
     color: String,
+    // User-chosen tone id (persisted in the sidecar). Empty until the user
+    // accepts a tone; the Chapters tab hydrates `tonesByChapter` from this so
+    // the choice survives reopen instead of resetting to the suggestion.
+    tone: String,
 }
 
 #[derive(Serialize)]
@@ -634,6 +638,8 @@ struct CliChapter {
     confidence: f32,
     #[serde(default)]
     evidence: Vec<String>,
+    #[serde(default)]
+    tone: String,
 }
 
 #[derive(Deserialize)]
@@ -664,6 +670,7 @@ fn cli_chapters_to_records(chapters: Vec<CliChapter>) -> Vec<ChapterRecord> {
             confidence: c.confidence,
             evidence: c.evidence,
             color: CHAPTER_PALETTE[i % CHAPTER_PALETTE.len()].to_string(),
+            tone: c.tone,
         })
         .collect()
 }
@@ -733,6 +740,7 @@ pub async fn create_chapters_sidecar(
             confidence: 0.0,
             evidence: vec!["manual_split".to_string()],
             color: CHAPTER_PALETTE[(i as usize) % CHAPTER_PALETTE.len()].to_string(),
+            tone: String::new(),
         });
     }
 
@@ -1202,6 +1210,8 @@ pub struct ChapterInput {
     pub evidence: Vec<String>,
     #[serde(default)]
     pub color: String,
+    #[serde(default)]
+    pub tone: String,
 }
 
 // Overwrite the chapters sidecar with a user-edited chapter list.
@@ -1254,6 +1264,7 @@ pub async fn write_chapters_sidecar(
             "confidence": c.confidence,
             "evidence": c.evidence,
             "color": c.color,
+            "tone": c.tone,
         })).collect::<Vec<_>>()
     );
 

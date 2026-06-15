@@ -2760,6 +2760,7 @@ def _normalize_chapter_list(chapters, duration_ms=None):
             "content_type": ch.content_type or "",
             "confidence": float(ch.confidence) if ch.confidence is not None else 0.0,
             "evidence": list(ch.evidence or []),
+            "tone": ch.tone or "",
         })
     return records
 
