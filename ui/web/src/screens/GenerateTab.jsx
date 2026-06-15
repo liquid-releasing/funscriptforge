@@ -50,6 +50,17 @@ function samplesStr(samples) {
   return samples.map((v) => Math.max(0, Math.min(1, v)).toFixed(3)).join(',');
 }
 
+// m:ss / h:mm:ss for the damaged-audio warning timestamp.
+function fmtClock(ms) {
+  const s = Math.max(0, Math.floor((ms || 0) / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  return h
+    ? `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+    : `${m}:${String(ss).padStart(2, '0')}`;
+}
+
 // Speed-band palette: cool (slow) → hot (flash). Mirrors the heatmap users know.
 const SPEED_COLORS = ['#3ed598', '#7ed957', '#ffd23f', '#ffb547', '#ff8c42', '#ff5d5d', '#e83e8c'];
 const SPEED_SHORT = ['v.slow', 'slow', 'med', 'fast', 'v.fast', 'ultra', 'flash'];
@@ -355,6 +366,9 @@ export default function GenerateTab({
             speed: payload.stats?.speed || null,
             fromCache: !!payload.from_cache,
             bpm: payload.bpm,
+            // Set when the source audio was corrupt past this ms — only the
+            // clean head generated, so warn the user the tail is sparse.
+            damagedAfterMs: payload.damaged_after_ms ?? null,
             sig,  // tag the result so the UI knows it matches the live settings
           };
           setGen(result);
@@ -405,6 +419,7 @@ export default function GenerateTab({
             const result = {
               actions: acts, band: sc.band || null, speed: sc.speed || null,
               fromCache: true, bpm: sc.bpm, sig: restoredSig,
+              damagedAfterMs: sc.damaged_after_ms ?? null,
             };
             setRangePts(rPts); setPacePts(pPts);
             setRangeStart(rStart); setPaceStart(pStart); setTexture(tx);
@@ -513,6 +528,23 @@ export default function GenerateTab({
           <p style={{ color: 'var(--warn, #ffb547)', margin: '6px 0 0', fontSize: 12 }}>
             Engine: {genError} — showing the stand-in preview.
           </p>
+        )}
+        {haveCurrent && gen?.damagedAfterMs != null && (
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: 8,
+            margin: '8px 0 0', padding: '8px 11px',
+            background: 'rgba(255,181,71,0.10)',
+            border: '1px solid var(--warn, #ffb547)', borderRadius: 'var(--r-3, 8px)',
+            color: 'var(--warn, #ffb547)', fontSize: 12, lineHeight: 1.45,
+          }}>
+            <Icon name="alert-triangle" size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              <strong>This video’s audio is damaged after {fmtClock(gen.damagedAfterMs)}.</strong>{' '}
+              Only the clean portion could be analyzed, so the funscript covers up
+              to {fmtClock(gen.damagedAfterMs)} — the rest will be sparse. Re-encode
+              the source audio and re-import for full coverage.
+            </span>
+          </div>
         )}
       </div>
 

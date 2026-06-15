@@ -4006,6 +4006,10 @@ def cmd_generate(args):
         "beats": len(beat_map.beats),
         "bpm": round(beat_map.bpm, 1),
         "duration_ms": beat_map.duration_ms,
+        # Set when the source audio was corrupt past this ms and only the clean
+        # head was analyzable — the UI shows a persistent 'damaged audio'
+        # warning so a short/sparse result on a broken source isn't a surprise.
+        "damaged_after_ms": beat_map.damaged_after_ms,
         "actions": len(actions),
         "pace_points": len(pace),
         "range_points": len(rng),
@@ -4050,6 +4054,7 @@ def cmd_generate(args):
             "duration_ms": payload["duration_ms"],
             "actions": payload["actions"],
             "from_cache": from_cache,
+            "damaged_after_ms": beat_map.damaged_after_ms,
             "band": payload["band"],
             "speed": fp.get("speed"),
         }
