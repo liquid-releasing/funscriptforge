@@ -1126,6 +1126,76 @@ def _render_stim_audio(alpha: Path, beta: Path, out_path: Path, duration_s: floa
         return False
 
 
+def _synth_click_track(beats, duration_s: float, downbeats=None, sr: int = 44100):
+    """Build a mono click-track waveform: a short percussive tick at each beat
+    timestamp, downbeats accented (higher pitch + louder).
+
+    Pure synthesis — needs ONLY the beat timestamps (ms), so the persisted
+    ``<stem>.beatmap.json`` alone drives it (no librosa, no media). Returns a
+    float32 numpy array of length ``duration_s * sr``."""
+    import numpy as np
+    n = max(1, int(duration_s * sr))
+    out = np.zeros(n, dtype=np.float32)
+    down = {int(d) for d in (downbeats or [])}
+
+    def _click(freq: float, amp: float, dur_ms: float = 35.0):
+        # Short exponentially-decaying sine — a clean, percussive metronome tick.
+        ln = max(1, int(sr * dur_ms / 1000.0))
+        t = np.arange(ln) / sr
+        env = np.exp(-t * 60.0)
+        return (amp * np.sin(2 * np.pi * freq * t) * env).astype(np.float32)
+
+    reg = _click(1000.0, 0.6)
+    acc = _click(1600.0, 0.9)
+    for b in beats:
+        i = int(int(b) / 1000.0 * sr)
+        if i < 0 or i >= n:
+            continue
+        clip = acc if int(b) in down else reg
+        end = min(n, i + len(clip))
+        out[i:end] += clip[: end - i]
+    np.clip(out, -1.0, 1.0, out=out)
+    return out
+
+
+def _render_beat_audio(beats, duration_s: float, out_path: Path,
+                       downbeats=None, fmt: str = "mp3", sr: int = 44100) -> bool:
+    """Render a click-track audio file (one tick per beat, accented downbeats)
+    from beat timestamps. mp3 by default (small + shareable); ``fmt="wav"`` for
+    the lossless original.
+
+    Reusable beat-renderer: export ``beat.mp3``, an optional audible click in
+    the viewer, and the prep tool's beat-file output all call this. False on any
+    failure (never aborts the export)."""
+    try:
+        import soundfile as sf
+        wave = _synth_click_track(beats, duration_s, downbeats=downbeats, sr=sr)
+        if fmt == "mp3":
+            import shutil
+            import subprocess
+            tmp_wav = out_path.with_suffix(".beat.tmp.wav")
+            sf.write(str(tmp_wav), wave, sr)
+            if not shutil.which("ffmpeg"):
+                print("beat mp3 requested but ffmpeg missing — kept WAV", file=sys.stderr)
+                tmp_wav.replace(out_path.with_suffix(".wav"))
+                return out_path.with_suffix(".wav").exists()
+            # A click track is mostly silence with sparse ticks — mono, a low
+            # sample rate, and VBR keep a full-length track small (a metronome
+            # needs no fidelity above ~11 kHz).
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(tmp_wav), "-ac", "1", "-ar", "22050",
+                 "-codec:a", "libmp3lame", "-q:a", "7", str(out_path)],
+                capture_output=True, timeout=600,
+            )
+            tmp_wav.unlink(missing_ok=True)
+        else:
+            sf.write(str(out_path), wave, sr)
+        return out_path.exists()
+    except Exception as exc:
+        print(f"beat audio skipped: {exc}", file=sys.stderr)
+        return False
+
+
 def _extract_frame(media: str, t_ms: int, out_path: Path) -> bool:
     """Grab a single 320px-wide frame at `t_ms` via ffmpeg. Returns False when
     ffmpeg is absent or the grab fails."""
@@ -1751,6 +1821,28 @@ def cmd_export(args):
                     _emit_progress(f"Export — rendering {label} audio ({fmt.upper()})…")
                     if _render_stim_audio(a, b, adir / f"{base}.{fmt}", duration_ms / 1000.0, fmt=fmt):
                         artifacts.append({"path": f"audio/{base}.{fmt}", "kind": "audio", "role": role, "format": fmt})
+
+        # 6c. audio/beat.mp3 — a metronome click track (one tick per detected
+        # beat, accented downbeats) synthesized straight from the persisted
+        # beatmap sidecar. Needs no media and no e-stim channels — just the beat
+        # timestamps — so it ships whenever a beatmap exists. Small (128k mp3),
+        # handy for lining up haptics to the music by ear.
+        if args.beat_mp3 and duration_ms > 0:
+            bj = fdir / f"{stem}.beatmap.json"
+            if bj.exists():
+                try:
+                    bdata = json.loads(bj.read_text(encoding="utf-8"))
+                    beats = bdata.get("beats") or []
+                    downbeats = bdata.get("downbeats") or []
+                except (OSError, json.JSONDecodeError):
+                    beats, downbeats = [], []
+                if beats:
+                    adir = staging / "audio"
+                    adir.mkdir(parents=True, exist_ok=True)
+                    _emit_progress("Export — rendering beat track (MP3)…")
+                    if _render_beat_audio(beats, duration_ms / 1000.0,
+                                          adir / "beat.mp3", downbeats=downbeats):
+                        artifacts.append({"path": "audio/beat.mp3", "kind": "audio", "role": "beat", "format": "mp3"})
 
         # 6b. Source media — provenance is ALWAYS recorded (relink key); the
         # bytes ride only when --include-media is set (opt-in, big). Lean default
@@ -4203,6 +4295,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument("--final-smooth", action="store_true", help="Apply final_smooth to the main funscript.")
     p_exp.add_argument("--stim-wav", action="store_true", help="Render audio/stim.wav from the e-stim channels (opt-in).")
     p_exp.add_argument("--stim-mp3", action="store_true", help="Render audio/stim.mp3 from the e-stim channels (opt-in; via ffmpeg).")
+    p_exp.add_argument("--beat-mp3", action=argparse.BooleanOptionalAction, default=True, help="Render audio/beat.mp3 (metronome click track) from the beatmap sidecar. On by default; --no-beat-mp3 to skip.")
     p_exp.add_argument("--include-media", action="store_true", help="Embed the source video/audio in the bundle for a standalone handoff (big). Default: lean bundle + manifest relink key.")
     p_exp.add_argument("--exclude", metavar="IDS", default="", help="Comma-separated target groups to leave OUT: strokers,estim,authoring,preview. Default: include all.")
 

@@ -547,6 +547,64 @@ class TestImportCLI(unittest.TestCase):
         self.assertIsNone(res["media"])
         self.assertEqual(res["media_expected"], "scene.mp4")
 
+    def _write_beatmap(self):
+        """Drop a minimal <stem>.beatmap.json in the forge dir so the export's
+        beat-track step has timestamps to render from."""
+        forge = os.path.join(self.tmp, ".scene.forge")
+        os.makedirs(forge, exist_ok=True)
+        beats = list(range(0, 9000, 500))  # a beat every 0.5s for 9s
+        bm = {"bpm": 120.0, "duration_ms": 9000, "beats": beats,
+              "downbeats": beats[::4], "stanzas": [], "energy": []}
+        with open(os.path.join(forge, "scene.beatmap.json"), "w") as f:
+            json.dump(bm, f)
+
+    def test_beat_mp3_rendered_from_beatmap(self):
+        # A beatmap sidecar → audio/beat.mp3 (metronome click track) ships by
+        # default, with no media and no e-stim channels needed.
+        self._write_beatmap()
+        out = os.path.join(self.tmp, "scene.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+            self.assertIn("audio/beat.mp3", names)
+            self.assertGreater(z.getinfo("audio/beat.mp3").file_size, 0)
+            manifest = json.loads(z.read("manifest.ffmeta"))
+        self.assertTrue(any(a.get("role") == "beat" for a in manifest["artifacts"]))
+
+    def test_no_beat_mp3_opt_out(self):
+        # --no-beat-mp3 suppresses the click track even when a beatmap exists.
+        self._write_beatmap()
+        out = os.path.join(self.tmp, "scene.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out, "--no-beat-mp3")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            self.assertNotIn("audio/beat.mp3", z.namelist())
+
+
+class TestBeatRenderer(unittest.TestCase):
+    """The reusable click-track synth — pure, needs only beat timestamps."""
+
+    def test_clicks_land_at_beat_samples(self):
+        import cli
+        sr = 8000
+        wave = cli._synth_click_track([0, 1000, 2000], 3.0, sr=sr)
+        self.assertEqual(len(wave), 3 * sr)
+        # Energy present at each beat onset, silence well between them.
+        for b_ms in (0, 1000, 2000):
+            i = int(b_ms / 1000.0 * sr)
+            self.assertGreater(abs(wave[i : i + 100]).max(), 0.1)
+        mid = int(0.5 * sr)  # halfway between beat 0 and 1 — past the 35ms tick
+        self.assertLess(abs(wave[mid : mid + 100]).max(), 1e-3)
+
+    def test_downbeats_are_accented(self):
+        import cli
+        sr = 8000
+        wave = cli._synth_click_track([0, 500], 1.0, downbeats=[0], sr=sr)
+        peak0 = abs(wave[0:200]).max()
+        peak1 = abs(wave[int(0.5 * sr) : int(0.5 * sr) + 200]).max()
+        self.assertGreater(peak0, peak1)  # downbeat louder than the regular beat
+
 
 if __name__ == "__main__":
     unittest.main()
