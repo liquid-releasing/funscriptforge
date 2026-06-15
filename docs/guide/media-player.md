@@ -45,6 +45,21 @@ See [Phrase Editor — Splitting a phrase →](phrase-editor.md#splitting-a-phra
 
 ---
 
+## Video format & smooth playback
+
+FunscriptForge plays your video **chapter by chapter** while you edit. How quickly chapters switch depends on the video format:
+
+| Your video | What happens | Chapter switching |
+| --- | --- | --- |
+| **1080p (or smaller) H.264, standard frame rate** | Streamed straight from your file | **Instant** — seeks within one continuous video |
+| **4K, HDR, variable frame rate, HEVC/AV1, 10-bit** | A downscaled (720p) preview is prepared | A short load the first time you open each chapter |
+
+**1080p H.264 is preferred but not required.** A standard 1080p MP4 plays instantly with nothing to prepare. A 4K (or other heavy) source still works perfectly — FunscriptForge just makes a lightweight 720p preview so the embedded player stays smooth, which adds a brief load when you jump to a chapter. Your **exported** files are never affected; this is only about editor preview playback.
+
+> **Tip:** If you have a choice, point FunscriptForge at a **1080p H.264** version of your video for the snappiest editing. The funscript and analysis are identical either way — only preview playback feels different.
+
+---
+
 ## File size limits
 
 | Mode | Limit |
@@ -66,6 +81,9 @@ Check your browser's audio permissions. Some browsers mute autoplay by default �
 
 **Playback is out of sync**
 The player uses the funscript timestamps directly. If the content and funscript are misaligned, use the [Nudge transform](transforms.md#nudge) to shift the phrase forward or backward to match.
+
+**Chapters take a few seconds to load**
+This means your source is 4K (or HDR / variable-frame-rate / HEVC / AV1), so FunscriptForge is preparing a smooth 720p preview the first time you open each chapter. It's expected, and it only affects preview playback — your analysis and exports are unaffected. A 1080p H.264 version of the same video plays instantly. See [Video format & smooth playback](#video-format--smooth-playback).
 
 ---
 
