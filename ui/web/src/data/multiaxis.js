@@ -73,6 +73,19 @@ export const SECONDARY_AXES = ['twist', 'roll', 'pitch', 'surge', 'sway'];
 
 export const DEFAULT_STYLE = 'None';
 
+// Position-aware Mechanical default arc across the chapter sequence: Cowgirl
+// opens, alternates Missionary/Doggy through the middle, builds to Riding, and
+// returns home to Cowgirl at the close. Mirrors the Character arc — one
+// discrete style per chapter, seeded so a fresh project reads as a journey
+// (fully overridable). Recorded default; see project_funscriptforge_pending.
+export function mechStyleForPosition(i, n) {
+  if (n <= 1) return 'Cowgirl';
+  if (i === 0) return 'Cowgirl';              // open
+  if (i === n - 1) return 'Cowgirl';          // close — returns home
+  if (i === n - 2) return 'Riding';           // build into the finale
+  return (i % 2 === 1) ? 'Missionary' : 'Doggy'; // middle alternation
+}
+
 export function styleById(id) {
   return MULTIAXIS_STYLES.find((s) => s.id === id) || MULTIAXIS_STYLES[0];
 }

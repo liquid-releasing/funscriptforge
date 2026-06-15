@@ -14,6 +14,8 @@
 // forgemoment's LUCIDE_MAP) that picks up the character color in the
 // UI. The icon is the at-a-glance story of what you get by picking
 // this character — important enough to surface alongside the label.
+import { mechStyleForPosition } from './multiaxis.js';
+
 export const CHARACTERS = [
   {
     id: 'gentle',
@@ -137,19 +139,35 @@ export const ESTIM_CHANNELS = [
   { id: 'vprost', label: 'Vol. prost.',  color: '#3ed598' },
 ];
 
-// Seeded per-chapter assignment so the skeleton has something to show
-// against a real project. Spreads across characters so visually
-// every chapter doesn't look the same. Real persistence ships with
-// the wiring pass (Accept writes per-chapter overrides to chain file).
-const SEED_ORDER = ['scene_builder', 'reactive', 'balanced', 'scene_builder',
-                    'unpredictable', 'reactive', 'gentle'];
+// Position-aware default arc across the chapter sequence — the "journey":
+// Scene Builder opens, alternates Balanced/Unpredictable through the middle,
+// builds to Reactive, and winds down with Scene Closer at the finale. One
+// discrete character per chapter, seeded so a fresh project reads as an arc
+// rather than a flat/uniform default (fully overridable per chapter). This is
+// the recorded default (see project_funscriptforge_pending); "Afterglow" is
+// the Scene Closer finale (the standalone Afterglow character was shelved —
+// see project_funscriptforge_post_beta).
+function characterForPosition(i, n) {
+  if (n <= 1) return 'scene_builder';
+  if (i === 0) return 'scene_builder';        // opener
+  if (i === n - 1) return 'scene_closer';     // finale — winds down
+  if (i === n - 2) return 'reactive';         // build into the finale
+  return (i % 2 === 1) ? 'balanced' : 'unpredictable'; // middle alternation
+}
 
+// Seed both the per-chapter character AND its Mechanical style as a matched
+// arc, so a fresh project opens with a coherent journey (not a flat default).
 export function seedCharacterAssignments(chapters) {
   if (!chapters || chapters.length === 0) return {};
+  const n = chapters.length;
   const out = {};
   chapters.forEach((c, i) => {
-    const characterId = SEED_ORDER[i % SEED_ORDER.length];
-    out[c.id] = { characterId, params: defaultParamsFor(characterId) };
+    const characterId = characterForPosition(i, n);
+    out[c.id] = {
+      characterId,
+      params: defaultParamsFor(characterId),
+      mechStyle: mechStyleForPosition(i, n),
+    };
   });
   return out;
 }
