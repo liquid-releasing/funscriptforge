@@ -930,6 +930,71 @@ pub async fn generate_read(
 }
 
 // ---------------------------------------------------------------------------
+// Bare-media support — open a VIDEO/AUDIO file as a project before any
+// funscript exists. probe_media gets duration/dimensions (cmd_meta needs a
+// funscript; this needs only the media); contact_sheet extracts the frames
+// the video-only Project page renders; promote_generated_funscript turns a
+// generated draft into the project's real funscript (its sibling home).
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn probe_media(media_path: String) -> Result<serde_json::Value, String> {
+    let stdout = run_cli(&["probe-media", "--media", media_path.as_str()]).await?;
+    serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse cli.py probe-media output: {}", e))
+}
+
+#[tauri::command]
+pub async fn contact_sheet(
+    media_path: String,
+    count: Option<u32>,
+    duration_ms: Option<u64>,
+    force: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let count_s = count.unwrap_or(9).to_string();
+    let dur_s = duration_ms.unwrap_or(0).to_string();
+    let mut args: Vec<&str> = vec![
+        "contact-sheet", "--media", media_path.as_str(),
+        "--count", count_s.as_str(), "--duration-ms", dur_s.as_str(),
+    ];
+    if force.unwrap_or(false) {
+        args.push("--force");
+    }
+    let stdout = run_cli(&args).await?;
+    serde_json::from_str(&stdout)
+        .map_err(|e| format!("could not parse cli.py contact-sheet output: {}", e))
+}
+
+/// Promote a generated draft to the project's real funscript. Copies
+/// `<forge>/<stem>.generated.funscript` to its sibling `<stem>.funscript`
+/// next to the media (where players + load_project expect it), so a
+/// video-only project gains a funscript path and every downstream tab works.
+/// Returns `{ ok, path }` with the new funscript path.
+#[tauri::command]
+pub async fn promote_generated_funscript(
+    media_path: String,
+) -> Result<serde_json::Value, String> {
+    let media = Path::new(&media_path);
+    let stem = media
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| "media path has no file stem".to_string())?;
+    let generated = forge_dir(media).join(format!("{}.generated.funscript", stem));
+    if !generated.exists() {
+        return Err(format!(
+            "no generated funscript to promote at {}",
+            generated.display()
+        ));
+    }
+    let parent = media.parent().unwrap_or(Path::new("."));
+    let target = parent.join(format!("{}.funscript", stem));
+    tokio::fs::copy(&generated, &target)
+        .await
+        .map_err(|e| format!("promote {} -> {}: {}", generated.display(), target.display(), e))?;
+    Ok(serde_json::json!({ "ok": true, "path": target.to_string_lossy() }))
+}
+
+// ---------------------------------------------------------------------------
 // Audio peaks — pre-computed waveform sidecar for the MediaViewer Audio mode.
 //
 // Shells out to `cli.py audio-peaks <media>` which writes <stem>.audio.json

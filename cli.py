@@ -1189,6 +1189,132 @@ def _extract_hero_frame(media: str, start_ms: int, end_ms: int, out_path: Path) 
     return best_b > 0.0 and out_path.exists()
 
 
+_PROBE_VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v"}
+_PROBE_AUDIO_EXTS = {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac"}
+
+
+def _media_kind(media: str) -> str:
+    """'video' | 'audio' | 'unknown' from the extension (mirrors the Rust
+    classifier in commands.rs)."""
+    ext = Path(media).suffix.lower()
+    if ext in _PROBE_VIDEO_EXTS:
+        return "video"
+    if ext in _PROBE_AUDIO_EXTS:
+        return "audio"
+    return "unknown"
+
+
+def _probe_media_dict(media: str) -> dict:
+    """Probe a raw media file with ffprobe → duration_ms + (video) dimensions.
+
+    Returns ``{ok, media, kind, duration_ms, width, height, fps}``. Best-effort:
+    when ffprobe is missing or the file won't parse, duration_ms is 0 and
+    width/height/fps are None — the caller still gets the kind from the
+    extension so a video-only project can open with a placeholder duration.
+    """
+    import shutil
+    import subprocess
+    kind = _media_kind(media)
+    out = {"ok": True, "media": media, "kind": kind,
+           "duration_ms": 0, "width": None, "height": None, "fps": None}
+    if not shutil.which("ffprobe"):
+        out["ok"] = False
+        out["reason"] = "ffprobe-missing"
+        return out
+    try:
+        proc = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-print_format", "json",
+             "-show_format", "-show_streams", str(media)],
+            capture_output=True, timeout=30, text=True,
+        )
+        data = json.loads(proc.stdout or "{}")
+    except Exception as exc:  # noqa: BLE001 — probe is best-effort
+        out["ok"] = False
+        out["reason"] = f"probe-failed: {exc}"
+        return out
+
+    fmt = data.get("format") or {}
+    try:
+        out["duration_ms"] = int(round(float(fmt.get("duration", 0)) * 1000))
+    except (TypeError, ValueError):
+        out["duration_ms"] = 0
+
+    for st in data.get("streams") or []:
+        if st.get("codec_type") == "video":
+            out["width"] = st.get("width")
+            out["height"] = st.get("height")
+            rate = st.get("avg_frame_rate") or st.get("r_frame_rate") or "0/0"
+            try:
+                num, _, den = rate.partition("/")
+                den_f = float(den) if den else 0.0
+                out["fps"] = round(float(num) / den_f, 3) if den_f else None
+            except (TypeError, ValueError):
+                out["fps"] = None
+            break
+    return out
+
+
+@_cli_command
+def cmd_probe_media(args):
+    """Probe a raw video/audio file for duration + dimensions (ffprobe).
+
+    The lightweight metadata a VIDEO-ONLY project needs to open before any
+    funscript exists (cmd_meta needs a funscript; this needs only the media).
+    """
+    print(json.dumps(_probe_media_dict(args.media)))
+
+
+def _contact_sheet_dir(media: str) -> Path:
+    """`<dir>/.<stem>.forge/<stem>.thumbs/` — cached contact-sheet frames."""
+    from videoflow.sidecar import forge_dir
+    return forge_dir(media) / f"{Path(media).stem}.thumbs"
+
+
+@_cli_command
+def cmd_contact_sheet(args):
+    """Extract N evenly-spaced frames from a video → cached contact sheet.
+
+    The video-only Project page renders these as a 3×N grid ("what's in this
+    video, across its length"). Frames are sampled at the CENTRE of each of N
+    equal slices (so none lands on the opening/closing black), written 320px
+    wide into the forge dir, and reused on the next open unless ``--force``.
+    Audio files have no frames — returns ``{ok:false, reason:'audio'}``.
+    """
+    media = args.media
+    if _media_kind(media) != "video":
+        print(json.dumps({"ok": False, "reason": "audio", "thumbs": []}))
+        return
+
+    count = max(1, min(int(args.count), 24))
+    duration_ms = int(args.duration_ms) if args.duration_ms else _probe_media_dict(media)["duration_ms"]
+    if duration_ms <= 0:
+        print(json.dumps({"ok": False, "reason": "no-duration", "thumbs": []}))
+        return
+
+    sheet_dir = _contact_sheet_dir(media)
+    sheet_dir.mkdir(parents=True, exist_ok=True)
+    stem = Path(media).stem
+    thumbs = []
+    for i in range(count):
+        # centre of slice i — avoids the first/last frame (cuts/black/credits)
+        t_ms = int(duration_ms * (i + 0.5) / count)
+        out_path = sheet_dir / f"{stem}.thumb.{count:02d}.{i:02d}.jpg"
+        if out_path.exists() and not args.force:
+            thumbs.append({"index": i, "at_ms": t_ms, "path": str(out_path)})
+            continue
+        if _extract_frame(media, t_ms, out_path):
+            thumbs.append({"index": i, "at_ms": t_ms, "path": str(out_path)})
+
+    print(json.dumps({
+        "ok": bool(thumbs),
+        "media": media,
+        "count": len(thumbs),
+        "requested": count,
+        "duration_ms": duration_ms,
+        "thumbs": thumbs,
+    }))
+
+
 def _next_available_path(base: Path) -> Path:
     """Return `base` if free, else the first non-colliding ` (N)` sibling —
     Explorer-style. Works for both a file (`scene.forge` → `scene (1).forge`,
@@ -4537,6 +4663,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_genr.add_argument("--media", required=True, help="Media file the session is keyed to")
 
+    # --- probe-media ---
+    p_probe = sub.add_parser(
+        "probe-media",
+        help="Probe a raw video/audio file for duration + dimensions (ffprobe)",
+    )
+    p_probe.add_argument("--media", required=True, help="Media file to probe")
+
+    # --- contact-sheet ---
+    p_cs = sub.add_parser(
+        "contact-sheet",
+        help="Extract N evenly-spaced frames from a video (video-only Project page)",
+    )
+    p_cs.add_argument("--media", required=True, help="Video file to sample")
+    p_cs.add_argument("--count", type=int, default=9, help="Number of frames (default 9)")
+    p_cs.add_argument("--duration-ms", type=int, default=0,
+                      help="Known duration in ms (skips a probe; 0 = probe)")
+    p_cs.add_argument("--force", action="store_true", help="Re-extract even if cached")
+
     # --- test ---
     sub.add_parser("test", help="Run unit tests")
 
@@ -5678,6 +5822,8 @@ def main():
         "beatmap":          cmd_beatmap,
         "generate":         cmd_generate,
         "generate-read":    cmd_generate_read,
+        "probe-media":      cmd_probe_media,
+        "contact-sheet":    cmd_contact_sheet,
     }
     dispatch[args.command](args)
 

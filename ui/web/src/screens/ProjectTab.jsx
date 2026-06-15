@@ -23,9 +23,10 @@ import {
   TextInput,
   SectionLabel,
 } from 'forgemoment';
-import { pickFunscriptFile, pickProjectFile, classifyProjectFile, importForgeBundle, pickForgeBundle } from '../api/forge.js';
+import { pickProjectFile, classifyProjectFile, importForgeBundle, pickForgeBundle, contactSheet } from '../api/forge.js';
 import { loadProjectFiles, revealInExplorer } from '../api/library.js';
 import { generatePreviewActions, parseDurationToMs } from '../lib/funscriptPreview.js';
+import { toMediaUrl } from '../lib/mediaUrl.js';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 
 // Cold-start substitute when no project is opened and no real recent
@@ -45,11 +46,13 @@ export default function ProjectTab({
   openedProject,
   loadedProjects = [],
   onOpenScript,
+  onOpenMedia,
   onSelectProject,
   onPickAndOpen,
   onLoadSample,
   onGoToLibrary,
   onAttachMedia,
+  onGenerate,
   onAppError,
   onRevertToOriginal,
   isLoadingProject,
@@ -111,10 +114,16 @@ export default function ProjectTab({
 
   // Left-rail "Open" button: only ever opens a new funscript. Single-type
   // picker keeps this affordance unambiguous.
+  // "Drop a new file…" / empty-state open: accepts a funscript, a bare
+  // video/audio (video-only / generate-first path), or a .forge bundle, and
+  // routes each to its loader.
   const handleOpen = async () => {
-    const path = await pickFunscriptFile();
+    const path = await pickProjectFile();
     if (!path) return;
-    onOpenScript?.(path);
+    const kind = classifyProjectFile(path);
+    if (kind === 'media') onOpenMedia?.(path);
+    else if (kind === 'bundle') await importBundleAndOpen(path);
+    else onOpenScript?.(path);
   };
 
   // Active-project "Add or replace…" button: opens the multi-type picker
@@ -204,6 +213,7 @@ export default function ProjectTab({
             projectFiles={projectFiles}
             onAddOrReplace={handleAddOrReplace}
             onOpenScript={onOpenScript}
+            onGenerate={onGenerate}
             onRevertToOriginal={onRevertToOriginal}
           />
         ) : (
@@ -253,7 +263,7 @@ function LeftRail({
               <Button kind="secondary" size="sm" icon="folder-open"
                       onClick={onPickAndOpen}
                       style={{ justifyContent: 'center' }}>
-                Open a funscript…
+                Open a funscript or video…
               </Button>
             )}
             {onImportBundle && (
@@ -388,7 +398,7 @@ function ProjectRow({ project, active, onClick }) {
   );
 }
 
-function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, onRevertToOriginal }) {
+function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, onGenerate, onRevertToOriginal }) {
   // Inline two-step confirm for the destructive "Revert to original" action.
   const [confirmingRevert, setConfirmingRevert] = useState(false);
   // Real funscripts loaded via the Rust bridge populate `project.actions`
@@ -404,6 +414,11 @@ function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, on
   const hasRealActions = Array.isArray(project.actions) && project.actions.length > 0;
   const chartActions = hasRealActions ? project.actions : generatePreviewActions(project, 1200);
   const totalMs = project.durationMs || parseDurationToMs(project.duration) || 60000;
+  // Video-only: media is attached but no funscript exists yet. The Funscript
+  // section becomes a "generate one" call-to-action instead of a (fake)
+  // preview chart, and we surface a frames contact sheet of the source.
+  const isVideoOnly = !isQuiet && !project.path && !hasRealActions
+    && (!!project._videoOnly || !!project.mediaPath);
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18, marginBottom: 22 }}>
@@ -515,18 +530,32 @@ function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, on
         </div>
       </div>
 
+      {/* Source media frames — a contact sheet across the video's length, so
+          a video-only project shows "what's in here" before any funscript
+          exists. Video only (audio has no frames). */}
+      {isVideoOnly && project.mediaKind !== 'audio' && project.mediaPath && (
+        <>
+          <SectionLabel>Source media</SectionLabel>
+          <div style={{ marginBottom: 24 }}>
+            <ContactSheet mediaPath={project.mediaPath} durationMs={project.durationMs} />
+          </div>
+        </>
+      )}
+
       <SectionLabel
-        right={
+        right={!isVideoOnly && (
           <span style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
             Drag to pan · scroll to zoom
           </span>
-        }
+        )}
       >
         Funscript
       </SectionLabel>
       <div style={{ marginBottom: 28 }}>
         {isQuiet ? (
           <FunscriptChartSkeleton label={isPlaceholder ? 'No project loaded' : 'Loading funscript…'} />
+        ) : isVideoOnly ? (
+          <NoFunscriptYet onGenerate={onGenerate} />
         ) : (
           <FunscriptChart
             actions={chartActions}
@@ -830,10 +859,10 @@ function EmptyProject({ onOpen }) {
       >
         <Icon name="upload-cloud" size={36} stroke={1.5} />
         <div style={{ fontSize: 14, fontWeight: 600, marginTop: 10 }}>
-          Drop a funscript
+          Open a funscript or video
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
-          .funscript · media file attached later
+          .funscript to edit · video/audio to generate from · .forge bundle
         </div>
       </button>
     </div>
@@ -865,4 +894,115 @@ function FunscriptChartSkeleton({ label = 'Loading funscript…' }) {
       </span>
     </div>
   );
+}
+
+// Video-only empty state for the Funscript section: there's no funscript yet,
+// so the only forward action is to generate one. Mirrors the design's dashed
+// "no funscript yet" card with a "Generate a funscript" CTA.
+function NoFunscriptYet({ onGenerate }) {
+  return (
+    <div
+      style={{
+        height: 260,
+        background: 'var(--surface)',
+        border: '1px dashed var(--border)',
+        borderRadius: 8,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 14, textAlign: 'center', padding: 24,
+      }}
+    >
+      <Icon name="sparkles" size={28} stroke={1.5} style={{ color: 'var(--accent)' }} />
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>No funscript yet</div>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', maxWidth: 360, lineHeight: 1.5 }}>
+          This project is just media. Generate a funscript from it — shape Range and
+          Pace over the timeline — then continue into editing.
+        </div>
+      </div>
+      {onGenerate && (
+        <Button kind="primary" size="sm" icon="sparkles" onClick={onGenerate}>
+          Generate a funscript
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// Contact sheet — evenly-spaced frames across a video's length, fetched once
+// per media path from the cached `cli.py contact-sheet` extractor. Renders a
+// responsive grid; degrades to a quiet note when frames aren't available
+// (browser/dev, audio, ffmpeg missing).
+function ContactSheet({ mediaPath, durationMs }) {
+  const [state, setState] = useState({ status: 'loading', thumbs: [] });
+
+  useEffect(() => {
+    let alive = true;
+    setState({ status: 'loading', thumbs: [] });
+    contactSheet(mediaPath, { count: 9, durationMs: durationMs || 0 })
+      .then((res) => {
+        if (!alive) return;
+        const thumbs = Array.isArray(res?.thumbs) ? res.thumbs : [];
+        setState({ status: thumbs.length ? 'ready' : 'empty', thumbs });
+      })
+      .catch(() => { if (alive) setState({ status: 'empty', thumbs: [] }); });
+    return () => { alive = false; };
+  }, [mediaPath, durationMs]);
+
+  if (state.status === 'loading') {
+    return (
+      <div style={{
+        height: 96, background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 8, display: 'grid', placeItems: 'center', color: 'var(--text-dim)', fontSize: 12,
+      }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Icon name="loader" size={14} stroke={1.5} /> Extracting frames…
+        </span>
+      </div>
+    );
+  }
+  if (state.status === 'empty') {
+    return (
+      <div style={{
+        height: 72, background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 8, display: 'grid', placeItems: 'center', color: 'var(--text-dim)', fontSize: 11.5,
+      }}>
+        Frame preview unavailable for this source.
+      </div>
+    );
+  }
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 6,
+    }}>
+      {state.thumbs.map((t) => (
+        <div
+          key={t.index}
+          style={{
+            position: 'relative', aspectRatio: '16 / 9', borderRadius: 6, overflow: 'hidden',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+          }}
+        >
+          <img
+            src={toMediaUrl(t.path)}
+            alt={`frame at ${msToClockSheet(t.at_ms)}`}
+            loading="lazy"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+          <span style={{
+            position: 'absolute', right: 4, bottom: 4, padding: '1px 5px', borderRadius: 4,
+            background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 10, fontVariantNumeric: 'tabular-nums',
+          }}>
+            {msToClockSheet(t.at_ms)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function msToClockSheet(ms) {
+  const total = Math.max(0, Math.round((ms || 0) / 1000));
+  const m = Math.floor(total / 60);
+  const s = String(total % 60).padStart(2, '0');
+  return `${m}:${s}`;
 }

@@ -15,7 +15,8 @@ import {
 import { APP_VERSION } from './appVersion.js';
 import {
   isTauri, ping, loadProject, loadSampleProject, attachMedia,
-  pickFunscriptFile, pickMediaFile,
+  pickMediaFile, pickProjectFile, classifyProjectFile,
+  probeMedia, promoteGeneratedFunscript,
   loadAudioPeaks, loadAudioSpectrogram, loadAudioBeats,
   revertWorkingFunscript, saveWorkingFunscript,
   countChapterClips, analyzeChaptersWithVideoflow,
@@ -34,6 +35,18 @@ import CharactersTab from './screens/CharactersTab.jsx';
 import ExportTab from './screens/ExportTab.jsx';
 import CatalogTab from './screens/CatalogTab.jsx';
 import AboutDialog from './components/AboutDialog.jsx';
+
+// Format a millisecond duration as a `m:ss` (or `h:mm:ss`) clock for the
+// Project header pill. Used for video-only projects whose duration comes
+// from an ffprobe rather than a funscript's last action.
+function msToClock(ms) {
+  const total = Math.max(0, Math.round((ms || 0) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const ss = String(s).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
 
 const TABS = [
   { id: 'library',   label: 'Library' },
@@ -485,8 +498,39 @@ export default function App() {
   const adoptGeneratedFunscript = async (nextActions) => {
     if (!Array.isArray(nextActions) || !nextActions.length) return;
     handleActionsPatch(nextActions);
-    const path = typeof openedProject === 'object' ? openedProject?.path : null;
-    if (!path) return; // video-only project (no funscript path yet) — item D
+    const current = typeof openedProject === 'object' ? openedProject : null;
+    const path = current?.path || null;
+    // Video-only project (item D): there's no funscript path to save against.
+    // PROMOTE the generated draft (<forge>/<stem>.generated.funscript) to a
+    // real sibling <stem>.funscript next to the media, then reopen the project
+    // off that path — it now loads as a normal funscript project and every
+    // downstream tab (Analysis, Chapters, Phrases, …) works.
+    if (!path) {
+      const mediaPath = current?.mediaPath || null;
+      if (!mediaPath) return; // nothing to promote against
+      try {
+        const res = await promoteGeneratedFunscript(mediaPath);
+        if (res?.ok && res.path) {
+          await handleOpenScript(res.path, {
+            title: current?.title,
+            mediaPath,
+            mediaKind: current?.mediaKind,
+          });
+          // The project just changed identity (video-only → funscript). Drop
+          // the now-stale `media:` recents entry so it isn't a duplicate of
+          // the funscript project that replaced it.
+          if (current?.id) {
+            setLoadedProjects((prev) => prev.filter((p) => p.id !== current.id));
+          }
+        } else {
+          setAppError('Could not adopt the generated funscript — no draft was found to promote.');
+        }
+      } catch (err) {
+        console.error('App: promote_generated_funscript failed', err);
+        setAppError(err?.message ? `Could not adopt the generated funscript: ${err.message}` : 'Could not adopt the generated funscript.');
+      }
+      return;
+    }
     try {
       await saveWorkingFunscript(path, nextActions);
     } catch (err) {
@@ -505,13 +549,58 @@ export default function App() {
     });
   };
 
-  // Pop the OS file picker and run the chosen funscript through the
-  // standard load pipeline. Used by TopBar "Open" and Project tab's
-  // empty state — the entry point for "open from anywhere," outside
-  // the configured library roots.
+  // Open a BARE video/audio file as a project — before any funscript
+  // exists. The front door for "generate a funscript from this video":
+  // probe the media for duration/kind, seed a video-only project (no
+  // funscript path), and land on the Project tab where the "Generate a
+  // funscript" CTA picks up. Generation writes the draft; "Continue with
+  // this funscript" promotes it to a real sibling .funscript (item D).
+  const handleOpenMedia = async (mediaPath) => {
+    if (!mediaPath) return;
+    const filename = mediaPath.split(/[\\/]/).pop() || 'media';
+    const stem = filename.replace(/\.[^.]+$/, '');
+    setAppError(null);
+    setBusy({ message: `Opening ${filename}…` });
+    setTab('project');
+    try {
+      const info = await probeMedia(mediaPath);
+      const durationMs = info?.duration_ms || 0;
+      const project = {
+        id: `media:${mediaPath}`,
+        path: null,                       // video-only — no funscript yet
+        mediaPath,
+        mediaKind: info?.kind === 'audio' ? 'audio' : 'video',
+        title: stem,
+        durationMs,
+        duration: msToClock(durationMs),
+        actionCount: 0,
+        _videoOnly: true,
+      };
+      handleProjectOpened(project);
+    } catch (err) {
+      console.error('App: handleOpenMedia failed', err);
+      setAppError(err?.message ? `Could not open media: ${err.message}` : 'Could not open media.');
+      setOpenedProject(null);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Route an opened path by file kind: media → video-only project, funscript
+  // → standard load. (.forge bundles import via ProjectTab's own picker.)
+  const handleOpenPath = (path) => {
+    if (!path) return;
+    if (classifyProjectFile(path) === 'media') handleOpenMedia(path);
+    else handleOpenScript(path);
+  };
+
+  // Pop the OS file picker and open the chosen file. Used by TopBar "Open"
+  // and Project tab's empty state — the entry point for "open from
+  // anywhere," outside the configured library roots. Accepts a funscript OR
+  // a bare video/audio file (the video-only / generate-first path).
   const handlePickAndOpen = async () => {
-    const path = await pickFunscriptFile();
-    if (path) handleOpenScript(path);
+    const path = await pickProjectFile();
+    handleOpenPath(path);
   };
 
   // Load the synthetic "Big Buck Bunny" sample. Skips load_project
@@ -696,12 +785,25 @@ export default function App() {
     // Suppress "open a funscript" while a load is in flight — the busy
     // banner is already saying "Loading <file>…", so a parallel gate
     // saying "Open a funscript before continuing" is contradictory.
+    if (isLoadingProject) return null;
+    const hasFunscript = !!project?.path;
+    const hasMedia = !!project?.mediaPath;
+    // Project + Generate are reachable for a VIDEO-ONLY project (media, no
+    // funscript yet) — Generate is the door that CREATES the funscript.
     if (id === 'project') {
-      if (!project?.path && !isLoadingProject) return 'Open a funscript before continuing.';
+      if (!hasFunscript && !hasMedia) return 'Open a funscript or a video to begin.';
+      return null;
     }
-    if (['generate', 'analysis', 'polish', 'chapters', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
-        && !project?.path && !isLoadingProject) {
-      return 'Open a funscript before continuing.';
+    if (id === 'generate') {
+      if (!hasFunscript && !hasMedia) return 'Open a funscript or a video to begin.';
+      if (!hasMedia) return 'Generate needs a video or audio source. Attach media to this project first.';
+      return null;
+    }
+    // Editing tabs need an actual funscript — a video-only project must
+    // generate (or open) one before they unlock.
+    if (['analysis', 'polish', 'chapters', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
+        && !hasFunscript) {
+      return 'Generate or open a funscript before continuing.';
     }
     return null;
   };
@@ -719,9 +821,12 @@ export default function App() {
   // sibling summary line was still declaring "ready to chain" —
   // contradictory and confusing mid-pipeline.
   const currentTabLabel = TABS.find((t) => t.id === tab)?.label ?? 'Tab';
+  const isVideoOnly = !project?.path && !!project?.mediaPath;
   let footerSummary;
-  if (!project?.path) {
+  if (!project?.path && !isVideoOnly) {
     footerSummary = 'Open a funscript from the Library tab to begin.';
+  } else if (isVideoOnly && tab === 'project') {
+    footerSummary = 'No funscript yet — generate one from this media to begin editing.';
   } else if (busy) {
     footerSummary = `${currentTabLabel} · in progress — chain advances when complete`;
   } else if (nextTab) {
@@ -761,12 +866,27 @@ export default function App() {
     }
   } else if (tab === 'generate' && !gateMsg && !busy) {
     footerPrimaryLabel = 'Continue with this funscript';
-    footerOnPrimary = () => {
-      if (Array.isArray(genActions) && genActions.length) adoptGeneratedFunscript(genActions);
-      setTab('analysis');
+    footerOnPrimary = async () => {
+      const hasDraft = Array.isArray(genActions) && genActions.length;
+      // Adopt is awaited because a video-only project PROMOTES the draft to
+      // a real sibling funscript and reopens (landing on Project) — only
+      // after that resolves do we advance to Analysis, or the reopen's
+      // tab-switch would clobber the navigation. A funscript project just
+      // saves the working copy (no reopen) and advances the same way.
+      if (hasDraft) await adoptGeneratedFunscript(genActions);
+      // Don't strand a video-only project on Analysis with no funscript —
+      // if there was no draft to adopt, stay put (the gate explains why).
+      if (hasDraft || project?.path) setTab('analysis');
     };
-    footerSecondary = { label: 'Keep the original', onClick: () => setTab('analysis') };
-    footerSummary = 'Continue with the generated funscript, or keep the original.';
+    // "Keep the original" only makes sense when there IS an original to keep
+    // (a funscript project regenerating). For a video-only project the draft
+    // is the only funscript, so the secondary door is hidden.
+    if (project?.path) {
+      footerSecondary = { label: 'Keep the original', onClick: () => setTab('analysis') };
+      footerSummary = 'Continue with the generated funscript, or keep the original.';
+    } else {
+      footerSummary = 'Continue with the generated funscript to start editing.';
+    }
   }
 
   const handleAccept = async () => {
@@ -885,11 +1005,13 @@ export default function App() {
             openedProject={openedProject}
             loadedProjects={loadedProjects}
             onOpenScript={handleOpenScript}
+            onOpenMedia={handleOpenMedia}
             onSelectProject={handleSelectProject}
             onPickAndOpen={handlePickAndOpen}
             onLoadSample={handleLoadSample}
             onGoToLibrary={() => setTab('library')}
             onAttachMedia={handleAttachMedia}
+            onGenerate={() => setTab('generate')}
             onAppError={setAppError}
             onRevertToOriginal={handleRevertToOriginal}
             isLoadingProject={isLoadingProject}

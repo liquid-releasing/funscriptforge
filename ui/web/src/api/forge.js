@@ -233,6 +233,46 @@ export function wipeForgeDir(mediaPath) {
   );
 }
 
+/** Probe a raw video/audio file (ffprobe) for the duration + dimensions a
+ *  VIDEO-ONLY project needs to open before any funscript exists. Returns
+ *  `{ ok, media, kind:'video'|'audio'|'unknown', duration_ms, width, height,
+ *  fps }`. Best-effort — when ffprobe is missing or the file won't parse the
+ *  kind still comes from the extension and duration_ms is 0. Browser/dev
+ *  mode: a synthetic miss so callers fall back to extension-derived kind. */
+export function probeMedia(mediaPath) {
+  return call(
+    'probe_media',
+    { mediaPath },
+    () => Promise.resolve({ ok: false, kind: 'unknown', duration_ms: 0 }),
+  );
+}
+
+/** Extract N evenly-spaced frames from a video → a cached contact sheet for
+ *  the video-only Project page ("what's in this video, across its length").
+ *  Pass the known `durationMs` to skip a redundant probe. Returns
+ *  `{ ok, count, duration_ms, thumbs:[{index, at_ms, path}] }`; audio files
+ *  return `{ ok:false, reason:'audio', thumbs:[] }`. Browser/dev: empty. */
+export function contactSheet(mediaPath, { count = 9, durationMs = 0, force = false } = {}) {
+  return call(
+    'contact_sheet',
+    { mediaPath, count, durationMs, force },
+    () => Promise.resolve({ ok: false, reason: 'no-backend', thumbs: [] }),
+  );
+}
+
+/** Promote a generated draft to the project's REAL funscript: copies
+ *  `<forge>/<stem>.generated.funscript` to its sibling `<stem>.funscript`
+ *  next to the media, so a video-only project gains a funscript path and
+ *  every downstream tab works. Returns `{ ok, path }` with the new sibling
+ *  path; errors when there's no generated draft to promote. */
+export function promoteGeneratedFunscript(mediaPath) {
+  return call(
+    'promote_generated_funscript',
+    { mediaPath },
+    () => Promise.resolve({ ok: false }),
+  );
+}
+
 /** Run `cli.py assess` against the funscript and return the parsed phrase
  *  records. Used by the Phrases tab to hydrate its per-phrase edit table.
  *  Each record: { id, at_ms, end_ms, number, bpm, tag, all_tags,
