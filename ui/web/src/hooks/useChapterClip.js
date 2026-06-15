@@ -1,36 +1,46 @@
-// useChapterClip — extract the active chapter's clip into a player-ready
-// URL with the blob smoothing + size-cap fallback. Returns a stable
-// { clip, loading } shape so consuming tabs can drop a ~60-line block.
+// useChapterClip — resolve the active chapter's player-ready video URL.
 //
-// The clip's URL is either:
-//   - a blob: URL (clip fetched into JS memory, smooth seeks) when the
-//     clip is below the BLOB_FETCH_CAP, or
-//   - the asset URL (WebView's range-request streamer) when the clip
-//     exceeds the cap — WebView2 OOMs (0xE0000008) on ~400 MB+ blobs
-//     materialized alongside the live video decoder. See
-//     feedback-chapter-clip-blob-cap.
+// Two paths, chosen by a one-time probe of the source:
 //
-// The previous clip's blob URL is revoked after the next clip lands,
-// so memory doesn't pile up across chapter visits. Aborting a swap
-// in flight is safe — the cancellation flag suppresses both the
-// setState calls and the URL.createObjectURL.
+//   1. SINGLE-FILE STREAMING (fast path) — when the source streams cleanly
+//      into WebView2 (probe `direct_playable`: H.264 / yuv420p / ≤1080p / CFR
+//      / SDR), we DON'T re-encode anything. The player points at the WHOLE
+//      source via asset:// (offset 0 — the source timeline IS absolute) and we
+//      pre-warm the chapter's byte range so seeking is smooth. No temp clip,
+//      no blob, instant chapter switches.
 //
-// Input chapter accepts either casing (`at_ms` / `atMs`, `end_ms` /
-// `endMs`) — ChaptersTab uses camelCase, every other tab uses
-// snake_case. Plucking from both keeps the hook callable from any tab
-// without forcing a normalization step at the call site.
+//   2. PER-CHAPTER CLIP (fallback) — for sources that would stutter / OOM
+//      played whole (4K / VFR / HDR / exotic profile), extract a normalized
+//      re-encoded clip per chapter. The clip's URL is a blob: when below the
+//      BLOB_FETCH_CAP (smooth seeks) or the asset URL when it exceeds the cap
+//      (WebView2 OOMs ~400 MB+ blobs alongside the live decoder — see
+//      feedback-chapter-clip-blob-cap).
+//
+// Returns a stable { clip, loading } shape so consuming tabs can stay simple.
+// The clip carries { url, offsetMs, chapterId, direct? }; offsetMs is 0 for
+// the direct path and the clip's keyframe-snapped start for the clip path.
+//
+// Input chapter accepts either casing (`at_ms`/`atMs`, `end_ms`/`endMs`) —
+// ChaptersTab uses camelCase, every other tab snake_case.
 
 import { useEffect, useState } from 'react';
-import { extractChapterClip } from '../api/forge.js';
+import { extractChapterClip, probeMedia, prewarmMediaRange } from '../api/forge.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 
-// In-flight dedup lives in forge.js now so every caller (this hook plus
-// ChaptersTab's split/join pre-warm) shares one Promise per cache key.
-// Two parallel Rust extract_chapter_clip calls on the same target would
-// race the rename and leave a corrupted file behind (PIPELINE_ERROR_DECODE
-// observed 2026-05-25 on newly split/joined chapters).
-
 const BLOB_FETCH_CAP_BYTES = 150 * 1024 * 1024;
+
+// One probe per media path, shared across chapter changes + HMR. The
+// `direct_playable` verdict decides streaming-vs-clips and never changes for a
+// given file, so probe once and reuse. Map survives Vite module replacement.
+const __mediaProbe = (globalThis.__ffMediaProbe ||= new Map());
+function probeMediaCached(mediaPath) {
+  let p = __mediaProbe.get(mediaPath);
+  if (!p) {
+    p = probeMedia(mediaPath).catch(() => null);
+    __mediaProbe.set(mediaPath, p);
+  }
+  return p;
+}
 
 export function useChapterClip(mediaPath, chapter) {
   const id = chapter?.id ?? null;
@@ -49,14 +59,31 @@ export function useChapterClip(mediaPath, chapter) {
     let cancelled = false;
     setLoading(true);
     // Clear the previous clip so the player unmounts the prior chapter
-    // immediately rather than rendering it underneath the loading
-    // overlay while ffmpeg works.
+    // immediately rather than rendering it under the loading overlay.
     setClip(null);
-    extractChapterClip(mediaPath, startMs, endMs)
-      .then(async (result) => {
+
+    (async () => {
+      // Single-file streaming fast path — skip extraction entirely.
+      const probe = await probeMediaCached(mediaPath);
+      if (cancelled) return;
+      if (probe?.direct_playable) {
+        // Warm the chapter's byte range so the <video>'s range requests hit
+        // cache, not cold disk — eliminates the long-file seek stutter.
+        // Best-effort; never blocks playback.
+        prewarmMediaRange(mediaPath, startMs, endMs, probe.duration_ms || 0).catch(() => {});
+        if (cancelled) return;
+        setClip({ url: toMediaUrl(mediaPath), offsetMs: 0, chapterId: id, direct: true });
+        setLoading(false);
+        return;
+      }
+
+      // Fallback: per-chapter re-encoded clip.
+      try {
+        const result = await extractChapterClip(mediaPath, startMs, endMs);
         if (cancelled) return;
         if (!result) {
           console.warn('useChapterClip: extractChapterClip returned null');
+          setLoading(false);
           return;
         }
         const assetUrl = toMediaUrl(result.tempPath);
@@ -77,24 +104,19 @@ export function useChapterClip(mediaPath, chapter) {
           console.warn('useChapterClip: blob fetch failed, falling back to asset URL', err);
         }
         if (cancelled) return;
-        setClip({
-          url,
-          offsetMs: result.actualStartMs,
-          chapterId: id,
-        });
-      })
-      .catch((err) => {
+        setClip({ url, offsetMs: result.actualStartMs, chapterId: id });
+      } catch (err) {
         console.warn('useChapterClip: extractChapterClip failed', err);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
+
     return () => { cancelled = true; };
   }, [mediaPath, id, startMs, endMs]);
 
-  // Revoke the previous chapter's blob URL when clip changes. Cleanup
-  // fires AFTER the next clip has been set, so the video element has
-  // already swapped to the new URL before the old one is revoked.
+  // Revoke the previous chapter's blob URL when clip changes. Direct-stream
+  // clips carry an asset:// URL (no blob), so this is a no-op for them.
   useEffect(() => {
     if (!clip || !clip.url?.startsWith('blob:')) return undefined;
     return () => {

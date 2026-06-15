@@ -1301,7 +1301,16 @@ def _probe_media_dict(media: str) -> dict:
     import subprocess
     kind = _media_kind(media)
     out = {"ok": True, "media": media, "kind": kind,
-           "duration_ms": 0, "width": None, "height": None, "fps": None}
+           "duration_ms": 0, "width": None, "height": None, "fps": None,
+           # direct_playable: True when the source can stream straight into
+           # WebView2's <video> via asset:// WITHOUT a per-chapter re-encode —
+           # the single-file-streaming fast path. None until probed; False with
+           # `playable_reasons` listing what disqualified it (→ fall back to
+           # chapter-clip extraction). codec_name/pix_fmt/profile/fps_mode are
+           # surfaced so the caller (and logs) can see why.
+           "direct_playable": None, "playable_reasons": [],
+           "codec_name": None, "pix_fmt": None, "profile": None,
+           "fps_mode": None}
     if not shutil.which("ffprobe"):
         out["ok"] = False
         out["reason"] = "ffprobe-missing"
@@ -1335,8 +1344,64 @@ def _probe_media_dict(media: str) -> dict:
                 out["fps"] = round(float(num) / den_f, 3) if den_f else None
             except (TypeError, ValueError):
                 out["fps"] = None
+            _verdict_direct_playable(out, st)
             break
     return out
+
+
+def _verdict_direct_playable(out: dict, st: dict) -> None:
+    """Decide whether a video stream can stream straight into WebView2's
+    <video> via asset:// without a normalizing re-encode — the single-file
+    streaming fast path.
+
+    The per-chapter clip pipeline exists because long high-bitrate / 4K / VFR
+    / exotic-profile sources STUTTER or OOM the embedded Chromium decoder (see
+    chapter_clips.py FFMPEG_CLIP_ARGS). So we only direct-play sources we're
+    confident WebView2 handles cleanly; anything else falls back to clips.
+    Conservative by design — a false "not playable" just costs a clip; a false
+    "playable" costs the user a stuttering preview.
+
+    Mutates *out*: sets ``direct_playable`` (bool) + ``playable_reasons`` (the
+    disqualifiers, empty when playable) + the surfaced codec_name/pix_fmt/
+    profile/fps_mode.
+    """
+    reasons: list[str] = []
+    codec = (st.get("codec_name") or "").lower()
+    pix_fmt = (st.get("pix_fmt") or "").lower()
+    profile = (st.get("profile") or "")
+    width = st.get("width") or 0
+    transfer = (st.get("color_transfer") or "").lower()
+    primaries = (st.get("color_primaries") or "").lower()
+    avg = st.get("avg_frame_rate") or ""
+    rrate = st.get("r_frame_rate") or ""
+    out["codec_name"] = codec or None
+    out["pix_fmt"] = pix_fmt or None
+    out["profile"] = profile or None
+    # VFR is the primary stutter trigger; CFR has avg == r frame rate.
+    fps_mode = "cfr" if (avg and rrate and avg == rrate) else "vfr"
+    out["fps_mode"] = fps_mode
+
+    # H.264 is what WebView2 plays cleanly. HEVC/AV1/VP9 vary by platform.
+    if codec != "h264":
+        reasons.append(f"codec:{codec or 'unknown'}")
+    # 8-bit 4:2:0 only. 10-bit / 4:2:2 / 4:4:4 stutter or won't decode.
+    if pix_fmt and pix_fmt != "yuv420p":
+        reasons.append(f"pix_fmt:{pix_fmt}")
+    # High 10 / 4:2:2 / 4:4:4 profiles imply >8-bit or chroma the decoder chokes on.
+    if any(tok in profile.lower() for tok in ("10", "422", "444")):
+        reasons.append(f"profile:{profile}")
+    # ≤1080p — 4K decode is the heaviest op + the WebView2 blob/OOM cliff.
+    if width and width > 1920:
+        reasons.append(f"width:{width}")
+    # HDR (BT.2020 / PQ / HLG) needs tone-mapping; SDR BT.709 only.
+    if transfer in ("smpte2084", "arib-std-b67") or primaries == "bt2020":
+        reasons.append(f"hdr:{transfer or primaries}")
+    # Variable frame rate — the dominant long-source stutter cause.
+    if fps_mode == "vfr":
+        reasons.append("vfr")
+
+    out["playable_reasons"] = reasons
+    out["direct_playable"] = (len(reasons) == 0)
 
 
 @_cli_command
