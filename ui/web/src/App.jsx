@@ -1125,6 +1125,7 @@ export default function App() {
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}
+            onBusy={setBusy}
           />
         )}
         {tab === 'export' && (

@@ -124,6 +124,10 @@ export default function CharactersTab({
   trackPeaks,
   trackSpectrogram,
   trackBeats,
+  // App-level footer busy setter — drives the AcceptBar's sliding progress
+  // ribbon while the 9 channels recompute, so the (fast) calc has visible
+  // feedback at the footer.
+  onBusy,
 }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
@@ -415,8 +419,15 @@ export default function CharactersTab({
       return undefined;
     }
     let cancelled = false;
+    let startedBusy = false;
     setChannelsLoading(true);
     const timer = setTimeout(() => {
+      // Run the footer ribbon while the real compute is in-flight (after the
+      // debounce) — not during the 250ms settle, so a slider drag doesn't
+      // strobe it. Cleared in finally (or by cleanup if a newer run supersedes
+      // this one). startedBusy gates the cleanup so we only ever clear what we set.
+      startedBusy = true;
+      onBusy?.({ message: 'Calculating the 9 channels…' });
       stimProcess(path, {
         character: stagedChar.label,
         sliders: staged.params || {},
@@ -426,9 +437,17 @@ export default function CharactersTab({
       })
         .then((res) => { if (!cancelled) setChannelData(res?.channels || {}); })
         .catch(() => { if (!cancelled) setChannelData({}); })
-        .finally(() => { setChannelsLoading(false); });
+        .finally(() => {
+          if (cancelled) return;
+          setChannelsLoading(false);
+          onBusy?.(null);
+        });
     }, 250);
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      if (startedBusy) onBusy?.(null);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, activeChapterId, stagedChar?.id, editorMode, stagedParamsKey]);
 
