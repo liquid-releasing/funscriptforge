@@ -152,46 +152,43 @@ export default function CharactersTab({
   const loadingPathsRef = useRef(new Set());
   useEffect(() => {
     if (!path) return;
-    if (charactersByPath[path]) return;
-    if (chapters.length === 0) return;
+    // Already have REAL assignments cached → done. Critically, an empty `{}`
+    // must NOT count as "have it" (it would permanently block seeding), so we
+    // test key count, not truthiness.
+    const cached = charactersByPath[path];
+    if (cached && Object.keys(cached).length > 0) return;
+    if (chapters.length === 0) return;  // wait for chapters before seeding
     // Guard against re-firing the async read while it's already in flight.
-    // `charactersByPath` is in the deps (the guard above reads it), so this
-    // effect re-runs on every cache change; without this ref the read could
-    // be launched many times before the first resolve sets the cache,
-    // flooding the readCharacters IPC.
     if (loadingPathsRef.current.has(path)) return;
     loadingPathsRef.current.add(path);
     let cancelled = false;
     const done = () => loadingPathsRef.current.delete(path);
-    const fallback = () => {
-      done();
+    // No saved assignments → seed the journey-arc defaults across ALL chapters
+    // AND persist them to <stem>.characters.json so Export/generation read the
+    // same defaults the user sees (they were in-memory only before).
+    const seedAndSave = () => {
       if (cancelled) return;
-      // No saved assignments → seed the journey-arc defaults across all chapters
-      // AND persist them to <stem>.characters.json immediately. The defaults were
-      // previously in-memory only, so a fresh project exported (or generated)
-      // without ever pressing Accept found an empty sidecar and produced no
-      // e-stim. Persisting on seed makes "defaults assigned" actually durable.
       const seeded = seedCharacterAssignments(chapters);
-      let didSeed = false;
-      setCharactersByPath((prev) => {
-        if (prev[path]) return prev;
-        didSeed = true;
-        return { ...prev, [path]: seeded };
-      });
-      if (didSeed) saveCharacters(path, seeded).catch(() => {});
+      if (Object.keys(seeded).length === 0) return;
+      setCharactersByPath((prev) => (
+        prev[path] && Object.keys(prev[path]).length > 0 ? prev : { ...prev, [path]: seeded }
+      ));
+      saveCharacters(path, seeded).catch(() => {});  // idempotent
     };
     readCharacters(path)
       .then((res) => {
-        if (cancelled) { done(); return; }
+        done();
+        if (cancelled) return;
         const disk = res?.characters;
         if (disk && Object.keys(disk).length > 0) {
-          setCharactersByPath((prev) => (prev[path] ? prev : { ...prev, [path]: disk }));
-          done();
+          setCharactersByPath((prev) => (
+            prev[path] && Object.keys(prev[path]).length > 0 ? prev : { ...prev, [path]: disk }
+          ));
         } else {
-          fallback();
+          seedAndSave();
         }
       })
-      .catch(fallback);
+      .catch(() => { done(); seedAndSave(); });
     return () => { cancelled = true; };
   }, [path, chapters, charactersByPath, setCharactersByPath]);
 
@@ -215,8 +212,15 @@ export default function CharactersTab({
 
   const [activeChapterId, setActiveChapterId] = useState(() => chapters[0]?.id ?? null);
   useEffect(() => {
-    setActiveChapterId(chapters[0]?.id ?? null);
-  }, [path]);  // eslint-disable-line react-hooks/exhaustive-deps
+    // Pick the first chapter on project change — and RECOVER when chapters
+    // arrive after mount (analyze finishes after Channels is already shown):
+    // if the active id isn't among the loaded chapters, fall to the first.
+    // Without this, activeChapterId stuck at null → no active chapter → the
+    // seeded character/mechanical defaults never render.
+    setActiveChapterId((prev) => (
+      prev && chapters.some((c) => c.id === prev) ? prev : (chapters[0]?.id ?? null)
+    ));
+  }, [path, chapters]);  // eslint-disable-line react-hooks/exhaustive-deps
   const activeChapter = useMemo(
     () => chapters.find((c) => c.id === activeChapterId) || null,
     [chapters, activeChapterId],
