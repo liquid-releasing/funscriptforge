@@ -196,6 +196,45 @@ export function passageInfoForChapter(passages, chapters, idx) {
   };
 }
 
+// ── Single full-span "arc" ⇄ passages — the slider editor's model ──
+// The arc lane edits ONE full-span passage via four params (start depth /
+// peak / rise point / fall point). These convert to/from the passages array
+// so presets and sliders share one representation.
+const _ARC_EPS = 0.001;
+const _clamp01 = (v) => (v < 0 ? 0 : (v > 1 ? 1 : v));
+
+function _inferArcShape(floor, ceiling, rp, fp) {
+  if (ceiling <= floor + _ARC_EPS) return 'sustain';       // flat line
+  if (fp < 1 - _ARC_EPS) return rp > _ARC_EPS ? 'swell' : 'release';
+  return rp < _ARC_EPS ? 'sustain' : 'build';
+}
+
+// Current arc params from the passages array (a single full-span passage), or
+// a neutral flat-at-full arc when empty/multi-span.
+export function arcFromPassages(passages) {
+  if (passages && passages.length === 1) {
+    const p = passages[0];
+    const [rp, fp] = effectivePoints(p);
+    return { floor: p.floor ?? 0.3, ceiling: p.ceiling ?? 1.0, risePoint: rp, fallPoint: fp };
+  }
+  return { floor: 1.0, ceiling: 1.0, risePoint: 0.0, fallPoint: 1.0 };
+}
+
+// Build a one-passage array from arc params over `n` chapters. A flat arc at
+// full (ceiling≈floor≈1) is the neutral Hold → no passage. Enforces
+// ceiling≥floor and fallPoint≥risePoint.
+export function passagesFromArc(arc, n) {
+  if (n <= 0) return [];
+  const floor = _clamp01(arc.floor);
+  const ceiling = Math.max(floor, _clamp01(arc.ceiling));
+  if (ceiling >= 0.999 && floor >= 0.999) return [];
+  const rp = _clamp01(arc.risePoint);
+  const fp = Math.max(rp, _clamp01(arc.fallPoint));
+  const shape = _inferArcShape(floor, ceiling, rp, fp);
+  const p = makePassage(0, Math.max(0, n - 1), shape);
+  return [{ ...p, floor, ceiling, risePoint: rp, fallPoint: fp }];
+}
+
 // Which preset (if any) does the current passages array represent? Empty = the
 // neutral "Hold steady"; a single full-span passage matching a preset's shape +
 // floor/ceiling = that preset; anything hand-edited = null (no pill highlighted).

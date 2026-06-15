@@ -45,7 +45,7 @@ import MechanicalPanel from './MechanicalPanel.jsx';
 import PassagesPanel, { EnvelopeRibbon } from './PassagesPanel.jsx';
 import {
   PASSAGE_PRESETS, PASSAGE_SHAPES, passagesForPreset, activePassagePreset,
-  passageInfoForChapter,
+  passageInfoForChapter, arcFromPassages, passagesFromArc,
 } from '../data/passages.js';
 import { activeAxes, DEFAULT_STYLE } from '../data/multiaxis.js';
 
@@ -400,15 +400,19 @@ export default function CharactersTab({
       .catch(() => { if (!cancelled) setPassages([]); });
     return () => { cancelled = true; };
   }, [path]);
+  // Debounce the disk write so a slider drag doesn't fire (and race) a write
+  // per tick. State updates instantly (the arc/ribbon redraw live); only the
+  // trailing value persists, then the nonce bump re-runs the channel preview.
+  const passagesSaveTimer = useRef(null);
   const commitPassages = (next) => {
     setPassages(next);
-    if (path) {
+    if (!path) { setPassagesNonce((k) => k + 1); return; }
+    if (passagesSaveTimer.current) clearTimeout(passagesSaveTimer.current);
+    passagesSaveTimer.current = setTimeout(() => {
       savePassages(path, next)
         .then(() => setPassagesNonce((k) => k + 1))
         .catch(() => {});
-    } else {
-      setPassagesNonce((k) => k + 1);
-    }
+    }, 180);
   };
   // Index of the chapter being edited, and how (if at all) the active passage
   // shapes it — drives the provenance badge, the ribbon "you-are-here" marker,
@@ -707,6 +711,7 @@ export default function CharactersTab({
           info={passageInfo}
           passageName={passageName}
           onPick={(id) => commitPassages(passagesForPreset(id, chapters.length))}
+          onArcChange={(arc) => commitPassages(passagesFromArc(arc, chapters.length))}
           onFineTune={() => setEditorMode('passages')}
         />
       )}
@@ -807,10 +812,15 @@ export default function CharactersTab({
 // the chapters. "Fine-tune" jumps to the full Passages editor for
 // per-span Build/Release/Swell shaping.
 // ──────────────────────────────────────────────────────────────
-function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPick, onFineTune }) {
+function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPick, onArcChange, onFineTune }) {
   const activeId = activePassagePreset(passages);
   const ACCENT = '#ff8c42';
   const fmt = (v) => `×${(v ?? 1).toFixed(2)}`;
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  // Live arc params (the four sliders edit ONE full-span passage). Reads back
+  // from the current passages, so a preset click repositions the sliders too.
+  const arc = arcFromPassages(passages);
+  const setArc = (patch) => onArcChange?.({ ...arc, ...patch });
   // Provenance line: what shapes THIS chapter, by how much, and where it's
   // headed — so the volume drawing below is never an unexplained number.
   let provenance = null;
@@ -867,8 +877,21 @@ function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPi
             );
           })}
           <button
+            onClick={() => setAdjustOpen((v) => !v)}
+            title="Shape the arc by hand — start depth, peak, and where it rises/falls"
+            style={{
+              fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
+              padding: '3px 10px', borderRadius: 999, cursor: 'pointer',
+              background: adjustOpen ? ACCENT : 'transparent',
+              border: `1px solid ${adjustOpen ? ACCENT : 'var(--border)'}`,
+              color: adjustOpen ? '#0e1117' : 'var(--text-dim)',
+            }}
+          >
+            Adjust {adjustOpen ? '▾' : '▸'}
+          </button>
+          <button
             onClick={onFineTune}
-            title="Open the full Passages editor for per-span shaping"
+            title="Open the full Passages editor for per-span (multi-arc) shaping"
             style={{
               fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
               padding: '3px 10px', borderRadius: 999, cursor: 'pointer',
@@ -876,10 +899,34 @@ function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPi
               color: 'var(--text-dim)',
             }}
           >
-            Fine-tune →
+            Per-span →
           </button>
         </div>
       </div>
+
+      {/* Four-slider arc editor — start depth, peak, and where it rises / falls.
+          Edits ONE full-span passage; presets just preset these four. */}
+      {adjustOpen && (
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px',
+          padding: '8px 14px 10px', borderTop: '1px solid var(--border)',
+          background: 'var(--surface-2)',
+        }}>
+          <ArcSlider label="Start depth" hint="where the arc begins"
+                     value={arc.floor} accent={ACCENT}
+                     onChange={(v) => setArc({ floor: v, ceiling: Math.max(v, arc.ceiling) })} />
+          <ArcSlider label="Peak" hint="how high it reaches"
+                     value={arc.ceiling} accent={ACCENT}
+                     onChange={(v) => setArc({ ceiling: v, floor: Math.min(v, arc.floor) })} />
+          <ArcSlider label="Rise point" hint="where it finishes climbing"
+                     value={arc.risePoint} accent={ACCENT}
+                     onChange={(v) => setArc({ risePoint: v, fallPoint: Math.max(v, arc.fallPoint) })} />
+          <ArcSlider label="Fall point" hint="where it starts easing down"
+                     value={arc.fallPoint} accent={ACCENT}
+                     onChange={(v) => setArc({ fallPoint: v, risePoint: Math.min(v, arc.risePoint) })} />
+        </div>
+      )}
+
       <div style={{ borderTop: '1px solid var(--border)' }}>
         <EnvelopeRibbon chapters={chapters} passages={passages} height={52} activeIdx={activeIdx} />
       </div>
@@ -896,6 +943,28 @@ function PassageArcLane({ chapters, passages, activeIdx, info, passageName, onPi
         )}
       </div>
     </div>
+  );
+}
+
+// One labeled 0–100% slider for the arc editor. Value is 0..1; the readout
+// shows a percentage.
+function ArcSlider({ label, hint, value, accent, onChange }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+                       textTransform: 'uppercase', color: 'var(--text-dim)' }}>{label}</span>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--text-soft)', marginLeft: 'auto' }}>
+          {Math.round((value ?? 0) * 100)}%
+        </span>
+      </span>
+      <input
+        type="range" min={0} max={100} value={Math.round((value ?? 0) * 100)}
+        onChange={(e) => onChange(Number(e.target.value) / 100)}
+        title={hint}
+        style={{ width: '100%', accentColor: accent, cursor: 'pointer' }}
+      />
+    </label>
   );
 }
 

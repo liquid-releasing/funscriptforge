@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   PASSAGE_PRESETS, passagesForPreset, presetSamples, activePassagePreset,
   shapeFactor, envelopeFactor, resolvePassageSpans, passageFactorAt, passageInfoForChapter,
+  arcFromPassages, passagesFromArc,
 } from './passages.js';
 
 // Three equal 10s chapters (camelCase, the Channels shape).
@@ -97,6 +98,34 @@ describe('eased parametric envelope (mirror of forge/passages.py)', () => {
     for (const pr of PASSAGE_PRESETS.filter((p) => p.id !== 'hold')) {
       expect(activePassagePreset(passagesForPreset(pr.id, 5))).toBe(pr.id);
     }
+  });
+});
+
+describe('arc ⇄ passages (the 4-slider editor model)', () => {
+  it('empty/multi passages read back as a neutral flat-at-full arc', () => {
+    expect(arcFromPassages([])).toEqual({ floor: 1.0, ceiling: 1.0, risePoint: 0.0, fallPoint: 1.0 });
+  });
+
+  it('round-trips a preset through arc and back', () => {
+    const ps = passagesForPreset('edge', 5);
+    const arc = arcFromPassages(ps);
+    expect(arc.floor).toBeCloseTo(0.35, 6);
+    expect(arc.ceiling).toBeCloseTo(1.0, 6);
+    expect(arc.risePoint).toBeCloseTo(0.5, 6);
+    expect(arc.fallPoint).toBeCloseTo(0.6, 6);
+  });
+
+  it('passagesFromArc builds one full-span passage, full-flat = Hold (none)', () => {
+    expect(passagesFromArc({ floor: 1, ceiling: 1, risePoint: 0, fallPoint: 1 }, 5)).toEqual([]);
+    const ps = passagesFromArc({ floor: 0.3, ceiling: 1.0, risePoint: 0.5, fallPoint: 1.0 }, 5);
+    expect(ps).toHaveLength(1);
+    expect(ps[0]).toMatchObject({ beginIdx: 0, endIdx: 4, floor: 0.3, ceiling: 1.0, risePoint: 0.5, fallPoint: 1.0 });
+  });
+
+  it('enforces ceiling≥floor and fallPoint≥risePoint', () => {
+    const ps = passagesFromArc({ floor: 0.8, ceiling: 0.4, risePoint: 0.9, fallPoint: 0.2 }, 3);
+    expect(ps[0].ceiling).toBeGreaterThanOrEqual(ps[0].floor);
+    expect(ps[0].fallPoint).toBeGreaterThanOrEqual(ps[0].risePoint);
   });
 });
 
