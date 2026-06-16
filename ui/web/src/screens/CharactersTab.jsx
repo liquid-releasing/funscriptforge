@@ -135,6 +135,10 @@ export default function CharactersTab({
   // ribbon while the 9 channels recompute, so the (fast) calc has visible
   // feedback at the footer.
   onBusy,
+  // Shared active chapter (App) — seed on mount, report changes back, so
+  // Chapters ↔ Channels keep the same place across tab switches.
+  initialChapterId = null,
+  onActiveChapterChange,
 }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
@@ -218,7 +222,9 @@ export default function CharactersTab({
     if (path) saveCharacters(path, nextMap).catch(() => {});
   };
 
-  const [activeChapterId, setActiveChapterId] = useState(() => chapters[0]?.id ?? null);
+  // Seed from the shared active chapter (App) so Channels opens on the same
+  // chapter you were editing in Chapters; fall back to the first.
+  const [activeChapterId, setActiveChapterId] = useState(() => initialChapterId ?? chapters[0]?.id ?? null);
   useEffect(() => {
     // Pick the first chapter on project change — and RECOVER when chapters
     // arrive after mount (analyze finishes after Channels is already shown):
@@ -229,6 +235,10 @@ export default function CharactersTab({
       prev && chapters.some((c) => c.id === prev) ? prev : (chapters[0]?.id ?? null)
     ));
   }, [path, chapters]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // Report the active chapter up so the shared state (and Chapters) follow.
+  useEffect(() => {
+    if (activeChapterId) onActiveChapterChange?.(activeChapterId);
+  }, [activeChapterId]);  // eslint-disable-line react-hooks/exhaustive-deps
   const activeChapter = useMemo(
     () => chapters.find((c) => c.id === activeChapterId) || null,
     [chapters, activeChapterId],

@@ -312,7 +312,7 @@ function mergeWorkingActions({ originalActions, chapters, acceptedIds, tones, pa
 // number of hooks" guard.
 const EMPTY_CHAPTER = { id: '__empty__', atMs: 0, endMs: 0, name: '', color: '#888' };
 
-export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, trackSpectrogram, trackBeats, refreshAudioSidecars, setPhrasesByPath }) {
+export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, trackSpectrogram, trackBeats, refreshAudioSidecars, setPhrasesByPath, initialChapterId = null, onActiveChapterChange }) {
   const totalMs = project?.durationMs ?? 0;
   const actions = Array.isArray(project?.actions) ? project.actions : [];
 
@@ -338,7 +338,13 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   const [chapters, setChapters] = useState(() =>
     Array.isArray(project?.chapterList) ? project.chapterList : [],
   );
-  const [activeId, setActiveId] = useState(chapters[0]?.id ?? null);
+  // Seed from the shared active chapter (App) so returning to this tab keeps
+  // your place; fall back to the first chapter. Changes are reported back via
+  // the effect below. (dogfood 2026-06-16: tab-switch snapped to chapter 1.)
+  const [activeId, setActiveId] = useState(initialChapterId ?? chapters[0]?.id ?? null);
+  useEffect(() => {
+    if (activeId) onActiveChapterChange?.(activeId);
+  }, [activeId]);  // eslint-disable-line react-hooks/exhaustive-deps
   // tonesByChapter: { ch1: 'build', ch2: 'edge', ... }
   const [tonesByChapter, setTonesByChapter] = useState(() =>
     seedTones(chapters),

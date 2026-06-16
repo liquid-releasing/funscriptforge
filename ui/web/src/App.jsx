@@ -768,6 +768,16 @@ export default function App() {
     if (!project?.path || promptedProjectRef.current !== project?.id) return;
     saveSession(project.path, { tab, at: Date.now() });
   }, [tab, project?.path, project?.id]);
+
+  // Active chapter SHARED across the chapter-scoped tabs (Chapters, Channels),
+  // so switching tabs — or returning after an Accept advanced you — keeps your
+  // place instead of snapping back to the first chapter (dogfood 2026-06-16:
+  // "I click back to the previous tab, it takes me to the first chapter").
+  // Tabs unmount on switch, so they SEED from this on mount and REPORT changes
+  // back; null = "not chosen yet" → a tab defaults to its first chapter. Reset
+  // per project so a fresh open starts at the top.
+  const [activeChapterId, setActiveChapterId] = useState(null);
+  useEffect(() => { setActiveChapterId(null); }, [project?.id]);
   const { analysisState: globalAnalysisState } = deriveAnalysisState({
     hasMedia: !!project?.mediaPath,
     analyzing: !!busy,
@@ -1145,6 +1155,8 @@ export default function App() {
             // 2026-05-23: "it's actually pretty fast, should be in the
             // analysis page").
             setPhrasesByPath={setPhrasesByPath}
+            initialChapterId={activeChapterId}
+            onActiveChapterChange={setActiveChapterId}
           />
         )}
         {tab === 'phrases' && (
@@ -1192,6 +1204,8 @@ export default function App() {
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}
             onBusy={setBusy}
+            initialChapterId={activeChapterId}
+            onActiveChapterChange={setActiveChapterId}
           />
         )}
         {tab === 'export' && (
