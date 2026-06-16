@@ -549,11 +549,13 @@ function ProjectCard({ project, onClick, onReveal }) {
                  alt=""
                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <Icon name={project.kind === 'audio' ? 'music' : 'film'} size={32} />}
-        {/* Reveal-in-Explorer button — top-right overlay on the thumb.
-            Stops propagation so it doesn't trigger card-open. */}
+        {/* Edit / open-project button — top-right overlay on the thumb.
+            The whole card opens the project too; this pencil is the explicit
+            "this opens to edit" affordance (users couldn't tell the card was
+            the way in). Stops propagation so card + button don't double-fire. */}
         <button
-          onClick={(e) => { e.stopPropagation(); onReveal(); }}
-          title="Reveal in Explorer"
+          onClick={(e) => { e.stopPropagation(); onClick?.(); }}
+          title="Open to edit"
           style={{
             position: 'absolute', top: 6, right: 6,
             width: 26, height: 26, padding: 0,
@@ -564,7 +566,7 @@ function ProjectCard({ project, onClick, onReveal }) {
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          <Icon name="external-link" size={13} />
+          <Icon name="edit" size={13} />
         </button>
       </div>
 
@@ -601,8 +603,10 @@ function ProjectCard({ project, onClick, onReveal }) {
           <ProjectPills pills={project.pills} status={project.status} />
         </div>
 
-        {/* Metadata row — only render known fields */}
-        <ProjectMetaRow project={project} />
+        {/* Metadata row — only render known fields; reveal-in-folder sits here
+            next to the date now (moved off the thumb so the pencil can own
+            the top-right "open to edit" slot). */}
+        <ProjectMetaRow project={project} onReveal={onReveal} />
       </div>
     </div>
   );
@@ -627,21 +631,39 @@ function ProjectPills({ pills, status }) {
   );
 }
 
-function ProjectMetaRow({ project }) {
+function ProjectMetaRow({ project, onReveal }) {
   const parts = [];
   if (project.durationMs != null) parts.push(fmtDuration(project.durationMs));
   if (project.metadata.chapters != null) parts.push(`${project.metadata.chapters} ch`);
   if (project.metadata.bpm != null) parts.push(`${project.metadata.bpm} bpm`);
   if (project.metadata.beats != null) parts.push(`${project.metadata.beats} beats`);
   parts.push(fmtRelativeMtime(project.mtime));
-  if (parts.length === 0) return null;
   return (
     <div style={{
       fontSize: 10, color: 'var(--text-dim)',
-      display: 'flex', flexWrap: 'wrap', gap: 8,
+      display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
       marginTop: 'auto',
     }}>
       {parts.map((s, i) => <span key={i}>{s}</span>)}
+      {/* Open file location — the "arrow out of the box" moved here, next to
+          the date, so it reads as a file action rather than competing with the
+          card's open-to-edit gesture. Reveals the media file in the OS folder. */}
+      {onReveal && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onReveal(); }}
+          title="Open file location"
+          style={{
+            marginLeft: 'auto', width: 20, height: 20, padding: 0,
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: 'var(--text-dim)', borderRadius: 4,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-dim)'; }}
+        >
+          <Icon name="external-link" size={13} />
+        </button>
+      )}
     </div>
   );
 }
