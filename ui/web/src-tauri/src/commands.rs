@@ -10,7 +10,7 @@
 // Python pipeline stages land.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Emitter, Manager};
@@ -477,13 +477,62 @@ fn cli_command(args: &[&str]) -> Command {
     cmd
 }
 
+// ── D7: reap backend children on window-close ───────────────────────────────
+// Every backend spawn (analyze, generate, assess, stim/multiaxis, exports…)
+// registers its top-level PID here while it runs and deregisters on exit. On
+// window-close / app-exit we kill each still-running tree (taskkill /T reaps the
+// ffmpeg child too). Without this, closing the window mid-analyze orphaned the
+// forge-cli + ffmpeg children — they kept burning CPU AND held a lock on the
+// source video, so the next open couldn't touch the file. In-process so it
+// survives webview reloads (the Rust side outlives them).
+static ACTIVE_CHILDREN: OnceLock<Mutex<HashSet<u32>>> = OnceLock::new();
+fn active_children() -> &'static Mutex<HashSet<u32>> {
+    ACTIVE_CHILDREN.get_or_init(|| Mutex::new(HashSet::new()))
+}
+fn register_child(pid: u32) {
+    if let Ok(mut s) = active_children().lock() {
+        s.insert(pid);
+    }
+}
+fn deregister_child(pid: u32) {
+    if let Ok(mut s) = active_children().lock() {
+        s.remove(&pid);
+    }
+}
+
+/// Kill every still-running backend child tree. Called from the Tauri exit /
+/// window-destroy hooks (see lib.rs). Idempotent — killing an already-dead PID
+/// is harmless.
+pub fn reap_active_children() {
+    let pids: Vec<u32> = active_children()
+        .lock()
+        .map(|s| s.iter().copied().collect())
+        .unwrap_or_default();
+    for pid in pids {
+        kill_pid_tree(pid);
+    }
+}
+
 // Generic backend runner: runs `<backend> <args…>`, returns stdout. Non-zero
-// exits surface stderr in the error.
+// exits surface stderr in the error. Spawns explicitly (not .output()) so the
+// child PID is tracked for D7 reaping.
 async fn run_cli(args: &[&str]) -> Result<String, String> {
-    let output = cli_command(args)
-        .output()
-        .await
+    let child = cli_command(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|e| format!("spawn forge-cli failed: {}", e))?;
+    let pid = child.id();
+    if let Some(p) = pid {
+        register_child(p);
+    }
+    let output = child
+        .wait_with_output()
+        .await
+        .map_err(|e| format!("wait forge-cli failed: {}", e))?;
+    if let Some(p) = pid {
+        deregister_child(p);
+    }
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -545,6 +594,7 @@ async fn run_cli_superseding(key: &str, args: &[&str]) -> Result<String, String>
         if let Ok(mut m) = preview_pids().lock() {
             m.insert(key.to_string(), pid);
         }
+        register_child(pid); // D7: reap on window-close too
     }
 
     let output = child
@@ -561,6 +611,7 @@ async fn run_cli_superseding(key: &str, args: &[&str]) -> Result<String, String>
                 m.remove(key);
             }
         }
+        deregister_child(pid);
     }
 
     if !output.status.success() {
@@ -629,10 +680,25 @@ async fn run_cli_with_progress(
         drain(&mut offset);
     });
 
-    let output = cmd
-        .output()
-        .await
+    // Spawn explicitly (not .output()) so the PID is tracked for D7 reaping —
+    // this is the long-running path (auto-chapter, assess, generate) whose
+    // orphaned forge-cli + ffmpeg children were the worst offenders on close.
+    let child = cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|e| format!("spawn python failed: {}", e))?;
+    let child_pid = child.id();
+    if let Some(p) = child_pid {
+        register_child(p);
+    }
+    let output = child
+        .wait_with_output()
+        .await
+        .map_err(|e| format!("wait python failed: {}", e))?;
+    if let Some(p) = child_pid {
+        deregister_child(p);
+    }
 
     let _ = cancel_tx.send(());
     let _ = polling.await;

@@ -5,6 +5,14 @@ mod library;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // D7 — reap orphaned backend children (forge-cli + ffmpeg) the moment a
+        // window is destroyed, so a close mid-analyze can't leave them burning
+        // CPU and holding a lock on the source video.
+        .on_window_event(|_window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                commands::reap_active_children();
+            }
+        })
         .setup(|app| {
             // Resolve the Python backend once: bundled forge-cli resource in a
             // packaged build, else the dev .venv + cli.py.
@@ -84,6 +92,13 @@ pub fn run() {
             library::library_reveal_in_explorer,
             library::library_pick_folder,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            // Backstop for the window-destroy hook above — also reap on the
+            // final app-exit so nothing slips through a force-quit path.
+            if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
+                commands::reap_active_children();
+            }
+        });
 }
