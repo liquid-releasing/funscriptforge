@@ -1534,7 +1534,7 @@ function TimelineRow({ evt, recipe, labelMode, selected, onSelect, onEdit, onDel
       onClick={onSelect}
       style={{
         display: 'grid',
-        gridTemplateColumns: '60px 1fr auto',
+        gridTemplateColumns: '84px 1fr auto',
         gap: 8, padding: '7px 12px', cursor: 'pointer',
         background: selected ? 'var(--surface-2)' : 'transparent',
         borderLeft: `3px solid ${selected ? color : 'transparent'}`,
@@ -1542,8 +1542,15 @@ function TimelineRow({ evt, recipe, labelMode, selected, onSelect, onEdit, onDel
         alignItems: 'center',
       }}
     >
-      <div className="mono" style={{ fontSize: 11, color: 'var(--text-soft)' }}>
-        {fmtTime(evt.beginMs)}
+      {/* Begin AND end, in the precise mm:ss.mmm the capture bar takes — so
+          the end time is directly reusable as the next event's start (manual
+          chaining; dogfood 2026-06-16). The Chain toggle does this auto, but
+          users often tweak in between and re-enter the exact end by hand. */}
+      <div className="mono" style={{ fontSize: 10.5, lineHeight: 1.4 }}>
+        <div style={{ color: 'var(--text-soft)' }}>{fmtClock(evt.beginMs)}</div>
+        <div style={{ color: 'var(--text-dim)' }} title="end — reuse as next start">
+          {fmtClock(evt.endMs)}
+        </div>
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
