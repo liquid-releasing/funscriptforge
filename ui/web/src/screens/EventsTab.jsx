@@ -602,6 +602,7 @@ export default function EventsTab({
           onSelect={setSelectedId}
           onEdit={(id) => setSelectedId(id)}
           onDelete={handleDeleteEvent}
+          onNewEvent={() => setSelectedId(null)}
         />
       </div>
 
@@ -1423,7 +1424,7 @@ function CapturePane({ recipe, beginMs, endMs, editingEvent, labelMode, onAddEve
 // ──────────────────────────────────────────────────────────────
 // TimelinePane — right
 // ──────────────────────────────────────────────────────────────
-function TimelinePane({ events, totalEvents, scope, chapters, recipeFor, labelMode, selectedId, onSelect, onEdit, onDelete }) {
+function TimelinePane({ events, totalEvents, scope, chapters, recipeFor, labelMode, selectedId, onSelect, onEdit, onDelete, onNewEvent }) {
   const grouped = chapters.map((ch) => ({
     ch,
     items: events.filter((e) => e.beginMs >= ch.atMs && e.beginMs < ch.endMs),
@@ -1486,6 +1487,33 @@ function TimelinePane({ events, totalEvents, scope, chapters, recipeFor, labelMo
             ))}
           </div>
         ))}
+      </div>
+
+      {/* New-event affordance — explicit escape from edit-mode back to a
+          blank, armed capture (clears the selection). Clicking a row body
+          toggles select, but once you'd edited one there was no DISCOVERABLE
+          way back to "add a new one" (dogfood 2026-06-16). Lives at the
+          bottom-right of the list, below the last entry; lights up accent
+          while an event is selected to read as "leave editing, start fresh." */}
+      <div style={{
+        padding: '8px 10px', borderTop: '1px solid var(--border)',
+        display: 'flex', justifyContent: 'flex-end',
+      }}>
+        <button
+          type="button"
+          onClick={onNewEvent}
+          title="Start a new event (clears the editor)"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '7px 12px', borderRadius: 7,
+            background: selectedId ? 'var(--accent)' : 'var(--surface-2)',
+            border: `1px solid ${selectedId ? 'var(--accent)' : 'var(--border)'}`,
+            color: selectedId ? '#fff' : 'var(--text)',
+            fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          <Icon name="plus" size={15} /> New event
+        </button>
       </div>
     </div>
   );
