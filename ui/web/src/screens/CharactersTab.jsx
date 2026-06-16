@@ -535,6 +535,7 @@ export default function CharactersTab({
     }
     let cancelled = false;
     let startedBusy = false;
+    let watchdog = null;
     setChannelsLoading(true);
     const timer = setTimeout(() => {
       // Run the footer ribbon while the real compute is in-flight (after the
@@ -543,6 +544,15 @@ export default function CharactersTab({
       // this one). startedBusy gates the cleanup so we only ever clear what we set.
       startedBusy = true;
       onBusy?.({ message: 'Calculating the 9 channels…' });
+      // Safety net: a chapter window compute should finish in seconds. If one
+      // ever outlasts this, clear the spinner so the UI stays recoverable —
+      // the Rust latest-wins reaper kills the orphaned child on the next move.
+      watchdog = setTimeout(() => {
+        if (cancelled) return;
+        setChannelData({});
+        setChannelsLoading(false);
+        onBusy?.(null);
+      }, 120000);
       stimProcess(path, {
         character: stagedChar.label,
         sliders: staged.params || {},
@@ -553,6 +563,7 @@ export default function CharactersTab({
         .then((res) => { if (!cancelled) setChannelData(res?.channels || {}); })
         .catch(() => { if (!cancelled) setChannelData({}); })
         .finally(() => {
+          if (watchdog) clearTimeout(watchdog);
           if (cancelled) return;
           setChannelsLoading(false);
           onBusy?.(null);
@@ -561,6 +572,7 @@ export default function CharactersTab({
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      if (watchdog) clearTimeout(watchdog);
       if (startedBusy) onBusy?.(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

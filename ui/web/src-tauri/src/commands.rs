@@ -10,8 +10,9 @@
 // Python pipeline stages land.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::process::Command;
 
@@ -483,6 +484,84 @@ async fn run_cli(args: &[&str]) -> Result<String, String> {
         .output()
         .await
         .map_err(|e| format!("spawn forge-cli failed: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("cli {} exited non-zero: {}", args.first().unwrap_or(&""), stderr));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+// ── Latest-wins preview compute ─────────────────────────────────────────────
+// The per-chapter 9-channel (stim-process) and axis (multiaxis-process) draws
+// fire on every chapter switch and slider settle. Each is a fresh CPU-bound
+// Python `process()` over the chapter window. When the user jumps chapters
+// mid-compute, the React side discards the stale result — but nothing stops the
+// superseded PYTHON child, so it keeps thrashing CPU. On a long chapter with a
+// memory-pressured WebView2, two heavy runs starve each other and the new one
+// looks "stuck calculating forever." Fix: keep a registry of the in-flight
+// preview child per command and reap the prior one before spawning the next, so
+// only the latest ever runs (mirrors kill_existing_analyze, in-process so it
+// survives webview reloads). A superseding kill is the ONLY reaper — when the
+// run completes normally it deregisters itself.
+static PREVIEW_PIDS: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
+fn preview_pids() -> &'static Mutex<HashMap<String, u32>> {
+    PREVIEW_PIDS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(windows)]
+fn kill_pid_tree(pid: u32) {
+    use std::os::windows::process::CommandExt;
+    let _ = std::process::Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW — no console flash
+        .output();
+}
+#[cfg(not(windows))]
+fn kill_pid_tree(pid: u32) {
+    let _ = std::process::Command::new("kill")
+        .args(["-9", &pid.to_string()])
+        .output();
+}
+
+// run_cli, but latest-wins: reap any prior child registered under `key` (the
+// run the user just navigated away from), spawn this one, register it, await
+// output, then deregister. Returns stdout like run_cli.
+async fn run_cli_superseding(key: &str, args: &[&str]) -> Result<String, String> {
+    // Reap the previous in-flight preview for this key so it stops competing
+    // for CPU with the run we're about to start.
+    let prev = preview_pids().lock().ok().and_then(|mut m| m.remove(key));
+    if let Some(pid) = prev {
+        kill_pid_tree(pid);
+    }
+
+    let child = cli_command(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("spawn forge-cli failed: {}", e))?;
+    let pid = child.id();
+    if let Some(pid) = pid {
+        if let Ok(mut m) = preview_pids().lock() {
+            m.insert(key.to_string(), pid);
+        }
+    }
+
+    let output = child
+        .wait_with_output()
+        .await
+        .map_err(|e| format!("wait forge-cli failed: {}", e))?;
+
+    // Deregister — but only if we're still the registered pid; a newer run may
+    // have already replaced (and would have killed) us, and we must not clobber
+    // its entry.
+    if let Some(pid) = pid {
+        if let Ok(mut m) = preview_pids().lock() {
+            if m.get(key) == Some(&pid) {
+                m.remove(key);
+            }
+        }
+    }
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -2218,7 +2297,9 @@ pub async fn stim_process(
         args.push(e.to_string());
     }
     let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let res = run_cli(&argv).await;
+    // Latest-wins: a chapter jump mid-compute reaps the prior stim run so it
+    // can't thrash CPU and stall this one ("stuck calculating" on long chapters).
+    let res = run_cli_superseding("preview-stim", &argv).await;
     let _ = tokio::fs::remove_file(&tmp).await;
     let out = res?;
     serde_json::from_str(&out).map_err(|e| format!("parse stim-process output: {}", e))
@@ -2251,7 +2332,8 @@ pub async fn multiaxis_process(
         args.push(e.to_string());
     }
     let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let out = run_cli(&argv).await?;
+    // Latest-wins, same as stim_process — reap the superseded axis draw.
+    let out = run_cli_superseding("preview-multiaxis", &argv).await?;
     serde_json::from_str(&out).map_err(|e| format!("parse multiaxis-process output: {}", e))
 }
 
