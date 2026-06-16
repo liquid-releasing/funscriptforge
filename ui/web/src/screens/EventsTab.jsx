@@ -51,6 +51,33 @@ const NORMAL_RECIPE = {
   params: [], steps: [], defaultParams: {},
 };
 
+// Self-heal for the pre-clamp snap artifact: an event whose Begin snapped onto
+// the prior chapter's last beat (a few ms BEFORE a boundary) but which extends
+// INTO the next chapter really belongs to that next chapter. Snap such begins
+// up to the boundary so each event homes to exactly one chapter. Only touches
+// begins within tol BEFORE a boundary that the event crosses; events genuinely
+// starting (and ending) in the prior chapter are left alone. Returns the
+// (possibly) rewritten list plus whether anything changed (→ re-persist once).
+const SNAP_HEAL_TOL_MS = 250;
+function healChapterSnap(loaded, chapterList) {
+  if (!chapterList?.length) return { events: loaded, changed: false };
+  const starts = chapterList
+    .map((c) => c.atMs)
+    .filter((m) => m != null)
+    .sort((a, b) => a - b);
+  let changed = false;
+  const healed = loaded.map((e) => {
+    for (const atMs of starts) {
+      if (e.beginMs < atMs && atMs - e.beginMs <= SNAP_HEAL_TOL_MS && e.endMs > atMs) {
+        changed = true;
+        return { ...e, beginMs: atMs };
+      }
+    }
+    return e;
+  });
+  return { events: healed, changed };
+}
+
 // RecipeGlyph — a filled sparkline synthesized from the actual step stack (the
 // "shape icon"): modulation → its waveform; a single linear change → ramp
 // up/down/steady; baseline → a flat dim line. Grounded in real data.
@@ -96,11 +123,16 @@ export default function EventsTab({
       .then((res) => {
         if (cancelled) return;
         const loaded = res?.events ?? [];
-        setEvents(loaded);
+        // One-time self-heal: rescue events whose Begin snapped a few ms onto
+        // the prior chapter's last beat (pre-clamp) but that cross into the
+        // next chapter — re-home them and write back once if anything moved.
+        const { events: healed, changed } = healChapterSnap(loaded, chapters);
+        setEvents(healed);
+        if (changed) persist(healed);
         // Seed the id counter past any e-cap-N already on disk so new
         // captures can't collide with persisted ids after a reload.
         let maxSeq = 0;
-        for (const e of loaded) {
+        for (const e of healed) {
           const m = /^e-cap-(\d+)$/.exec(e.id || '');
           if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
         }
