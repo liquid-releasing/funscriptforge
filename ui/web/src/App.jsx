@@ -778,6 +778,12 @@ export default function App() {
   // per project so a fresh open starts at the top.
   const [activeChapterId, setActiveChapterId] = useState(null);
   useEffect(() => { setActiveChapterId(null); }, [project?.id]);
+  // Per-chapter accept handler registered by the active chapter tab (Chapters /
+  // Channels) so the ALWAYS-VISIBLE footer can host "Accept and next chapter"
+  // instead of an in-body button that scrolls out of view (dogfood 2026-06-16).
+  // { hasNext, run } | null; cleared by the tab's unmount, so non-chapter tabs
+  // never read a stale value (and the footer also gates on the tab id).
+  const [chapterNav, setChapterNav] = useState(null);
   const { analysisState: globalAnalysisState } = deriveAnalysisState({
     hasMedia: !!project?.mediaPath,
     analyzing: !!busy,
@@ -963,6 +969,18 @@ export default function App() {
     } else {
       footerSummary = 'Continue with the generated funscript to start editing.';
     }
+  }
+
+  // Chapter-scoped tabs (Chapters, Channels) host their per-chapter accept on
+  // the footer as the SECONDARY (the primary stays "Accept and chain to <next
+  // tab>"). The tab registers { hasNext, run }: not-last → "Accept and next
+  // chapter" (commit + advance), last → "Accept chapter" (commit, no advance),
+  // so the last chapter is still committable once the in-body button is gone.
+  if ((tab === 'chapters' || tab === 'stim') && chapterNav && !gateMsg && !busy) {
+    footerSecondary = {
+      label: chapterNav.hasNext ? 'Accept and next chapter' : 'Accept chapter',
+      onClick: chapterNav.run,
+    };
   }
 
   const handleAccept = async () => {
@@ -1157,6 +1175,7 @@ export default function App() {
             setPhrasesByPath={setPhrasesByPath}
             initialChapterId={activeChapterId}
             onActiveChapterChange={setActiveChapterId}
+            onRegisterChapterNav={setChapterNav}
           />
         )}
         {tab === 'phrases' && (
@@ -1206,6 +1225,7 @@ export default function App() {
             onBusy={setBusy}
             initialChapterId={activeChapterId}
             onActiveChapterChange={setActiveChapterId}
+            onRegisterChapterNav={setChapterNav}
           />
         )}
         {tab === 'export' && (

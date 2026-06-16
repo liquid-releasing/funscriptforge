@@ -139,6 +139,8 @@ export default function CharactersTab({
   // Chapters ↔ Channels keep the same place across tab switches.
   initialChapterId = null,
   onActiveChapterChange,
+  // Register the per-chapter accept on the App footer (always-visible).
+  onRegisterChapterNav,
 }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
@@ -454,13 +456,38 @@ export default function CharactersTab({
     () => chapters.findIndex((c) => c.id === activeChapterId),
     [chapters, activeChapterId],
   );
-  // Move to the next chapter WITHOUT accepting — so navigating doesn't force a
-  // commit (dogfood 2026-06-16). Shared state carries it to Chapters too.
-  const goNextChapter = () => {
+  // Footer "Accept and next chapter" — commit BOTH the staged character AND the
+  // staged mechanical for this chapter (one applied entry), then advance. This
+  // is the single accept now that the in-body Accept buttons are gone; it lives
+  // on the always-visible footer (dogfood 2026-06-16).
+  const acceptAllAndNext = () => {
+    if (!activeChapterId) return;
+    const prevEntry = applied?.[activeChapterId] || {};
+    commitApplied({
+      ...(applied || {}),
+      [activeChapterId]: {
+        ...prevEntry,
+        characterId: staged.characterId,
+        params: { ...staged.params },
+        mechStyle: stagedMechStyle,
+      },
+    });
     if (activeChapterIdx >= 0 && activeChapterIdx < chapters.length - 1) {
       setActiveChapterId(chapters[activeChapterIdx + 1].id);
     }
   };
+  const isLastChapter = activeChapterIdx >= chapters.length - 1;
+  const acceptRunRef = useRef(acceptAllAndNext);
+  acceptRunRef.current = acceptAllAndNext;
+  useEffect(() => {
+    if (!onRegisterChapterNav) return undefined;
+    onRegisterChapterNav(
+      chapters.length > 0
+        ? { hasNext: !isLastChapter, run: () => acceptRunRef.current() }
+        : null,
+    );
+    return () => onRegisterChapterNav(null);
+  }, [isLastChapter, chapters.length, onRegisterChapterNav]);
 
   // The journey-arc default for THIS chapter's position — what the auto-seed
   // would assign. Exposed as an explicit "Use default" button under each grid
@@ -826,7 +853,6 @@ export default function CharactersTab({
               defaultLabel={defaultCharLabel}
               dirty={dirty}
               isLastChapter={chapters.findIndex((c) => c.id === activeChapterId) >= chapters.length - 1}
-              onNextChapter={goNextChapter}
               estimSelected={estimSelected}
               catalogWarning={catalogWarning}
             />
@@ -1275,7 +1301,7 @@ function CharacterPanel({
   catalog,
   stagedChar, isNothingStaged, stagedParams,
   onSelectCharacter, onParamChange, onAccept, onReset, onUseDefault, defaultLabel,
-  dirty, isLastChapter, onNextChapter,
+  dirty, isLastChapter,
   estimSelected, catalogWarning,
 }) {
   // Card grid auto-sizes — usually 5 + Nothing = 6, but accommodates a
@@ -1418,8 +1444,6 @@ function CharacterPanel({
           isNothingStaged={isNothingStaged}
           dirty={dirty}
           isLastChapter={isLastChapter}
-          onAccept={onAccept}
-          onNextChapter={onNextChapter}
           onReset={onReset}
           onUseDefault={onUseDefault}
           defaultLabel={defaultLabel}
@@ -1434,53 +1458,20 @@ function CharacterPanel({
 // commit-and-advance affordance the user asked for; it's enabled
 // even when nothing is dirty so the user can power-walk through
 // chapters where the seeded default already fits.
-function ActionRow({ stagedChar, isNothingStaged, dirty, isLastChapter, onAccept, onNextChapter, onReset, onUseDefault, defaultLabel }) {
+function ActionRow({ stagedChar, isNothingStaged, dirty, onReset, onUseDefault, defaultLabel }) {
   const label = stagedChar?.label
     || (isNothingStaged ? NOTHING.label : null);
-  const color = stagedChar?.color
-    || (isNothingStaged ? NOTHING_COLOR : 'var(--accent)');
-  // Button text: "Use Reactive · next chapter" / "Use Reactive (last)"
-  const verb = label ? `Use ${label}` : 'Use this character';
-  const suffix = isLastChapter ? '(last chapter)' : '· next chapter';
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8, marginTop: 6,
       paddingTop: 12, borderTop: '1px solid var(--border)',
     }}>
-      <button
-        onClick={onAccept}
-        disabled={!label}
-        style={{
-          padding: '8px 14px', fontSize: 12.5, fontWeight: 700,
-          background: label ? color : 'var(--surface-2)',
-          color: label ? '#fff' : 'var(--text-dim)',
-          border: 'none', borderRadius: 6,
-          cursor: label ? 'pointer' : 'not-allowed',
-          fontFamily: 'inherit',
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-        }}
-        title={label ? `Commit ${label} to this chapter and move on` : 'Pick a character first'}
-      >
-        <Icon name="check" size={13} />
-        {verb} {suffix}
-      </button>
-      {/* Standalone Next chapter — navigate without committing a character
-          (dogfood 2026-06-16). Hidden on the last chapter. */}
-      {!isLastChapter && onNextChapter && (
-        <button
-          onClick={onNextChapter}
-          title="Go to the next chapter without accepting"
-          style={{
-            padding: '8px 12px', fontSize: 12, fontWeight: 700,
-            background: 'transparent', color: 'var(--text)',
-            border: '1px solid var(--border)', borderRadius: 6,
-            cursor: 'pointer', fontFamily: 'inherit',
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-          }}
-        >
-          Next chapter <Icon name="arrow-right" size={13} />
-        </button>
-      )}
+      {/* Accept moved to the always-visible footer ("Accept and next chapter")
+          so it never scrolls out of view (dogfood 2026-06-16). This row keeps
+          the quick "Use default" + "Reset" helpers. */}
+      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+        {label ? `${label} staged · accept in the footer ↓` : 'Pick a character'}
+      </span>
       {onUseDefault && (
         <button
           onClick={onUseDefault}

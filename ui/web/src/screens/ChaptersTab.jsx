@@ -312,7 +312,7 @@ function mergeWorkingActions({ originalActions, chapters, acceptedIds, tones, pa
 // number of hooks" guard.
 const EMPTY_CHAPTER = { id: '__empty__', atMs: 0, endMs: 0, name: '', color: '#888' };
 
-export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, trackSpectrogram, trackBeats, refreshAudioSidecars, setPhrasesByPath, initialChapterId = null, onActiveChapterChange }) {
+export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, trackSpectrogram, trackBeats, refreshAudioSidecars, setPhrasesByPath, initialChapterId = null, onActiveChapterChange, onRegisterChapterNav }) {
   const totalMs = project?.durationMs ?? 0;
   const actions = Array.isArray(project?.actions) ? project.actions : [];
 
@@ -886,6 +886,25 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     recomputePhrasesAfterChapterChange('join');
   };
 
+  // Register the per-chapter accept on the App footer so it's always visible
+  // ("Accept and next chapter", or "Accept chapter" on the last). The ref keeps
+  // the handler fresh without re-registering on every chapter change; only
+  // last-ness / chapter-count toggles re-register. (dogfood 2026-06-16: the
+  // in-body accept scrolled out of view.)
+  const navIdx = chapters.findIndex((c) => c.id === active.id);
+  const isLastChapter = chapters.length > 0 && navIdx >= chapters.length - 1;
+  const acceptRunRef = useRef(() => {});
+  acceptRunRef.current = handleAcceptTone;
+  useEffect(() => {
+    if (!onRegisterChapterNav) return undefined;
+    onRegisterChapterNav(
+      chapters.length > 0
+        ? { hasNext: !isLastChapter, run: () => acceptRunRef.current() }
+        : null,
+    );
+    return () => onRegisterChapterNav(null);
+  }, [isLastChapter, chapters.length, onRegisterChapterNav]);
+
   return (
     <section style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* Page header */}
@@ -1230,8 +1249,6 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
               and advances to the next chapter. The count next to it is
               the progress through the chapter list. */}
           {(() => {
-            const idx = chapters.findIndex((c) => c.id === active.id);
-            const isLast = idx >= chapters.length - 1;
             const isAccepted = acceptedChapterIds.has(active.id);
             const acceptedCount = acceptedChapterIds.size;
             return (
@@ -1248,40 +1265,12 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                     </span>
                   )}
                 </div>
-                {/* Standalone "Next chapter" — move on WITHOUT accepting, so
-                    you don't have to bake a tone just to navigate (dogfood
-                    2026-06-16). Hidden on the last chapter. */}
-                {!isLast && (
-                  <button
-                    onClick={() => setActiveId(chapters[idx + 1].id)}
-                    title="Go to the next chapter without accepting"
-                    style={{
-                      padding: '8px 12px', fontSize: 12.5, fontWeight: 700,
-                      background: 'transparent', color: 'var(--text)',
-                      border: '1px solid var(--border)', borderRadius: 6,
-                      cursor: 'pointer', fontFamily: 'inherit',
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                    }}
-                  >
-                    Next chapter <Icon name="arrow-right" size={13} />
-                  </button>
-                )}
-                <button
-                  onClick={handleAcceptTone}
-                  title={isLast
-                    ? 'Bake this chapter’s tone into the working funscript'
-                    : 'Bake this chapter’s tone and move to the next chapter'}
-                  style={{
-                    padding: '8px 14px', fontSize: 12.5, fontWeight: 700,
-                    background: tone.color, color: '#fff',
-                    border: 'none', borderRadius: 6,
-                    cursor: 'pointer', fontFamily: 'inherit',
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                  }}
-                >
-                  <Icon name="check" size={13} />
-                  {isLast ? 'Accept tone (last chapter)' : 'Accept tone · next chapter'}
-                </button>
+                {/* Accept moved to the always-visible footer ("Accept and next
+                    chapter") so it never scrolls out of view (dogfood
+                    2026-06-16). This row is now the progress readout. */}
+                <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                  Accept in the footer ↓
+                </span>
               </div>
             );
           })()}
