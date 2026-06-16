@@ -404,16 +404,9 @@ export default function CharactersTab({
     setStagedMechStyle(appliedForActive?.mechStyle ?? DEFAULT_STYLE);
   }, [activeChapterId, appliedForActive?.mechStyle]);
   const mechDirty = stagedMechStyle !== appliedMechStyle;
-  const acceptMech = () => {
-    if (!activeChapterId) return;
-    const prevEntry = applied?.[activeChapterId] || {};
-    commitApplied({
-      ...(applied || {}),
-      [activeChapterId]: { ...prevEntry, mechStyle: stagedMechStyle },
-    });
-    const i = chapters.findIndex((c) => c.id === activeChapterId);
-    if (i >= 0 && i < chapters.length - 1) setActiveChapterId(chapters[i + 1].id);
-  };
+  // No in-body Mechanical accept — the footer's "Accept and next chapter"
+  // (acceptAllAndNext) commits the staged mechanical alongside the staged
+  // character and advances. Reset stays as a quick in-body helper.
   const resetMech = () => setStagedMechStyle(appliedMechStyle);
   const mechAxisCount = activeAxes(stagedMechStyle).length;
 
@@ -831,8 +824,6 @@ export default function CharactersTab({
             loading={axisLoading}
             chapter={activeChapter}
             dirty={mechDirty}
-            isLastChapter={chapters.findIndex((c) => c.id === activeChapterId) >= chapters.length - 1}
-            onAccept={acceptMech}
             onReset={resetMech}
             onUseDefault={useDefaultMech}
             defaultStyleId={defaultMechId}

@@ -36,7 +36,7 @@ function SectionLabel({ children, right }) {
 export default function MechanicalPanel({
   styleId, onSelectStyle,
   axisData = null, loading = false, chapter = null,
-  dirty = false, isLastChapter = false, onAccept, onReset,
+  dirty = false, onReset,
   onUseDefault, defaultStyleId,
 }) {
   const style = styleById(styleId);
@@ -44,29 +44,20 @@ export default function MechanicalPanel({
   const axes = style.axes || {};
   const activeCount = Object.keys(axes).length;
 
-  // Accept / Reset — mirrors the Character editor's accept-and-advance. The
-  // pick is staged; Accept commits it to this chapter and moves on. Rendered
-  // directly under the style cards (not at the panel bottom) so pick → commit
-  // is one tight loop; the diagram + per-axis previews below it read as a
-  // "here's what it produces" confirmation.
+  // The pick is STAGED; the single "Accept and next chapter" on the always-
+  // visible footer commits it (alongside the staged character) and advances —
+  // there is no in-body accept anymore (it duplicated the footer's advance and
+  // could desync the chapter, the dogfood complaint we fixed for Character /
+  // Channels too). This row keeps the quick "Use default" + "Reset" helpers and
+  // a hint that the commit lives on the footer.
   const acceptRow = (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8, marginTop: 12,
       paddingTop: 12, borderTop: '1px solid var(--border)',
     }}>
-      <button
-        onClick={onAccept}
-        title={`Commit ${style.label} motion to this chapter and move on`}
-        style={{
-          padding: '8px 14px', fontSize: 12.5, fontWeight: 700,
-          background: ACTIVE, color: '#fff', border: 'none', borderRadius: 6,
-          cursor: 'pointer', fontFamily: 'inherit',
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-        }}
-      >
-        <Icon name="check" size={13} />
-        Use {style.label} {isLastChapter ? '(last chapter)' : '· next chapter'}
-      </button>
+      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+        {style.label} staged · accept in the footer ↓
+      </span>
       {onUseDefault && (
         <button
           onClick={onUseDefault}

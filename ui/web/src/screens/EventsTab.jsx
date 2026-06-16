@@ -199,7 +199,12 @@ export default function EventsTab({
     if (scope === 'all') return events;
     const ch = chapters.find((c) => c.id === scope);
     if (!ch) return events;
-    return events.filter((e) => e.beginMs >= ch.atMs && e.beginMs < ch.endMs);
+    // Overlap (not begin-only) — same semantics as the hero's chapterEvents.
+    // A capture at the chapter's very start can snap a few ms BEFORE atMs
+    // (nearest-beat pull), which a begin-only filter would hide even though
+    // the event clearly belongs to this chapter. Anything touching the
+    // chapter window shows in its timeline.
+    return events.filter((e) => e.beginMs < ch.endMs && e.endMs > ch.atMs);
   }, [events, scope, chapters]);
 
   // ── Chapter-scoped hero (Stage 1a: TrackStack) ──────────────────────
@@ -273,8 +278,16 @@ export default function EventsTab({
     }
     return bestD <= 250 ? Math.round(best) : Math.round(ms);
   };
-  const handleCaptureBegin = () => setBeginMs(snapMs(currentMs));
-  const handleCaptureEnd = () => setEndMs(snapMs(currentMs));
+  // Keep a captured mark inside the active chapter — snap-to-beat can pull a
+  // mark a few ms ACROSS the boundary (e.g. capturing Begin at a chapter's
+  // very start lands on the last beat of the prior chapter), which would file
+  // the event under the wrong chapter. Clamp post-snap to the scope window.
+  const clampToChapter = (ms) => {
+    if (!activeChapter) return ms;
+    return Math.max(activeChapter.atMs, Math.min(activeChapter.endMs, ms));
+  };
+  const handleCaptureBegin = () => setBeginMs(clampToChapter(snapMs(currentMs)));
+  const handleCaptureEnd = () => setEndMs(clampToChapter(snapMs(currentMs)));
   const handleResetCapture = () => { setBeginMs(null); setEndMs(null); };
 
   // Commit the captured span as an event using the library's current effect
