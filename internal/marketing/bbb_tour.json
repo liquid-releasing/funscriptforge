@@ -1,0 +1,155 @@
+{
+  "meta": {
+    "title": "FunscriptForge — Guided Tour (Big Buck Bunny)",
+    "purpose": "Approachable marketing overview that also shows the tool goes deep. Touches the system end-to-end without diving into individual tabs (each tab gets its own follow-up video).",
+    "example": "Big Buck Bunny",
+    "targetDurationSec": 420,
+    "estimatedDurationSec": 396,
+    "voiceWpm": 150,
+    "voiceStyle": "warm, friendly, confident — a knowledgeable friend, not a salesperson. Speaks to artists & non-technical creators: taste up front, science backstage.",
+    "runtime": "web app (vite dev) at http://localhost:1430",
+    "narrativeSpine": "Lead with the magic (Generate = the first draft) and use that wait to explain WHAT MAKES A GREAT FUNSCRIPT (the quality science). Then Analysis reveals THE VIEWER — three layers (video, audio, funscript) — and how you USE the video + audio to land precisely on the moment you want to shape; we PLAY it here so the synced motion sells the tool; the footage is raw ore you turn to gold. Then CHAPTERS: give each chapter a TONE (the emotional arc) and reshape whole PATTERNS, never nudging a single cycle by hand. Then the breadth, then ship.",
+    "sceneOrderNote": "Scene order follows the actual app nav: Library -> Project -> Generate -> Analysis -> Chapters -> (deeper tabs). The two data-science beats are SPLIT: 'what makes a great funscript' rides the Generate wait; 'the data we glean' rides the Analysis reveal.",
+    "honestyNote": "Deep frame-by-frame video analysis is post-beta. Analysis today is audio-derived (beats/chapters/energy/spectrogram) + the video you navigate. Narration says 'video' evocatively, not as a per-frame CV claim. Don't tighten the visuals to imply motion-CV unless/until it ships.",
+    "schemaNotes": "Each scene's narrationSec is the AUTHORITY for scene length — the runner holds the scene for that long while the voiceover plays, regardless of how fast the UI responds (important in web/mock mode where backend calls resolve instantly). Actions fire in order; a scene's actions should total <= narrationSec, with a trailing 'hold' filling the remainder. Prefer 'dataTour' selectors; 'css'/'text' are fallbacks; 'approxXY' (at the declared viewport) is a camera/zoom hint, not a click target."
+  },
+
+  "viewport": { "width": 1440, "height": 900, "deviceScaleFactor": 2 },
+
+  "baseUrl": "http://localhost:1430",
+
+  "recommendedDataTourHooks": {
+    "why": "Text/coordinate selectors are brittle for an automated recording. Adding a few stable data-tour attributes makes the tour reliable and re-runnable. Small one-time dev task; each maps to an element that already exists.",
+    "hooks": [
+      { "dataTour": "nav-strip",        "element": "nav.ff-tabstrip", "file": "ui/web/src/App.jsx:1006" },
+      { "dataTour": "tab-library",      "element": ".ff-tabbutton (label 'Library')" },
+      { "dataTour": "tab-generate",     "element": ".ff-tabbutton (label 'Generate')" },
+      { "dataTour": "tab-analysis",     "element": ".ff-tabbutton (label 'Analysis')" },
+      { "dataTour": "tab-chapters",     "element": ".ff-tabbutton (label 'Chapters')" },
+      { "dataTour": "tab-channels",     "element": ".ff-tabbutton (label 'Channels')" },
+      { "dataTour": "tab-export",       "element": ".ff-tabbutton (label 'Export')" },
+      { "dataTour": "library-card-bbb", "element": "the Big Buck Bunny project card", "file": "ui/web/src/screens/LibraryScreen.jsx (ProjectCard)" },
+      { "dataTour": "generate-intent",  "element": "the Pace / Range intent sliders on the Generate tab" },
+      { "dataTour": "generate-result",  "element": "the generated stroke preview / depth meter on Generate" },
+      { "dataTour": "analyze-progress", "element": "the busy/progress footer shown during Analyze (AcceptBar)" },
+      { "dataTour": "beats-lane",       "element": "the beat-tick strip under the media player", "file": "forgemoment/src/MediaViewer.jsx (BeatsLane)" },
+      { "dataTour": "play-control",     "element": "the play/pause button on the MediaViewer transport" },
+      { "dataTour": "chapter-strip",    "element": "the chapter strip on the Chapters tab" },
+      { "dataTour": "chapter-tone",     "element": "the tone picker / tone cards on the Chapters tab" },
+      { "dataTour": "media-viewer",     "element": "the MediaViewer surface (the three stacked layers: video, audio, funscript)" }
+    ]
+  },
+
+  "scenes": [
+    {
+      "id": "01-welcome",
+      "title": "Welcome",
+      "section": "Open / Library",
+      "narrationSec": 40,
+      "narration": "This is FunscriptForge. If you've ever wanted to make a funscript — the motion track that drives interactive toys and e-stim devices — but figured it meant hours of hand-drawing dots, this is for you. FunscriptForge turns a video into a finished, device-ready script, and keeps you in the driver's seat the whole way. We'll use a clip you might know — Big Buck Bunny — to walk the whole system, end to end. Don't worry about every button today; think of this as the map.",
+      "actions": [
+        { "type": "goto", "url": "http://localhost:1430" },
+        { "type": "waitForSelector", "target": { "dataTour": "nav-strip", "css": "nav.ff-tabstrip", "region": "top nav strip", "approxXY": [480, 48] }, "state": "visible", "timeoutMs": 15000 },
+        { "type": "highlight", "target": { "dataTour": "nav-strip", "css": "nav.ff-tabstrip", "region": "top nav strip", "approxXY": [480, 48] }, "ms": 2500, "note": "soft sweep across the whole nav to imply breadth without naming tabs" },
+        { "type": "hold", "ms": 34000 }
+      ]
+    },
+    {
+      "id": "02-open-project",
+      "title": "Open Big Buck Bunny",
+      "section": "Library -> Project",
+      "narrationSec": 34,
+      "narration": "Everything starts in your Library — every video and project in one place. We'll open Big Buck Bunny. FunscriptForge reads the file, sets up a workspace, and never touches your original — your source stays safe while everything we create lives right alongside it. This Project view is home base: the video, its details, and the path forward. With a fresh video like this, the fastest way in is to let FunscriptForge build the first draft for you.",
+      "actions": [
+        { "type": "highlight", "target": { "dataTour": "library-card-bbb", "css": ".ff-projectgrid > *:first-child", "text": "big_buck_bunny", "region": "first project card, upper-left of content grid", "approxXY": [230, 330] }, "ms": 1500 },
+        { "type": "click", "target": { "dataTour": "library-card-bbb", "text": "big_buck_bunny", "region": "Big Buck Bunny project card", "approxXY": [230, 330] } },
+        { "type": "waitForSelector", "target": { "css": "h2:has-text('Project')", "text": "Project", "region": "content header", "approxXY": [60, 96] }, "state": "visible", "timeoutMs": 10000 },
+        { "type": "hold", "ms": 28000 }
+      ]
+    },
+    {
+      "id": "03-generate-what-makes-great",
+      "title": "Generate — and what makes a great funscript",
+      "section": "Generate",
+      "narrationSec": 76,
+      "narration": "Here's the magic, right up front. Point FunscriptForge at a video, and Generate builds you a funscript from the motion itself — no drawing dots one at a time. And while it works, let me tell you what it's actually going for. We studied real, hand-crafted funscripts — the gold standard, made by people — to learn what makes one feel great instead of mechanical. The surprise: it isn't loudness, and it isn't going full-throttle the whole time. A great script breathes. It has an arc — it builds, it settles, it peaks, it comes back down — the way a good scene does. The motion swells and recedes with the action. And the rhythm of variation — how much the pace and the depth move over time — lives in a measurable sweet spot. Too uniform feels robotic; too random feels like noise. Generate tunes your draft to exactly that band, and locks it to the beat. You set the intent — how much pace, how much range — and the tool does the labor. You're the artist.",
+      "actions": [
+        { "type": "click", "target": { "dataTour": "tab-generate", "css": ".ff-tabbutton:has-text('Generate')", "text": "Generate", "region": "nav strip, 3rd tab", "approxXY": [235, 48] } },
+        { "type": "waitForSelector", "target": { "css": "h2:has-text('Generate')", "text": "Generate", "region": "content header", "approxXY": [60, 96] }, "state": "visible", "timeoutMs": 10000 },
+        { "type": "highlight", "target": { "dataTour": "generate-intent", "css": "input[type='range']", "region": "Pace / Range intent sliders", "approxXY": [400, 360] }, "ms": 6000, "note": "linger on the intent sliders as the VO says 'you set the intent'" },
+        { "type": "highlight", "target": { "dataTour": "generate-result", "css": "[class*='depth'], [class*='preview'], canvas", "region": "generated strokes / depth-meter preview", "approxXY": [900, 470] }, "ms": 6000, "note": "show the generated motion MATERIALIZING — not a bare spinner. This is the 'it built my script' payoff." },
+        { "type": "hold", "ms": 60000, "note": "Hold while the quality-science narration plays. Keep the camera on the working/result UI." }
+      ]
+    },
+    {
+      "id": "04-analysis-data-to-gold",
+      "title": "Analysis — the viewer, and finding your spot",
+      "section": "Analysis",
+      "narrationSec": 74,
+      "narration": "Now, where does all of that come from? This is Analysis — where FunscriptForge shows its work, all in one place: the viewer. And this is the heart of the tool — three layers, stacked together. Your video. Its audio, as a waveform and a spectrogram. And the funscript itself, riding right alongside. This is how you find your way. Scrub through and watch the action, see the audio spike, follow the strokes — and land right on the exact moment you want to shape. The video and the audio are your map; they let you place yourself precisely where your magic goes. Press play, and it all moves together — the beat ticking under the playhead, the strokes scrolling in time — so you can feel what you're making, not just see it. Because every great funscript is already half-written inside the footage. The pulse, the build, the moments that want to land — they're in there. FunscriptForge surfaces that and frames it for you. Your job — the fun part — is to turn it into gold.",
+      "actions": [
+        { "type": "click", "target": { "dataTour": "tab-analysis", "css": ".ff-tabbutton:has-text('Analysis')", "text": "Analysis", "region": "nav strip, 4th tab", "approxXY": [330, 48] } },
+        { "type": "waitForSelector", "target": { "dataTour": "analyze-progress", "css": "[class*='accept'] [class*='progress'], text=/Analyz|Detect|chapter|beat/i", "region": "busy footer / progress bar at the bottom", "approxXY": [720, 862] }, "state": "visible", "timeoutMs": 8000, "optional": true, "note": "If the backend is instant (web/mock mode), overlay a brief 'reading your footage' progress beat so the reveal lands." },
+        { "type": "highlight", "target": { "dataTour": "media-viewer", "region": "the three stacked layers: video on top, audio (waveform + spectrogram), funscript", "approxXY": [720, 400] }, "ms": 6000, "note": "as VO names the three layers, sweep top-to-bottom: video -> audio/spectro -> funscript" },
+        { "type": "highlight", "target": { "dataTour": "beats-lane", "region": "beat-tick strip under the player", "approxXY": [720, 560] }, "ms": 3000 },
+        { "type": "click", "target": { "dataTour": "play-control", "css": "[class*='play'], button[aria-label*='play' i]", "region": "play button on the transport", "approxXY": [720, 600] }, "note": "PLAY IT. On 'press play', start playback so the baton sweeps, beats tick, and the funscript tape scrolls in sync. Let it run through the rest of the scene." },
+        { "type": "hold", "ms": 50000, "note": "Video plays during the hold — the synced motion IS the visual while the ore/gold narration lands. Pause at scene end (or let scene 05's tab click stop it)." }
+      ]
+    },
+    {
+      "id": "05-chapters-tone-and-patterns",
+      "title": "Chapters: tone + patterns, never a cycle by hand",
+      "section": "Chapters",
+      "narrationSec": 64,
+      "narration": "And shaping it is where FunscriptForge is different. It divides your script into chapters — and you give each one a tone. Tender. Building. Teasing. Edging. Climax. That's how you direct the emotional arc of the whole piece, in broad, confident strokes. And within a chapter, you work in patterns, not dots. A finished script holds thousands of individual strokes, and the last thing you want is to nudge them one at a time. Want a stretch to feel more relentless, or more varied? You reshape the whole pattern at once, and the fine detail takes care of itself. You're never editing math; you're directing the feel — chapter by chapter, tone by tone. That's the difference between a script that's merely correct and one your audience remembers — and you get there without ever touching a single cycle by hand.",
+      "actions": [
+        { "type": "click", "target": { "dataTour": "tab-chapters", "css": ".ff-tabbutton:has-text('Chapters')", "text": "Chapters", "region": "nav strip, 5th tab", "approxXY": [420, 48] } },
+        { "type": "waitForSelector", "target": { "dataTour": "chapter-strip", "css": "[class*='chapter']", "region": "chapter strip", "approxXY": [400, 300] }, "state": "visible", "timeoutMs": 10000 },
+        { "type": "highlight", "target": { "dataTour": "chapter-strip", "region": "the chapter strip — the unit you work in", "approxXY": [400, 300] }, "ms": 5000, "note": "as VO says 'divides your script into chapters' — sweep the chapter strip" },
+        { "type": "highlight", "target": { "dataTour": "chapter-tone", "css": "[class*='tone']", "region": "the tone cards / picker (tender, build, tease, edge, climax)", "approxXY": [720, 420] }, "ms": 8000, "note": "as VO names the tones — pan the tone cards; optionally click one to show a chapter taking a tone" },
+        { "type": "highlight", "target": { "dataTour": "media-viewer", "css": "[class*='funscript'], canvas", "region": "the velocity-colored funscript — the 'pattern' you reshape", "approxXY": [720, 470] }, "ms": 6000, "note": "as VO says 'work in patterns, not dots' — show the WHOLE pattern, NOT individual points" },
+        { "type": "hold", "ms": 42000 }
+      ]
+    },
+    {
+      "id": "06-the-journey",
+      "title": "Breadth — a whole studio",
+      "section": "Nav overview (no deep dive)",
+      "narrationSec": 48,
+      "narration": "And there's a whole studio behind that. Channels is where you shape character and feel — and turn one script into output for real devices, from e-stim to multi-axis strokers. Phrases and Stanzas let you sculpt section by section. Events let you place specific moments — a whole catalog of named effects. And Polish tunes everything to a particular device. Each one is a full workspace, and each gets its own video. What matters today is that it's all here: approachable enough to start in minutes, deep enough that you'll never outgrow it.",
+      "actions": [
+        { "type": "hover", "target": { "css": ".ff-tabbutton:has-text('Channels')", "text": "Channels", "region": "nav strip", "approxXY": [760, 48] } },
+        { "type": "hover", "target": { "css": ".ff-tabbutton:has-text('Phrases')", "text": "Phrases", "region": "nav strip", "approxXY": [505, 48] } },
+        { "type": "hover", "target": { "css": ".ff-tabbutton:has-text('Stanzas')", "text": "Stanzas", "region": "nav strip", "approxXY": [590, 48] } },
+        { "type": "hover", "target": { "css": ".ff-tabbutton:has-text('Events')", "text": "Events", "region": "nav strip", "approxXY": [670, 48] } },
+        { "type": "hover", "target": { "css": ".ff-tabbutton:has-text('Polish')", "text": "Polish", "region": "nav strip", "approxXY": [845, 48] } },
+        { "type": "hold", "ms": 24000, "note": "Sync each hover to the moment its tab is named. Do NOT click in. Generate and Chapters had their own scenes — not re-pitched here." }
+      ]
+    },
+    {
+      "id": "07-export",
+      "title": "Ship it",
+      "section": "Export",
+      "narrationSec": 30,
+      "narration": "When you're happy, Export packages it all into a single bundle — the motion script, the audio, device-ready files for whatever hardware you use, even a beat track and preview images. One click, everything in one place, ready to play.",
+      "actions": [
+        { "type": "click", "target": { "dataTour": "tab-export", "css": ".ff-tabbutton:has-text('Export')", "text": "Export", "region": "nav strip, last tab", "approxXY": [920, 48] } },
+        { "type": "waitForSelector", "target": { "css": "h2:has-text('Export')", "text": "Export", "region": "content header", "approxXY": [60, 96] }, "state": "visible", "timeoutMs": 10000 },
+        { "type": "highlight", "target": { "css": "[class*='artifact'], [class*='file']", "region": "the bundle's file list / preview thumbnails", "approxXY": [720, 470] }, "ms": 5000 },
+        { "type": "hold", "ms": 20000 }
+      ]
+    },
+    {
+      "id": "08-close",
+      "title": "Close",
+      "section": "Back to Library",
+      "narrationSec": 30,
+      "narration": "That's FunscriptForge: open a video, let it find the gold already inside, shape it in patterns, and ship it to any device. Approachable on the very first day, and as deep as you want to go. We'll dig into each step in the videos to come. Welcome to the forge.",
+      "actions": [
+        { "type": "click", "target": { "dataTour": "tab-library", "css": ".ff-tabbutton:has-text('Library')", "text": "Library", "region": "nav strip, 1st tab", "approxXY": [55, 48] } },
+        { "type": "highlight", "target": { "dataTour": "nav-strip", "css": "nav.ff-tabstrip", "region": "full nav strip", "approxXY": [480, 48] }, "ms": 3000 },
+        { "type": "hold", "ms": 22000 }
+      ]
+    }
+  ]
+}
