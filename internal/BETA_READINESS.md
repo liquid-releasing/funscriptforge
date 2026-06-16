@@ -19,12 +19,14 @@ tones persist). Still needs a single end-to-end tick of:
 - [ ] **Bare-funscript live click-through** (static audit ✅; live pass not done)
 - [ ] Progress/busy footer never shows a bare "Working…"
 
-### 2. Process management — D1 + D7 🟡 (built 2026-06-16 `494fea2`, needs tauri:dev recompile + live verify)
+### 2. Process management — D1 + D7 ✅ (LIVE-VERIFIED 2026-06-16, `494fea2`)
 - D1 (serialize analyzes): ✅ done — `kill_existing_analyze` reaps the prior auto-chapter before spawning.
-- D7 (reap children on window-close): ✅ built — `ACTIVE_CHILDREN` registry tracks every backend
-  spawn's PID; `reap_active_children` kills each tree on `WindowEvent::Destroyed` + `RunEvent::Exit`.
-  **Live test:** start an analyze on a long source, close the window mid-run → confirm (Task Manager)
-  no `forge-cli`/`python`/`ffmpeg` survives, and the source video can be opened/moved immediately after.
+- D7 (reap children on window-close): ✅ **LIVE-VERIFIED.** `ACTIVE_CHILDREN` registry tracks every
+  backend spawn's PID; `reap_active_children` kills each tree on `WindowEvent::Destroyed` +
+  `RunEvent::Exit`. **Test result:** closed the window DURING chapter-clip extraction (ffmpeg live,
+  holding the source video) → both python workers (incl. the 1.6 GB analyze worker) AND ffmpeg gone
+  to zero; fan wound down (no orphan CPU). The dealbreaker bug (orphans burning CPU + locking the
+  source video after close) is fixed.
 
 ### 3. WebView2 memory 🟡 (partially mitigated)
 The VictoriaOaks freeze cause: the viewer holds full-track heavy data (20 MB spectrogram parsed
