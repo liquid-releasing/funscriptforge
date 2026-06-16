@@ -71,6 +71,10 @@ function RecipeGlyph({ recipe, color, w = 34, h = 18 }) {
 export default function EventsTab({
   project, selectedDevices = [],
   trackPeaks = null, trackSpectrogram = null, trackBeats = null,
+  // Shared active chapter (App) — seed the scope from it so Events opens on the
+  // same chapter you were editing, report changes back, and host an "Accept and
+  // next chapter" on the footer like Chapters / Channels.
+  initialChapterId = null, onActiveChapterChange, onRegisterChapterNav,
 }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
@@ -139,7 +143,14 @@ export default function EventsTab({
   }, [recipes]);
   const recipeById = (id) => recipeMap.get(id) || null;
 
-  const [scope, setScope] = useState('all'); // 'all' | chapter id
+  // Seed the scope from the shared active chapter (App) so Events opens on the
+  // chapter you were editing in Chapters / Channels; a stale id falls back to
+  // the first chapter via the activeChapter memo below.
+  const [scope, setScope] = useState(initialChapterId || 'all'); // 'all' | chapter id
+  // Report the scoped chapter up so the shared state (and the other tabs) follow.
+  useEffect(() => {
+    if (scope !== 'all') onActiveChapterChange?.(scope);
+  }, [scope]);  // eslint-disable-line react-hooks/exhaustive-deps
   const [selectedId, setSelectedId] = useState(null);
   // Playhead + transport for the chapter-scoped hero. The MediaViewer is
   // the time backbone (emits onTimeChange while playing); click-to-seek on
@@ -200,6 +211,30 @@ export default function EventsTab({
     if (scope !== 'all') return chapters.find((c) => c.id === scope) ?? chapters[0];
     return chapters[0];
   }, [scope, chapters]);
+
+  // Footer "Accept and next chapter" (same as Channels). Events auto-save, so
+  // this just advances the scoped chapter; on the last chapter it's a no-op
+  // "Accept chapter". Registered with App so it sits on the always-visible
+  // footer next to "Accept and chain to Channels" (dogfood 2026-06-16).
+  const activeIdx = chapters.findIndex((c) => c.id === activeChapter?.id);
+  const isLastChapter = activeIdx >= chapters.length - 1;
+  const goNextRef = useRef(() => {});
+  goNextRef.current = () => {
+    if (activeIdx >= 0 && activeIdx < chapters.length - 1) setScope(chapters[activeIdx + 1].id);
+  };
+  useEffect(() => {
+    if (!onRegisterChapterNav) return undefined;
+    onRegisterChapterNav(
+      chapters.length > 0
+        ? {
+            hasNext: !isLastChapter,
+            label: isLastChapter ? 'Accept chapter' : 'Accept and next chapter',
+            run: () => goNextRef.current(),
+          }
+        : null,
+    );
+    return () => onRegisterChapterNav(null);
+  }, [isLastChapter, chapters.length, onRegisterChapterNav]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const chapterEvents = useMemo(() => {
     if (!activeChapter) return [];

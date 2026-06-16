@@ -483,7 +483,11 @@ export default function CharactersTab({
     if (!onRegisterChapterNav) return undefined;
     onRegisterChapterNav(
       chapters.length > 0
-        ? { hasNext: !isLastChapter, run: () => acceptRunRef.current() }
+        ? {
+            hasNext: !isLastChapter,
+            label: isLastChapter ? 'Accept chapter' : 'Accept and next chapter',
+            run: () => acceptRunRef.current(),
+          }
         : null,
     );
     return () => onRegisterChapterNav(null);

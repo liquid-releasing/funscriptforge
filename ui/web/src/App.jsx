@@ -976,11 +976,8 @@ export default function App() {
   // tab>"). The tab registers { hasNext, run }: not-last → "Accept and next
   // chapter" (commit + advance), last → "Accept chapter" (commit, no advance),
   // so the last chapter is still committable once the in-body button is gone.
-  if ((tab === 'chapters' || tab === 'stim') && chapterNav && !gateMsg && !busy) {
-    footerSecondary = {
-      label: chapterNav.hasNext ? 'Accept and next chapter' : 'Accept chapter',
-      onClick: chapterNav.run,
-    };
+  if ((tab === 'chapters' || tab === 'stim' || tab === 'events') && chapterNav?.label && !gateMsg && !busy) {
+    footerSecondary = { label: chapterNav.label, onClick: chapterNav.run };
   }
 
   const handleAccept = async () => {
@@ -1211,6 +1208,9 @@ export default function App() {
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}
+            initialChapterId={activeChapterId}
+            onActiveChapterChange={setActiveChapterId}
+            onRegisterChapterNav={setChapterNav}
           />
         )}
         {tab === 'stim' && (
