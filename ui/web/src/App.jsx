@@ -36,6 +36,8 @@ import CharactersTab from './screens/CharactersTab.jsx';
 import ExportTab from './screens/ExportTab.jsx';
 import CatalogTab from './screens/CatalogTab.jsx';
 import AboutDialog from './components/AboutDialog.jsx';
+import OpenProjectDialog from './components/OpenProjectDialog.jsx';
+import { loadSession, saveSession } from './lib/sessionStore.js';
 
 // Format a millisecond duration as a `m:ss` (or `h:mm:ss`) clock for the
 // Project header pill. Used for video-only projects whose duration comes
@@ -734,6 +736,38 @@ export default function App() {
   const chapterArr = Array.isArray(project?.chapterList)
     ? project.chapterList
     : (Array.isArray(project?.chapters) ? project.chapters : null);
+
+  // ── Resume / open-project dialog ────────────────────────────────────
+  // After a project opens, surface a ONE-TIME prompt only when there's a real
+  // decision: the on-disk analysis is from an older analyzer version (offer to
+  // recalculate) OR there's a saved place to resume to. Nothing to decide →
+  // no dialog (we don't nag). The trigger effect is declared BEFORE the
+  // session-write effect so it reads the PRIOR session before the open's own
+  // landing-tab set overwrites it. Session is localStorage today; the portable
+  // <stem>.forge/session.json is the immediate follow-up (lib/sessionStore).
+  const [openDialog, setOpenDialog] = useState(null);
+  const promptedProjectRef = useRef(null);
+  useEffect(() => {
+    if (!project?.id || !project?.path) { promptedProjectRef.current = null; return; }
+    if (promptedProjectRef.current === project.id) return;  // prompt once per open
+    promptedProjectRef.current = project.id;
+    const versionStale = analyzerVersionStale(project?.analyzerVersion);
+    const session = loadSession(project.path);
+    const resumeTab = (session?.tab && session.tab !== 'library' && session.tab !== tab)
+      ? session.tab : null;
+    if (versionStale || resumeTab) {
+      const t = TABS.find((x) => x.id === resumeTab);
+      setOpenDialog({ title: project.title, versionStale, resumeTab, resumeTabLabel: t?.label || null });
+    }
+  }, [project?.id, project?.path, project?.analyzerVersion]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Write-through the active tab as this project's "where you left off." Only
+  // after the open prompt has been considered for this project (promptedRef
+  // set), so the trigger above always reads the prior session first.
+  useEffect(() => {
+    if (!project?.path || promptedProjectRef.current !== project?.id) return;
+    saveSession(project.path, { tab, at: Date.now() });
+  }, [tab, project?.path, project?.id]);
   const { analysisState: globalAnalysisState } = deriveAnalysisState({
     hasMedia: !!project?.mediaPath,
     analyzing: !!busy,
@@ -1231,6 +1265,16 @@ export default function App() {
         open={aboutOpen}
         onClose={() => setAboutOpen(false)}
         inTauri={inTauri}
+      />
+      <OpenProjectDialog
+        open={!!openDialog}
+        title={openDialog?.title}
+        versionStale={!!openDialog?.versionStale}
+        resumeTab={openDialog?.resumeTab}
+        resumeTabLabel={openDialog?.resumeTabLabel}
+        onResume={(t) => { if (t) setTab(t); setOpenDialog(null); }}
+        onRecalculate={() => { setTab('analysis'); setOpenDialog(null); }}
+        onDismiss={() => setOpenDialog(null)}
       />
     </div>
   );
