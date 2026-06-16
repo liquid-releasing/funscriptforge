@@ -19,12 +19,12 @@ tones persist). Still needs a single end-to-end tick of:
 - [ ] **Bare-funscript live click-through** (static audit ✅; live pass not done)
 - [ ] Progress/busy footer never shows a bare "Working…"
 
-### 2. Process management — D1 + D7 🔁 (in progress 2026-06-16)
-- D1 (serialize analyzes): ✅ effectively done — `kill_existing_analyze` reaps the prior
-  auto-chapter before spawning a new one.
-- D7 (reap children on window-close): 🔁 building — orphaned `forge-cli`/`ffmpeg` keep eating
-  CPU **and hold a lock on the source video** after the window closes. In-process child registry
-  + reap on app exit / window destroy.
+### 2. Process management — D1 + D7 🟡 (built 2026-06-16 `494fea2`, needs tauri:dev recompile + live verify)
+- D1 (serialize analyzes): ✅ done — `kill_existing_analyze` reaps the prior auto-chapter before spawning.
+- D7 (reap children on window-close): ✅ built — `ACTIVE_CHILDREN` registry tracks every backend
+  spawn's PID; `reap_active_children` kills each tree on `WindowEvent::Destroyed` + `RunEvent::Exit`.
+  **Live test:** start an analyze on a long source, close the window mid-run → confirm (Task Manager)
+  no `forge-cli`/`python`/`ffmpeg` survives, and the source video can be opened/moved immediately after.
 
 ### 3. WebView2 memory 🟡 (partially mitigated)
 The VictoriaOaks freeze cause: the viewer holds full-track heavy data (20 MB spectrogram parsed
