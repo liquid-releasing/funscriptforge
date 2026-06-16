@@ -454,6 +454,13 @@ export default function CharactersTab({
     () => chapters.findIndex((c) => c.id === activeChapterId),
     [chapters, activeChapterId],
   );
+  // Move to the next chapter WITHOUT accepting — so navigating doesn't force a
+  // commit (dogfood 2026-06-16). Shared state carries it to Chapters too.
+  const goNextChapter = () => {
+    if (activeChapterIdx >= 0 && activeChapterIdx < chapters.length - 1) {
+      setActiveChapterId(chapters[activeChapterIdx + 1].id);
+    }
+  };
 
   // The journey-arc default for THIS chapter's position — what the auto-seed
   // would assign. Exposed as an explicit "Use default" button under each grid
@@ -819,6 +826,7 @@ export default function CharactersTab({
               defaultLabel={defaultCharLabel}
               dirty={dirty}
               isLastChapter={chapters.findIndex((c) => c.id === activeChapterId) >= chapters.length - 1}
+              onNextChapter={goNextChapter}
               estimSelected={estimSelected}
               catalogWarning={catalogWarning}
             />
@@ -1267,7 +1275,7 @@ function CharacterPanel({
   catalog,
   stagedChar, isNothingStaged, stagedParams,
   onSelectCharacter, onParamChange, onAccept, onReset, onUseDefault, defaultLabel,
-  dirty, isLastChapter,
+  dirty, isLastChapter, onNextChapter,
   estimSelected, catalogWarning,
 }) {
   // Card grid auto-sizes — usually 5 + Nothing = 6, but accommodates a
@@ -1411,6 +1419,7 @@ function CharacterPanel({
           dirty={dirty}
           isLastChapter={isLastChapter}
           onAccept={onAccept}
+          onNextChapter={onNextChapter}
           onReset={onReset}
           onUseDefault={onUseDefault}
           defaultLabel={defaultLabel}
@@ -1425,7 +1434,7 @@ function CharacterPanel({
 // commit-and-advance affordance the user asked for; it's enabled
 // even when nothing is dirty so the user can power-walk through
 // chapters where the seeded default already fits.
-function ActionRow({ stagedChar, isNothingStaged, dirty, isLastChapter, onAccept, onReset, onUseDefault, defaultLabel }) {
+function ActionRow({ stagedChar, isNothingStaged, dirty, isLastChapter, onAccept, onNextChapter, onReset, onUseDefault, defaultLabel }) {
   const label = stagedChar?.label
     || (isNothingStaged ? NOTHING.label : null);
   const color = stagedChar?.color
@@ -1455,6 +1464,23 @@ function ActionRow({ stagedChar, isNothingStaged, dirty, isLastChapter, onAccept
         <Icon name="check" size={13} />
         {verb} {suffix}
       </button>
+      {/* Standalone Next chapter — navigate without committing a character
+          (dogfood 2026-06-16). Hidden on the last chapter. */}
+      {!isLastChapter && onNextChapter && (
+        <button
+          onClick={onNextChapter}
+          title="Go to the next chapter without accepting"
+          style={{
+            padding: '8px 12px', fontSize: 12, fontWeight: 700,
+            background: 'transparent', color: 'var(--text)',
+            border: '1px solid var(--border)', borderRadius: 6,
+            cursor: 'pointer', fontFamily: 'inherit',
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+          }}
+        >
+          Next chapter <Icon name="arrow-right" size={13} />
+        </button>
+      )}
       {onUseDefault && (
         <button
           onClick={onUseDefault}

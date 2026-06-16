@@ -1248,6 +1248,24 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                     </span>
                   )}
                 </div>
+                {/* Standalone "Next chapter" — move on WITHOUT accepting, so
+                    you don't have to bake a tone just to navigate (dogfood
+                    2026-06-16). Hidden on the last chapter. */}
+                {!isLast && (
+                  <button
+                    onClick={() => setActiveId(chapters[idx + 1].id)}
+                    title="Go to the next chapter without accepting"
+                    style={{
+                      padding: '8px 12px', fontSize: 12.5, fontWeight: 700,
+                      background: 'transparent', color: 'var(--text)',
+                      border: '1px solid var(--border)', borderRadius: 6,
+                      cursor: 'pointer', fontFamily: 'inherit',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    Next chapter <Icon name="arrow-right" size={13} />
+                  </button>
+                )}
                 <button
                   onClick={handleAcceptTone}
                   title={isLast
