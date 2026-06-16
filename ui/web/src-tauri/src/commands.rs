@@ -1411,13 +1411,26 @@ struct DiskAudioBeats {
     duration_ms: u64,
     #[serde(default)]
     bpm: f32,
-    #[serde(default)]
+    // The canonical `<stem>.beatmap.json` keys these `beats` / `downbeats`;
+    // the legacy `<stem>.beats.json` used `beats_ms` / `downbeats_ms`. Accept
+    // both so one struct reads either file.
+    #[serde(default, alias = "beats")]
     beats_ms: Vec<u64>,
-    #[serde(default)]
+    #[serde(default, alias = "downbeats")]
     downbeats_ms: Vec<u64>,
 }
 
 fn beats_sidecar_path(media_path: &str) -> String {
+    // `<stem>.beatmap.json` is the canonical beat map every analysis / generate
+    // pass writes (and the one the tempo-octave fixes land in). `<stem>.beats.json`
+    // is a legacy name some older caches still carry; the viewer used to read it,
+    // so a re-analysis silently updated beatmap.json while the viewer kept showing
+    // the stale beats.json. Prefer the beatmap; fall back to the legacy file only
+    // when no beatmap exists, so old projects still load something.
+    let beatmap = forge_sidecar_path(media_path, ".beatmap.json");
+    if Path::new(&beatmap).exists() {
+        return beatmap;
+    }
     forge_sidecar_path(media_path, ".beats.json")
 }
 
