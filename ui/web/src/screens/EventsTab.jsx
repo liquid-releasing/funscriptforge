@@ -199,12 +199,11 @@ export default function EventsTab({
     if (scope === 'all') return events;
     const ch = chapters.find((c) => c.id === scope);
     if (!ch) return events;
-    // Overlap (not begin-only) — same semantics as the hero's chapterEvents.
-    // A capture at the chapter's very start can snap a few ms BEFORE atMs
-    // (nearest-beat pull), which a begin-only filter would hide even though
-    // the event clearly belongs to this chapter. Anything touching the
-    // chapter window shows in its timeline.
-    return events.filter((e) => e.beginMs < ch.endMs && e.endMs > ch.atMs);
+    // One home per event — the timeline list shows an event in exactly the
+    // chapter its begin falls in (no double-listing across boundaries). The
+    // capture clamp (clampToChapter) keeps a Begin mark from snapping across
+    // the boundary, so an event added at a chapter's start stays homed there.
+    return events.filter((e) => e.beginMs >= ch.atMs && e.beginMs < ch.endMs);
   }, [events, scope, chapters]);
 
   // ── Chapter-scoped hero (Stage 1a: TrackStack) ──────────────────────
