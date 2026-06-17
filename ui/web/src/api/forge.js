@@ -695,10 +695,10 @@ export function openExternal(url) {
   });
 }
 
-/** Launch ForgePlayer (the LQR player) as an Export hand-off. Best-effort dev
- *  launcher — locates a sibling forgeplayer/ checkout (or FORGEPLAYER_ROOT).
- *  ForgePlayer has no `.forge` importer yet, so the caller also reveals the
- *  exported file for the user to drop into a stim slot. Browser mode → null. */
+/** Launch ForgePlayer (the LQR player) as an Export hand-off, opening the
+ *  exported `.forge` bundle directly (ForgePlayer's importer boots into the
+ *  scene). Best-effort dev launcher — locates a sibling forgeplayer/ checkout
+ *  (or FORGEPLAYER_ROOT). Browser mode → null. */
 export function openInForgePlayer(path) {
   return call('open_in_forgeplayer', { path }, () => Promise.resolve(null));
 }

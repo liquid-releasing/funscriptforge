@@ -2784,14 +2784,13 @@ fn locate_forgeplayer() -> Option<(PathBuf, PathBuf)> {
 
 /// Launch ForgePlayer (the LQR player) as a hand-off destination from Export.
 ///
-/// ForgePlayer has no `.forge` bundle importer yet (it reads
-/// `.forgeplayer-session` and loads `.funscript`/audio per stim slot), so we
-/// only launch the app here — the caller also reveals the exported file so the
-/// user can drop it into a slot. `path` is accepted for forward-compat (when
-/// ForgePlayer learns to open a bundle on launch) but not yet forwarded.
+/// ForgePlayer now has a `.forge` bundle importer (its `main.py` opens a bundle
+/// path passed on launch → `ControlWindow.open_path` → import + activate), so we
+/// forward the exported bundle directly: it boots straight into the scene
+/// (video relinked, e-stim channels wired) instead of the user dropping it into
+/// a slot. An empty/missing `path` just launches the app to its Library.
 #[tauri::command]
 pub async fn open_in_forgeplayer(path: String) -> Result<(), String> {
-    let _ = &path; // reserved — ForgePlayer cannot yet open a bundle on launch
     let (py, main_py) = locate_forgeplayer().ok_or_else(|| {
         "ForgePlayer not found — set FORGEPLAYER_ROOT to its folder, or place a \
          forgeplayer/ checkout beside FunscriptForge."
@@ -2799,6 +2798,11 @@ pub async fn open_in_forgeplayer(path: String) -> Result<(), String> {
     })?;
     let mut cmd = std::process::Command::new(&py);
     cmd.arg(&main_py);
+    // Forward the bundle so ForgePlayer opens straight into it. Only when it's a
+    // real existing path — a blank arg would otherwise read as a bogus target.
+    if !path.is_empty() && Path::new(&path).exists() {
+        cmd.arg(&path);
+    }
     if let Some(dir) = main_py.parent() {
         cmd.current_dir(dir);
     }

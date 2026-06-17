@@ -259,10 +259,10 @@ export default function ExportTab({
       }
       setResults(written);
       if (toForgePlayer) {
-        // Hand off: launch the player, then reveal the bundle so the user can
-        // drop it into a stim slot (no .forge importer in ForgePlayer yet).
+        // Hand off: ForgePlayer now opens the bundle directly (its importer
+        // boots straight into the scene), so pass the .forge — no reveal needed.
         const forgeRes = written.find((r) => r.shape === 'forge') || written[0];
-        if (forgeRes?.path) await launchForgePlayer(true, forgeRes);
+        if (forgeRes?.path) await launchForgePlayer(false, forgeRes);
       }
     } catch (e) {
       setWriteError(String(e?.message || e));
