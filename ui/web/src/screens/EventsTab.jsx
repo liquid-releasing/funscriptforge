@@ -26,7 +26,7 @@
 // never touched; events layer on the output channels. Chapter scope + the
 // selected/edited event id stay tab-local session state.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Button, Icon, fmtTime, fmtTimeShort, TrackStack, MediaViewer, ChapterRibbon } from 'forgemoment';
 import { EVENT_DEVICES } from '../data/events.js';
 import {
@@ -440,6 +440,21 @@ export default function EventsTab({
     activeChapter ?? null,
   );
 
+  // Smooth baton clock. The MediaViewer hands its <video> up via videoElRef;
+  // getLiveMs reads the real (un-throttled) media clock so TrackStack's baton
+  // tracks the beats at 60fps. The clip plays at clip-relative time, so add
+  // the same offset MediaViewer uses to report original-media ms.
+  const videoElRef = useRef(null);
+  const videoOffsetMs =
+    chapterClip && chapterClip.chapterId === activeChapter?.id
+      ? chapterClip.offsetMs
+      : 0;
+  const getLiveMs = useCallback(() => {
+    const v = videoElRef.current;
+    if (!v) return null;
+    return v.currentTime * 1000 + videoOffsetMs;
+  }, [videoOffsetMs]);
+
   if (!project?.path) {
     return (
       <section className="ff-placeholder" style={{ padding: 24 }}>
@@ -570,6 +585,7 @@ export default function EventsTab({
               lanes={['events', 'funscript', 'audio', 'spectro']}
               funscriptColorMode="velocity"
               currentMs={currentMs}
+              getLiveMs={getLiveMs}
               selectedEventId={selectedId}
               onSeek={setCurrentMs}
               onSelectEvent={(id) => setSelectedId((s) => (s === id ? null : id))}
@@ -582,6 +598,7 @@ export default function EventsTab({
               frame-precise begin/end landing. */}
           <MediaViewer
             width="100%"
+            videoElRef={videoElRef}
             thumbnailAspect="16/9"
             videoSrc={
               chapterClip && chapterClip.chapterId === activeChapter.id
