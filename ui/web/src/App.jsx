@@ -17,6 +17,7 @@ import {
   isTauri, ping, loadProject, loadSampleProject, attachMedia,
   pickMediaFile, pickProjectFile, classifyProjectFile,
   probeMedia, promoteGeneratedFunscript,
+  importForgeBundle, getLaunchBundle,
   loadAudioPeaks, loadAudioSpectrogram, loadAudioBeats,
   revertWorkingFunscript, saveWorkingFunscript,
   countChapterClips, analyzeChaptersWithVideoflow,
@@ -686,6 +687,54 @@ export default function App() {
       setBusy(null);
     }
   };
+
+  // Unpack a `.forge` bundle into a re-editable project on disk and open the
+  // funscript it produces. The App-level twin of ProjectTab's importBundleAndOpen
+  // — used by the launch-arg handler below so the Windows "Edit in
+  // FunscriptForge" verb lands on a real project no matter which tab is active.
+  const importBundleAndOpen = async (path) => {
+    const name = path.split(/[\\/]/).pop() || 'bundle';
+    setAppError(null);
+    setBusy({ message: `Importing ${name}…` });
+    setTab('project');
+    try {
+      const res = await importForgeBundle(path);
+      if (!res?.funscriptPath) {
+        setAppError(`Couldn't import bundle: ${name}`);
+        return;
+      }
+      await handleOpenScript(res.funscriptPath);
+      if (!res.media) {
+        const want = res.mediaExpected ? `“${res.mediaExpected}”` : 'a video';
+        setAppError(`Imported ${name} — attach ${want} with “Add or replace…” to see it in the editor.`);
+      }
+    } catch (err) {
+      console.error('App: importBundleAndOpen failed', err);
+      setAppError(`Import failed: ${String(err?.message || err)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // File-association onboarding (Windows): when FSF is launched with a path
+  // argument — right-click "Edit in FunscriptForge" on a `.forge`, or "Open
+  // with" on a funscript/media — drain it once on mount and route by kind.
+  // One-shot (the Rust side returns the path only on the first call), and
+  // ref-guarded so a StrictMode double-mount can't double-import.
+  const launchHandledRef = useRef(false);
+  useEffect(() => {
+    if (launchHandledRef.current) return;
+    launchHandledRef.current = true;
+    (async () => {
+      const path = await getLaunchBundle();
+      if (!path) return;
+      const kind = classifyProjectFile(path);
+      if (kind === 'bundle') await importBundleAndOpen(path);
+      else if (kind === 'media') handleOpenMedia(path);
+      else handleOpenScript(path);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Attach a media file to the currently-open project. Used by the Project
   // tab's "Add or replace…" picker when the user picks audio/video; the

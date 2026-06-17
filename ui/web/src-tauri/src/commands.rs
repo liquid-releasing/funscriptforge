@@ -2678,6 +2678,34 @@ pub async fn import_forge_bundle(
     serde_json::from_str(&out).map_err(|e| format!("parse import result: {}", e))
 }
 
+/// The file path FunscriptForge was launched with, if any. The Windows file
+/// association hands a `.forge` bundle here: right-click "Edit in
+/// FunscriptForge" (and "Open with" on a funscript/media) passes the path as
+/// argv. Captured once at startup; the frontend drains it on first mount and
+/// routes by kind (bundle → import, funscript → open, media → video-only).
+static LAUNCH_PATH: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+/// Snapshot the first command-line path that exists on disk. WebView2/Tauri can
+/// append their own `--switches`, so we skip flag-shaped args and take the first
+/// real path. Call once, from `setup`.
+pub fn capture_launch_path() {
+    let found = std::env::args()
+        .skip(1)
+        .find(|a| !a.starts_with('-') && Path::new(a).exists());
+    let _ = LAUNCH_PATH.set(Mutex::new(found));
+}
+
+/// Drain the launch path — one-shot, so a dev HMR reload (or a second mount
+/// under React StrictMode) doesn't re-import the same bundle. Returns the path
+/// on the first call of the process, `null` thereafter.
+#[tauri::command]
+pub fn get_launch_bundle() -> Option<String> {
+    LAUNCH_PATH
+        .get()
+        .and_then(|m| m.lock().ok())
+        .and_then(|mut g| g.take())
+}
+
 /// Reveal a path in the OS file manager (selects the file on Windows). Best
 /// effort — Explorer returns a non-zero exit even on success, so we don't
 /// check status.

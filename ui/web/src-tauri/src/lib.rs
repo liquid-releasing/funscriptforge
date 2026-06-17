@@ -17,6 +17,10 @@ pub fn run() {
             // Resolve the Python backend once: bundled forge-cli resource in a
             // packaged build, else the dev .venv + cli.py.
             commands::init_cli_invocation(app.handle());
+            // Snapshot any file path we were launched with (the Windows
+            // file association's "Edit in FunscriptForge" verb passes a
+            // .forge bundle as argv). The frontend drains it on first mount.
+            commands::capture_launch_path();
             #[cfg(debug_assertions)]
             {
                 use tauri::Manager;
@@ -66,6 +70,7 @@ pub fn run() {
             commands::polish_write,
             commands::export_write,
             commands::import_forge_bundle,
+            commands::get_launch_bundle,
             commands::reveal_path,
             commands::open_external,
             commands::open_in_forgeplayer,

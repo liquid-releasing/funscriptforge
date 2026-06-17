@@ -729,6 +729,16 @@ export async function importForgeBundle(bundlePath, outDir = null) {
   };
 }
 
+/** Drain the launch-time file path — the Windows file association hands a
+ *  `.forge` bundle here when the user picks "Edit in FunscriptForge" (or "Open
+ *  with" on a funscript/media), passed as argv at startup. One-shot per
+ *  process: returns the path on the first call, null after (and in browser
+ *  mode). The caller classifies and routes it (bundle → import, funscript →
+ *  open, media → video-only). */
+export async function getLaunchBundle() {
+  return call('get_launch_bundle', {}, () => Promise.resolve(null));
+}
+
 /** Open a `.forge` bundle picker — the first-class onboarding input alongside
  *  pickFunscriptFile. Returns the absolute path on desktop, null if cancelled
  *  or in browser mode. */
