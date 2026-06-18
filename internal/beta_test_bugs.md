@@ -73,6 +73,8 @@ D15. **★ CONFIRMED DATA LOSS — chapter TONES not remembered across a tab
    memory → Untoned — the D15 session-lift fixes that; the primary just never
    committed at all. ('tame' chapters: selection persisted; its backend transform
    still needs the per-chapter Accept.)
+   **✅ COMMITTED + LIVE-VERIFIED 2026-06-18 (`f3f8096`):** after a restart the app
+   remembered the tones the user had set + accepted. Blocker cleared.
 
 D18. **Chapter mini-card heatmap colors disagree with the editor.** The chapter
    strip card (e.g. ch3) renders mostly BLUE, but the same chapter in the editor
@@ -95,6 +97,12 @@ D19. **Tone/chapter panel times should be ABSOLUTE (video-relative), continuous
    absolute video time instead. Bounded UX change. (NOTE: the Chapters LIST cards
    already show absolute 0:00-2:38 / 2:38-6:05 — so the offending panel is a
    specific in-chapter view that re-bases to 0; pin which one on next repro.)
+   **✅ FIXED-UNCOMMITTED 2026-06-18:** pinned it — the Chapters tone before/after
+   cards (`BeforeAfterCol` → `FunscriptChart`, ChaptersTab.jsx ~1266/1287). They
+   re-base the slice actions to 0 for drawing but never passed the chart's existing
+   `axisOffsetMs` prop, so the time axis read 0:29 instead of 38:44+. Passed
+   `axisOffsetMs={active.atMs}` to both charts (the same prop Phrases/Stanzas slice
+   previews already use). Verified on next reload: ch9 axis should read ~38:44→43:57.
 
 D20. **Phrase similarity/shape not grouping visually-identical phrases.** In ch1,
    P7/P8/P9/P10/P12/P13 look like the same behavior/shape but aren't recognized
@@ -125,6 +133,20 @@ D17. **Lost "done" signal → footer stuck on "Analyzing…" (appears hung) afte
    completion callback was dropped. Recovery = reload the app (re-reads disk).
    Fix direction: the footer should reconcile against disk / time out a lost
    callback rather than spin forever.
+
+D21. **Events on the LAST chapter read as "not accepted" — Accept did nothing
+   visible.** Repro: add a Scene Closer event to ch12 (the last chapter), click
+   the footer "Accept chapter" → no feedback; user can't tell the event was
+   committed. **Root cause:** the Events footer-nav `run` was `goNextRef.current()`,
+   which only advances the scope to the NEXT chapter — on the last chapter there is
+   no next, so it was a literal no-op. The event itself WAS saved (Events write
+   through to `<stem>.feel.yml` on every add/edit, fire-and-forget), but the button
+   gave zero confirmation. **✅ FIXED-UNCOMMITTED 2026-06-18 (EventsTab.jsx):** the
+   last-chapter Accept now (a) flush-persists the events list and (b) pulses a
+   fixed "✓ Events saved for this chapter" toast; label is now the consistent
+   "Accept last chapter changes" (was "Accept chapter"). Non-last chapters still
+   advance as before. NOTE: events bake into the e-stim signal at EXPORT, not on
+   Accept — Accept on Events = "save + confirm", by design.
 
 ### ✅ Fixed this session (videoflow source — LIVE in dev, no rebuild)
 

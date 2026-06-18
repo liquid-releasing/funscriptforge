@@ -1269,6 +1269,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                   height={120}
                   view={beforeAfterView}
                   onViewChange={setBeforeAfterView}
+                  axisOffsetMs={active.atMs}
                   bare
                 />
               </BeforeAfterCol>
@@ -1289,6 +1290,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                   height={120}
                   view={beforeAfterView}
                   onViewChange={setBeforeAfterView}
+                  axisOffsetMs={active.atMs}
                   bare
                 />
               </BeforeAfterCol>

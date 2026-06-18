@@ -206,6 +206,14 @@ export default function EventsTab({
   const [selectedEffectId, setSelectedEffectId] = useState('normal');
   // Label presentation — SFW (default, store positioning) vs NSFW (raw intent).
   const [labelMode, setLabelMode] = useState('sfw');
+  // Transient "events saved ✓" confirmation. Events write through on every
+  // edit, but the footer Accept gave no feedback on the LAST chapter (its nav
+  // run was a no-op there), so a Scene Closer added to the final chapter read
+  // as "not accepted" even though it was on disk (dogfood 2026-06-18). The
+  // last-chapter Accept now flush-persists and pulses this so the save is
+  // visible. Cleared on a timer; the ref lets the timer survive re-renders.
+  const [savedPulse, setSavedPulse] = useState(false);
+  const savedTimerRef = useRef(null);
 
   const selectedEvent = useMemo(
     () => events.find((e) => e.id === selectedId) || null,
@@ -256,7 +264,18 @@ export default function EventsTab({
   const isLastChapter = activeIdx >= chapters.length - 1;
   const goNextRef = useRef(() => {});
   goNextRef.current = () => {
-    if (activeIdx >= 0 && activeIdx < chapters.length - 1) setScope(chapters[activeIdx + 1].id);
+    if (activeIdx >= 0 && activeIdx < chapters.length - 1) {
+      setScope(chapters[activeIdx + 1].id);
+      return;
+    }
+    // Last chapter: there's no next to advance to. Events already write
+    // through on every edit, but the user needs to SEE that the final
+    // chapter's events (e.g. a Scene Closer) are committed — so flush-persist
+    // and pulse a confirmation rather than silently doing nothing.
+    persist(events);
+    setSavedPulse(true);
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setSavedPulse(false), 2400);
   };
   useEffect(() => {
     if (!onRegisterChapterNav) return undefined;
@@ -264,13 +283,15 @@ export default function EventsTab({
       chapters.length > 0
         ? {
             hasNext: !isLastChapter,
-            label: isLastChapter ? 'Accept chapter' : 'Accept and next chapter',
+            label: isLastChapter ? 'Accept last chapter changes' : 'Accept and next chapter',
             run: () => goNextRef.current(),
           }
         : null,
     );
     return () => onRegisterChapterNav(null);
   }, [isLastChapter, chapters.length, onRegisterChapterNav]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // Drop the confirmation timer on unmount.
+  useEffect(() => () => { if (savedTimerRef.current) clearTimeout(savedTimerRef.current); }, []);
 
   const chapterEvents = useMemo(() => {
     if (!activeChapter) return [];
@@ -475,6 +496,16 @@ export default function EventsTab({
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '22px 28px', background: 'var(--bg)' }}>
+      {savedPulse && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: 84, transform: 'translateX(-50%)',
+          zIndex: 50, padding: '10px 18px', borderRadius: 999,
+          background: 'var(--accent, #ffb454)', color: '#1a1208', fontWeight: 700,
+          fontSize: 13, boxShadow: '0 6px 24px rgba(0,0,0,0.4)', pointerEvents: 'none',
+        }}>
+          ✓ Events saved for this chapter
+        </div>
+      )}
       <Header
         eventCount={events.length}
         scopeCount={timelineEvents.length}
