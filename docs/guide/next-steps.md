@@ -75,7 +75,7 @@ The Next Steps tab also previews upcoming tools:
 
 ## Community
 
-- [Discord](https://discord.gg/funscriptforge) — feedback, feature requests, sharing
+- [Discord](https://discord.gg/MHucAwwRc) — feedback, feature requests, sharing
 - [GitHub](https://github.com/liquid-releasing/funscriptforge) — issues, contributions
 
 ---
