@@ -33,7 +33,7 @@ const BLOB_FETCH_CAP_BYTES = 150 * 1024 * 1024;
 // `direct_playable` verdict decides streaming-vs-clips and never changes for a
 // given file, so probe once and reuse. Map survives Vite module replacement.
 const __mediaProbe = (globalThis.__ffMediaProbe ||= new Map());
-function probeMediaCached(mediaPath) {
+export function probeMediaCached(mediaPath) {
   let p = __mediaProbe.get(mediaPath);
   if (!p) {
     p = probeMedia(mediaPath).catch(() => null);

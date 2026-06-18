@@ -23,7 +23,7 @@ export const ANALYSIS_ARTIFACTS = [
 export function deriveAnalysisState({
   hasMedia, analyzing, pipelineError,
   chapterList, trackPeaks, trackSpectrogram, trackBeats,
-  chapterClipsPresent,
+  chapterClipsPresent, directPlay = null,
 }) {
   // Chapter clips are "done" when one clip per chapter exists on disk.
   // chapterClipsPresent == null means not-yet-counted — treat as done so we
@@ -37,14 +37,24 @@ export function deriveAnalysisState({
   // (1 chapter → 0 clips is its COMPLETE state). So only MULTI-chapter projects
   // expect one clip per chapter and can be 'partial' on missing clips —
   // otherwise a single-chapter project would be perpetually partial and Accept
-  // would resume in a loop. (Residual edge: a multi-chapter video with a
-  // dominant >50%-of-source chapter that skips its own clip could false-
-  // positive; the real fix is recording the expected clip count in the
-  // sidecar — deferred.)
+  // would resume in a loop.
+  //
+  // Clips are ALSO not expected when the source is DIRECT-PLAYABLE: a clean
+  // source that streams into WebView2 without a normalising re-encode skips
+  // clip extraction ENTIRELY (videoflow structural.py: "Source streams
+  // directly — skipping clip extraction"), so it yields 0 clips for ANY chapter
+  // count. `directPlay` is the cached `direct_playable` probe verdict (the same
+  // one useChapterClip consults). Without it a multi-chapter direct-play source
+  // (e.g. small/clean 540p — Prisoner) is PERPETUALLY 'partial' on missing
+  // clips → a false Resume CTA + a no-op auto-resume each Accept (the D5c
+  // residual). We suppress the clip requirement only when we KNOW clips aren't
+  // needed (directPlay === true); unknown (probe pending/failed) falls through
+  // to the count check so the real "killed during chapter_clips on a 4K source"
+  // case (directPlay false) still surfaces Resume. D5/D5c.
   const expectedClips = chapterList?.length ?? 0;
   const clipsDone = chapterClipsPresent == null
     ? true
-    : (expectedClips <= 1 ? true : chapterClipsPresent >= expectedClips);
+    : (directPlay === true || expectedClips <= 1 || chapterClipsPresent >= expectedClips);
   const present = {
     chapters:    !!chapterList?.length,
     peaks:       !!trackPeaks?.peaks?.length,

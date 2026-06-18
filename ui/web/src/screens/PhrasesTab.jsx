@@ -105,6 +105,10 @@ export default function PhrasesTab({
   trackPeaks,
   trackSpectrogram,
   trackBeats,
+  // Registers a per-chapter "Accept and next chapter" on the always-visible App
+  // footer (mirrors Chapters/Channels), shown beside the primary "Accept and
+  // chain to Stanzas". Cleared on unmount.
+  onRegisterChapterNav = () => {},
 }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
@@ -184,6 +188,31 @@ export default function PhrasesTab({
   // and short-circuit render before any of this matters.
   const activeChapter = chapters.find((c) => c.id === activeChapterId) ?? chapters[0] ?? null;
   const cacheEntry = project?.path ? phrasesByPath[project.path] : null;
+
+  // Per-chapter "Accept and next chapter" footer button (beside "Accept and
+  // chain to Stanzas"). Computed above the empty-state early returns so the
+  // hooks run unconditionally (Rules of Hooks). Phrase edits already roll
+  // forward via Apply, so "accept" = advance to the next chapter without
+  // leaving the tab. Hidden on the last chapter (no next; the primary "chain to
+  // Stanzas" is the action there). The ref keeps `run` fresh without
+  // re-registering every chapter change.
+  const navChapterIdx = chapters.findIndex((c) => c.id === activeChapter?.id);
+  const navIsLast = navChapterIdx < 0 || navChapterIdx >= chapters.length - 1;
+  const navRunRef = useRef(() => {});
+  navRunRef.current = () => {
+    if (navChapterIdx >= 0 && navChapterIdx < chapters.length - 1) {
+      setActiveChapterId(chapters[navChapterIdx + 1].id);
+    }
+  };
+  useEffect(() => {
+    if (!onRegisterChapterNav) return undefined;
+    onRegisterChapterNav(
+      !navIsLast && chapters.length > 0
+        ? { hasNext: true, label: 'Accept and next chapter', run: () => navRunRef.current() }
+        : null,
+    );
+    return () => onRegisterChapterNav(null);
+  }, [navIsLast, chapters.length, onRegisterChapterNav]);
   const allPhrases = cacheEntry?.phrases ?? EMPTY_PHRASES;
   const phrasesLoaded = !!cacheEntry?.loaded;
   const phrasesInScope = useMemo(() => {

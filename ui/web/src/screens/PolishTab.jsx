@@ -488,22 +488,28 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
             )}
             <button
               onClick={() => stamp(focusedDevice)}
-              disabled={!canStamp || stamping === focusedDevice.id}
+              // Disable while ANY station is forging, not just this one — a
+              // single backend forge runs at a time, and switching the bench to
+              // another station mid-forge must not let a second one start.
+              disabled={!canStamp || stamping !== null}
               style={{
                 width: '100%', borderRadius: 8, padding: '11px 16px',
                 background: focusedState === 'accepted' ? 'transparent' : `linear-gradient(135deg, ${ember}, ${shade(ember, -20)})`,
                 color: focusedState === 'accepted' ? '#3ed598' : '#fff',
                 fontWeight: 700, fontSize: 12.5,
-                cursor: canStamp && stamping !== focusedDevice.id ? 'pointer' : 'not-allowed',
-                opacity: canStamp ? 1 : 0.5,
+                cursor: canStamp && stamping === null ? 'pointer' : 'not-allowed',
+                // Dim when blocked by ANOTHER station's forge; the focused
+                // station that's actually forging keeps full opacity ("Forging…").
+                opacity: canStamp && (stamping === null || stamping === focusedDevice.id) ? 1 : 0.5,
                 boxShadow: focusedState === 'accepted' ? 'none' : `0 4px 14px ${ember}55`,
                 border: focusedState === 'accepted' ? '1px solid rgba(62,213,152,0.4)' : 'none',
               }}
             >
               {stamping === focusedDevice.id ? 'Forging…'
-                : focusedState === 'accepted' ? '✓ Stamped · re-forge'
-                  : focusedState === 'stale' ? 'Re-stamp · source changed'
-                    : 'Stamp this pass'}
+                : stamping !== null ? 'Forging another station…'
+                  : focusedState === 'accepted' ? '✓ Stamped · re-forge'
+                    : focusedState === 'stale' ? 'Re-stamp · source changed'
+                      : 'Stamp this pass'}
             </button>
             {!canStamp && (
               <div style={{ fontSize: 10, color: '#6b7390', marginTop: 8, textAlign: 'center' }}>

@@ -88,6 +88,10 @@ export default function StanzasTab({
   trackPeaks,
   trackSpectrogram,
   trackBeats,
+  // Registers a per-chapter "Accept and next chapter" on the always-visible App
+  // footer (mirrors Chapters/Channels/Phrases), beside the primary "Accept and
+  // chain to <next>". Cleared on unmount.
+  onRegisterChapterNav = () => {},
 }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
@@ -150,6 +154,29 @@ export default function StanzasTab({
   const activeChapterIdx = activeChapter
     ? chapters.findIndex((c) => c.id === activeChapter.id)
     : -1;
+
+  // Per-chapter "Accept and next chapter" footer button (beside "Accept and
+  // chain to <next>"). Computed above the empty-state early returns so the
+  // hooks run unconditionally (Rules of Hooks). Stanza edits already roll
+  // forward via Apply, so "accept" = advance to the next chapter without
+  // leaving the tab. Hidden on the last chapter (no next). The ref keeps `run`
+  // fresh without re-registering every chapter change.
+  const navIsLast = activeChapterIdx < 0 || activeChapterIdx >= chapters.length - 1;
+  const navRunRef = useRef(() => {});
+  navRunRef.current = () => {
+    if (activeChapterIdx >= 0 && activeChapterIdx < chapters.length - 1) {
+      setActiveChapterId(chapters[activeChapterIdx + 1].id);
+    }
+  };
+  useEffect(() => {
+    if (!onRegisterChapterNav) return undefined;
+    onRegisterChapterNav(
+      !navIsLast && chapters.length > 0
+        ? { hasNext: true, label: 'Accept and next chapter', run: () => navRunRef.current() }
+        : null,
+    );
+    return () => onRegisterChapterNav(null);
+  }, [navIsLast, chapters.length, onRegisterChapterNav]);
 
   // Stanzas + clusters pulled from <stem>.chapters.json via readStanzas.
   // Cached at App.jsx level keyed by funscript path so tab switches

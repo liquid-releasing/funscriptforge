@@ -61,6 +61,7 @@ import {
   wipeForgeDir,
 } from '../api/forge.js';
 import { deriveAnalysisState } from '../lib/analysisState.js';
+import { probeMediaCached } from '../hooks/useChapterClip.js';
 
 // FunscriptForge's Analysis tab uses the full default category list.
 // The Phrases sub-tab IS surfaced here — it renders the at-a-glance
@@ -113,6 +114,9 @@ export default function AnalysisTab({
   // (all sidecars present, clips incomplete) surfaces as 'partial' → the
   // Resume CTA. See D5 in internal/beta_test_bugs.md.
   const [chapterClipsPresent, setChapterClipsPresent] = useState(null);
+  // `direct_playable` verdict — a direct-play source skips clips entirely (0
+  // by design), so it must not read as 'partial' on missing clips. D5c.
+  const [mediaDirectPlay, setMediaDirectPlay] = useState(null);
   // Pipeline-level error — when the whole analysis fails (no media,
   // CLI crash, etc.), every still-loading panel surfaces this and the
   // Retry button re-triggers the same call.
@@ -436,6 +440,20 @@ export default function AnalysisTab({
     return () => { cancelled = true; };
   }, [project?.path, project?.mediaPath, projectExists, isSample, analyzing]);
 
+  // Direct-playable verdict (cached, shared with useChapterClip + App) so the
+  // clip-completeness check is suppressed for sources that skip clips. D5c.
+  useEffect(() => {
+    if (!projectExists || isSample || !isTauri() || !project?.mediaPath) {
+      setMediaDirectPlay(null);
+      return;
+    }
+    let cancelled = false;
+    probeMediaCached(project.mediaPath)
+      .then((p) => { if (!cancelled) setMediaDirectPlay(p?.direct_playable ?? null); })
+      .catch(() => { if (!cancelled) setMediaDirectPlay(null); });
+    return () => { cancelled = true; };
+  }, [project?.mediaPath, projectExists, isSample]);
+
   // ── Empty state ─────────────────────────────────────────────────
   if (!projectExists) {
     return (
@@ -540,11 +558,11 @@ export default function AnalysisTab({
     () => deriveAnalysisState({
       hasMedia, analyzing, pipelineError,
       chapterList, trackPeaks, trackSpectrogram, trackBeats,
-      chapterClipsPresent,
+      chapterClipsPresent, directPlay: mediaDirectPlay,
     }),
     [hasMedia, analyzing, pipelineError,
      chapterList, trackPeaks, trackSpectrogram, trackBeats,
-     chapterClipsPresent],
+     chapterClipsPresent, mediaDirectPlay],
   );
 
   return (

@@ -24,6 +24,7 @@ import {
   analyzerVersionStale,
 } from './api/forge.js';
 import { deriveAnalysisState } from './lib/analysisState.js';
+import { probeMediaCached } from './hooks/useChapterClip.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
 import GenerateTab from './screens/GenerateTab.jsx';
@@ -179,6 +180,12 @@ export default function App() {
   // (all sidecars present, clips short of chapters.length) — visible on every
   // downstream tab, not just Analysis. D5/D5b.
   const [chapterClipsPresent, setChapterClipsPresent] = useState(null);
+  // `direct_playable` probe verdict for the open source. A direct-play source
+  // skips clip extraction entirely (0 clips BY DESIGN), so the analysis state
+  // must not false-flag it 'partial' on "missing" clips. null = unknown
+  // (pending/failed) — deriveAnalysisState only suppresses the clip
+  // requirement on an explicit true. D5c.
+  const [mediaDirectPlay, setMediaDirectPlay] = useState(null);
   // selectedDevices is lifted here so it survives tab switches — once the
   // user picks devices in Project, downstream tabs (Device, Stim, Multi-axis)
   // see the same selection without re-prompting.
@@ -420,6 +427,18 @@ export default function App() {
       .catch(() => { if (!cancelled) setChapterClipsPresent(null); });
     return () => { cancelled = true; };
   }, [openedMediaPath, busy]);
+
+  // Probe the source's direct-playable verdict (cached, one probe per path,
+  // shared with useChapterClip). Feeds deriveAnalysisState so a direct-play
+  // source (0 clips by design) isn't perpetually 'partial' on missing clips.
+  useEffect(() => {
+    if (!isTauri() || !openedMediaPath) { setMediaDirectPlay(null); return undefined; }
+    let cancelled = false;
+    probeMediaCached(openedMediaPath)
+      .then((p) => { if (!cancelled) setMediaDirectPlay(p?.direct_playable ?? null); })
+      .catch(() => { if (!cancelled) setMediaDirectPlay(null); });
+    return () => { cancelled = true; };
+  }, [openedMediaPath]);
 
   const handleProjectOpened = (project) => {
     setOpenedProject(project);
@@ -840,6 +859,7 @@ export default function App() {
     chapterList: chapterArr,
     trackPeaks, trackSpectrogram, trackBeats,
     chapterClipsPresent,
+    directPlay: mediaDirectPlay,
   });
   const analysisPartial = globalAnalysisState === 'partial';
 
@@ -1020,12 +1040,15 @@ export default function App() {
     }
   }
 
-  // Chapter-scoped tabs (Chapters, Channels) host their per-chapter accept on
-  // the footer as the SECONDARY (the primary stays "Accept and chain to <next
-  // tab>"). The tab registers { hasNext, run }: not-last → "Accept and next
-  // chapter" (commit + advance), last → "Accept chapter" (commit, no advance),
-  // so the last chapter is still committable once the in-body button is gone.
-  if ((tab === 'chapters' || tab === 'stim' || tab === 'events') && chapterNav?.label && !gateMsg && !busy) {
+  // Chapter-scoped tabs host their per-chapter accept on the footer as the
+  // SECONDARY (the primary stays "Accept and chain to <next tab>"). The tab
+  // registers { hasNext, label, run }: not-last → "Accept and next chapter"
+  // (commit + advance). Chapters/Channels also register a last-chapter "Accept
+  // chapter" (commit, no advance); Phrases/Stanzas have no per-chapter commit
+  // so they register null on the last chapter (the primary "chain to <next>" is
+  // the action there).
+  const CHAPTER_NAV_TABS = ['chapters', 'stim', 'events', 'phrases', 'stanzas'];
+  if (CHAPTER_NAV_TABS.includes(tab) && chapterNav?.label && !gateMsg && !busy) {
     footerSecondary = { label: chapterNav.label, onClick: chapterNav.run };
   }
 
@@ -1235,6 +1258,7 @@ export default function App() {
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}
+            onRegisterChapterNav={setChapterNav}
           />
         )}
         {tab === 'stanzas' && (
@@ -1248,6 +1272,7 @@ export default function App() {
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}
+            onRegisterChapterNav={setChapterNav}
           />
         )}
         {tab === 'events' && (
