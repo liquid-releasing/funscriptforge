@@ -312,7 +312,7 @@ function mergeWorkingActions({ originalActions, chapters, acceptedIds, tones, pa
 // number of hooks" guard.
 const EMPTY_CHAPTER = { id: '__empty__', atMs: 0, endMs: 0, name: '', color: '#888' };
 
-export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, trackSpectrogram, trackBeats, refreshAudioSidecars, setPhrasesByPath, initialChapterId = null, onActiveChapterChange, onRegisterChapterNav }) {
+export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, onActionsPatch, setBusy, setAppError, trackPeaks, trackSpectrogram, trackBeats, refreshAudioSidecars, setPhrasesByPath, initialChapterId = null, onActiveChapterChange, onRegisterChapterNav, chapterEdits = null, onChapterEditsChange }) {
   const totalMs = project?.durationMs ?? 0;
   const actions = Array.isArray(project?.actions) ? project.actions : [];
 
@@ -347,11 +347,11 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   }, [activeId]);  // eslint-disable-line react-hooks/exhaustive-deps
   // tonesByChapter: { ch1: 'build', ch2: 'edge', ... }
   const [tonesByChapter, setTonesByChapter] = useState(() =>
-    seedTones(chapters),
+    chapterEdits?.tones ?? seedTones(chapters),
   );
   // paramsByChapter: { ch1: { tender: {...}, build: {...}, ... }, ... }
   const [paramsByChapter, setParamsByChapter] = useState(() =>
-    seedParams(chapters),
+    chapterEdits?.params ?? seedParams(chapters),
   );
 
   // Per-chapter acceptance — which chapters the user has explicitly
@@ -362,7 +362,9 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // viewer (and downstream tabs) reflect the toned shape immediately,
   // not just at chain time. Local Set; lives only for the session — the
   // tab-level chain step is still where persistence happens.
-  const [acceptedChapterIds, setAcceptedChapterIds] = useState(() => new Set());
+  const [acceptedChapterIds, setAcceptedChapterIds] = useState(() =>
+    chapterEdits?.accepted ? new Set(chapterEdits.accepted) : new Set(),
+  );
 
   // When the user opens a different project, reset the local chapter list
   // and the per-chapter maps. Keying off project.path covers the case
@@ -371,10 +373,29 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     const next = Array.isArray(project?.chapterList) ? project.chapterList : [];
     setChapters(next);
     setActiveId(next[0]?.id ?? null);
-    setTonesByChapter(seedTones(next));
-    setParamsByChapter(seedParams(next));
-    setAcceptedChapterIds(new Set());
-  }, [project?.path]);
+    // Restore the lifted per-chapter edits for THIS project if we have them
+    // (survives a Chapters-tab unmount/remount — D15: a picked tone was
+    // component-local and reverted to Untoned on tab switch); else seed
+    // defaults. Accept still writes the sidecar for cross-restart persistence.
+    setTonesByChapter(chapterEdits?.tones ?? seedTones(next));
+    setParamsByChapter(chapterEdits?.params ?? seedParams(next));
+    setAcceptedChapterIds(chapterEdits?.accepted ? new Set(chapterEdits.accepted) : new Set());
+  }, [project?.path]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mirror the per-chapter edits up to App session state so they survive THIS
+  // tab unmounting (D15). Keyed by project path in App; the on-Accept sidecar
+  // write still handles cross-restart persistence. A ref keeps the callback
+  // fresh without the effect re-firing on its identity change — only the maps
+  // drive the sync.
+  const onChapterEditsChangeRef = useRef(onChapterEditsChange);
+  onChapterEditsChangeRef.current = onChapterEditsChange;
+  useEffect(() => {
+    onChapterEditsChangeRef.current?.({
+      tones: tonesByChapter,
+      params: paramsByChapter,
+      accepted: Array.from(acceptedChapterIds),
+    });
+  }, [tonesByChapter, paramsByChapter, acceptedChapterIds]);
 
   // Auto-split + sidecar write. The Rust bridge persists the file; the
   // returned record list refreshes local state so the rest of the tab
@@ -895,14 +916,42 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   const isLastChapter = chapters.length > 0 && navIdx >= chapters.length - 1;
   const acceptRunRef = useRef(() => {});
   acceptRunRef.current = handleAcceptTone;
+  // Commit ALL selected chapter tones at once — apply the toned shape to the
+  // working funscript (mergeWorkingActions) AND persist the whole tone map to
+  // the sidecar — WITHOUT advancing. Wired into the footer's PRIMARY "Accept
+  // and chain to <next>" so leaving the Chapters tab actually accepts the
+  // user's tone work. D15: the primary used to only navigate, silently dropping
+  // un-Accepted tones. (Per-chapter 'tame' still needs its own Accept — its
+  // backend transform isn't part of the synchronous merge; the selection is
+  // persisted regardless so it's remembered.)
+  const commitAllRef = useRef(() => {});
+  commitAllRef.current = async () => {
+    const allAccepted = new Set(acceptedChapterIds);
+    chapters.forEach((c) => {
+      const t = tonesByChapter[c.id];
+      if (t && t !== 'none') allAccepted.add(c.id);
+    });
+    setAcceptedChapterIds(allAccepted);
+    const merged = mergeWorkingActions({
+      originalActions, chapters, acceptedIds: allAccepted,
+      tones: tonesByChapter, params: paramsByChapter,
+    });
+    onActionsPatch?.(merged);
+    const sourcePath = project?.mediaPath ?? project?.path;
+    if (sourcePath) {
+      try { await writeChaptersSidecar(sourcePath, attachTones(chapters, tonesByChapter)); }
+      catch (err) { console.warn('ChaptersTab: commit-all tone persist failed', err); }
+    }
+  };
   useEffect(() => {
     if (!onRegisterChapterNav) return undefined;
     onRegisterChapterNav(
       chapters.length > 0
         ? {
             hasNext: !isLastChapter,
-            label: isLastChapter ? 'Accept chapter' : 'Accept and next chapter',
+            label: isLastChapter ? 'Accept last chapter changes' : 'Accept and next chapter',
             run: () => acceptRunRef.current(),
+            commit: () => commitAllRef.current(),
           }
         : null,
     );

@@ -197,6 +197,12 @@ export default function App() {
   // the session only; cross-restart persistence comes later via the
   // .ffmeta sidecar (see project-funscriptforge-pending).
   const [phrasesByPath, setPhrasesByPath] = useState({});
+  // Per-chapter tone / param / accept edits, lifted here so they survive the
+  // Chapters tab UNMOUNTING on a tab switch (D15: picking a tone was
+  // component-local state and silently reverted to Untoned on return). Keyed by
+  // project path; shape per entry: { tones, params, accepted: string[] }. The
+  // on-Accept sidecar write still handles cross-restart persistence.
+  const [chapterEditsByPath, setChapterEditsByPath] = useState({});
   // Stanzas cache — parallel structure to phrasesByPath. Survives tab
   // switches so `readStanzas` (sidecar read) only fires once per project
   // per session. Shape per entry: { stanzas: StanzaRecord[], loaded: boolean }.
@@ -1066,6 +1072,14 @@ export default function App() {
       const ok = await handleAnalysisResume();
       if (!ok) return; // resume failed — error shown, stay put
     }
+    // Commit the active chapter-scoped tab's pending work before leaving, so
+    // the primary "Accept and chain" actually ACCEPTS (user: "Accept and next
+    // chapter SHOULD accept the tones!"). Only the Chapters tab registers a
+    // `commit` (apply + persist ALL selected tones); other tabs auto-save.
+    if (chapterNav?.commit) {
+      try { await chapterNav.commit(); }
+      catch (e) { console.warn('accept-and-chain commit failed', e); }
+    }
     // TODO: write chain file with the active tab's working state.
     console.log(`accept-and-chain: ${tab} → ${nextTab}`);
     setTab(nextTab);
@@ -1245,6 +1259,10 @@ export default function App() {
             initialChapterId={activeChapterId}
             onActiveChapterChange={setActiveChapterId}
             onRegisterChapterNav={setChapterNav}
+            chapterEdits={project?.path ? chapterEditsByPath[project.path] : null}
+            onChapterEditsChange={(edits) => {
+              if (project?.path) setChapterEditsByPath((prev) => ({ ...prev, [project.path]: edits }));
+            }}
           />
         )}
         {tab === 'phrases' && (

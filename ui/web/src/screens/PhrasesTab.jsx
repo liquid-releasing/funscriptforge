@@ -201,14 +201,27 @@ export default function PhrasesTab({
   const navRunRef = useRef(() => {});
   navRunRef.current = () => {
     if (navChapterIdx >= 0 && navChapterIdx < chapters.length - 1) {
-      setActiveChapterId(chapters[navChapterIdx + 1].id);
+      setActiveChapterId(chapters[navChapterIdx + 1].id);   // advance
+    } else if (project?.path) {
+      // Last chapter: nothing to advance to. Phrase edits already roll forward
+      // on Apply (which saves), so "accept" re-persists the current working
+      // funscript to disk and confirms — so the last chapter is never left
+      // feeling un-committed when chaining to the next tab.
+      setBusy?.({ message: 'Accepting last chapter changes…' });
+      saveWorkingFunscript(project.path, actions)
+        .catch((e) => setAppError?.(`Could not save: ${e?.message ?? e}`))
+        .finally(() => setBusy?.(null));
     }
   };
   useEffect(() => {
     if (!onRegisterChapterNav) return undefined;
     onRegisterChapterNav(
-      !navIsLast && chapters.length > 0
-        ? { hasNext: true, label: 'Accept and next chapter', run: () => navRunRef.current() }
+      chapters.length > 0
+        ? {
+            hasNext: !navIsLast,
+            label: navIsLast ? 'Accept last chapter changes' : 'Accept and next chapter',
+            run: () => navRunRef.current(),
+          }
         : null,
     );
     return () => onRegisterChapterNav(null);

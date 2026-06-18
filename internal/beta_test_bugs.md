@@ -6,9 +6,241 @@ verify + commit) · ✅ committed.
 
 ---
 
+## Session 2026-06-18 (beta dogfood — Prisoner, post-recompile)
+
+### 🔴 Open — found in the 4K/Generate dogfood (2026-06-18, hovixag935 4k60 + others)
+
+D12. **First "Generate new funscript" tap on Project is unresponsive; works on
+   the 2nd tap.** The Project footer primary "Generate new funscript" just does
+   `setTab('generate')` (App.jsx:1010-1011), but that whole footer block is gated
+   on `!busy` (App.jsx:1009). On first landing on Project a transient `busy`
+   (project load / a background pass) reverts the primary to the generic "Accept
+   and chain to Generate" (and/or disables it), so the first tap no-ops; once
+   busy clears it works. Fix: don't let a transient load-busy swallow the first
+   tap — either keep the Generate-new handler wired during load, or disable +
+   visibly grey the button while busy (don't silently no-op).
+
+D13. **No busy band in the footer while generating** (noticeable on longer
+   files — long enough to want the band). BUT the plumbing IS wired:
+   `GenerateTab` calls `onBusy({message:'Generating from the beats…', steps:[]})`
+   on start and `onBusy(null)` on finish (GenerateTab.jsx:348/383), and App
+   passes `onBusy={setBusy}` (App.jsx:1195). So the band *should* show — needs a
+   live repro to see why it isn't visible: candidates = the debounced generate
+   effect (setTimeout, GenerateTab:341) setting/clearing busy in a way the footer
+   band doesn't surface, or the band being suppressed on the Generate tab.
+   **Positive:** generation itself works well — 2nd pass found the funscript +
+   remembered Range/Pace and scored **95**.
+
+D14. **Phrases not built during analyze; appeared ~a minute later (lazy).** On a
+   fresh analyze the Phrases data wasn't there immediately — the analyze "did not
+   start it up," then it showed up later (lazy-on-Phrases-tab-mount). This is the
+   parked **D3** class ("bundle phrase analysis into the analyze pipeline"), but
+   note hovixag935's analyze DID write `phrases.json` in-pipeline — so confirm
+   whether this was a different file or a timing/refresh gap (D2-class).
+
+D15. **★ CONFIRMED DATA LOSS — chapter TONES not remembered across a tab
+   switch.** Repro: set tones on chapters → go to Phrases → come back to Chapters
+   → ALL chapters show "Untoned" again. **Diagnosed:** `tonesByChapter` is
+   component-local `useState` (ChaptersTab.jsx:349) seeded by `seedTones(chapters)`,
+   which reads `project.chapterList[].tone`. Picking a tone only mutates that
+   local state; it's persisted to the chapters sidecar ONLY by the per-chapter
+   Accept (`handleAcceptTone`→`writeChaptersSidecar`). So leaving the Chapters tab
+   unmounts it → state lost → remount reseeds from chapterList (no unaccepted
+   tones) → everything reverts to Untoned. Same root as "Accept and chain doesn't
+   accept the last chapter changes." **Fix options:** (a) lift `tonesByChapter` +
+   `acceptedChapterIds` to App session state keyed by project path (survives tab
+   switches; minimal, matches the complaint); (b) auto-persist tones to the
+   sidecar / `.characters.json` on every change (survives app restart too,
+   debounced) — the more complete fix. Lean (a) now, (b) post-beta. This is a
+   beta blocker — silent loss of user work.
+   **🟡 FIXED-UNCOMMITTED 2026-06-18 (option a, JS/HMR):** lifted `tonesByChapter`
+   + `paramsByChapter` + `acceptedChapterIds` to App session state
+   `chapterEditsByPath[path]` (App.jsx) + passed `chapterEdits`/`onChapterEditsChange`
+   to ChaptersTab. ChaptersTab SEEDS the three maps from `chapterEdits`
+   (initializers + the project-path reseed effect) and MIRRORS them back up via a
+   ref-stable effect. Tones now survive a Chapters↔other-tab switch; Accept still
+   writes the sidecar for restart. ⚠️ Residual (post-beta, option b): UNaccepted
+   tones still don't survive an app RESTART. Verify: set tones → Phrases → back
+   to Chapters → tones still there (not Untoned).
+   **+ PRIMARY "Accept and chain" now COMMITS (user: "Accept SHOULD accept the
+   tones!"):** ChaptersTab registers a `commit` (commitAll) on `chapterNav` that
+   applies ALL selected tones via `mergeWorkingActions` + persists the whole tone
+   map to the sidecar (no advance); App `handleAccept` awaits `chapterNav.commit()`
+   before chaining. So BOTH accept paths now commit: secondary "Accept and next
+   chapter" (`handleAcceptTone`, already did) AND primary "Accept and chain to
+   <next>" (new). Root of the original loss: `handleAcceptTone` writes the sidecar
+   but never updates in-memory `chapterList`, so a remount reseeded from stale
+   memory → Untoned — the D15 session-lift fixes that; the primary just never
+   committed at all. ('tame' chapters: selection persisted; its backend transform
+   still needs the per-chapter Accept.)
+
+D18. **Chapter mini-card heatmap colors disagree with the editor.** The chapter
+   strip card (e.g. ch3) renders mostly BLUE, but the same chapter in the editor
+   lane is red/green/red. **Checked:** they SHARE the colormap — `ChapterRibbon.jsx`
+   imports `magmaRGB` from `TrackStack.jsx` (the "canonical velocity colormap"),
+   so the palette code is the same. The mismatch is therefore in the
+   NORMALIZATION (velocity→[0,1] scaling before the colormap): the card and the
+   editor must use a different velocity reference (per-chapter max vs visible-
+   window max vs a fixed/global scale), so identical strokes map to different
+   colors. Fix = make both normalize speed against the same reference. (Still
+   "may or may not be a bug" per user; cosmetic but real.) Confirm the exact
+   denominators in ChapterRibbon's band waveform vs TrackStack's funscript lane.
+
+D19. **Tone/chapter panel times should be ABSOLUTE (video-relative), continuous
+   across chapters — NOT reset to 0 per chapter.** (Clarified by user — the
+   opposite of the first read.) Ch1 = 0:00–3:37; moving to ch2, the small tone
+   boxes should read 3:37→(its end) measured from the START OF THE VIDEO, not
+   chapter-relative (not 0:00→). So wherever a focused-chapter panel currently
+   resets its time axis/labels to 0 at the chapter start, it should show the
+   absolute video time instead. Bounded UX change. (NOTE: the Chapters LIST cards
+   already show absolute 0:00-2:38 / 2:38-6:05 — so the offending panel is a
+   specific in-chapter view that re-bases to 0; pin which one on next repro.)
+
+D20. **Phrase similarity/shape not grouping visually-identical phrases.** In ch1,
+   P7/P8/P9/P10/P12/P13 look like the same behavior/shape but aren't recognized
+   as similar; "No shapes were selected." Only P15/P16/P17 (ch2) group as the
+   same. User asks if applying the Dominant tone interfered — but tones (if
+   unaccepted, per D15) don't change the funscript, and Shape detection is
+   funscript-shape-based, so this is more likely a **shape_labeler
+   detection-quality** gap (not recognizing recurring similar phrases) than a
+   tone side-effect. Detection-quality item; needs a look at shape_labeler
+   sensitivity on near-identical phrases. **User hypothesis (likely right): the
+   un-grouped phrases simply aren't assigned a NAMED shape** (shape_labeler leaves
+   them unlabeled / below confidence), so the Shape lens has nothing to group on
+   — vs P15-17 which got a shared shape_label. So the gap = labeler COVERAGE
+   (too many phrases left unnamed), not a grouping bug. Check shape_labeler's
+   label-vs-null rate on this file.
+
+D16. **Phrase/assessment pass is SLOW on long files (~12 min on a 60-min 4K).**
+   hovixag935: chapters done 14:04 → assessment done 14:16 = ~12 min of phrase
+   drift analysis over the whole funscript. Not a hang — genuinely slow. Perf
+   item: the assess/drift pass doesn't scale well to long sources.
+
+D17. **Lost "done" signal → footer stuck on "Analyzing…" (appears hung) after the
+   work actually finished.** After the ~12-min assess wrote phrases.json +
+   assessment.json (14:16) and the backend process exited, the footer stayed on
+   "Analyzing… in progress" indefinitely — no process running, work complete on
+   disk. Orphaned-callback class (D1/D2); likely an accidental "Accept and chain"
+   fired a second analyze/resume that raced the in-flight assess and one
+   completion callback was dropped. Recovery = reload the app (re-reads disk).
+   Fix direction: the footer should reconcile against disk / time out a lost
+   callback rather than spin forever.
+
+### ✅ Fixed this session (videoflow source — LIVE in dev, no rebuild)
+
+D9. **★ Chapters→Phrases nav crashed analyze: `tone: 'none'` rejected by the
+   sidecar validator.** Moving Chapters→Phrases triggered an analyze/resume that
+   re-extracted audio from the 67-min Prisoner source and then crashed:
+   `SidecarError: chapters[11].tone must be one of ['', 'build', 'climax',
+   'dominant', 'edge', 'tease', 'tender'], got 'none'`.
+   - **Root cause = FF↔videoflow contract mismatch.** `ChaptersTab.jsx` uses
+     `'none'` as a UI-only "Untoned" sentinel (explicitly "no Python
+     counterpart", line 77-89) and **persists it to `<stem>.chapters.json`** on
+     Accept / as the default for untoned chapters (line 74). videoflow's
+     `_VALID_TONE_LABELS` only accepts `''` for untoned and **rejects `'none'`**.
+     On the next analyze, `write_sidecar`→`read_sidecar` re-reads + validates the
+     existing doc → crash. (Prisoner had `'none'` on chapters[11] AND [12].)
+   - **Fix:** `videoflow/src/videoflow/sidecar.py::_coerce_legacy_tone()` maps
+     `tone: 'none'` → `''` in `_normalise` (both the chapters and stanzas loops).
+     Since BOTH `read_sidecar` and `write_sidecar` route through `_normalise`,
+     this heals the on-disk doc on read AND stops `'none'` ever being persisted
+     again. Mirrors videoflow's existing `content_type` "accepted on write,
+     mapped on read" policy. VERIFIED against the real corrupted Prisoner sidecar
+     (none→'', no error); adds zero new test failures.
+   - **⚠️ FOLLOW-UP (suspected, unconfirmed): this 'none' crash may ALSO be why a
+     FULL re-analyze fired on the Chapters→Phrases nav** instead of a cheap
+     resume/no-op. Hypothesis: the `--resume` Tier-1 freshness check reads the
+     existing sidecar, hit the `SidecarError` on `'none'`, treated the sidecar as
+     invalid → fell through to a full re-detect (+ audio re-extract). With
+     `'none'` coerced, the freshness read should now succeed → resume should
+     short-circuit. **Test on retry: does Chapters→Phrases now finish FAST (clips
+     only / no-op), or does it still re-extract 67-min audio?** If it still
+     re-extracts, there's a separate over-eager-reanalyze trigger to chase
+     (phrases are funscript-derived + cheap; they must NOT trigger auto_chapter).
+   - **Design note (user, 2026-06-18):** building a new funscript should NOT
+     re-run `auto_chapter` — chapters/beats/spectrogram/audio are video-derived
+     and reusable; only phrases/stanzas/assessment (funscript-derived) need a
+     cheap recompute. Confirmed `auto_chapter` never reads the funscript.
+
+D11. **★ FIXED (JS, HMR) — false "Partial analysis" banner on a direct-play
+   source (the D5c residual).** After D9, Prisoner (960×540) showed
+   "Partial analysis — 4 of 5 stages … Missing: chapter clips" with a Resume
+   CTA — but Resume correctly did nothing (audio NOT re-extracted, sidecars
+   untouched, still 0 clips). **Not a failure: 0 clips is CORRECT.** Prisoner is
+   `direct_playable` (small/clean source streams into WebView2 without a
+   normalising re-encode), so `structural.py` SKIPS clip extraction entirely
+   ("Source streams directly — skipping clip extraction") → 0 clips for all 13
+   chapters by design.
+   - **Root cause:** `deriveAnalysisState` assumed `expectedClips =
+     chapterList.length`, so a multi-chapter direct-play source (0 clips) was
+     perpetually 'partial' → false Resume CTA + a no-op auto-resume on every
+     Accept. Exactly the D5c "dominant chapter skips its clip" residual, but
+     wider (ALL chapters skip on a direct-play source). Hits any clean small
+     source (common).
+   - **Fix (frontend-only, no rebuild):** thread the cached `direct_playable`
+     probe verdict (the same one `useChapterClip` uses — exported
+     `probeMediaCached`) into `deriveAnalysisState` as `directPlay`. Clips are
+     considered done when `directPlay === true`. **Conservative:** only an
+     EXPLICIT true suppresses the clip requirement — unknown (probe
+     pending/failed) or false still falls through to the count check, so the
+     real "killed during chapter_clips on a 4K source" D5 Resume case is
+     preserved. Files: `lib/analysisState.js` (logic), `hooks/useChapterClip.js`
+     (export the cached probe), `App.jsx` + `screens/AnalysisTab.jsx` (probe
+     verdict state + effect + pass to derive). vite build green.
+   - **Verify:** reload the app on Prisoner → the Partial banner clears →
+     Analysis reads 'complete'. Confirm a genuinely-interrupted 4K analyze
+     (clips short, NOT direct-play) STILL shows Resume.
+
+### 🟡 Test-maintenance (not a blocker)
+
+D10. **`videoflow/tests/test_sidecar.py` — 25/38 pre-existing failures from path
+   drift.** The `_chapters(td)` test helper writes the sidecar to the old
+   `<stem>.chapters.json` SIBLING location, but `read_sidecar` now resolves to
+   the hidden `.<stem>.forge/` forge_dir → returns `None` (file-not-found) → the
+   Read/Merge/Provenance assertions fail. Confirmed identical with/without the D9
+   fix (so it's drift, not a regression). Update the test fixtures to write into
+   `forge_dir`. Tracked, deferred.
+
+---
+
 ## Session 2026-06-11 (Phase 3 dogfood — consolidated pipeline pass)
 
 ### 🔴 Open
+
+D8. **🟡 FIXED-UNCOMMITTED 2026-06-11. `assessment.json` written OUTSIDE the
+   `.forge` sidecar folder.** `cli.py assess` defaulted its output to
+   `_default_path(funscript, "_assessment.json")` = a `<stem>_assessment.json`
+   sibling of the source (every OTHER sidecar lives in `.<stem>.forge/`). The
+   app writes it on every Phrases-tab visit (`analyze_phrases` → `cli.py assess`
+   without `--no-save`). FIX: new `cli.py _assessment_path()` → writes
+   `<stem>.forge/<stem>.assessment.json` (mirrors `_write_phrases_slice_sidecar`'s
+   forge_dir guard + mkdir; falls back to the sibling if videoflow isn't
+   importable). Both save sites in the assess handler updated. Verified on
+   Timeline1: new run lands in `.Timeline1.forge/Timeline1.assessment.json`,
+   sibling untouched. Phrases sidecar write is separate/unaffected. ⚠️ Standalone
+   needs a forge-cli rebuild to pick it up (dev uses source cli.py). Old legacy
+   siblings in test_funscript/ are stale clutter (cleanup pending user OK).
+
+D7. **🔴 Open — BETA BUG (affects the SHIPPED standalone build, not just dev).
+   App does NOT reap analyze children on window close (the hot-laptop cause).**
+   Confirmed it hits the standalone app too: same Rust path spawns the bundled
+   `forge-cli.exe` + bundled ffmpeg with no lifecycle management, so a tester who
+   closes the app mid-analyze on a long 4K source gets a runaway forge-cli +
+   ffmpeg eating CPU AND locking their video file until Task-Manager-killed.
+   Live-repro 2026-06-11: closing the app left MULTIPLE orphaned python analyzes
+   piled up (35912 @ 324 CPU, 13672, 40456) + ffmpeg, holding a file lock.
+   Promote D1+D7 from "next session" to PRE-BETA. Verified: `src-tauri/src` has ZERO `kill_on_drop`,
+   `CloseRequested`, `on_window_event`, `RunEvent`, or `ExitRequested`. Closing
+   the window mid-analyze terminates `funscriptforge.exe` but the spawned python
+   `auto-chapter` + ffmpeg children orphan and keep running (Windows doesn't
+   auto-reap; tokio Command doesn't kill_on_drop by default). This is why
+   closing the app during the 4K run left the fan blasting until killed
+   manually. NOTE: resume-AFTER-close already works via disk state (D5 — no
+   "was-running" memory needed; reopen → partial → Accept resumes). Only the
+   process CLEANUP is missing. **Fix = same structure as D1:** a Rust registry
+   of in-flight analyze PIDs, used by both kill-existing-before-spawn (D1) AND a
+   `RunEvent::ExitRequested`/`on_window_event(CloseRequested)` handler that
+   taskkills the tree on exit. Land D1 + D7 together.
 
 D1. **🟡 FIXED-UNCOMMITTED 2026-06-11. Duplicate concurrent `auto-chapter` on
    the same project.** FIX: `commands.rs::kill_existing_analyze(media)` — before
