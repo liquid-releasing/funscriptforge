@@ -11,31 +11,63 @@ forgeviewer ("the real deal" — but more than we need), the decision is to **dr
 script comparison entirely** and build a focused last stage that reuses FSF's
 existing components, borrowing only forgeviewer's pure `stats.js`.
 
-Shape:
-- **Header = device/funscript selector** (reuse the existing device-picker chrome).
-  Click a device → its funscript loads onto the lanes. **One device at a time — no
-  comparison.** This replaces forgeviewer's entire ScriptRail / overlay / baseline /
-  divergence apparatus (which only existed to juggle multiple scripts).
-- **Center = `TrackStack` lanes** (forgemoment, already in-app): `funscript` +
-  `audio` + `spectro` + a **new `screech` markers lane**. Proven pattern — EventsTab
-  drives the same component.
-- **Left = single-script stats list** — port forgeviewer's pure `stats.js`; render
-  liveliness + density + usable-range + velocity + stroke. **Drop** deltas-vs-baseline
-  and cross-script dynamics (comparison features); keep the absolute stats.
-- **Screech** = the markers lane + one stat row ("1 screech tamed · 19 co-rail
-  caps") from `<stem>.screech.json`.
+**It is an output-REVIEW surface, not a player-first tab.** The job: see the
+generated output across the whole timeline so inconsistencies pop — e.g.
+VictoriaOaks reads soft in the intro vs. the body, and today that's visible
+*nowhere*. The design is a near-exact reuse of EventsTab's hero pattern
+(`TrackStack` + side `MediaViewer`, synced by a shared baton), reconfigured for
+review.
 
-### Resolved decisions
-- **E-Stim (9 channels):** default to the **felt channel `volume`** (where the flash
-  lives) with a **small channel dropdown** (frequency/alpha/beta/…). One lane at a
-  time.
-- **Thumbnails lane:** **deferred** — ship `funscript + audio + spectro + screech`
-  first (all reuse existing wiring; TrackStack's `thumbs` lane isn't wired yet).
-- **No compare, no overlay, no `.forge`-save modal, no divergence strip.**
+### Layout (three columns + a shared baton)
+```
+[ E-Stim ▾ ] [Handy] [OSR2] …   device picker · chapters strip · ⚠ screech note
+┌──────────┬─────────────────────────────────────┬────────────────┐
+│ STATS    │ CENTER — lane stack (FULL timeline)  │ VIEWER (right) │
+│ whole-   │  audio                               │  video frame   │
+│ device   │  spectro                             │  @ baton       │
+│ summary  │  intensity arc  ← soft intro pops    │  mode toggle   │
+│          │  ───────────────────────────────────│  + transport   │
+│          │  all 9 e-stim channels, stacked      │                │
+│          │            ┃ big baton across lanes  │  (synced)      │
+└──────────┴─────────────────────────────────────┴────────────────┘
+   one shared clock → center lanes + right viewer move together
+```
+
+- **Header = device selector** (reuse existing device-picker chrome). Pick a device
+  → **all its funscripts** load as stacked lanes (E-Stim = 9; multiaxis OSR2/SR6 =
+  pitch/roll/surge/…; Handy/Lovense = 1). No comparison.
+- **Center = `TrackStack`**, **default to the FULL timeline** (all chapters at once —
+  a soft intro only shows when intro + body are on screen together; chapters as tint
+  bands, zoom optional). Lanes, top→bottom: `audio`, `spectro`, **`intensity` arc**,
+  then **all 9 e-stim channels** (velocity-coloured), compact ~40px DAW-style. A
+  **big baton** (the `getLiveMs` line) sweeps across all lanes.
+- **Right = `MediaViewer`** showing the **video frame at the baton** (mode toggle
+  Video/Audio/Spectro/Funscript, transport). Same shared clock as the lanes — park
+  the baton on a soft spot and *see the source moment*. This is what makes it a
+  review tool.
+- **Left = whole-device stats summary** (port forgeviewer's pure `stats.js`):
+  liveliness + density + usable-range + velocity + stroke, aggregated for the
+  selected device's output. No deltas/baseline (those were comparison).
+- **Intensity arc** = a headline summary band (overall e-stim energy/envelope over
+  time, per-chapter or derived) so soft-vs-hot stretches pop at a glance — the
+  detail lives in the 9 lanes below.
+- **Screech** = a quiet **note/badge** (ruler tick + one-liner from
+  `<stem>.screech.json`), NOT an emphasised lane. It's rare; don't let it dominate.
+
+### Resolved decisions (2026-06-30, second pass)
+- **Show ALL channels** for the selected device (E-Stim = all 9), not volume+dropdown.
+- **Full-timeline default** (not chapter-scoped) — consistency review needs the macro view.
+- **Keep a playhead + right-panel viewer + big baton** across the lanes (reuse
+  EventsTab's `TrackStack`+`MediaViewer` baton sync).
+- **Intensity-arc headline strip:** YES.
+- **Stats panel:** whole-device summary.
+- **Thumbnails lane:** deferred.
+- **Screech:** demoted to a note, not a lane.
+- **No compare / overlay / divergence / `.forge`-save.**
 
 ### What we borrow from forgeviewer
-Only `stats.js` (pure functions) and a few token/visual cues. Everything else is
-native FSF (`TrackStack`, `MediaViewer`, the device-picker header, the tab shell).
+Only `stats.js` (pure functions) and token/visual cues. Everything else is native
+FSF (`TrackStack`, `MediaViewer`, device-picker header, tab shell).
 
 ## What forgeviewer already is
 
@@ -91,17 +123,25 @@ architecture decision — visual, on the timeline, at a glance.
 
 1. **`stats.js`** — copy `forgeviewer/.../stats.js` into FSF (pure module); keep the
    single-script metrics (`liveliness`, density, `usableRange`, velocity, stroke);
-   drop `dynamics`/divergence (need comparison). Add a vitest.
-2. **`ViewerTab.jsx`** (`ui/web/src/screens/`) — header device/channel selector +
-   left stats panel + center `TrackStack`. Chapter-scoped like EventsTab.
-3. **`TrackStack` `screech` lane** (forgemoment) — add `'screech'` to the
-   `activeLanes` filter + a render block (band per region; amber=source_screech,
-   red=co_rail; hover tooltip). ~5–15 lines mirroring the events lane.
-4. **Bridge** — `readScreechJson` (forge.js) → `read_screech_json` (commands.rs) →
-   `screech-read` (cli.py) returning `<stem>.screech.json`.
-5. **Channel loader** — reuse `stim-process`/`list-outputs` to get the device's
-   funscript(s); for e-stim, default `volume` + dropdown.
+   drop `dynamics`/divergence (comparison). Aggregate across the device's channels
+   for the whole-device summary. Add a vitest.
+2. **`ViewerTab.jsx`** (`ui/web/src/screens/`) — three columns: left whole-device
+   stats · center `TrackStack` (full-timeline, all channels + audio/spectro/intensity)
+   · right `MediaViewer`. Shared baton clock (`currentMs`/`getLiveMs`) wired between
+   `TrackStack` and `MediaViewer` exactly as EventsTab does.
+3. **`intensity` lane** — derive an envelope/energy band (overall e-stim intensity vs
+   time; per-chapter or smoothed volume/velocity). Add as a `TrackStack` lane type or
+   render in the stack. Makes soft-vs-hot legible.
+4. **Channel loader** — get ALL of the selected device's funscripts (reuse
+   `stim-process`/`list-outputs`/the `.output/<Device>/` files). E-Stim = 9 lanes.
+5. **Screech NOTE** (not a lane) — read `<stem>.screech.json` via bridge
+   (`readScreechJson` → `read_screech_json` → `screech-read`); render a ruler tick +
+   a one-line badge ("1 screech tamed @ 1:21"). Low-key.
 6. **Mount** — wire into App.jsx (below).
+
+> Lanes count: audio + spectro + intensity + 9 channels = ~12. Use compact lane
+> heights (~36–44px) and let the stack scroll. The center column is the star — give
+> it the width; stats left ~240px, viewer right ~340px.
 
 ## Mount point in FunscriptForge (confirmed by recon)
 
