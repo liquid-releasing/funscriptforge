@@ -71,6 +71,7 @@ nav:
     - Phrase Editor: guide/phrase-editor.md
     - Pattern Editor: guide/pattern-editor.md
     - Export: guide/export.md
+    - Viewer: guide/viewer.md
     - Media Player: guide/media-player.md
     - Transforms: guide/transforms.md
   - Reference:

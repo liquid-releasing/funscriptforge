@@ -93,6 +93,92 @@ def _find_screech(output_dir: Path, stem: str) -> dict | None:
     return None
 
 
+def _stride_decimate(actions: list[dict], cap: int) -> list[dict]:
+    """Time-uniform thinning for the monitor: keep every k-th real sample so the
+    curve stays monotonic in time. Unlike the center lane's min/max envelope
+    (which emits low+high *pairs* per bin and reads as a zigzag when zoomed),
+    this preserves the true stroke shape in a windowed view."""
+    n = len(actions)
+    if cap <= 0 or n <= cap:
+        return [{"at": int(a["at"]), "pos": int(a["pos"])} for a in actions]
+    k = (n + cap - 1) // cap
+    out = [{"at": int(actions[i]["at"]), "pos": int(actions[i]["pos"])} for i in range(0, n, k)]
+    last = actions[-1]
+    if out[-1]["at"] != int(last["at"]):
+        out.append({"at": int(last["at"]), "pos": int(last["pos"])})
+    return out
+
+
+def _resolve_output(path: str) -> tuple[Path | None, Path | None, str]:
+    """Resolve a media/funscript path to its (output_dir, forge_bundle, stem),
+    applying the sibling fallback (1080p/4K/VR renders share one generated set)."""
+    p = Path(path)
+    stem = p.stem
+    parent = p.parent
+    output_dir = parent / f"{stem}.output"
+    forge = parent / f"{stem}.forge"
+    if not output_dir.is_dir():
+        sibs = sorted(parent.glob("*.output"))
+        if sibs:
+            output_dir = sibs[0]
+            stem = output_dir.name[: -len(".output")]
+    if not forge.is_file():
+        fsibs = sorted(f for f in parent.glob("*.forge") if f.is_file())
+        if fsibs:
+            forge = fsibs[0]
+            if not output_dir.is_dir():
+                stem = forge.name[: -len(".forge")]
+    return (output_dir if output_dir.is_dir() else None,
+            forge if forge.is_file() else None, stem)
+
+
+def load_single_channel(path: str, device: str, channel: str, *, cap: int = 40000) -> dict:
+    """Full-resolution actions for ONE device channel — the monitor's funscript
+    view (windowed to a few seconds, so it needs real samples, not the center
+    lane's decimated envelope). Returns {available, name, actions, rawCount}."""
+    output_dir, forge, stem = _resolve_output(path)
+    if output_dir is not None:
+        dev_dir = output_dir / device
+        if dev_dir.is_dir():
+            for f in sorted(dev_dir.glob("*.funscript")):
+                if _channel_name(f.name, stem) == channel:
+                    try:
+                        acts = (json.loads(f.read_text(encoding="utf-8")).get("actions") or [])
+                    except Exception:
+                        acts = []
+                    if len(acts) >= 2:
+                        return {"available": True, "name": channel,
+                                "actions": _stride_decimate(acts, cap), "rawCount": len(acts)}
+    if forge is not None:
+        try:
+            z = zipfile.ZipFile(forge)
+            for n in z.namelist():
+                if not n.endswith(".funscript"):
+                    continue
+                parts = n.split("/")
+                dev = (_STATION_DEVICE.get(parts[1], parts[1].title())
+                       if len(parts) >= 3 and parts[0] == "stations"
+                       else ("Motion" if n == "motion.funscript" else None))
+                nm = "stroke" if n == "motion.funscript" else _channel_name(parts[-1], stem)
+                if dev == device and nm == channel:
+                    acts = (json.loads(z.read(n).decode("utf-8")).get("actions") or [])
+                    if len(acts) >= 2:
+                        return {"available": True, "name": channel,
+                                "actions": _stride_decimate(acts, cap), "rawCount": len(acts)}
+        except Exception:
+            pass
+    return {"available": False, "name": channel, "actions": [], "rawCount": 0}
+
+
+def load_audio_only(path: str, *, points: int = 150000) -> dict:
+    """High-resolution audio envelope for the monitor's windowed waveform (the
+    main payload's 16k is fine for the full-timeline lane but blocky when the
+    monitor zooms to ~12s). Returns {available, audio:{peaks,hopMs,durationMs}}."""
+    _, _, stem = _resolve_output(path)
+    audio = _load_audio(Path(path).parent, stem, target=points)
+    return {"available": bool(audio), "audio": audio}
+
+
 def load_device_outputs(path: str, *, max_points: int = 2000) -> dict:
     """Load a project's generated device channels for the Viewer.
 
@@ -128,11 +214,15 @@ def load_device_outputs(path: str, *, max_points: int = 2000) -> dict:
         cand = _load_from_dir(output_dir, stem, max_points)
         if cand["available"]:
             cand["source"] = "output"
+            cand["sourcePath"] = str(output_dir)
+            cand["sourceName"] = output_dir.name
             res = cand
     if res is None and forge.is_file():
         cand = _load_from_forge(forge, stem, max_points)
         if cand["available"]:
             cand["source"] = "forge"
+            cand["sourcePath"] = str(forge)
+            cand["sourceName"] = forge.name
             res = cand
     if res is None:
         return {"available": False, "error": "no <stem>.output dir or .forge bundle",
@@ -143,6 +233,7 @@ def load_device_outputs(path: str, *, max_points: int = 2000) -> dict:
     res["audio"] = _load_audio(parent, stem)
     res["beats"] = _load_beats(parent, stem)
     res["events"] = _load_events(parent, stem)
+    res["chapters"] = _load_chapters(parent, stem)
     # Spectrogram is shipped as a static PNG in the export (Preview/), not as
     # rebuildable cells — so the center spectro lane renders the image directly.
     spec = output_dir / "Preview" / "spectrogram.png"
@@ -193,17 +284,17 @@ def _decimate_peaks(peaks: list, target: int = 3000) -> list:
     return out
 
 
-def _load_audio(parent: Path, stem: str) -> dict | None:
+def _load_audio(parent: Path, stem: str, target: int = 16000) -> dict | None:
     """Audio peak envelope for the viewer's audio lane, decimated for transport.
-    Tries the hidden cache, then the .forge bundle (the loose output has none)."""
+    Tries the hidden cache, then the .forge bundle (the loose output has none).
+    ``target`` controls resolution — the center lane re-bins to pixel width so
+    16k is plenty there, but the monitor windows to ~12s and wants far more."""
     def _shape(d: dict) -> dict | None:
         peaks = d.get("peaks")
         if not peaks:
             return None
         dur = d.get("duration_ms") or d.get("durationMs") or 0
-        # Finer than the lane needs (the lane re-bins to pixel width) so the
-        # zoomed-in monitor waveform isn't a solid block.
-        dec = _decimate_peaks(peaks, target=16000)
+        dec = _decimate_peaks(peaks, target=target)
         hop = (dur / len(dec)) if (dur and dec) else (d.get("hop_ms") or d.get("hopMs") or 10)
         return {"peaks": dec, "hopMs": hop, "durationMs": dur}
 
@@ -223,6 +314,43 @@ def _load_audio(parent: Path, stem: str) -> dict | None:
         except Exception:
             pass
     return None
+
+
+def _load_chapters(parent: Path, stem: str) -> list[dict]:
+    """Chapter spans for the per-chapter liveliness readout: {start, end, name,
+    tone, color}. From the hidden cache, else the .forge bundle's chapters.json."""
+    raw = None
+    cache = parent / f".{stem}.forge" / f"{stem}.chapters.json"
+    if cache.is_file():
+        try:
+            raw = json.loads(cache.read_text(encoding="utf-8"))
+        except Exception:
+            raw = None
+    if raw is None:
+        forge = parent / f"{stem}.forge"
+        if forge.is_file():
+            try:
+                z = zipfile.ZipFile(forge)
+                hit = next((n for n in z.namelist() if n.endswith("chapters.json")), None)
+                if hit:
+                    raw = json.loads(z.read(hit).decode("utf-8"))
+            except Exception:
+                raw = None
+    if not raw:
+        return []
+    chs = raw.get("chapters") if isinstance(raw, dict) else raw
+    out = []
+    for i, c in enumerate(chs or []):
+        start = c.get("at_ms")
+        end = c.get("end_ms")
+        if start is None or end is None:
+            continue
+        out.append({
+            "start": int(start), "end": int(end),
+            "name": c.get("name") or f"Chapter {i + 1}",
+            "tone": c.get("tone", ""), "color": c.get("color", ""),
+        })
+    return out
 
 
 def _load_events(parent: Path, stem: str) -> list[dict]:

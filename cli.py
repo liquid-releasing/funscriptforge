@@ -3400,8 +3400,14 @@ def cmd_viewer_load(args):
     Scans ``<stem>.output/`` for per-device channel funscripts (decimated) and
     attaches the screech note. Pure file IO — reviews what was produced.
     """
-    from forge.viewer import load_device_outputs
-    result = load_device_outputs(args.input, max_points=args.max_points)
+    from forge.viewer import load_device_outputs, load_single_channel, load_audio_only
+    if getattr(args, "channel", None):
+        device, _, chan = args.channel.partition("/")
+        result = load_single_channel(args.input, device, chan)
+    elif getattr(args, "audio_points", None):
+        result = load_audio_only(args.input, points=args.audio_points)
+    else:
+        result = load_device_outputs(args.input, max_points=args.max_points)
     print(json.dumps(result))
 
 
@@ -4785,6 +4791,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_vl.add_argument("input", help="Project media or funscript path (output dir is its sibling)")
     p_vl.add_argument("--max-points", type=int, default=2000,
                       help="Decimate each channel to ~this many points for transport")
+    p_vl.add_argument("--channel", default=None,
+                      help="Load ONE channel at full res ('<Device>/<channel>') for the monitor")
+    p_vl.add_argument("--audio-points", type=int, default=None,
+                      help="Load ONLY the audio envelope at ~this many points (monitor hi-res)")
 
     # --- multiaxis-process (React bridge to the multiaxis engine) ---
     p_mxp = sub.add_parser(

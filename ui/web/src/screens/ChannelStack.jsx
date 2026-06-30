@@ -34,7 +34,9 @@ function magma(t) {
   return [0, 1, 2].map((k) => Math.round(c0[k] + (c1[k] - c0[k]) * f));
 }
 
-const LANE_H = { audio: 46, spectro: 40, intensity: 38, events: 30, channel: 40 };
+// Lane heights kept lean so the whole stack — context lanes + all 9 device
+// channels + the time ruler — fits a ~720px panel without scrolling.
+const LANE_H = { audio: 42, spectro: 34, intensity: 34, events: 26, channel: 36 };
 
 export default function ChannelStack({
   channels = [],            // [{ name, actions:[{at,pos}] }]
@@ -226,14 +228,16 @@ export default function ChannelStack({
                        fill={ch.color || '#888'} opacity={0.06} />;
         })}
 
-        {/* lane backgrounds */}
+        {/* lane backgrounds — clicking a channel lane selects it (pipes that
+            channel into the monitor + stats) AND, by NOT stopping propagation,
+            still bubbles to the SVG handler so the same click moves the baton. */}
         {layout.rows.map((row) => (
           <rect key={`bg-${row.name}`} x={PAD_X} y={row.y} width={plotW} height={row.h}
                 fill="rgba(255,255,255,0.025)" rx={4}
                 stroke={row.name === selectedChannel ? 'var(--accent, #ff4b4b)' : 'transparent'}
                 strokeWidth={1}
-                onClick={(e) => { if (onSelectChannel && row.kind === 'channel') { e.stopPropagation(); onSelectChannel(row.name); } }}
-                style={{ cursor: row.kind === 'channel' ? 'pointer' : 'inherit' }} />
+                onClick={() => { if (onSelectChannel && row.kind === 'channel') onSelectChannel(row.name); }}
+                style={{ cursor: 'pointer' }} />
         ))}
 
         {(spectrogramUrl || spectroUrl) && (() => { const r = rowFor('spectro'); return (

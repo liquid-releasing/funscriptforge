@@ -578,11 +578,15 @@ export function stimProcess(funscriptPath, { character, sliders = {}, mode = '2d
  *  `<stem>.output/<Device>/*.funscript` (decimated) + the screech note.
  *  Returns {available, devices:[{name, channels:[{name, actions, rawCount}]}],
  *  durationMs, screech}. Browser → unavailable. */
-export function viewerLoad(mediaOrFunscriptPath, { maxPoints = 2000 } = {}) {
+export function viewerLoad(mediaOrFunscriptPath, { maxPoints = 2000, channel = null, audioPoints = null } = {}) {
   return call(
     'viewer_load',
-    { input: mediaOrFunscriptPath, maxPoints },
-    () => Promise.resolve({ available: false, devices: [], durationMs: 0, screech: null }),
+    { input: mediaOrFunscriptPath, maxPoints, channel, audioPoints },
+    () => Promise.resolve(channel
+      ? { available: false, name: channel, actions: [], rawCount: 0 }
+      : audioPoints
+        ? { available: false, audio: null }
+        : { available: false, devices: [], durationMs: 0, screech: null }),
   );
 }
 

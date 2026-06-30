@@ -103,6 +103,26 @@ export function posAt(actions, ms) {
   return a.pos + t * (b.pos - a.pos);
 }
 
+// Liveliness for ONE time window across a device's channels — the per-chapter
+// readout. Slices each channel's actions to [startMs, endMs], scores it, and
+// returns the mean liveliness (same blend as the whole-device headline) plus
+// the contributing action count. Windows with too few points return null so
+// the UI can show "—" instead of a misleading 0.
+export function livelinessInWindow(channels, startMs, endMs) {
+  const winMs = Math.max(1, endMs - startMs);
+  const scores = [];
+  let total = 0;
+  for (const c of channels) {
+    if (!c.actions || c.actions.length < 2) continue;
+    const slice = c.actions.filter((a) => a.at >= startMs && a.at <= endMs);
+    if (slice.length < 3) continue;
+    total += slice.length;
+    scores.push(livelinessScore(computeStats(slice, winMs)));
+  }
+  if (!scores.length) return { liveliness: null, count: total };
+  return { liveliness: Math.round(mean(scores)), count: total };
+}
+
 // ── Whole-device summary ────────────────────────────────────────────
 // Roll a device's channels ([{ name, actions }]) into one headline summary:
 // channel count, total actions, and the mean of each metric across channels

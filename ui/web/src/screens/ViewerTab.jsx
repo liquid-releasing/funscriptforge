@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MediaViewer } from 'forgemoment';
 import ChannelStack from './ChannelStack.jsx';
 import { viewerLoad } from '../api/forge.js';
-import { analyzeChannels, posAt } from '../lib/forgeStats.js';
+import { analyzeChannels, livelinessInWindow, posAt } from '../lib/forgeStats.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 
 // Intensity arc: prefer the felt `volume` channel; else a normalized velocity
@@ -76,8 +76,60 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
   const durationMs = data?.durationMs || project?.durationMs || 0;
   const channels = device?.channels || [];
 
+  // The monitor windows down to a few seconds, so the center lane's decimated
+  // min/max envelope reads as a zigzag there. Fetch the SELECTED channel at full
+  // resolution (time-uniform) so the monitor shows real strokes.
+  const monitorChannelName = selectedChannel || channels[0]?.name || null;
+  const [monitorActions, setMonitorActions] = useState([]);
+  useEffect(() => {
+    if (!loadKey || !device || !monitorChannelName) { setMonitorActions([]); return undefined; }
+    let live = true;
+    viewerLoad(loadKey, { channel: `${device.name}/${monitorChannelName}` })
+      .then((res) => { if (live) setMonitorActions(res?.actions?.length ? res.actions : []); })
+      .catch(() => { if (live) setMonitorActions([]); });
+    return () => { live = false; };
+  }, [loadKey, device, monitorChannelName]);
+
+  // Fall back to the decimated center-lane actions until the full-res fetch lands.
+  const monitorFunscript = useMemo(() => {
+    if (monitorActions.length) return { actions: monitorActions };
+    const ch = channels.find((c) => c.name === monitorChannelName) || channels[0];
+    return { actions: ch?.actions || [] };
+  }, [monitorActions, channels, monitorChannelName]);
+
+  // The 16k audio is fine for the full-timeline lane (it re-bins to pixel
+  // width) but blocky in the monitor's ~12s window. Fetch a high-res envelope
+  // once per project for the monitor only.
+  const [monitorAudio, setMonitorAudio] = useState(null);
+  useEffect(() => {
+    if (!loadKey) { setMonitorAudio(null); return undefined; }
+    let live = true;
+    viewerLoad(loadKey, { audioPoints: 150000 })
+      .then((res) => { if (live) setMonitorAudio(res?.audio?.peaks?.length ? res.audio : null); })
+      .catch(() => { if (live) setMonitorAudio(null); });
+    return () => { live = false; };
+  }, [loadKey]);
+
   const intensity = useMemo(() => computeIntensity(channels, durationMs), [channels, durationMs]);
   const summary = useMemo(() => analyzeChannels(channels, durationMs), [channels, durationMs]);
+
+  // Per-chapter liveliness — where the output sags vs. peaks. Reflects the
+  // selected channel when one is picked, else the whole device. This is what
+  // surfaces a soft intro as a number, not just a dip in the arc.
+  const chaptersData = data?.chapters || [];
+  const perChapter = useMemo(() => {
+    if (!chaptersData.length || !channels.length) return [];
+    const scope = selectedChannel
+      ? channels.filter((c) => c.name === selectedChannel)
+      : channels;
+    return chaptersData.map((ch, i) => ({
+      ...ch,
+      idx: i + 1,
+      ...livelinessInWindow(scope, ch.start, ch.end),
+    }));
+  }, [chaptersData, channels, selectedChannel]);
+  const liveValues = perChapter.map((c) => c.liveliness).filter((v) => v != null);
+  const liveMax = liveValues.length ? Math.max(...liveValues) : 1;
   const screech = data?.screech || null;
   const screechRegions = screech?.source_screech_regions || [];
   const capCount = screech?.generation_cap_regions?.length || 0;
@@ -184,10 +236,48 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
               })()}
             </div>
           )}
+
+          {/* Per-chapter liveliness — click a chapter to seek there. Reflects
+              the selected channel when one is picked, else the whole device. */}
+          {perChapter.length > 0 && (
+            <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid var(--border, #2d3148)' }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
+                            color: 'var(--text-muted, #9ba3c4)', marginBottom: 6 }}>
+                Per chapter{selectedChannel ? ` · ${selectedChannel}` : ''}
+              </div>
+              {perChapter.map((c) => {
+                const v = c.liveliness;
+                const pct = v != null ? Math.max(3, (v / Math.max(1, liveMax)) * 100) : 0;
+                // Warm where lively, dim where it sags — a soft chapter reads cool.
+                const hot = v != null ? v / Math.max(1, liveMax) : 0;
+                const bar = v == null ? 'var(--border, #2d3148)'
+                  : `hsl(${20 + hot * 20}, ${40 + hot * 45}%, ${42 + hot * 10}%)`;
+                return (
+                  <button key={c.idx} type="button"
+                    onClick={() => setCurrentMs(Math.max(0, Math.min(durationMs, c.start)))}
+                    title={`${c.name}${c.tone ? ` · ${c.tone}` : ''} — liveliness ${v ?? '—'}`}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+                             padding: '3px 0', background: 'none', border: 'none', cursor: 'pointer',
+                             textAlign: 'left' }}>
+                    <span style={{ width: 16, flexShrink: 0, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
+                                   color: 'var(--text-dim, #6b7390)' }}>{c.idx}</span>
+                    <span style={{ flex: 1, height: 8, borderRadius: 3, overflow: 'hidden',
+                                   background: 'rgba(255,255,255,0.06)' }}>
+                      <span style={{ display: 'block', height: '100%', width: `${pct}%`, background: bar }} />
+                    </span>
+                    <span style={{ width: 20, flexShrink: 0, textAlign: 'right', fontSize: 11,
+                                   fontFamily: 'var(--font-mono, monospace)', color: 'var(--text, #fafafa)' }}>
+                      {v ?? '—'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </aside>
 
         {/* Center — the lane stack (the star) */}
-        <main style={{ flex: 1, minWidth: 0, padding: 12, overflowY: 'auto' }}>
+        <main style={{ flex: 1, minWidth: 0, padding: '8px 12px', overflowY: 'auto' }}>
           <ChannelStack
             channels={channels}
             waveform={audioWaveform}
@@ -216,10 +306,13 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
             thumbnailAspect="16/9"
             videoSrc={toMediaUrl(project?.mediaPath)}
             media={{ kind: project?.mediaKind ?? 'video', title: 'Full timeline' }}
-            funscript={device ? { actions: (channels.find((c) => c.name === selectedChannel) || channels[0])?.actions || [] } : { actions: [] }}
-            audioWaveform={audioWaveform}
+            funscript={monitorFunscript}
+            audioWaveform={monitorAudio || audioWaveform}
             spectrogram={trackSpectrogram}
+            hideEmptySpectro
             beats={beats}
+            batonColorByBeat
+            batonWidth={4}
             currentMs={currentMs}
             totalMs={durationMs}
             isPlaying={isPlaying}
@@ -233,6 +326,25 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
             modeToggleSize="sm"
           />
         </aside>
+      </div>
+
+      {/* Footer — which output we're reviewing. With the sibling fallback you
+          may open the 4K but be reading the 1080p .output; this tells you so. */}
+      <div title={data?.sourcePath || ''}
+           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 14px',
+                    borderTop: '1px solid var(--border, #2d3148)', fontSize: 11,
+                    color: 'var(--text-dim, #6b7390)', fontFamily: 'var(--font-mono, monospace)',
+                    whiteSpace: 'nowrap', overflow: 'hidden' }}>
+        <span style={{ textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0,
+                       color: 'var(--text-muted, #9ba3c4)' }}>
+          {data?.source === 'forge' ? 'Bundle' : 'Output'}
+        </span>
+        <span style={{ flexShrink: 0, color: 'var(--text, #fafafa)' }}>
+          {data?.sourceName || '—'}
+        </span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', opacity: 0.7 }}>
+          {data?.sourcePath || ''}
+        </span>
       </div>
     </section>
   );

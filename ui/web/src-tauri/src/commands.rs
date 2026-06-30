@@ -2377,9 +2377,21 @@ pub async fn stim_process(
 pub async fn viewer_load(
     input: String,
     max_points: Option<i64>,
+    channel: Option<String>,
+    audio_points: Option<i64>,
 ) -> Result<serde_json::Value, String> {
     let mp = max_points.unwrap_or(2000).to_string();
-    let out = run_cli(&["viewer-load", &input, "--max-points", &mp]).await?;
+    let mut args: Vec<&str> = vec!["viewer-load", &input, "--max-points", &mp];
+    if let Some(ref ch) = channel {
+        args.push("--channel");
+        args.push(ch);
+    }
+    let ap = audio_points.map(|v| v.to_string());
+    if let Some(ref ap) = ap {
+        args.push("--audio-points");
+        args.push(ap);
+    }
+    let out = run_cli(&args).await?;
     serde_json::from_str(&out).map_err(|e| format!("parse viewer-load output: {}", e))
 }
 
