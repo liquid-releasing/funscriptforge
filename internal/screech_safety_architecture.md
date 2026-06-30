@@ -224,13 +224,19 @@ follow-up in §7.)
   Measured on the real screech: **−38 % peak, −29 % energy**, **9.4 s for a 93-min
   file**. (Two failing tests in `test_audio_peaks`/`test_audio_spectrogram` are a
   pre-existing Windows sidecar-fixture bug, unrelated.)
-- **#2 FSF e-stim cap — TODO.** Locate the channel generator that produced
-  `frequency`/`volume`; apply the same co-rail invariant where the audio context
-  is still available.
-- **#5 sidecar + viewer markers — partially scaffolded.** `screech_regions` now
-  flows out of videoflow analysis and `FlashRegion`/`ScreechRegion` both have
-  `as_dict()`; still need persistence to a sidecar and the viewer overlay.
-- **#4 re-render** and **#6 viewer** — TODO.
+- **#2 FSF e-stim cap — DONE.** `forge/stim_safety.py` — region-targeted (uses the
+  videoflow screech regions) + co-rail catch-all. Wired into `cmd_stim_process`
+  (co-rail on the live draw) + a new `cap-stim` CLI subcommand (region cap +
+  sidecar at export, and the standalone fix pass). 8 tests green; committed
+  `77ccbd0` (only my 3 cli.py hunks staged — the D27a work was left untouched).
+- **#5 sidecar — DONE.** `cap-stim` writes `<stem>.screech.json`
+  (`source_screech_regions` + `generation_cap_regions`). Viewer markers ride with
+  #6.
+- **#4 fix the shipped file — DONE.** Ran `cap-stim` on the real VictoriaOaks
+  E-Stim bundle (originals backed up to `.pre_screech_backup/`): volume at the
+  1:21 screech **90→80**, sidecar written, only 11/11883 samples touched.
+- **#6 viewer — TODO.** The last stage: render the channels with the
+  `screech.json` spans as timeline markers so a glance shows what was tamed.
 
 ## 7. Open questions / follow-ups
 
