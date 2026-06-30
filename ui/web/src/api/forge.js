@@ -149,8 +149,13 @@ export function listToneTemplates() {
  *
  *  Mock: synthesises a project from the basename so the Project tab can be
  *  exercised before the bridge lands. */
-export function loadProject(path) {
-  return call('load_project', { path }, () => mockLoadProject(path));
+export function loadProject(path, mediaPath = null) {
+  // mediaPath is the project's known media (the JS layer tracks it). Passed to
+  // Rust as `mediaHint` so chapter resolution finds the media-keyed
+  // .forge/<media_stem>.chapters.json — essential for a funscript GENERATED
+  // from a video, whose stem differs from the media stem (D25/D26). Omit it and
+  // Rust falls back to the strict same-stem adjacent probe.
+  return call('load_project', { path, mediaHint: mediaPath || null }, () => mockLoadProject(path));
 }
 
 /** Equal-split the funscript into `n` chapters and write the

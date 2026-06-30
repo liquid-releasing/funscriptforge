@@ -412,7 +412,7 @@ export default function GenerateTab({
           const pSamp = liftStart(curveSamples(pPts), pStart);
           const rSamp = liftStart(curveSamples(rPts), rStart);
           const restoredSig = `${mediaPath || ''}|${samplesStr(pSamp)}|${samplesStr(rSamp)}|${tx}`;
-          const proj = await loadProject(sc.output).catch(() => null);
+          const proj = await loadProject(sc.output, mediaPath).catch(() => null);
           const acts = Array.isArray(proj?.actions) ? proj.actions : [];
           if (cancelled) return;
           if (acts.length) {

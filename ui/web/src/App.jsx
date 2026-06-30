@@ -473,7 +473,14 @@ export default function App() {
       return;
     }
     if (project.path) {
-      handleOpenScript(project.path);
+      // Carry the recents row's known media/title so a reopen resolves chapters
+      // against the media-keyed sidecar (a generated funscript's stem differs
+      // from the media stem — without this the reopen loses its chapters; D25).
+      handleOpenScript(project.path, {
+        title: project.title,
+        mediaPath: project.mediaPath,
+        mediaKind: project.mediaKind,
+      });
     }
   };
 
@@ -693,7 +700,7 @@ export default function App() {
     // so editing tabs pass their gate immediately.
     setTab(meta.landTab || 'project');
     try {
-      const project = await loadProject(path);
+      const project = await loadProject(path, meta.mediaPath || null);
       // Apply caller hints over Rust defaults. Library is the main
       // source of these — it knows the media-stem title AND the
       // prefix-with-boundary matched mediaPath, both of which the
@@ -994,7 +1001,7 @@ export default function App() {
   } else if (isVideoOnly && tab === 'project') {
     footerSummary = 'No funscript yet — generate one from this media to begin editing.';
   } else if (busy) {
-    footerSummary = `${currentTabLabel} · in progress — chain advances when complete`;
+    footerSummary = `${currentTabLabel} · in progress — chain can advance when complete`;
   } else if (nextTab) {
     const nextLabel = TABS.find((t) => t.id === nextTab)?.label ?? nextTab;
     footerSummary = `${currentTabLabel} · ready to chain to ${nextLabel}`;

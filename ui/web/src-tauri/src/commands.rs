@@ -244,7 +244,7 @@ fn compute_funscript_stats(actions: &[FunscriptAction]) -> (i32, i32, f64) {
 }
 
 #[tauri::command]
-pub async fn load_project(path: String) -> Result<LoadedProject, String> {
+pub async fn load_project(path: String, media_hint: Option<String>) -> Result<LoadedProject, String> {
     // ── Read the funscript ────────────────────────────────────────────
     // If a working copy exists in the forge dir (edits made in a prior
     // session), load THAT — it's the durable save state. The original stays
@@ -329,7 +329,20 @@ pub async fn load_project(path: String) -> Result<LoadedProject, String> {
     // authored against video). Returns the first hit. Done before chapter
     // resolution so we can pass the media path through to videoflow when
     // it exists (enables mp4-embedded chapter markers via ffprobe).
-    let (media_path, media_kind) = find_adjacent_media(&stem);
+    // Prefer an explicit media hint from the caller (the JS layer knows the
+    // project's mediaPath — e.g. a funscript GENERATED from a video, whose stem
+    // carries extra qualifiers the strict same-stem find_adjacent_media can't
+    // pair). This is what makes chapter resolution find the media-keyed
+    // .forge/<media_stem>.chapters.json: without it, a generated project
+    // resolves chapters against the FUNSCRIPT stem (wrong forge dir) and comes
+    // back with zero chapters (D25/D26 — chapters never surface, no Accept
+    // button). Fall back to the strict adjacent probe when no hint is given.
+    let (media_path, media_kind) = match media_hint {
+        Some(ref m) if !m.is_empty() && std::fs::metadata(m).is_ok() => {
+            (Some(m.clone()), media_kind_from_path(m))
+        }
+        _ => find_adjacent_media(&stem),
+    };
 
     // ── Chapters via videoflow resolver ──────────────────────────────
     // Shells out to `cli.py chapters` which calls videoflow.chapters.load_chapters
@@ -838,11 +851,21 @@ async fn resolve_chapters_via_cli(path_for_resolution: &str, duration_ms: u64) -
     .await
     {
         Ok(s) => s,
-        Err(_) => return Vec::new(),
+        Err(e) => {
+            eprintln!("[chapters] run_cli FAILED for {}: {}", path_for_resolution, e);
+            return Vec::new();
+        }
     };
     let parsed: CliChaptersResolved = match serde_json::from_str(&stdout) {
         Ok(p) => p,
-        Err(_) => return Vec::new(),
+        Err(e) => {
+            eprintln!(
+                "[chapters] JSON parse FAILED for {}: {} — raw head: {}",
+                path_for_resolution, e,
+                &stdout.chars().take(200).collect::<String>()
+            );
+            return Vec::new();
+        }
     };
     if !parsed.found {
         return Vec::new();
@@ -2911,6 +2934,19 @@ fn strip_funscript_ext(path: &str) -> String {
 // Look for a media file (video / audio) with the same stem as the funscript.
 // Video extensions checked first — most funscripts are authored against video.
 // If neither exists, returns (None, "audio") so the UI has a safe default.
+// Classify a media path as "video" or "audio" by extension — the same ext
+// lists find_adjacent_media uses. Used when the caller hands us an explicit
+// media path (load_project's media_hint) so we don't re-probe the disk.
+fn media_kind_from_path(p: &str) -> String {
+    const AUDIO_EXTS: &[&str] = &["mp3", "wav", "flac", "ogg", "m4a", "aac"];
+    let ext = Path::new(p)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+    if AUDIO_EXTS.contains(&ext.as_str()) { "audio".to_string() } else { "video".to_string() }
+}
+
 fn find_adjacent_media(stem: &str) -> (Option<String>, String) {
     const VIDEO_EXTS: &[&str] = &["mp4", "mkv", "mov", "avi", "webm", "m4v"];
     const AUDIO_EXTS: &[&str] = &["mp3", "wav", "flac", "ogg", "m4a", "aac"];

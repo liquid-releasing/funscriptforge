@@ -254,7 +254,7 @@ export default function AnalysisTab({
           // Both reload via the same loadProject call — idempotent and
           // cheap.
           if ((leaf === 'chapters_sidecar' || leaf === 'sidecar') && project?.path) {
-            loadProject(project.path)
+            loadProject(project.path, project.mediaPath)
               .then((p) => {
                 if (Array.isArray(p?.chapterList)) onChaptersChange?.(p.chapterList);
               })
