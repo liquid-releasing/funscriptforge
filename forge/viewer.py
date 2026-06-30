@@ -104,8 +104,25 @@ def load_device_outputs(path: str, *, max_points: int = 2000) -> dict:
     """
     p = Path(path)
     stem = p.stem
-    output_dir = p.parent / f"{stem}.output"
-    forge = p.parent / f"{stem}.forge"
+    parent = p.parent
+    output_dir = parent / f"{stem}.output"
+    forge = parent / f"{stem}.forge"
+    # Sibling fallback — a folder may hold several renders of the same title
+    # (1080p / 4K / VR) but the output was generated for just one. If the opened
+    # media's exact <stem>.output/.forge isn't there, adopt the first sibling so
+    # opening ANY of those files still finds the work. The resolved stem then
+    # drives channel-name parsing + the audio/beats/events lookup.
+    if not output_dir.is_dir():
+        sibs = sorted(parent.glob("*.output"))
+        if sibs:
+            output_dir = sibs[0]
+            stem = output_dir.name[: -len(".output")]
+    if not forge.is_file():
+        fsibs = sorted(f for f in parent.glob("*.forge") if f.is_file())
+        if fsibs:
+            forge = fsibs[0]
+            if not output_dir.is_dir():
+                stem = forge.name[: -len(".forge")]
     res = None
     if output_dir.is_dir():
         cand = _load_from_dir(output_dir, stem, max_points)
@@ -120,12 +137,48 @@ def load_device_outputs(path: str, *, max_points: int = 2000) -> dict:
     if res is None:
         return {"available": False, "error": "no <stem>.output dir or .forge bundle",
                 "devices": []}
-    # Context lanes — audio waveform + events — sourced wherever they live (the
-    # loose output, the .forge cache, or the bundle). Spectrogram is omitted: it
-    # is only built during full analysis and isn't part of the export.
-    res["audio"] = _load_audio(p.parent, stem)
-    res["events"] = _load_events(p.parent, stem)
+    # Context lanes — audio waveform + beats + events — sourced wherever they
+    # live (the loose output, the .forge cache, or the bundle). Spectrogram is
+    # omitted: it's only built during full analysis, not part of the export.
+    res["audio"] = _load_audio(parent, stem)
+    res["beats"] = _load_beats(parent, stem)
+    res["events"] = _load_events(parent, stem)
+    # Spectrogram is shipped as a static PNG in the export (Preview/), not as
+    # rebuildable cells — so the center spectro lane renders the image directly.
+    spec = output_dir / "Preview" / "spectrogram.png"
+    res["spectrogramPng"] = str(spec) if spec.is_file() else None
     return res
+
+
+def _load_beats(parent: Path, stem: str) -> dict | None:
+    """Beat grid for the monitor + audio-lane ticks: {bpm, beatsMs, downbeatsMs}."""
+    raw = None
+    cache = parent / f".{stem}.forge" / f"{stem}.beats.json"
+    if cache.is_file():
+        try:
+            raw = json.loads(cache.read_text(encoding="utf-8"))
+        except Exception:
+            raw = None
+    if raw is None:
+        forge = parent / f"{stem}.forge"
+        if forge.is_file():
+            try:
+                z = zipfile.ZipFile(forge)
+                hit = next((n for n in z.namelist() if n.endswith("beats.json")), None)
+                if hit:
+                    raw = json.loads(z.read(hit).decode("utf-8"))
+            except Exception:
+                raw = None
+    if not raw:
+        return None
+    beats = raw.get("beats_ms") or raw.get("beatsMs") or []
+    if not beats:
+        return None
+    return {
+        "bpm": raw.get("bpm"),
+        "beatsMs": [int(b) for b in beats],
+        "downbeatsMs": [int(b) for b in (raw.get("downbeats_ms") or raw.get("downbeatsMs") or [])],
+    }
 
 
 def _decimate_peaks(peaks: list, target: int = 3000) -> list:
@@ -148,7 +201,9 @@ def _load_audio(parent: Path, stem: str) -> dict | None:
         if not peaks:
             return None
         dur = d.get("duration_ms") or d.get("durationMs") or 0
-        dec = _decimate_peaks(peaks)
+        # Finer than the lane needs (the lane re-bins to pixel width) so the
+        # zoomed-in monitor waveform isn't a solid block.
+        dec = _decimate_peaks(peaks, target=16000)
         hop = (dur / len(dec)) if (dur and dec) else (d.get("hop_ms") or d.get("hopMs") or 10)
         return {"peaks": dec, "hopMs": hop, "durationMs": dur}
 

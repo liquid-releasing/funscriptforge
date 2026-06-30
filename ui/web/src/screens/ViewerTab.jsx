@@ -88,6 +88,8 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
   const audioWaveform = (trackPeaks?.peaks?.length ? trackPeaks : null)
     || (data?.audio?.peaks?.length ? data.audio : null);
   const events = data?.events || [];
+  const beats = data?.beats || null;
+  const spectrogramUrl = data?.spectrogramPng ? toMediaUrl(data.spectrogramPng) : null;
   const getLiveMs = useCallback(() => {
     const v = videoElRef.current;
     return v ? v.currentTime * 1000 : null;
@@ -190,8 +192,10 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
             channels={channels}
             waveform={audioWaveform}
             spectrogram={trackSpectrogram}
+            spectrogramUrl={spectrogramUrl}
             intensity={intensity}
             events={events}
+            beats={beats}
             screechRegions={screechRegions}
             durationMs={durationMs}
             currentMs={currentMs}
@@ -215,6 +219,7 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
             funscript={device ? { actions: (channels.find((c) => c.name === selectedChannel) || channels[0])?.actions || [] } : { actions: [] }}
             audioWaveform={audioWaveform}
             spectrogram={trackSpectrogram}
+            beats={beats}
             currentMs={currentMs}
             totalMs={durationMs}
             isPlaying={isPlaying}

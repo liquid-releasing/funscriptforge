@@ -40,8 +40,10 @@ export default function ChannelStack({
   channels = [],            // [{ name, actions:[{at,pos}] }]
   waveform = null,          // { peaks:[0..1], hopMs }
   spectrogram = null,       // { cells, nMels, nFrames, hopMs }
+  spectrogramUrl = null,    // shipped static spectrogram PNG (preferred)
   intensity = null,         // [{ at, v:0..1 }]
   events = [],              // [{ start, end, label, color }]
+  beats = null,             // { beatsMs:[…] } — ticks on the audio lane
   chapters = null,          // [{ atMs, endMs, color }]
   screechRegions = [],      // [{ start_s, end_s }]
   durationMs = 1,
@@ -76,12 +78,12 @@ export default function ChannelStack({
     let y = 0;
     const push = (kind, name, h) => { rows.push({ kind, name, y, h }); y += h + LANE_GAP; };
     if (waveform?.peaks?.length) push('audio', 'audio', LANE_H.audio);
-    if (spectrogram?.cells?.length && spectrogram?.nFrames) push('spectro', 'spectro', LANE_H.spectro);
+    if (spectrogramUrl || (spectrogram?.cells?.length && spectrogram?.nFrames)) push('spectro', 'spectro', LANE_H.spectro);
     if (intensity?.length) push('intensity', 'intensity', LANE_H.intensity);
     if (events?.length) push('events', 'events', LANE_H.events);
     channels.forEach((c) => push('channel', c.name, LANE_H.channel));
     return { rows, rulerY: y, total: Math.max(1, y + RULER_H) };
-  }, [waveform, spectrogram, intensity, events, channels]);
+  }, [waveform, spectrogram, spectrogramUrl, intensity, events, channels]);
 
   const rowFor = (name) => layout.rows.find((r) => r.name === name);
 
@@ -234,12 +236,25 @@ export default function ChannelStack({
                 style={{ cursor: row.kind === 'channel' ? 'pointer' : 'inherit' }} />
         ))}
 
-        {spectroUrl && (() => { const r = rowFor('spectro'); return (
-          <image href={spectroUrl} x={PAD_X} y={r.y} width={plotW} height={r.h}
+        {(spectrogramUrl || spectroUrl) && (() => { const r = rowFor('spectro'); return (
+          <image href={spectrogramUrl || spectroUrl} x={PAD_X} y={r.y} width={plotW} height={r.h}
                  preserveAspectRatio="none" style={{ pointerEvents: 'none' }} />
         ); })()}
 
         {audioPath && <path d={audioPath} fill="rgba(120,180,255,0.4)" stroke="rgba(160,205,255,0.8)" strokeWidth={0.6} style={{ pointerEvents: 'none' }} />}
+
+        {/* beat ticks on the audio lane (dropped when they'd pack tighter than ~4px) */}
+        {audioPath && beats?.beatsMs?.length > 0 && (() => {
+          const r = rowFor('audio');
+          const inView = beats.beatsMs;
+          if (inView.length > plotW / 4) return null;
+          const dbset = new Set(beats.downbeatsMs || []);
+          return inView.map((b, i) => (
+            <line key={`bt-${i}`} x1={xFor(b)} x2={xFor(b)} y1={r.y + 2} y2={r.y + r.h - 2}
+                  stroke={dbset.has(b) ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)'}
+                  strokeWidth={dbset.has(b) ? 1 : 0.6} style={{ pointerEvents: 'none' }} />
+          ));
+        })()}
 
         {intensityPath && <path d={intensityPath} fill="rgba(255,140,66,0.35)" stroke="rgba(255,140,66,0.85)" strokeWidth={1} style={{ pointerEvents: 'none' }} />}
 
