@@ -17,6 +17,10 @@ pub fn run() {
             // Resolve the Python backend once: bundled forge-cli resource in a
             // packaged build, else the dev .venv + cli.py.
             commands::init_cli_invocation(app.handle());
+            // Background prewarm: pull the heavy Python scientific stack into
+            // the OS file cache now, so the user's FIRST analyze/assess doesn't
+            // eat the one-time ~15s cold-disk import. Best-effort, non-blocking.
+            commands::prewarm_backend();
             // Snapshot any file path we were launched with (the Windows
             // file association's "Edit in FunscriptForge" verb passes a
             // .forge bundle as argv). The frontend drains it on first mount.

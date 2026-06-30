@@ -472,6 +472,35 @@ fn cli_invocation() -> &'static CliInvocation {
     CLI.get_or_init(dev_cli_invocation)
 }
 
+/// Background prewarm at app launch (called from lib.rs setup, after
+/// init_cli_invocation). Spawns `forge-cli warmup` detached, discarding output,
+/// so the OS file cache is hot for the heavy scientific stack
+/// (librosa/numba/scipy ≈ 15s cold-disk, <1s warm) before the user's FIRST
+/// real analyze/assess. Best-effort: a spawn failure is ignored (the next real
+/// call warms it anyway). The warmup process is short-lived and touches no
+/// project files, so it needs no D7 reaping. Uses std (not tokio) Command so it
+/// runs from the synchronous setup hook without a runtime.
+pub fn prewarm_backend() {
+    let inv = cli_invocation();
+    let mut cmd = std::process::Command::new(&inv.program);
+    cmd.args(&inv.prefix_args).arg("warmup").current_dir(&inv.cwd);
+    if let Some(dir) = &inv.extra_path {
+        let sep = if cfg!(windows) { ";" } else { ":" };
+        let existing = std::env::var("PATH").unwrap_or_default();
+        cmd.env("PATH", format!("{}{}{}", dir.display(), sep, existing));
+    }
+    cmd.stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000; // no console flash
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let _ = cmd.spawn(); // fire and forget
+}
+
 // Build a tokio Command for the resolved backend with `args` appended.
 fn cli_command(args: &[&str]) -> Command {
     let inv = cli_invocation();

@@ -3425,6 +3425,24 @@ def cmd_viewer_load(args):
     print(json.dumps(result))
 
 
+@_cli_command
+def cmd_warmup(args):
+    """Best-effort prewarm, fired in the background at app launch (lib.rs setup).
+
+    Importing this module already pulled the heavy scientific stack
+    (librosa / numba / scipy) off disk into the OS file cache — that's the
+    ~15s-cold / <1s-warm cost every fresh `cli.py` spawn would otherwise pay on
+    the user's FIRST real analyze/assess. One tiny librosa op also warms the
+    numba JIT. Touches no project files; always exits 0."""
+    try:
+        import numpy as np
+        import librosa
+        librosa.stft(np.zeros(2048, dtype=np.float32), n_fft=512)
+    except Exception:
+        pass
+    print("warm")
+
+
 def cmd_multiaxis_process(args):
     """Generate secondary-axis funscripts for a window (a chapter) via the
     multiaxis engine, emit as JSON axis actions. React bridge to
@@ -4796,6 +4814,12 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Path to the analysis screech sidecar (or a {start_s,end_s}[] JSON)")
     p_cap.add_argument("--media", default=None,
                        help="Media/funscript path; sidecar is written to its .forge dir if given")
+
+    # --- warmup (background prewarm of the scientific stack at app launch) ---
+    sub.add_parser(
+        "warmup",
+        help="Prewarm librosa/numba/scipy into the OS file cache (fired at app launch)",
+    )
 
     # --- viewer-load (React bridge: load generated device outputs to review) ---
     p_vl = sub.add_parser(
@@ -6190,6 +6214,7 @@ def main():
         "passages-read":    cmd_passages_read,
         "stim-process":     cmd_stim_process,
         "cap-stim":         cmd_cap_stim,
+        "warmup":           cmd_warmup,
         "viewer-load":      cmd_viewer_load,
         "multiaxis-process": cmd_multiaxis_process,
         "list-event-recipes": cmd_list_event_recipes,
