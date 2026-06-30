@@ -574,6 +574,18 @@ export function stimProcess(funscriptPath, { character, sliders = {}, mode = '2d
   );
 }
 
+/** Load the project's generated device outputs for the Viewer stage — reads
+ *  `<stem>.output/<Device>/*.funscript` (decimated) + the screech note.
+ *  Returns {available, devices:[{name, channels:[{name, actions, rawCount}]}],
+ *  durationMs, screech}. Browser → unavailable. */
+export function viewerLoad(mediaOrFunscriptPath, { maxPoints = 2000 } = {}) {
+  return call(
+    'viewer_load',
+    { input: mediaOrFunscriptPath, maxPoints },
+    () => Promise.resolve({ available: false, devices: [], durationMs: 0, screech: null }),
+  );
+}
+
 /** Generate the secondary-axis funscripts (twist/roll/pitch/surge/sway) for a
  *  chapter window via the multiaxis engine — the Mechanical editor's live draw.
  *  Pass the position-style name (Cowgirl/Doggy/…) and the chapter window.

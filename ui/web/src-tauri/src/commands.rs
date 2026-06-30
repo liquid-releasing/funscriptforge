@@ -2371,6 +2371,18 @@ pub async fn stim_process(
     serde_json::from_str(&out).map_err(|e| format!("parse stim-process output: {}", e))
 }
 
+/// Load the project's generated device outputs for the Viewer stage — reads the
+/// `<stem>.output/` channel funscripts (decimated) + the screech note.
+#[tauri::command]
+pub async fn viewer_load(
+    input: String,
+    max_points: Option<i64>,
+) -> Result<serde_json::Value, String> {
+    let mp = max_points.unwrap_or(2000).to_string();
+    let out = run_cli(&["viewer-load", &input, "--max-points", &mp]).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse viewer-load output: {}", e))
+}
+
 /// Generate secondary-axis funscripts for a window (a chapter) via the
 /// multiaxis engine — the React bridge to `forge.multiaxis.generate_multiaxis`.
 /// Deterministic + sub-millisecond per chapter (pure Python, no subprocess),

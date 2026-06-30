@@ -3394,6 +3394,17 @@ def cmd_cap_stim(args):
     }))
 
 
+def cmd_viewer_load(args):
+    """Load a project's generated device outputs for the Viewer stage.
+
+    Scans ``<stem>.output/`` for per-device channel funscripts (decimated) and
+    attaches the screech note. Pure file IO — reviews what was produced.
+    """
+    from forge.viewer import load_device_outputs
+    result = load_device_outputs(args.input, max_points=args.max_points)
+    print(json.dumps(result))
+
+
 def cmd_multiaxis_process(args):
     """Generate secondary-axis funscripts for a window (a chapter) via the
     multiaxis engine, emit as JSON axis actions. React bridge to
@@ -4766,6 +4777,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_cap.add_argument("--media", default=None,
                        help="Media/funscript path; sidecar is written to its .forge dir if given")
 
+    # --- viewer-load (React bridge: load generated device outputs to review) ---
+    p_vl = sub.add_parser(
+        "viewer-load",
+        help="Load <stem>.output device channel funscripts (+ screech note) for the Viewer",
+    )
+    p_vl.add_argument("input", help="Project media or funscript path (output dir is its sibling)")
+    p_vl.add_argument("--max-points", type=int, default=2000,
+                      help="Decimate each channel to ~this many points for transport")
+
     # --- multiaxis-process (React bridge to the multiaxis engine) ---
     p_mxp = sub.add_parser(
         "multiaxis-process",
@@ -6085,6 +6105,7 @@ def main():
         "passages-read":    cmd_passages_read,
         "stim-process":     cmd_stim_process,
         "cap-stim":         cmd_cap_stim,
+        "viewer-load":      cmd_viewer_load,
         "multiaxis-process": cmd_multiaxis_process,
         "list-event-recipes": cmd_list_event_recipes,
         "edger-export":     cmd_edger_export,

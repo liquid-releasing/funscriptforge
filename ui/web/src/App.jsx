@@ -30,6 +30,7 @@ import ProjectTab from './screens/ProjectTab.jsx';
 import GenerateTab from './screens/GenerateTab.jsx';
 import AnalysisTab from './screens/AnalysisTab.jsx';
 import PolishTab from './screens/PolishTab.jsx';
+import ViewerTab from './screens/ViewerTab.jsx';
 import ChaptersTab from './screens/ChaptersTab.jsx';
 import PhrasesTab from './screens/PhrasesTab.jsx';
 import StanzasTab from './screens/StanzasTab.jsx';
@@ -109,6 +110,7 @@ const TABS = [
   // after chapters/phrases/stanzas/events/channels define the *what*.
   // See memory project_polish_tab.md.
   { id: 'polish',    label: 'Polish' },
+  { id: 'viewer',    label: 'Viewer' },
   { id: 'export',    label: 'Export' },
   // 'catalog' (2026-05-18) sits past Export with a visual separator —
   // utility tab, not part of the Project → Export pipeline. Source-of-
@@ -910,11 +912,12 @@ export default function App() {
     stanzas:  'events',
     events:   'stim',
     stim:     'polish',
-    polish:   'export',
+    polish:   'viewer',
+    viewer:   'export',
   };
   // Tabs that CONSUME the analysis sidecars (chapters/phrases/channels/etc).
   // Analysis itself is deliberately excluded — it's where the work happens.
-  const ANALYSIS_CONSUMER_TABS = ['chapters', 'phrases', 'stanzas', 'events', 'stim', 'polish', 'export'];
+  const ANALYSIS_CONSUMER_TABS = ['chapters', 'phrases', 'stanzas', 'events', 'stim', 'polish', 'viewer', 'export'];
   // "Genuinely un-analyzed" = no chapters in memory, or the on-disk analysis
   // was produced by a stale analyzer version (a re-analyze is queued). This is
   // the gate signal — deliberately independent of `busy`, so a channel-preview
@@ -1226,6 +1229,13 @@ export default function App() {
             project={typeof openedProject === 'object' ? openedProject : null}
             setAppError={setAppError}
             setBusy={setBusy}
+          />
+        )}
+        {tab === 'viewer' && (
+          <ViewerTab
+            project={typeof openedProject === 'object' ? openedProject : null}
+            trackPeaks={trackPeaks}
+            trackSpectrogram={trackSpectrogram}
           />
         )}
         {tab === 'chapters' && (

@@ -62,6 +62,7 @@ pub fn run() {
             commands::read_passages,
             commands::save_passages,
             commands::stim_process,
+            commands::viewer_load,
             commands::multiaxis_process,
             commands::polish_preview,
             commands::polish_apply,
