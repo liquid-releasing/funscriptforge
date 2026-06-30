@@ -249,6 +249,20 @@ def cmd_pipeline(args):
 def cmd_assess(args):
     json_mode = getattr(args, "format", "table") == "json"
 
+    # Fast path — reuse a FRESH phrases.json sidecar instead of re-running the
+    # full analyzer pipeline. The de-coupled analyze pass already wrote it, so
+    # re-entering the Phrases tab (or any assess on an unchanged funscript) was
+    # paying the whole multi-minute pipeline again — the "aggressive recalc"
+    # (D27a). Only for json_mode (the UI/bridge consumer); the table/file path
+    # still computes because it persists the richer assessment object. A tone
+    # edit rewrites the funscript → the sidecar is older → we recompute, which
+    # is the correct invalidation.
+    if json_mode:
+        cached = _fresh_phrases_payload(args.funscript)
+        if cached is not None:
+            print(json.dumps(cached))
+            return
+
     analyzer = FunscriptAnalyzer(config=_build_analyzer_config(args))
     analyzer.load(args.funscript)
     t0 = time.time()
@@ -6013,6 +6027,67 @@ def _load_downbeats_for_phrases(funscript_path: str) -> list:
     except (OSError, ValueError):
         return []
     return data.get("downbeats_ms") or []
+
+
+def _fresh_phrases_payload(funscript_path: str) -> Optional[dict]:
+    """Rebuild the assess JSON payload from a FRESH `<stem>.phrases.json`
+    sidecar, or ``None`` when it's absent / stale / a different schema version.
+
+    'Fresh' = the sidecar is newer than the funscript AND (if present) the
+    chapters sidecar. So a tone edit that rewrote the funscript, or a chapter
+    re-detect, correctly invalidates it and forces a real reassess — but a mere
+    tab re-entry with no change reuses the cached slices instead of re-running
+    the full analyzer (the "aggressive recalc", D27a). The payload mirrors the
+    json_mode shape cmd_assess emits so the bridge/consumer can't tell the
+    difference (plus a ``cached`` marker for debugging)."""
+    try:
+        from videoflow.sidecar import forge_dir
+    except ImportError:
+        return None
+    fpath = Path(funscript_path)
+    if not fpath.is_file():
+        return None
+    target_dir = forge_dir(funscript_path)
+    sidecar = target_dir / f"{fpath.stem}.phrases.json"
+    if not sidecar.is_file():
+        return None
+    try:
+        s_mtime = sidecar.stat().st_mtime
+        if s_mtime < fpath.stat().st_mtime:
+            return None  # funscript changed after the sidecar → stale
+        chapters = target_dir / f"{fpath.stem}.chapters.json"
+        if chapters.is_file() and s_mtime < chapters.stat().st_mtime:
+            return None  # chapters re-detected after the sidecar → stale
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if data.get("version") != _PHRASES_SIDECAR_VERSION:
+        return None  # schema bump → recompute
+    slices = data.get("slices")
+    if not isinstance(slices, list):
+        return None
+    phrases = []
+    for i, s in enumerate(slices):
+        m = s.get("metrics") or {}
+        tags = list(m.get("tags") or [])
+        phrases.append({
+            "at_ms":         int(s.get("at_ms", 0)),
+            "end_ms":        int(s.get("end_ms", 0)),
+            "number":        i + 1,
+            "bpm":           m.get("bpm"),
+            "tag":           (tags[0] if tags else None),
+            "all_tags":      tags,
+            "pattern_label": m.get("pattern_label"),
+        })
+    return {
+        # PhrasesTab only consumes `phrases`; duration is a best-effort derive
+        # from the last slice end so the field stays present and sane.
+        "duration_ms":  (phrases[-1]["end_ms"] if phrases else 0),
+        "bpm":          None,
+        "action_count": None,
+        "phrases":      phrases,
+        "cached":       True,
+    }
 
 
 def _write_phrases_slice_sidecar(funscript_path: str, result) -> Optional[Path]:
