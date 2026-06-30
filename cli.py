@@ -3346,9 +3346,52 @@ def cmd_stim_process(args):
             from forge import passages as _passages_mod
             for suf, cdat in channels.items():
                 cdat["actions"] = _passages_mod.scale_estim(suf, cdat["actions"], _passages)
+        # Flash-safety cap (co-rail catch-all) on the live draw so the preview
+        # reflects what ships. The region-targeted clamp needs the analysis
+        # screech sidecar and runs at export; the catch-all needs nothing.
+        from forge.stim_safety import cap_channels_dict
+        cap_channels_dict(channels)
         print(json.dumps({"available": True, "mode": args.mode, "channels": channels}))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def cmd_cap_stim(args):
+    """Apply the flash-safety cap to generated e-stim channel files.
+
+    Region-targeted (using the analysis screech sidecar) + co-rail catch-all,
+    rewriting the volume channels in place and emitting a ``<stem>.screech.json``
+    report. Runs at export and is also the standalone "fix a shipped file" pass.
+    """
+    from forge.stim_safety import (
+        cap_stim_channels, discover_channels, write_sidecar,
+    )
+    screech_regions = None
+    if args.screech_json and Path(args.screech_json).exists():
+        raw = json.loads(Path(args.screech_json).read_text(encoding="utf-8"))
+        # accept either the full sidecar shape or a bare [{start_s,end_s}] list
+        screech_regions = raw.get("source_screech_regions", raw) if isinstance(raw, dict) else raw
+
+    channels = discover_channels(args.output_dir, args.stem)
+    if not channels:
+        print(json.dumps({"ok": False, "error": "no channel files found"}))
+        return
+    regions = cap_stim_channels(channels, screech_regions=screech_regions, write=True)
+
+    if args.media:
+        from videoflow.sidecar import forge_dir
+        sc_dir = forge_dir(args.media)
+        sc_path = sc_dir / f"{Path(args.media).stem}.screech.json"
+    else:
+        sc_path = Path(args.output_dir) / f"{args.stem}.screech.json"
+    write_sidecar(sc_path, cap_regions=regions, screech_regions=screech_regions)
+    print(json.dumps({
+        "ok": True,
+        "capped_regions": len(regions),
+        "source_screech": sum(1 for r in regions if r.reason == "source_screech"),
+        "co_rail": sum(1 for r in regions if r.reason == "co_rail"),
+        "sidecar": str(sc_path),
+    }))
 
 
 def cmd_multiaxis_process(args):
@@ -4711,6 +4754,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_stp.add_argument("--start-ms", type=int, default=None, help="Window start (chapter atMs)")
     p_stp.add_argument("--end-ms", type=int, default=None, help="Window end (chapter endMs)")
 
+    # --- cap-stim (flash-safety cap over generated channel files + sidecar) ---
+    p_cap = sub.add_parser(
+        "cap-stim",
+        help="Cap generated e-stim channels so a screech can't flash; writes <stem>.screech.json",
+    )
+    p_cap.add_argument("output_dir", help="Directory holding the <stem>.<channel>.funscript files")
+    p_cap.add_argument("--stem", required=True, help="Channel filename stem")
+    p_cap.add_argument("--screech-json", default=None,
+                       help="Path to the analysis screech sidecar (or a {start_s,end_s}[] JSON)")
+    p_cap.add_argument("--media", default=None,
+                       help="Media/funscript path; sidecar is written to its .forge dir if given")
+
     # --- multiaxis-process (React bridge to the multiaxis engine) ---
     p_mxp = sub.add_parser(
         "multiaxis-process",
@@ -6029,6 +6084,7 @@ def main():
         "passages-write":   cmd_passages_write,
         "passages-read":    cmd_passages_read,
         "stim-process":     cmd_stim_process,
+        "cap-stim":         cmd_cap_stim,
         "multiaxis-process": cmd_multiaxis_process,
         "list-event-recipes": cmd_list_event_recipes,
         "edger-export":     cmd_edger_export,
