@@ -34,13 +34,14 @@ function magma(t) {
   return [0, 1, 2].map((k) => Math.round(c0[k] + (c1[k] - c0[k]) * f));
 }
 
-const LANE_H = { audio: 46, spectro: 40, intensity: 38, channel: 40 };
+const LANE_H = { audio: 46, spectro: 40, intensity: 38, events: 30, channel: 40 };
 
 export default function ChannelStack({
   channels = [],            // [{ name, actions:[{at,pos}] }]
   waveform = null,          // { peaks:[0..1], hopMs }
   spectrogram = null,       // { cells, nMels, nFrames, hopMs }
   intensity = null,         // [{ at, v:0..1 }]
+  events = [],              // [{ start, end, label, color }]
   chapters = null,          // [{ atMs, endMs, color }]
   screechRegions = [],      // [{ start_s, end_s }]
   durationMs = 1,
@@ -77,9 +78,10 @@ export default function ChannelStack({
     if (waveform?.peaks?.length) push('audio', 'audio', LANE_H.audio);
     if (spectrogram?.cells?.length && spectrogram?.nFrames) push('spectro', 'spectro', LANE_H.spectro);
     if (intensity?.length) push('intensity', 'intensity', LANE_H.intensity);
+    if (events?.length) push('events', 'events', LANE_H.events);
     channels.forEach((c) => push('channel', c.name, LANE_H.channel));
     return { rows, rulerY: y, total: Math.max(1, y + RULER_H) };
-  }, [waveform, spectrogram, intensity, channels]);
+  }, [waveform, spectrogram, intensity, events, channels]);
 
   const rowFor = (name) => layout.rows.find((r) => r.name === name);
 
@@ -251,10 +253,32 @@ export default function ChannelStack({
           </g>
         ))}
 
-        {/* lane labels (drawn over content) */}
+        {/* events lane — colored bands with labels */}
+        {(() => {
+          const row = rowFor('events');
+          if (!row) return null;
+          return events.map((ev, i) => {
+            const x0 = xFor(ev.start);
+            const w = Math.max(2, xFor(ev.end ?? ev.start) - x0);
+            const color = ev.color || 'var(--accent-warm, #ff8c42)';
+            return (
+              <g key={`ev-${i}`} style={{ pointerEvents: 'none' }}>
+                <rect x={x0} y={row.y + 13} width={w} height={row.h - 15} rx={2}
+                      fill={color} fillOpacity={0.7} />
+                {w > 26 && ev.label && (
+                  <text x={x0 + 3} y={row.y + row.h - 4} fontSize={8} fontWeight={700} fill="#0d0d0d">
+                    {ev.label}
+                  </text>
+                )}
+              </g>
+            );
+          });
+        })()}
+
+        {/* lane labels (drawn over content) — white per request */}
         {layout.rows.map((row) => (
           <text key={`lbl-${row.name}`} x={PAD_X + 6} y={row.y + 11} fontSize={9} fontWeight={700}
-                fill={row.kind === 'spectro' ? 'rgba(255,255,255,0.66)' : 'rgba(255,255,255,0.4)'}
+                fill="rgba(255,255,255,0.95)"
                 style={{ pointerEvents: 'none', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
             {row.name}
           </text>

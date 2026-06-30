@@ -110,8 +110,10 @@ const TABS = [
   // after chapters/phrases/stanzas/events/channels define the *what*.
   // See memory project_polish_tab.md.
   { id: 'polish',    label: 'Polish' },
-  { id: 'viewer',    label: 'Viewer' },
   { id: 'export',    label: 'Export' },
+  // Viewer sits AFTER Export — there's nothing to review until export has
+  // produced the device channel funscripts (<stem>.output / .forge).
+  { id: 'viewer',    label: 'Viewer' },
   // 'catalog' (2026-05-18) sits past Export with a visual separator —
   // utility tab, not part of the Project → Export pipeline. Source-of-
   // truth reference for every transform (tones / behaviors / structurals).
@@ -912,12 +914,16 @@ export default function App() {
     stanzas:  'events',
     events:   'stim',
     stim:     'polish',
-    polish:   'viewer',
-    viewer:   'export',
+    polish:   'export',
+    export:   'viewer',
   };
   // Tabs that CONSUME the analysis sidecars (chapters/phrases/channels/etc).
   // Analysis itself is deliberately excluded — it's where the work happens.
-  const ANALYSIS_CONSUMER_TABS = ['chapters', 'phrases', 'stanzas', 'events', 'stim', 'polish', 'viewer', 'export'];
+  // NB: 'viewer' is deliberately NOT here — it reviews the EXPORTED output
+  // (<stem>.output / .forge), which is independent of the analysis sidecars, so
+  // it stays reachable for a completed/media-only project. Its own empty state
+  // handles "no output yet".
+  const ANALYSIS_CONSUMER_TABS = ['chapters', 'phrases', 'stanzas', 'events', 'stim', 'polish', 'export'];
   // "Genuinely un-analyzed" = no chapters in memory, or the on-disk analysis
   // was produced by a stale analyzer version (a re-analyze is queued). This is
   // the gate signal — deliberately independent of `busy`, so a channel-preview
@@ -1341,7 +1347,7 @@ export default function App() {
           />
         )}
         {tab === 'catalog' && <CatalogTab />}
-        {tab !== 'library' && tab !== 'project' && tab !== 'generate' && tab !== 'analysis' && tab !== 'polish' && tab !== 'chapters' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && tab !== 'catalog' && (
+        {tab !== 'library' && tab !== 'project' && tab !== 'generate' && tab !== 'analysis' && tab !== 'polish' && tab !== 'viewer' && tab !== 'chapters' && tab !== 'phrases' && tab !== 'stanzas' && tab !== 'events' && tab !== 'stim' && tab !== 'export' && tab !== 'catalog' && (
           <section className="ff-placeholder">
             <h2>{TABS.find((t) => t.id === tab).label}</h2>
             <p>Screen not ported yet.</p>

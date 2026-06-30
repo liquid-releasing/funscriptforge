@@ -105,19 +105,102 @@ def load_device_outputs(path: str, *, max_points: int = 2000) -> dict:
     p = Path(path)
     stem = p.stem
     output_dir = p.parent / f"{stem}.output"
-    if output_dir.is_dir():
-        res = _load_from_dir(output_dir, stem, max_points)
-        if res["available"]:
-            res["source"] = "output"
-            return res
     forge = p.parent / f"{stem}.forge"
+    res = None
+    if output_dir.is_dir():
+        cand = _load_from_dir(output_dir, stem, max_points)
+        if cand["available"]:
+            cand["source"] = "output"
+            res = cand
+    if res is None and forge.is_file():
+        cand = _load_from_forge(forge, stem, max_points)
+        if cand["available"]:
+            cand["source"] = "forge"
+            res = cand
+    if res is None:
+        return {"available": False, "error": "no <stem>.output dir or .forge bundle",
+                "devices": []}
+    # Context lanes — audio waveform + events — sourced wherever they live (the
+    # loose output, the .forge cache, or the bundle). Spectrogram is omitted: it
+    # is only built during full analysis and isn't part of the export.
+    res["audio"] = _load_audio(p.parent, stem)
+    res["events"] = _load_events(p.parent, stem)
+    return res
+
+
+def _decimate_peaks(peaks: list, target: int = 3000) -> list:
+    n = len(peaks)
+    if n <= target:
+        return [abs(float(x)) for x in peaks]
+    out = []
+    for i in range(target):
+        lo = (i * n) // target
+        hi = max(lo + 1, ((i + 1) * n) // target)
+        out.append(max(abs(float(x)) for x in peaks[lo:hi]))
+    return out
+
+
+def _load_audio(parent: Path, stem: str) -> dict | None:
+    """Audio peak envelope for the viewer's audio lane, decimated for transport.
+    Tries the hidden cache, then the .forge bundle (the loose output has none)."""
+    def _shape(d: dict) -> dict | None:
+        peaks = d.get("peaks")
+        if not peaks:
+            return None
+        dur = d.get("duration_ms") or d.get("durationMs") or 0
+        dec = _decimate_peaks(peaks)
+        hop = (dur / len(dec)) if (dur and dec) else (d.get("hop_ms") or d.get("hopMs") or 10)
+        return {"peaks": dec, "hopMs": hop, "durationMs": dur}
+
+    cache = parent / f".{stem}.forge" / f"{stem}.audio.json"
+    if cache.is_file():
+        try:
+            return _shape(json.loads(cache.read_text(encoding="utf-8")))
+        except Exception:
+            pass
+    forge = parent / f"{stem}.forge"
     if forge.is_file():
-        res = _load_from_forge(forge, stem, max_points)
-        if res["available"]:
-            res["source"] = "forge"
-            return res
-    return {"available": False, "error": "no <stem>.output dir or .forge bundle",
-            "devices": []}
+        try:
+            z = zipfile.ZipFile(forge)
+            hit = next((n for n in z.namelist() if n.endswith("audio.json")), None)
+            if hit:
+                return _shape(json.loads(z.read(hit).decode("utf-8")))
+        except Exception:
+            pass
+    return None
+
+
+def _load_events(parent: Path, stem: str) -> list[dict]:
+    """Parse the Edger events.yml into timeline spans {start, end, label}."""
+    import yaml
+
+    raw = None
+    loose = parent / f"{stem}.output" / "Edger" / f"{stem}.events.yml"
+    if loose.is_file():
+        try:
+            raw = yaml.safe_load(loose.read_text(encoding="utf-8"))
+        except Exception:
+            raw = None
+    if raw is None:
+        forge = parent / f"{stem}.forge"
+        if forge.is_file():
+            try:
+                z = zipfile.ZipFile(forge)
+                hit = next((n for n in z.namelist() if n.endswith("events.yml")), None)
+                if hit:
+                    raw = yaml.safe_load(z.read(hit).decode("utf-8"))
+            except Exception:
+                raw = None
+    if not raw:
+        return []
+    out = []
+    for e in raw.get("events") or []:
+        t = e.get("time")
+        if t is None:
+            continue
+        dur = int((e.get("params") or {}).get("duration_ms") or 0)
+        out.append({"start": int(t), "end": int(t) + dur, "label": e.get("name", "")})
+    return out
 
 
 def _load_from_dir(output_dir: Path, stem: str, max_points: int) -> dict:

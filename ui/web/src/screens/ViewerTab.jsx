@@ -48,6 +48,7 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [currentMs, setCurrentMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [loadErr, setLoadErr] = useState(null);
   const videoElRef = useRef(null);
 
   const loadKey = project?.mediaPath || project?.path || null;
@@ -56,9 +57,10 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
     if (!loadKey) { setData(null); return undefined; }
     let live = true;
     setLoading(true);
+    setLoadErr(null);
     viewerLoad(loadKey, { maxPoints: 2000 })
       .then((res) => { if (live) { setData(res || null); setLoading(false); } })
-      .catch(() => { if (live) { setData(null); setLoading(false); } });
+      .catch((e) => { if (live) { setLoadErr(String(e?.message || e)); setData(null); setLoading(false); } });
     return () => { live = false; };
   }, [loadKey]);
 
@@ -80,17 +82,26 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
   const screechRegions = screech?.source_screech_regions || [];
   const capCount = screech?.generation_cap_regions?.length || 0;
 
-  const audioWaveform = trackPeaks?.peaks?.length ? trackPeaks : null;
+  // Prefer the live-analysis peaks if the project was analyzed this session;
+  // otherwise use the peaks the loader pulled from the export/.forge so the
+  // audio lane works on a finished, unanalyzed project too.
+  const audioWaveform = (trackPeaks?.peaks?.length ? trackPeaks : null)
+    || (data?.audio?.peaks?.length ? data.audio : null);
+  const events = data?.events || [];
   const getLiveMs = useCallback(() => {
     const v = videoElRef.current;
     return v ? v.currentTime * 1000 : null;
   }, []);
 
-  if (!project?.path) {
+  // The Viewer reviews the EXPORTED output, not the working funscript — so it
+  // must NOT require project.path. A finished/media-only project has no working
+  // funscript (the channels live in <stem>.output / .forge), yet mediaPath →
+  // that output is exactly what we want to load.
+  if (!loadKey) {
     return (
       <section className="ff-placeholder" style={{ padding: 24 }}>
         <h2>Viewer</h2>
-        <p>Open a project to review its generated output.</p>
+        <p>Open a project (or its media) to review its generated output.</p>
       </section>
     );
   }
@@ -105,6 +116,13 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
         <h2>Viewer</h2>
         <p>No generated output found yet. Export the project (Export tab) to produce
            device channel funscripts, then review them here.</p>
+        <p className="ff-meta" style={{ marginTop: 12, fontSize: 12, color: 'var(--text-dim, #6b7390)' }}>
+          Looked for output next to: <code>{loadKey || '(no media/funscript path)'}</code>
+        </p>
+        {loadErr && <p className="ff-meta" style={{ fontSize: 12, color: 'var(--danger, #ff5470)' }}>
+          load error: <code>{loadErr}</code></p>}
+        {data?.error && <p className="ff-meta" style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+          reason: <code>{data.error}</code></p>}
       </section>
     );
   }
@@ -173,6 +191,7 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
             waveform={audioWaveform}
             spectrogram={trackSpectrogram}
             intensity={intensity}
+            events={events}
             screechRegions={screechRegions}
             durationMs={durationMs}
             currentMs={currentMs}
@@ -183,8 +202,9 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
           />
         </main>
 
-        {/* Right — reference monitor, synced to the same baton */}
-        <aside style={{ width: 340, flexShrink: 0, padding: 12,
+        {/* Right — reference monitor, synced to the same baton. Kept narrow so
+            the lane stack (the star) gets the width. */}
+        <aside style={{ width: 272, flexShrink: 0, padding: 12,
                         borderLeft: '1px solid var(--border, #2d3148)' }}>
           <MediaViewer
             width="100%"
