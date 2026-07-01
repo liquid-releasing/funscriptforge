@@ -466,20 +466,12 @@ export default function PhrasesTab({
       id: p.id,
       at_ms: p.at_ms,
       end_ms: p.end_ms,
-      // No category-color wash. A "frantic"/"fast" phrase (#ff4b4b/#ff6b6b)
-      // filled the whole band solid red; on a fast clip that tiled the strip
-      // with red bars, and the one under the playhead read as a "red baton".
-      // Selection is a faint WHITE wash instead; phrase type reads from the
-      // label chip + border, never a colored slab.
-      fill: isTarget ? '#ffffff' : color,
-      fillOpacity: isTarget ? 0.06 : 0,
-      // Border is NEUTRAL (white), never the category color. A frantic phrase
-      // (#ff4b4b) used to draw a red border box around the band; when the
-      // playhead sat on it, the white baton read as "a baton with a red
-      // margin". Type shows on the label chip; the border is just a delimiter.
-      stroke: isTarget ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
+      fill: color,
+      fillOpacity: isTarget ? 0.18 : 0.08,
+      // White = "in my edit set", crisp; skipped keep the dim category color.
+      stroke: isTarget ? '#ffffff' : color,
       strokeWidth: isTarget ? 2 : 1,
-      strokeOpacity: isTarget ? 0.9 : 0.3,
+      strokeOpacity: isTarget ? 1 : 0.45,
       focused: isFocused,
       label: `P${p.number ?? i + 1}`,
       labelBg: isTarget ? color : 'rgba(0,0,0,0.45)',
