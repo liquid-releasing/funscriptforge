@@ -451,11 +451,14 @@ export default function PhrasesTab({
       at_ms: p.at_ms,
       end_ms: p.end_ms,
       fill: color,
-      fillOpacity: isTarget ? 0.18 : 0.08,
+      // Faint wash only — a hint, not a slab. A "fast" phrase (#ff6b6b) at the
+      // clip start used to render as a solid red bar under the playhead and read
+      // as a stray baton; the type still shows via the label chip + border.
+      fillOpacity: isTarget ? 0.09 : 0.04,
       // White = "in my edit set", crisp; skipped keep the dim category color.
       stroke: isTarget ? '#ffffff' : color,
       strokeWidth: isTarget ? 2 : 1,
-      strokeOpacity: isTarget ? 1 : 0.45,
+      strokeOpacity: isTarget ? 0.9 : 0.3,
       focused: isFocused,
       label: `P${p.number ?? i + 1}`,
       labelBg: isTarget ? color : 'rgba(0,0,0,0.45)',
