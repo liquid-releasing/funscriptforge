@@ -679,62 +679,101 @@ class _BeatAccent(PhraseTransform):
         return actions
 
 
+def _beat_steps(p):
+    """Read the 8 per-beat emphasis sliders (0..100 → 0.0..1.0)."""
+    return [
+        max(0.0, min(1.0, float(p.get(f"beat{i}", 100)) / 100.0))
+        for i in range(1, 9)
+    ]
+
+
+def _beat_sequencer(actions, steps, anchor_mode):
+    """Shared 8-step per-beat groove sequencer for Hero Beat / Short Beats.
+
+    Detects stroke reversals (extrema) as beats, assigns each action to the
+    nearest beat, and scales that beat's stroke by its step's percent (an
+    8-step repeating cycle). The anchor is LOCAL to each beat's own stroke
+    (bounded by its neighbouring reversals), so a lifted stroke keeps its own
+    bottom/center instead of snapping to a global 0/50:
+
+        anchor_mode='floor'  → keep the beat's own BOTTOM, ease the top down
+                               (Hero Beat — lands at its current bottom).
+        anchor_mode='center' → keep the beat's own CENTER, shrink both ends
+                               equally (Short Beats — shorter about its center).
+
+    Preserves beat count + timing; scales positions only. All-100 is identity.
+    Self-contained: it sequences the script's own reversals, not a music grid.
+    """
+    if len(actions) < 2:
+        return actions
+    if all(s == 1.0 for s in steps):
+        return actions  # identity — nothing pulled in
+
+    extrema_idx = _find_extrema(actions, min_prominence=5)
+    beat_times = [actions[i]["at"] for i in extrema_idx]
+    if len(beat_times) < 1:
+        return actions
+
+    # Per-beat LOCAL anchor from the stroke around each reversal (bounded by its
+    # neighbours): floor = local min, center = midpoint of local min/max.
+    n = len(extrema_idx)
+    anchors = []
+    for k in range(n):
+        a0 = extrema_idx[k - 1] if k > 0 else 0
+        a1 = extrema_idx[k + 1] if k < n - 1 else len(actions) - 1
+        seg = [actions[i]["pos"] for i in range(a0, a1 + 1)]
+        lo, hi = min(seg), max(seg)
+        anchors.append(lo if anchor_mode == "floor" else (lo + hi) / 2.0)
+
+    import bisect
+    for a in actions:
+        t = a["at"]
+        j = bisect.bisect_left(beat_times, t)
+        if j <= 0:
+            nb = 0
+        elif j >= len(beat_times):
+            nb = len(beat_times) - 1
+        else:
+            nb = j if (beat_times[j] - t) < (t - beat_times[j - 1]) else j - 1
+        scale = steps[nb % 8]
+        anchor = anchors[nb]
+        a["pos"] = max(0, min(100, int(round(anchor + (a["pos"] - anchor) * scale))))
+
+    return actions
+
+
 class _HeroBeat(PhraseTransform):
-    """8-step groove sequencer over the funscript's OWN beats.
+    """8-step groove sequencer over the funscript's OWN beats — FLOOR-anchored.
 
-    Detects stroke reversals (extrema) as beats, assigns each to one of eight
-    repeating steps, and scales that beat's stroke DEPTH (distance from the
-    midpoint 50) by the step's emphasis percent:
+    Assigns each stroke reversal to one of eight repeating steps and scales that
+    beat's stroke by the step's percent while pinning the beat's OWN bottom. So
+    the emphasis is "how tall this beat is": 100 = full height (kept), 80 = 80%
+    as tall, 0 = flat to its floor. The bottom of each stroke stays on its low
+    rail — 0 for a full stroke, its current bottom for a lifted one — and only
+    the TOP eases down, carving a groove without lifting the floor. Short Beats
+    is the center-anchored twin. All-100 (the default) is identity.
 
-        100 = full depth (kept)   ·   0 = flat to centre   ·   50 = half depth
-
-    Set the hero beats to 100 and the rest lower to carve a groove out of an
-    even wall of strokes (your "wall of red, 100% emphasised, smaller for
-    deemphasised"). All-100 (the default) is identity, so simply selecting
-    the transform changes nothing until you pull steps down.
-
-    Self-contained by design: it sequences the script's own reversals, not an
-    external beat grid — editing uses the beats a script already has
-    (generation is where you align to the music). v1 "shape existing": it
-    scales existing strokes; it does not synthesise new ones.
-
-    Each action is scaled by the emphasis of the nearest beat in time, so a
-    whole stroke shrinks or stays with its beat. Depth scales around 50 (like
-    Amplitude Scale), so peaks and troughs both ease toward centre as their
-    step's emphasis drops.
+    Self-contained: it sequences the script's own reversals, not an external
+    beat grid (generation is where you align to the music); it scales existing
+    strokes, it does not synthesise new ones.
     """
 
     def _transform(self, actions, p):
-        if len(actions) < 2:
-            return actions
+        return _beat_sequencer(actions, _beat_steps(p), "floor")
 
-        steps = [
-            max(0.0, min(1.0, float(p.get(f"beat{i}", 100)) / 100.0))
-            for i in range(1, 9)
-        ]
-        if all(s == 1.0 for s in steps):
-            return actions  # identity — nothing pulled down
 
-        extrema_idx = _find_extrema(actions, min_prominence=5)
-        beat_times = [actions[i]["at"] for i in extrema_idx]
-        if len(beat_times) < 1:
-            return actions
+class _ShortBeats(PhraseTransform):
+    """8-step groove sequencer — the CENTER-anchored twin of Hero Beat.
 
-        import bisect
-        for a in actions:
-            t = a["at"]
-            # Nearest beat (in time) owns this action.
-            j = bisect.bisect_left(beat_times, t)
-            if j <= 0:
-                nb = 0
-            elif j >= len(beat_times):
-                nb = len(beat_times) - 1
-            else:
-                nb = j if (beat_times[j] - t) < (t - beat_times[j - 1]) else j - 1
-            scale = steps[nb % 8]
-            a["pos"] = max(0, min(100, int(round(50 + (a["pos"] - 50) * scale))))
+    Identical per-beat control, but it pins each beat's OWN center and shrinks
+    both ends equally: a de-emphasized beat loses off the TOP and the BOTTOM,
+    staying centered where it sits (80 = 80% as tall = 10% off each end). Use
+    Hero Beat to keep strokes on the floor; use Short Beats to keep them
+    centered where they already are. All-100 (default) is identity.
+    """
 
-        return actions
+    def _transform(self, actions, p):
+        return _beat_sequencer(actions, _beat_steps(p), "center")
 
 
 class _HalveTempo(PhraseTransform):
@@ -1582,7 +1621,7 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
         _HeroBeat(
             key="hero_beat",
             name="Hero Beat",
-            description="8-step groove sequencer over the script's own beats. Each slider sets how much depth that beat keeps (100 = full, 0 = flat). Set the hero beats high and the rest lower to carve a groove out of an even wall of strokes. All-100 = no change.",
+            description="8-step groove sequencer over the script's own beats. Each slider sets how TALL that beat's stroke is — its own bottom stays put and only the top eases down (100 = full height, 80 = 80% as tall, 0 = flat to its floor). Set the hero beats high and the rest lower to carve a groove out of an even wall of strokes. Short Beats is the center-anchored twin. All-100 = no change.",
             # Picker grouping only: Hero Beat reshapes rhythmic structure, so
             # it lives under Structural in the UI. It is NOT structural in the
             # data sense (structural flag stays False) — it preserves beat
@@ -1594,7 +1633,22 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
                     label=f"Beat {i}", type="int", default=100,
                     min_val=0, max_val=100, step=5,
                     help=(f"Emphasis for step {i} of the repeating 8-beat cycle. "
-                          "100 = full depth (kept), 0 = flat to centre."),
+                          "100 = full height (kept), 0 = flat to the floor."),
+                )
+                for i in range(1, 9)
+            },
+        ),
+        _ShortBeats(
+            key="short_beats",
+            name="Short Beats",
+            description="8-step groove sequencer (center-anchored twin of Hero Beat). Each slider shortens that beat's stroke around its OWN center — equally off the top and bottom, staying where it sits (100 = full, 80 = 80% as tall / 10% off each end, 0 = flat). Hero Beat keeps strokes on the floor; Short Beats keeps them centered. All-100 = no change.",
+            category="structural",
+            params={
+                f"beat{i}": TransformParam(
+                    label=f"Beat {i}", type="int", default=100,
+                    min_val=0, max_val=100, step=5,
+                    help=(f"Length for step {i} of the repeating 8-beat cycle. "
+                          "100 = full, 80 = 80% as tall (10% off each end), 0 = flat."),
                 )
                 for i in range(1, 9)
             },
@@ -1813,7 +1867,7 @@ TRANSFORM_ORDER: List[str] = [
     # Performance / Device Realism
     "performance", "tame",
     # Rhythmic Patterns
-    "beat_accent", "hero_beat",
+    "beat_accent", "hero_beat", "short_beats",
     # Timing / Sync
     "nudge",
     # Replacement

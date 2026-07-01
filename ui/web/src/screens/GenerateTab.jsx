@@ -656,16 +656,20 @@ export default function GenerateTab({
             />
             {/* Texture/Life — a global generation control (not per-lane): how
                 much the quiet beats pull off the rails for the gold mid
-                shoulder. Hard-capped at 0.35 (>=0.4 breaks the bimodal law). */}
+                shoulder. Low = crisp, pinned to the rails (mechanical); high =
+                more life, quiet beats ease off the rails (organic). Hard-capped
+                at 0.35 (>=0.4 breaks the bimodal law → rails collapse to a bell). */}
             <div style={{ borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
               <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--warn, #ffb547)', letterSpacing: '0.04em', minWidth: 58 }}>TEXTURE</span>
-              <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>life — quiet beats ease off the rails</span>
+              <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>life — turn up to ease quiet beats off the rails</span>
+              <span style={{ fontSize: 9.5, color: 'var(--text-dim)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>on&nbsp;the&nbsp;rails</span>
               <input
                 type="range" min={0} max={35} value={Math.round(texture * 100)}
                 onChange={(e) => setTexture(Number(e.target.value) / 100)}
-                style={{ flex: 1, maxWidth: 200, marginLeft: 'auto', accentColor: 'var(--warn, #ffb547)', cursor: 'pointer' }}
-                title="bounded amplitude variation — capped at 0.35 (above that the rails collapse into a bell)"
+                style={{ flex: 1, maxWidth: 160, accentColor: 'var(--warn, #ffb547)', cursor: 'pointer' }}
+                title="Bounded amplitude variation. Low = quiet beats stay pinned to the rails (crisp, mechanical); high = they ease off the rails (more life). Capped at 0.35 — above that the two rails collapse into a bell."
               />
+              <span style={{ fontSize: 9.5, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>more&nbsp;life</span>
               <span className="mono" style={{ fontSize: 11, color: 'var(--text-soft)', minWidth: 30 }}>{texture.toFixed(2)}</span>
             </div>
           </div>

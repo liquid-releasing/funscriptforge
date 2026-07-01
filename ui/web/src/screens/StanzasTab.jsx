@@ -399,7 +399,8 @@ export default function StanzasTab({
         // the session ahead of disk (recovers on next Apply) — surface but
         // don't roll back. Mirrors PhrasesTab.handleApply.
         await saveWorkingFunscript(project.path, res.actions);
-        setEditedStanzaIds([]);
+        // KEEP the stanza selection so the user can layer another transform on
+        // the SAME stanzas (mirrors PhrasesTab). Reset only the transform pick.
         setTransformId(null);
         setParams({});
       }
@@ -830,8 +831,8 @@ export default function StanzasTab({
           onCancel={() => { setTransformId(null); setParams({}); }}
           onUndo={undoTransform}
           canUndo={canUndo}
-          undoLabel="Undo"
-          undoTitle={canUndo ? 'Undo the last applied transform' : 'Nothing to undo yet'}
+          undoLabel={undoStack.length > 0 ? `Undo (${undoStack.length})` : 'Undo'}
+          undoTitle={canUndo ? `Undo the last applied transform — ${undoStack.length} stacked on this chapter` : 'Nothing to undo yet'}
         />
       </div>
     </div>

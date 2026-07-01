@@ -62,6 +62,7 @@ _EXPECTED_KEYS = {
     "final_smooth",
     "beat_accent",
     "hero_beat",
+    "short_beats",
     "halve_tempo",
     "tame",
     # Timing / Sync
@@ -1591,8 +1592,9 @@ class TestRange(unittest.TestCase):
 
 class TestHeroBeat(unittest.TestCase):
     """hero_beat: an 8-step depth sequencer over the script's own beats
-    (stroke reversals). Each step scales that beat's stroke depth (distance
-    from 50). All-100 is identity; pulling steps down carves a groove."""
+    (stroke reversals). Each step scales that beat's positions by emphasis%
+    anchored at the floor (0) — keeps the bottom, eases the top down. All-100
+    is identity; pulling steps down carves a groove."""
 
     @staticmethod
     def _wall(n=64):
@@ -1618,11 +1620,30 @@ class TestHeroBeat(unittest.TestCase):
 
     def test_pulling_steps_down_reduces_overall_depth(self):
         acts = self._wall()
-        before = sum(abs(a["pos"] - 50) for a in acts)
+        before = sum(a["pos"] for a in acts)          # total upward reach
         out = TRANSFORM_CATALOG["hero_beat"].apply(
             acts, self._all(beat2=0, beat4=0, beat6=0, beat8=0))
-        after = sum(abs(a["pos"] - 50) for a in out)
-        self.assertLess(after, before)  # deemphasised beats eased toward centre
+        after = sum(a["pos"] for a in out)
+        # de-emphasised beats ease their TOPS down toward the floor
+        self.assertLess(after, before)
+
+    def test_floor_is_kept_tops_ease_down(self):
+        # Every beat at 60% → pos * 0.6: bottoms (0) stay, tops (100) → ~60.
+        acts = self._wall()
+        out = TRANSFORM_CATALOG["hero_beat"].apply(
+            acts, self._all(**{f"beat{i}": 60 for i in range(1, 9)}))
+        pos = [a["pos"] for a in out]
+        self.assertEqual(min(pos), 0)        # floor kept on the low rail
+        self.assertLessEqual(max(pos), 60)   # tops eased down to ~60%
+
+    def test_lifted_stroke_keeps_its_own_bottom(self):
+        # Beats sitting at 40↔90 → 60% keeps the bottom at 40, not dragged to 0.
+        acts = [{"at": i * 100, "pos": 40 if i % 2 == 0 else 90} for i in range(64)]
+        out = TRANSFORM_CATALOG["hero_beat"].apply(
+            acts, self._all(**{f"beat{i}": 60 for i in range(1, 9)}))
+        pos = [a["pos"] for a in out]
+        self.assertEqual(min(pos), 40)       # own bottom kept
+        self.assertLessEqual(max(pos), 70)   # 40 + (90-40)*.6
 
     def test_positions_stay_in_range(self):
         acts = self._wall()
@@ -1631,6 +1652,52 @@ class TestHeroBeat(unittest.TestCase):
 
     def test_not_structural(self):
         self.assertFalse(TRANSFORM_CATALOG["hero_beat"].structural)
+
+
+class TestShortBeats(unittest.TestCase):
+    """short_beats: the center-anchored twin of hero_beat — same 8-step
+    per-beat control, but shrinks each beat around its OWN center."""
+
+    @staticmethod
+    def _wall(n=64, lo=0, hi=100):
+        return [{"at": i * 100, "pos": lo if i % 2 == 0 else hi} for i in range(n)]
+
+    @staticmethod
+    def _all(**over):
+        p = {f"beat{i}": 100 for i in range(1, 9)}
+        p.update(over)
+        return p
+
+    def test_all_100_is_identity(self):
+        acts = self._wall()
+        out = TRANSFORM_CATALOG["short_beats"].apply(acts, self._all())
+        self.assertEqual([a["pos"] for a in out], [a["pos"] for a in acts])
+
+    def test_60_keeps_center_trims_both_ends(self):
+        acts = self._wall()  # 0 ↔ 100, center 50
+        out = TRANSFORM_CATALOG["short_beats"].apply(
+            acts, self._all(**{f"beat{i}": 60 for i in range(1, 9)}))
+        pos = [a["pos"] for a in out]
+        self.assertEqual(min(pos), 20)   # centered on 50, not the floor
+        self.assertEqual(max(pos), 80)
+
+    def test_lifted_stroke_keeps_its_own_center(self):
+        # Beats sitting at 40↔90 (center 65) → 60% stays centered at 65.
+        acts = self._wall(lo=40, hi=90)
+        out = TRANSFORM_CATALOG["short_beats"].apply(
+            acts, self._all(**{f"beat{i}": 60 for i in range(1, 9)}))
+        pos = [a["pos"] for a in out]
+        self.assertEqual(min(pos), 50)   # 65 + (40-65)*.6
+        self.assertEqual(max(pos), 80)   # 65 + (90-65)*.6
+
+    def test_preserves_count_and_timing(self):
+        acts = self._wall()
+        out = TRANSFORM_CATALOG["short_beats"].apply(acts, self._all(beat2=0, beat4=40))
+        self.assertEqual(len(out), len(acts))
+        self.assertEqual([a["at"] for a in out], [a["at"] for a in acts])
+
+    def test_not_structural(self):
+        self.assertFalse(TRANSFORM_CATALOG["short_beats"].structural)
 
 
 class TestConsolidatedAliasesHidden(unittest.TestCase):

@@ -555,7 +555,10 @@ export default function PhrasesTab({
         // patched above; a save failure leaves the session ahead of disk
         // (recoverable on the next Apply) — surface it but don't roll back.
         await saveWorkingFunscript(project.path, res.actions);
-        setEditedPhraseIds([]);
+        // KEEP the phrase selection so the user can layer another transform on
+        // the SAME phrases (user: "after apply, keep the selection"). Reset only
+        // the transform pick so the next edit is a deliberate choice; the fresh
+        // preview then computes against the just-applied baseline.
         setTransformId(null);
         setParams({});
       }
@@ -1019,8 +1022,8 @@ export default function PhrasesTab({
           onCancel={() => { setTransformId(null); setParams({}); }}
           onUndo={undoTransform}
           canUndo={canUndo}
-          undoLabel="Undo"
-          undoTitle={canUndo ? 'Undo the last applied transform' : 'Nothing to undo yet'}
+          undoLabel={undoStack.length > 0 ? `Undo (${undoStack.length})` : 'Undo'}
+          undoTitle={canUndo ? `Undo the last applied transform — ${undoStack.length} stacked on this chapter` : 'Nothing to undo yet'}
         />
       </div>
     </div>

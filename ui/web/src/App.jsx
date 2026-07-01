@@ -1076,27 +1076,28 @@ export default function App() {
   // so they register null on the last chapter (the primary "chain to <next>" is
   // the action there).
   const CHAPTER_NAV_TABS = ['chapters', 'stim', 'events', 'phrases', 'stanzas'];
-  if (CHAPTER_NAV_TABS.includes(tab) && chapterNav?.label && !gateMsg && !busy) {
-    footerSecondary = { label: chapterNav.label, onClick: chapterNav.run };
-  }
   // Completion gate — chapter-scoped tabs that REPORT `complete` (Phrases/
-  // Stanzas today) keep the primary LOCKED and reading "Chain to <next>"
-  // until every chapter has been considered (user: "do no chain until all
-  // chapters have been considered"). Tabs that don't report `complete`
-  // (Chapters/Channels/Events) leave it undefined → no gate → unchanged.
+  // Stanzas today) drive the whole footer off it; tabs that don't
+  // (Chapters/Channels/Events) leave it undefined → old behavior.
   const chapterGateActive = CHAPTER_NAV_TABS.includes(tab)
     && chapterNav && typeof chapterNav.complete === 'boolean';
   const chapterIncomplete = chapterGateActive && !chapterNav.complete;
+  if (CHAPTER_NAV_TABS.includes(tab) && chapterNav?.label && !gateMsg && !busy && !chapterGateActive) {
+    // UNGATED chapter tabs: walk is a secondary beside the always-available
+    // "Accept and chain" primary (unchanged).
+    footerSecondary = { label: chapterNav.label, onClick: chapterNav.run };
+  }
   if (chapterIncomplete && !gateMsg && !busy) {
-    // Not every chapter considered yet → the RED primary IS the next action
-    // (accept THIS chapter / walk), never a chain (user: "no chain until all
-    // chapters considered" + "make the next action easy, not the skip").
-    // Chaining only appears once complete. The tab's own "Accept all as-is"
-    // button is the one-click alternative to walking each chapter.
+    // GATED tab, not complete → the RED primary IS the walk (accept this
+    // chapter); NO secondary. Chaining appears only once every chapter is
+    // considered (user: "no chain until all chapters considered" + "make the
+    // next action easy, not the skip"). "Accept all as-is" is the one-click
+    // alternative. When gated AND complete, both `if`s are skipped → default
+    // primary "Accept and chain to <next>" with NO redundant walk secondary.
     const nextLabel = nextTab ? (TABS.find((t) => t.id === nextTab)?.label ?? nextTab) : '';
     footerPrimaryLabel = chapterNav.label;   // "Accept and next chapter" / last
     footerOnPrimary = chapterNav.run;        // accept this chapter + advance
-    footerSecondary = null;                  // primary already hosts the walk
+    footerSecondary = null;
     footerSummary = `${chapterNav.considered ?? 0} of ${chapterNav.total ?? 0} chapters considered · accept each (or “Accept all as-is”) to unlock chaining${nextLabel ? ` to ${nextLabel}` : ''}`;
   }
 
