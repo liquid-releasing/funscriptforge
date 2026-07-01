@@ -439,6 +439,22 @@ export default function PhrasesTab({
   // Focused phrase (single mode) already layers a white inset ring; this
   // makes edit-set and single-focus selection read the same way.
   const editedPhraseIdSet = useMemo(() => new Set(editedPhraseIds), [editedPhraseIds]);
+
+  // p98 velocity over the FULL track — the same colormap scale the Chapters
+  // FunscriptChart uses. Passed to ChapterContextStrip so a fast phrase renders
+  // the same color here as in Chapters instead of self-normalizing to a solid
+  // red bar (local-max fallback made a fast phrase's peak divide by itself).
+  const velocityMax = useMemo(() => {
+    if (!actions || actions.length < 2) return 0;
+    const vs = [];
+    for (let i = 1; i < actions.length; i++) {
+      const dt = Math.max(1, actions[i].at - actions[i - 1].at);
+      vs.push(Math.abs(actions[i].pos - actions[i - 1].pos) / dt);
+    }
+    if (!vs.length) return 0;
+    vs.sort((a, b) => a - b);
+    return vs[Math.min(vs.length - 1, Math.floor(vs.length * 0.98))] || vs[vs.length - 1];
+  }, [actions]);
   const phraseBands = useMemo(() => phrasesInScope.map((p, i) => {
     const tag = BEHAVIOR_TAGS.find((t) => t.id === p.tag);
     const sid = shapeByAtMs.get(p.at_ms);
@@ -741,6 +757,7 @@ export default function PhrasesTab({
           // to the tab-level title row above so the button sits above
           // the right-column viewer and stays put across collapse.
           height={180}
+          velocityMax={velocityMax}
           currentMs={currentMs}
           onSeek={setCurrentMs}
         />

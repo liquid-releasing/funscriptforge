@@ -301,6 +301,21 @@ export default function StanzasTab({
 
   // Project stanzas into ChapterContextStrip's band vocabulary.
   const editedStanzaIdSet = useMemo(() => new Set(editedStanzaIds), [editedStanzaIds]);
+
+  // p98 velocity over the FULL track — shared colormap scale (mirrors
+  // PhrasesTab / Chapters FunscriptChart) so a fast stanza renders the same
+  // color as elsewhere instead of self-normalizing to a solid red bar.
+  const velocityMax = useMemo(() => {
+    if (!actions || actions.length < 2) return 0;
+    const vs = [];
+    for (let i = 1; i < actions.length; i++) {
+      const dt = Math.max(1, actions[i].at - actions[i - 1].at);
+      vs.push(Math.abs(actions[i].pos - actions[i - 1].pos) / dt);
+    }
+    if (!vs.length) return 0;
+    vs.sort((a, b) => a - b);
+    return vs[Math.min(vs.length - 1, Math.floor(vs.length * 0.98))] || vs[vs.length - 1];
+  }, [actions]);
   const stanzaBands = useMemo(() => stanzasInScope.map((s, i) => {
     const m = findMode(s.mode);
     const color = m?.color || 'var(--text-dim)';
@@ -609,6 +624,7 @@ export default function StanzasTab({
           // to the tab-level title row above so the button sits above
           // the right-column viewer and stays put across collapse.
           height={180}
+          velocityMax={velocityMax}
           currentMs={currentMs}
           onSeek={setCurrentMs}
         />
