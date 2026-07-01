@@ -1060,6 +1060,12 @@ export default function App() {
     } else {
       footerSummary = 'Continue with the generated funscript to start editing.';
     }
+  } else if (tab === 'export' && !gateMsg && !busy) {
+    // Export writes via its own "Export All" button; the footer's job is to
+    // jump to the Viewer to review what was produced. Plain red "View".
+    footerPrimaryLabel = 'View';
+    footerOnPrimary = () => setTab('viewer');
+    footerSummary = 'Review the exported output in the Viewer.';
   }
 
   // Chapter-scoped tabs host their per-chapter accept on the footer as the

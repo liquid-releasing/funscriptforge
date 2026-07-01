@@ -331,11 +331,11 @@ export default function ChannelStack({
         {/* baton — big shared playhead */}
         {getLiveMs ? (
           <line ref={batonRef} x1={0} x2={0} y1={0} y2={layout.rulerY}
-                stroke="var(--accent, #ff4b4b)" strokeWidth={2}
+                stroke="rgba(255,255,255,0.9)" strokeWidth={2}
                 style={{ pointerEvents: 'none', display: 'none' }} />
         ) : (currentMs != null && currentMs >= start && currentMs <= end && (
           <line x1={xFor(currentMs)} x2={xFor(currentMs)} y1={0} y2={layout.rulerY}
-                stroke="var(--accent, #ff4b4b)" strokeWidth={2} style={{ pointerEvents: 'none' }} />
+                stroke="rgba(255,255,255,0.9)" strokeWidth={2} style={{ pointerEvents: 'none' }} />
         ))}
       </svg>
     </div>
