@@ -332,8 +332,10 @@ export default function StanzasTab({
       fillOpacity: isTarget ? 0.06 : 0,
       // White = "in my edit set" (orthogonal to category color), so the
       // selection stays legible even when the mode/cluster color is the
-      // wash. Mirrors PhrasesTab. Skipped keep the dim category border.
-      stroke: isTarget ? '#ffffff' : color,
+      // wash. Border is NEUTRAL (white), never the category color, so a red
+      // cluster no longer draws a red border box that reads as a "red baton"
+      // under the playhead. Mirrors PhrasesTab; type shows on the label chip.
+      stroke: isTarget ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
       strokeWidth: isTarget ? 2 : 1,
       strokeOpacity: isTarget ? 0.9 : 0.3,
       focused: isFocused,
