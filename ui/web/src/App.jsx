@@ -1079,12 +1079,36 @@ export default function App() {
   if (CHAPTER_NAV_TABS.includes(tab) && chapterNav?.label && !gateMsg && !busy) {
     footerSecondary = { label: chapterNav.label, onClick: chapterNav.run };
   }
+  // Completion gate — chapter-scoped tabs that REPORT `complete` (Phrases/
+  // Stanzas today) keep the primary LOCKED and reading "Chain to <next>"
+  // until every chapter has been considered (user: "do no chain until all
+  // chapters have been considered"). Tabs that don't report `complete`
+  // (Chapters/Channels/Events) leave it undefined → no gate → unchanged.
+  const chapterGateActive = CHAPTER_NAV_TABS.includes(tab)
+    && chapterNav && typeof chapterNav.complete === 'boolean';
+  const chapterIncomplete = chapterGateActive && !chapterNav.complete;
+  if (chapterIncomplete && !gateMsg && !busy) {
+    // Not every chapter considered yet → the RED primary IS the next action
+    // (accept THIS chapter / walk), never a chain (user: "no chain until all
+    // chapters considered" + "make the next action easy, not the skip").
+    // Chaining only appears once complete. The tab's own "Accept all as-is"
+    // button is the one-click alternative to walking each chapter.
+    const nextLabel = nextTab ? (TABS.find((t) => t.id === nextTab)?.label ?? nextTab) : '';
+    footerPrimaryLabel = chapterNav.label;   // "Accept and next chapter" / last
+    footerOnPrimary = chapterNav.run;        // accept this chapter + advance
+    footerSecondary = null;                  // primary already hosts the walk
+    footerSummary = `${chapterNav.considered ?? 0} of ${chapterNav.total ?? 0} chapters considered · accept each (or “Accept all as-is”) to unlock chaining${nextLabel ? ` to ${nextLabel}` : ''}`;
+  }
 
   const handleAccept = async () => {
     if (gateMsg) {
       // Gate blocks; nothing to advance. The summary already shows why.
       return;
     }
+    // Completion gate — a chapter-scoped tab that hasn't considered every
+    // chapter can't chain yet (belt-and-suspenders; the button is also
+    // disabled via `ready`).
+    if (chapterIncomplete) return;
     if (!nextTab) return;
     // If analysis was interrupted during chapter_clips (sidecars on disk,
     // clips short), Accept finishes it first — no separate Resume button

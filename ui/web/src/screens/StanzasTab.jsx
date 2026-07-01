@@ -106,6 +106,20 @@ export default function StanzasTab({
     );
   };
 
+  // ── Pass-1 accept model: completion gate + transform Undo (mirrors
+  // PhrasesTab). Chapters the user has CONSIDERED gate the footer chain;
+  // the undo/redo stacks power the "oops, I just applied" fix. Reset per
+  // project.
+  const [consideredChapterIds, setConsideredChapterIds] = useState(() => new Set());
+  useEffect(() => { setConsideredChapterIds(new Set()); }, [project?.path]);
+  const markChapterConsidered = (id) => {
+    if (id == null) return;
+    setConsideredChapterIds((s) => (s.has(id) ? s : new Set(s).add(id)));
+  };
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  useEffect(() => { setUndoStack([]); setRedoStack([]); }, [project?.path]);
+
   const [activeModeId, setActiveModeId] = useState(null);
   const [activeClusterId, setActiveClusterId] = useState(null);
 
@@ -164,6 +178,8 @@ export default function StanzasTab({
   const navIsLast = activeChapterIdx < 0 || activeChapterIdx >= chapters.length - 1;
   const navRunRef = useRef(() => {});
   navRunRef.current = () => {
+    // Accepting a chapter marks it CONSIDERED — unlocks the footer chain.
+    markChapterConsidered(activeChapter?.id);
     if (activeChapterIdx >= 0 && activeChapterIdx < chapters.length - 1) {
       setActiveChapterId(chapters[activeChapterIdx + 1].id);   // advance
     } else if (project?.path) {
@@ -177,6 +193,8 @@ export default function StanzasTab({
         .finally(() => setBusy?.(null));
     }
   };
+  const chaptersConsideredComplete = chapters.length > 0
+    && chapters.every((c) => consideredChapterIds.has(c.id));
   useEffect(() => {
     if (!onRegisterChapterNav) return undefined;
     onRegisterChapterNav(
@@ -185,11 +203,14 @@ export default function StanzasTab({
             hasNext: !navIsLast,
             label: navIsLast ? 'Accept last chapter changes' : 'Accept and next chapter',
             run: () => navRunRef.current(),
+            complete: chaptersConsideredComplete,
+            considered: chapters.filter((c) => consideredChapterIds.has(c.id)).length,
+            total: chapters.length,
           }
         : null,
     );
     return () => onRegisterChapterNav(null);
-  }, [navIsLast, chapters.length, onRegisterChapterNav]);
+  }, [navIsLast, chapters.length, onRegisterChapterNav, chaptersConsideredComplete, consideredChapterIds]);
 
   // Stanzas + clusters pulled from <stem>.chapters.json via readStanzas.
   // Cached at App.jsx level keyed by funscript path so tab switches
@@ -369,6 +390,9 @@ export default function StanzasTab({
         project.path, transformId, params, previewSpans,
       );
       if (res && Array.isArray(res.actions)) {
+        // Snapshot the PRE-apply action list for Undo, then roll forward.
+        setUndoStack((s) => [...s, actions]);
+        setRedoStack([]);
         onActionsPatch(res.actions);
         // Write-through to the durable working funscript (survives reopen,
         // read by Export). In-memory is patched above; a save failure leaves
@@ -384,6 +408,28 @@ export default function StanzasTab({
     } finally {
       setBusy?.(null);
     }
+  };
+
+  // Undo/Redo the applied-transform stack (mirrors PhrasesTab).
+  const canUndo = undoStack.length > 0;
+  const undoTransform = () => {
+    if (!undoStack.length) return;
+    const prev = undoStack[undoStack.length - 1];
+    setUndoStack((s) => s.slice(0, -1));
+    setRedoStack((r) => [...r, actions]);
+    onActionsPatch(prev);
+    if (project?.path) saveWorkingFunscript(project.path, prev).catch(() => {});
+  };
+  const redoTransform = () => {
+    if (!redoStack.length) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack((r) => r.slice(0, -1));
+    setUndoStack((s) => [...s, actions]);
+    onActionsPatch(next);
+    if (project?.path) saveWorkingFunscript(project.path, next).catch(() => {});
+  };
+  const acceptAllChaptersAsIs = () => {
+    setConsideredChapterIds(new Set(chapters.map((c) => c.id)));
   };
 
   // Focused stanza derived from id + scope. Mirrors PhrasesTab.
@@ -530,6 +576,23 @@ export default function StanzasTab({
             height={36}
           />
         </div>
+        {/* Accept-all above the chapter list — one click unlocks chaining
+            (mirrors PhrasesTab). Preserves any transforms already made. */}
+        <button
+          onClick={acceptAllChaptersAsIs}
+          disabled={chaptersConsideredComplete}
+          title="Accept every chapter as-is (no transforms needed) and unlock chaining"
+          style={{
+            flexShrink: 0, padding: '5px 10px', borderRadius: 6,
+            border: '1px solid var(--border)', background: 'transparent',
+            color: chaptersConsideredComplete ? 'var(--text-dim)' : 'var(--text)',
+            cursor: chaptersConsideredComplete ? 'default' : 'pointer',
+            opacity: chaptersConsideredComplete ? 0.6 : 1,
+            fontFamily: 'inherit', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+          }}
+        >
+          {chaptersConsideredComplete ? 'All chapters considered ✓' : 'Accept all as-is'}
+        </button>
       </HeaderRow>
 
       {/* ── Title row — tab-level header: slice identity on the left,
@@ -677,7 +740,7 @@ export default function StanzasTab({
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
         {/* Left rail */}
         <div style={{
-          width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column',
+          width: 272, flexShrink: 0, display: 'flex', flexDirection: 'column',
           background: 'var(--surface)', borderRight: '1px solid var(--border)',
         }}>
           <div style={{
@@ -685,6 +748,7 @@ export default function StanzasTab({
             flexShrink: 0,
           }}>
             <Segmented value={mode} onChange={setMode} options={[
+              { value: 'all',     label: 'All' },
               { value: 'tag',     label: 'Mode' },
               { value: 'cluster', label: 'Cluster' },
               { value: 'single',  label: 'Single' },
@@ -705,7 +769,7 @@ export default function StanzasTab({
                 onSelect={setActiveClusterId}
               />
             )}
-            {mode === 'single' && (
+            {(mode === 'single' || mode === 'all') && (
               <StanzaRail
                 stanzas={stanzasInScope}
                 focusStanzaId={focusStanzaId}
@@ -722,6 +786,7 @@ export default function StanzasTab({
         }}>
           <StanzaTable
             stanzas={(() => {
+              if (mode === 'all') return stanzasInScope;
               if (mode === 'tag') {
                 return stanzasInScope.filter((s) => s.mode === activeModeId);
               }
@@ -763,6 +828,10 @@ export default function StanzasTab({
           cancelLabel="Cancel"
           onApply={handleApply}
           onCancel={() => { setTransformId(null); setParams({}); }}
+          onUndo={undoTransform}
+          canUndo={canUndo}
+          undoLabel="Undo"
+          undoTitle={canUndo ? 'Undo the last applied transform' : 'Nothing to undo yet'}
         />
       </div>
     </div>

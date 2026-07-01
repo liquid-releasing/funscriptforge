@@ -530,10 +530,12 @@ function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, on
         </div>
       </div>
 
-      {/* Source media frames — a contact sheet across the video's length, so
-          a video-only project shows "what's in here" before any funscript
-          exists. Video only (audio has no frames). */}
-      {isVideoOnly && project.mediaKind !== 'audio' && project.mediaPath && (
+      {/* Source media frames — a contact sheet across the video's length,
+          shown ABOVE the funscript for any video project: a video-only project
+          sees "what's in here" before a funscript exists, and a funscript
+          project sees the frames alongside the script it's editing. Video only
+          (audio has no frames). */}
+      {project.mediaKind !== 'audio' && project.mediaPath && (
         <>
           <SectionLabel>Source media</SectionLabel>
           <div style={{ marginBottom: 24 }}>
@@ -938,7 +940,7 @@ function ContactSheet({ mediaPath, durationMs }) {
   useEffect(() => {
     let alive = true;
     setState({ status: 'loading', thumbs: [] });
-    contactSheet(mediaPath, { count: 9, durationMs: durationMs || 0 })
+    contactSheet(mediaPath, { count: 12, durationMs: durationMs || 0 })
       .then((res) => {
         if (!alive) return;
         const thumbs = Array.isArray(res?.thumbs) ? res.thumbs : [];

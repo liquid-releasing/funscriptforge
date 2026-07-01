@@ -136,6 +136,27 @@ export default function PhrasesTab({
     );
   };
 
+  // ── Pass-1 accept model: completion gate + transform Undo ───────────
+  // Which chapters the user has explicitly CONSIDERED (accepted — with or
+  // without a transform). The footer's "Accept and chain" stays LOCKED until
+  // every chapter is considered (user: "do no chain until all chapters have
+  // been considered"). Reset per project.
+  const [consideredChapterIds, setConsideredChapterIds] = useState(() => new Set());
+  useEffect(() => { setConsideredChapterIds(new Set()); }, [project?.path]);
+  const markChapterConsidered = (id) => {
+    if (id == null) return;
+    setConsideredChapterIds((s) => (s.has(id) ? s : new Set(s).add(id)));
+  };
+
+  // Transform Undo/Redo — a session snapshot stack of the working action
+  // list. Apply pushes the PRE-apply snapshot; Undo pops it back (the "oops,
+  // I just applied — how do I fix it" loop the user asked to start from).
+  // Page-local (Undo lives on this tab, next to Cancel — not the footer);
+  // cleared when the project changes.
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  useEffect(() => { setUndoStack([]); setRedoStack([]); }, [project?.path]);
+
   // Left-rail tag-mode selection. Drives "which phrases are in edit"
   // when mode === 'tag'. Reset to the first tag that has phrases in
   // scope whenever the chapter changes (analogous to PatternsTab's
@@ -200,6 +221,9 @@ export default function PhrasesTab({
   const navIsLast = navChapterIdx < 0 || navChapterIdx >= chapters.length - 1;
   const navRunRef = useRef(() => {});
   navRunRef.current = () => {
+    // Accepting a chapter marks it CONSIDERED — that's what unlocks the
+    // footer's "Accept and chain" (every chapter must be considered first).
+    markChapterConsidered(activeChapter?.id);
     if (navChapterIdx >= 0 && navChapterIdx < chapters.length - 1) {
       setActiveChapterId(chapters[navChapterIdx + 1].id);   // advance
     } else if (project?.path) {
@@ -213,6 +237,9 @@ export default function PhrasesTab({
         .finally(() => setBusy?.(null));
     }
   };
+  // All chapters considered → the footer may chain. Recomputed each render.
+  const chaptersConsideredComplete = chapters.length > 0
+    && chapters.every((c) => consideredChapterIds.has(c.id));
   useEffect(() => {
     if (!onRegisterChapterNav) return undefined;
     onRegisterChapterNav(
@@ -221,11 +248,16 @@ export default function PhrasesTab({
             hasNext: !navIsLast,
             label: navIsLast ? 'Accept last chapter changes' : 'Accept and next chapter',
             run: () => navRunRef.current(),
+            // Drives the footer completion gate. Only Phrases/Stanzas report
+            // `complete` today, so other chapter tabs stay ungated.
+            complete: chaptersConsideredComplete,
+            considered: chapters.filter((c) => consideredChapterIds.has(c.id)).length,
+            total: chapters.length,
           }
         : null,
     );
     return () => onRegisterChapterNav(null);
-  }, [navIsLast, chapters.length, onRegisterChapterNav]);
+  }, [navIsLast, chapters.length, onRegisterChapterNav, chaptersConsideredComplete, consideredChapterIds]);
   const allPhrases = cacheEntry?.phrases ?? EMPTY_PHRASES;
   const phrasesLoaded = !!cacheEntry?.loaded;
   const phrasesInScope = useMemo(() => {
@@ -513,6 +545,10 @@ export default function PhrasesTab({
         project.path, transformId, params, previewSpans,
       );
       if (res && Array.isArray(res.actions)) {
+        // Snapshot the PRE-apply action list for Undo, then roll forward.
+        // A fresh Apply invalidates any redo history.
+        setUndoStack((s) => [...s, actions]);
+        setRedoStack([]);
         onActionsPatch(res.actions);
         // Write-through to the durable working funscript so the edit
         // survives close/reopen and Export reads it. In-memory is already
@@ -528,6 +564,34 @@ export default function PhrasesTab({
     } finally {
       setBusy?.(null);
     }
+  };
+
+  // Undo/Redo the applied-transform stack. Undo pops the last pre-apply
+  // snapshot back into the working funscript (and re-persists it); Redo
+  // re-applies. Both patch App state + save so the chart + disk agree.
+  const canUndo = undoStack.length > 0;
+  const undoTransform = () => {
+    if (!undoStack.length) return;
+    const prev = undoStack[undoStack.length - 1];
+    setUndoStack((s) => s.slice(0, -1));
+    setRedoStack((r) => [...r, actions]);
+    onActionsPatch(prev);
+    if (project?.path) saveWorkingFunscript(project.path, prev).catch(() => {});
+  };
+  const redoTransform = () => {
+    if (!redoStack.length) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack((r) => r.slice(0, -1));
+    setUndoStack((s) => [...s, actions]);
+    onActionsPatch(next);
+    if (project?.path) saveWorkingFunscript(project.path, next).catch(() => {});
+  };
+
+  // One-click "trust the defaults" — mark every chapter considered so the
+  // footer unlocks "Accept and chain" without walking each chapter. Preserves
+  // any transforms already applied (it only touches the considered set).
+  const acceptAllChaptersAsIs = () => {
+    setConsideredChapterIds(new Set(chapters.map((c) => c.id)));
   };
 
   // Empty / no-project states. Below ALL hooks so the hook count is
@@ -658,6 +722,24 @@ export default function PhrasesTab({
             height={36}
           />
         </div>
+        {/* Accept-all lives ABOVE the chapter list (footer stays uncluttered):
+            one click marks every chapter considered so chaining unlocks
+            without walking each one. Preserves any transforms already made. */}
+        <button
+          onClick={acceptAllChaptersAsIs}
+          disabled={chaptersConsideredComplete}
+          title="Accept every chapter as-is (no transforms needed) and unlock chaining"
+          style={{
+            flexShrink: 0, padding: '5px 10px', borderRadius: 6,
+            border: '1px solid var(--border)', background: 'transparent',
+            color: chaptersConsideredComplete ? 'var(--text-dim)' : 'var(--text)',
+            cursor: chaptersConsideredComplete ? 'default' : 'pointer',
+            opacity: chaptersConsideredComplete ? 0.6 : 1,
+            fontFamily: 'inherit', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+          }}
+        >
+          {chaptersConsideredComplete ? 'All chapters considered ✓' : 'Accept all as-is'}
+        </button>
       </HeaderRow>
 
       {/* ── Title row — tab-level header: slice identity on the left,
@@ -836,7 +918,7 @@ export default function PhrasesTab({
             Single phrase). Picker governs rail organization, so it lives
             where it acts. */}
         <div style={{
-          width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column',
+          width: 272, flexShrink: 0, display: 'flex', flexDirection: 'column',
           background: 'var(--surface)', borderRight: '1px solid var(--border)',
         }}>
           <div style={{
@@ -845,12 +927,14 @@ export default function PhrasesTab({
           }}>
             <Segmented value={mode} onChange={setMode} options={[
               // Lenses = group-bys on the SAME phrases (memory
-              // project_patterns_phrases_one_segmentation): Behavior tag
+              // project_patterns_phrases_one_segmentation): All (whole
+              // chapter — every phrase in the edit set at once), Behavior tag
               // (what's wrong), Shape (structural form, was the Patterns/
               // Motifs tab — 2026-05-31), Single phrase (surgical).
+              { value: 'all',     label: 'All' },
               { value: 'tag',     label: 'Behavior' },
               { value: 'shape',   label: 'Shape' },
-              { value: 'single',  label: 'Single phrase' },
+              { value: 'single',  label: 'Single' },
             ]} />
           </div>
           <div style={{ flex: 1, overflow: 'auto' }}>
@@ -888,7 +972,9 @@ export default function PhrasesTab({
         }}>
           <PhraseTable
             phrases={
-              mode === 'tag'
+              mode === 'all'
+                ? phrasesInScope
+                : mode === 'tag'
                 ? phrasesInScope.filter((p) => p.tag === activeTagId)
                 : mode === 'shape'
                 ? phrasesInScope.filter((p) => shapeByAtMs.get(p.at_ms) === activeShapeId)
@@ -931,6 +1017,10 @@ export default function PhrasesTab({
           cancelLabel="Cancel"
           onApply={handleApply}
           onCancel={() => { setTransformId(null); setParams({}); }}
+          onUndo={undoTransform}
+          canUndo={canUndo}
+          undoLabel="Undo"
+          undoTitle={canUndo ? 'Undo the last applied transform' : 'Nothing to undo yet'}
         />
       </div>
     </div>
