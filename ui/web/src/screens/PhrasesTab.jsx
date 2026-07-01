@@ -450,11 +450,13 @@ export default function PhrasesTab({
       id: p.id,
       at_ms: p.at_ms,
       end_ms: p.end_ms,
-      fill: color,
-      // Faint wash only — a hint, not a slab. A "fast" phrase (#ff6b6b) at the
-      // clip start used to render as a solid red bar under the playhead and read
-      // as a stray baton; the type still shows via the label chip + border.
-      fillOpacity: isTarget ? 0.09 : 0.04,
+      // No category-color wash. A "frantic"/"fast" phrase (#ff4b4b/#ff6b6b)
+      // filled the whole band solid red; on a fast clip that tiled the strip
+      // with red bars, and the one under the playhead read as a "red baton".
+      // Selection is a faint WHITE wash instead; phrase type reads from the
+      // label chip + border, never a colored slab.
+      fill: isTarget ? '#ffffff' : color,
+      fillOpacity: isTarget ? 0.06 : 0,
       // White = "in my edit set", crisp; skipped keep the dim category color.
       stroke: isTarget ? '#ffffff' : color,
       strokeWidth: isTarget ? 2 : 1,

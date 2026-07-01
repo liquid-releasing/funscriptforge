@@ -310,10 +310,11 @@ export default function StanzasTab({
       id: s.id,
       at_ms: s.at_ms,
       end_ms: s.end_ms,
-      fill: color,
-      // Faint wash only — a hint, not a slab (mirrors PhrasesTab). Keeps a
-      // "fast"/red cluster from rendering as a solid red bar under the playhead.
-      fillOpacity: isTarget ? 0.09 : 0.04,
+      // No category-color wash (mirrors PhrasesTab). A red cluster used to fill
+      // the whole band solid red and read as a "red baton" under the playhead.
+      // Selection is a faint WHITE wash; type reads from the label + border.
+      fill: isTarget ? '#ffffff' : color,
+      fillOpacity: isTarget ? 0.06 : 0,
       // White = "in my edit set" (orthogonal to category color), so the
       // selection stays legible even when the mode/cluster color is the
       // wash. Mirrors PhrasesTab. Skipped keep the dim category border.
