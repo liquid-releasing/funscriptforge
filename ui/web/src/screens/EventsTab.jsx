@@ -262,8 +262,31 @@ export default function EventsTab({
   // footer next to "Accept and chain to Channels" (dogfood 2026-06-16).
   const activeIdx = chapters.findIndex((c) => c.id === activeChapter?.id);
   const isLastChapter = activeIdx >= chapters.length - 1;
+
+  // Completion gate — same contract as Chapters / Phrases / Stanzas. Events
+  // auto-save, but the footer must NOT offer "chain to Channels" (nor show the
+  // ready ✓) until every chapter has been CONSIDERED. "Considered" is the
+  // walk/visit signal: a chapter can legitimately hold zero events, so there's
+  // no per-chapter persisted signal to derive from — session-local, reset per
+  // project, unlocked in bulk by "Accept all as-is".
+  const [consideredChapterIds, setConsideredChapterIds] = useState(() => new Set());
+  useEffect(() => { setConsideredChapterIds(new Set()); }, [project?.path]);
+  const markConsidered = (id) => {
+    if (id == null) return;
+    setConsideredChapterIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev); next.add(id); return next;
+    });
+  };
+  const chaptersConsideredComplete = chapters.length > 0
+    && chapters.every((c) => consideredChapterIds.has(c.id));
+  const acceptAllChaptersAsIs = () =>
+    setConsideredChapterIds(new Set(chapters.map((c) => c.id)));
+
   const goNextRef = useRef(() => {});
   goNextRef.current = () => {
+    // Walking a chapter marks it considered — that's what unlocks chaining.
+    markConsidered(activeChapter?.id);
     if (activeIdx >= 0 && activeIdx < chapters.length - 1) {
       setScope(chapters[activeIdx + 1].id);
       return;
@@ -285,11 +308,16 @@ export default function EventsTab({
             hasNext: !isLastChapter,
             label: isLastChapter ? 'Accept last chapter changes' : 'Accept and next chapter',
             run: () => goNextRef.current(),
+            // Drives the footer gate: no chain to Channels (and no ready ✓)
+            // until every chapter is considered.
+            complete: chaptersConsideredComplete,
+            considered: chapters.filter((c) => consideredChapterIds.has(c.id)).length,
+            total: chapters.length,
           }
         : null,
     );
     return () => onRegisterChapterNav(null);
-  }, [isLastChapter, chapters.length, onRegisterChapterNav]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLastChapter, chapters.length, onRegisterChapterNav, chaptersConsideredComplete, consideredChapterIds]);  // eslint-disable-line react-hooks/exhaustive-deps
   // Drop the confirmation timer on unmount.
   useEffect(() => () => { if (savedTimerRef.current) clearTimeout(savedTimerRef.current); }, []);
 
@@ -545,6 +573,25 @@ export default function EventsTab({
                 height={36}
               />
             </div>
+            {/* Accept-all lives ABOVE the chapter bar (footer stays uncluttered):
+                one click marks every chapter considered so chaining to Channels
+                unlocks without walking each one. Events already auto-save, so
+                this only flips the gate — it never touches feel.yml. */}
+            <button
+              onClick={acceptAllChaptersAsIs}
+              disabled={chaptersConsideredComplete}
+              title="Mark every chapter considered and unlock chaining to Channels"
+              style={{
+                flexShrink: 0, padding: '5px 10px', borderRadius: 6,
+                border: '1px solid var(--border)', background: 'transparent',
+                color: chaptersConsideredComplete ? 'var(--text-dim)' : 'var(--text)',
+                cursor: chaptersConsideredComplete ? 'default' : 'pointer',
+                opacity: chaptersConsideredComplete ? 0.6 : 1,
+                fontFamily: 'inherit', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+              }}
+            >
+              {chaptersConsideredComplete ? 'All chapters considered ✓' : 'Accept all as-is'}
+            </button>
           </div>
 
           {/* Chapter identity + Collapse — the design's title row. */}
