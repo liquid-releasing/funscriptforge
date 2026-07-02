@@ -869,6 +869,9 @@ export default function App() {
   // { hasNext, run } | null; cleared by the tab's unmount, so non-chapter tabs
   // never read a stale value (and the footer also gates on the tab id).
   const [chapterNav, setChapterNav] = useState(null);
+  // Export tab registers its write action + completion so the footer can host
+  // the "Export" primary and flip it to "Chain to Viewer" ✓ once it's written.
+  const [exportReg, setExportReg] = useState(null);
   const { analysisState: globalAnalysisState } = deriveAnalysisState({
     hasMedia: !!project?.mediaPath,
     analyzing: !!busy,
@@ -1028,6 +1031,7 @@ export default function App() {
     : (tab === 'export' ? 'Write outputs' : 'Accept');
   let footerOnPrimary = null; // null → use handleAccept
   let footerSecondary = null; // { label, onClick }
+  let footerSecondaryActions = null; // [{ label, onClick, disabled }] — multi-walk tabs
   if (tab === 'project' && !gateMsg && !busy) {
     footerPrimaryLabel = 'Generate new funscript';
     footerOnPrimary = () => setTab('generate');
@@ -1061,11 +1065,17 @@ export default function App() {
       footerSummary = 'Continue with the generated funscript to start editing.';
     }
   } else if (tab === 'export' && !gateMsg && !busy) {
-    // Export writes via its own "Export All" button; the footer's job is to
-    // jump to the Viewer to review what was produced. Plain red "View".
-    footerPrimaryLabel = 'View';
-    footerOnPrimary = () => setTab('viewer');
-    footerSummary = 'Review the exported output in the Viewer.';
+    // The footer owns the export verb (user): a tentative white "Export" that
+    // RUNS the write, then flips to a red ✓ "Chain to Viewer" once it succeeds.
+    if (exportReg?.done) {
+      footerPrimaryLabel = 'Chain to Viewer';
+      footerOnPrimary = () => setTab('viewer');
+      footerSummary = 'Exported — chain to the Viewer to review the output.';
+    } else {
+      footerPrimaryLabel = 'Export';
+      footerOnPrimary = () => exportReg?.run?.();
+      footerSummary = 'Write the export, then chain to the Viewer.';
+    }
   }
 
   // Chapter-scoped tabs host their per-chapter accept on the footer as the
@@ -1075,19 +1085,31 @@ export default function App() {
   // chapter" (commit, no advance); Phrases/Stanzas have no per-chapter commit
   // so they register null on the last chapter (the primary "chain to <next>" is
   // the action there).
-  const CHAPTER_NAV_TABS = ['chapters', 'stim', 'events', 'phrases', 'stanzas'];
+  const CHAPTER_NAV_TABS = ['chapters', 'stim', 'events', 'phrases', 'stanzas', 'polish'];
   // Completion gate — chapter-scoped tabs that REPORT `complete` (Phrases/
   // Stanzas today) drive the whole footer off it; tabs that don't
   // (Chapters/Channels/Events) leave it undefined → old behavior.
   const chapterGateActive = CHAPTER_NAV_TABS.includes(tab)
     && chapterNav && typeof chapterNav.complete === 'boolean';
   const chapterIncomplete = chapterGateActive && !chapterNav.complete;
-  if (CHAPTER_NAV_TABS.includes(tab) && chapterNav?.label && !gateMsg && !busy && !chapterGateActive) {
+  // Multi-pass tab (Channels): TWO per-pass walks live as the footer's white
+  // secondary buttons, and the RED "Accept and chain" stays the primary
+  // (tentative — white, no ✓ — until every chapter has both axes). Different
+  // shape from the single-walk gated tabs below, where the primary IS the walk.
+  const chapterMultiPass = chapterGateActive
+    && Array.isArray(chapterNav.passes) && chapterNav.passes.length > 0;
+  if (chapterMultiPass && !gateMsg && !busy) {
+    footerSecondaryActions = chapterNav.passes.map((p) => ({
+      key: p.key, label: p.label, onClick: p.run, disabled: p.disabled,
+    }));
+    const nextLabel = nextTab ? (TABS.find((t) => t.id === nextTab)?.label ?? nextTab) : '';
+    footerSummary = `${chapterNav.considered ?? 0} of ${chapterNav.total ?? 0} chapters built · set character AND mechanical for each to unlock chaining${nextLabel ? ` to ${nextLabel}` : ''}`;
+  } else if (CHAPTER_NAV_TABS.includes(tab) && chapterNav?.label && !gateMsg && !busy && !chapterGateActive) {
     // UNGATED chapter tabs: walk is a secondary beside the always-available
     // "Accept and chain" primary (unchanged).
     footerSecondary = { label: chapterNav.label, onClick: chapterNav.run };
   }
-  if (chapterIncomplete && !gateMsg && !busy) {
+  if (chapterIncomplete && !chapterMultiPass && !gateMsg && !busy) {
     // GATED tab, not complete → the RED primary IS the walk (accept this
     // chapter); NO secondary. Chaining appears only once every chapter is
     // considered (user: "no chain until all chapters considered" + "make the
@@ -1098,7 +1120,9 @@ export default function App() {
     footerPrimaryLabel = chapterNav.label;   // "Accept and next chapter" / last
     footerOnPrimary = chapterNav.run;        // accept this chapter + advance
     footerSecondary = null;
-    footerSummary = `${chapterNav.considered ?? 0} of ${chapterNav.total ?? 0} chapters considered · accept each (or “Accept all as-is”) to unlock chaining${nextLabel ? ` to ${nextLabel}` : ''}`;
+    // Tabs may override the count wording (Polish walks DEVICES, not chapters).
+    footerSummary = chapterNav.summary
+      ?? `${chapterNav.considered ?? 0} of ${chapterNav.total ?? 0} chapters considered · accept each (or “Accept all as-is”) to unlock chaining${nextLabel ? ` to ${nextLabel}` : ''}`;
   }
 
   const handleAccept = async () => {
@@ -1273,6 +1297,7 @@ export default function App() {
             project={typeof openedProject === 'object' ? openedProject : null}
             setAppError={setAppError}
             setBusy={setBusy}
+            onRegisterChapterNav={setChapterNav}
           />
         )}
         {tab === 'viewer' && (
@@ -1382,6 +1407,7 @@ export default function App() {
             trackSpectrogram={trackSpectrogram}
             setBusy={setBusy}
             setAppError={setAppError}
+            onRegisterExport={setExportReg}
           />
         )}
         {tab === 'catalog' && <CatalogTab />}
@@ -1424,15 +1450,27 @@ export default function App() {
           onAccept={footerOnPrimary || handleAccept}
           secondaryLabel={footerSecondary?.label}
           onSecondary={footerSecondary?.onClick}
+          secondaryActions={footerSecondaryActions}
           error={appError}
           onClearError={() => setAppError(null)}
           busy={busy}
           gate={gateMsg}
-          ready={!gateMsg && !appError && !busy && (Boolean(nextTab) || tab === 'export')}
-          // Export owns its own write button in-tab; the footer's generic
-          // accept is a no-op there (no downstream tab), so hide the dead
-          // Reset/Write buttons but keep the bar for the progress banner.
-          hideActions={tab === 'export'}
+          // While a gated chapter tab is still being walked, the primary IS the
+          // per-chapter walk ("Accept and next chapter") — render it quiet/white
+          // with no ✓. Red + ✓ returns only once every chapter is considered and
+          // the primary becomes the real "Accept and chain to <next>".
+          // Tentative (white, no ✓) while a gated chapter tab is being walked
+          // OR while Export hasn't written yet (the "Export" verb precedes the
+          // real red ✓ "Chain to Viewer"). Red + ✓ returns only on completion.
+          primaryTentative={chapterIncomplete || (tab === 'export' && !exportReg?.done)}
+          // Project is a CHOICE fork ("Generate new" vs "Edit this"), not an
+          // accept — so no lead checkmark on entry; it's just a door, not an
+          // endorsed default the user has completed. Likewise a gated chapter
+          // tab mid-walk, or Export before it's written, is NOT done — the lead
+          // ✓ would falsely read "all set".
+          ready={!gateMsg && !appError && !busy && tab !== 'project' && !chapterIncomplete
+            && !(tab === 'export' && !exportReg?.done)
+            && (Boolean(nextTab) || tab === 'export')}
         />
       )}
       <StatusBar

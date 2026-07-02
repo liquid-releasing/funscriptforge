@@ -6,6 +6,263 @@ verify + commit) · ✅ committed.
 
 ---
 
+## Session 2026-07-02 (Accept/Undo polish + Short Beats dogfood)
+
+### ✅ Investigated — SAFE
+
+D31. **Loud transient safety — alarm-clock sound at 5:56–6:01 in
+   `forgeassembler/test_media/victoriaoaks/fixed/15.mp4`. CHECKED 2026-07-02:
+   NOT unsafe.** Inspected the generated `15.funscript` window (356000–361000ms)
+   vs the whole file:
+   - **Beat-grid quantization is the safety net.** The whole script sits on a
+     FIXED 232ms grid (global min == p1 == median inter-point gap == 232ms). At
+     most one reversal per 232ms — a transient physically can't insert extra
+     strokes between beats, so it can't machine-gun. This bounds stroke rate by
+     construction, independent of audio spikes.
+   - **In-envelope velocity.** Window max = 405 u/s = the SAME ceiling hit
+     throughout the file (whole-file max also 405 = amplitude94 ÷ 232ms). The
+     file's genuinely fastest strokes are at 6:13–6:21, not the alarm.
+   - **No micro-oscillation.** Clean 232ms spacing (18→79→21→81…), steady rhythm.
+   - **The audio there is actually QUIETER than the song** (window peak median
+     0.497 vs global 0.605; max 0.853 vs ~1.0 elsewhere; 0% near-clip). The alarm
+     beep is a narrow-band tone — perceptually salient, low broadband energy.
+   **Remaining (fidelity, NOT safety):** the generator DID map the alarm's
+   beeping rhythm to strokes (the 232ms 18↔80 oscillation in-window). "Do you
+   want the alarm stroked?" is an Events/edit correction, not a safety fix.
+   **Latent hardening idea (not needed for this file):** there is no EXPLICIT
+   per-step velocity clamp in `videoflow/generate.py` — safety is emergent from
+   the beat grid. If a future source ever has a very fast detected BPM, an
+   explicit max-velocity / min-interval floor (tie to [[project_tame_tone]])
+   would be belt-and-suspenders. Log-only for now.
+
+---
+
+## Session 2026-06-27 (Generate → Analysis dogfood, ddt483)
+
+### 🔴 Open
+
+D22. **★ Analysis RE-EXTRACTS audio that generation just extracted (the D9
+   "separate over-eager-reanalyze trigger" — now confirmed).** Repro: build a
+   funscript from a video on the Generate tab → land on Analysis → it runs the
+   full pipeline and re-extracts audio ("Extracting audio… 40:38 done") even
+   though generation already did the audio/beat work on the same source. **Root
+   cause:** the Analysis auto-trigger calls
+   `analyzeChaptersWithVideoflow(project.path, 5.5, project.mediaPath, resume=false)`
+   (`AnalysisTab.jsx:170`). `resume=false` = a FULL pass — videoflow recomputes
+   every stage incl. audio extraction. Only the (now-removed-by-D5b) Partial-
+   banner Resume CTA ever passed `resume=true`; the auto-trigger and Re-analyze
+   always force a full recompute. So generation's reusable, video-derived
+   sidecars (audio/beats/spectrogram) are thrown away and recomputed. **Fix
+   direction:** the AUTO trigger should pass `resume=true` (videoflow's Tier-1/2
+   freshness check skips stages whose sidecar already exists, computing only the
+   missing chapter detection/clips). An explicit user "Re-analyze" stays a full
+   pass. Exactly the D9 design note: video-derived stages are reusable; only
+   phrases/stanzas/assessment (funscript-derived) need recompute.
+   **★ INVESTIGATED 2026-06-27 — the one-line flag flip is NOT enough.**
+   Generation (`cli.py::cmd_generate` → `_load_or_analyze_beatmap`) extracts
+   audio + detects beats but persists them ONLY as `<stem>.beatmap.json` (the
+   FULL AudioBeatMap: beats + energy + stanzas, keyed by tracker/source/
+   chunk_secs provenance — `_beatmap_sidecar_path`). `auto_chapter --resume`
+   does NOT read `beatmap.json`; its freshness check looks for its OWN sidecars
+   (`audio_peaks` / `spectrogram` / `audio_beats` reduced + `chapters`). The two
+   artifact sets don't overlap, so even with `resume=true` auto_chapter
+   re-extracts audio + re-detects beats. **Real fix (videoflow/Python, not a UI
+   one-liner) — make the two share the cache.** Options: (a) generation also
+   emits the auto_chapter audio sidecars (audio_peaks/spectrogram + reduced
+   audio_beats) from the same extraction it already runs, so resume skips them;
+   (b) `auto_chapter --resume` recognizes a fresh `beatmap.json` and derives its
+   reduced beats sidecar from it instead of re-detecting; (c) persist the
+   extracted-audio artifact once and have both stages reuse it (kills the
+   duplicate ffmpeg extract regardless of detection). (a) or (c) is the
+   substrate the D9 note ("video-derived stages are reusable") implies. Pair the
+   `resume=true` auto-trigger flip WITH one of these — the flag alone is
+   necessary but not sufficient. NOT applied (user mid-build; also Rust/Python →
+   would force a tauri:dev recompile + relaunch).
+
+D23. **"No media attached" on Analysis + Accept-and-chain right after generating
+   from a video.** Screenshot: "Reviewing ddt483.HD_3_apo8_nyx3 · No media
+   attached — attach a video or audio file on the Project tab." `hasMedia =
+   !!project?.mediaPath` (`AnalysisTab.jsx:140`). Generation REQUIRES
+   `project.mediaPath` to run the real engine (`GenerateTab.jsx:304-306`), so it
+   was set at gen time; the adopt→reopen path passes `mediaPath` through
+   (`App.jsx:545`, `699-702`) and `handleProjectOpened` preserves it as-is
+   (`App.jsx:449`). On paper `mediaPath` should survive the adopt — **could not
+   pin the loss by reading alone.** Needs a live repro to capture the actual
+   project record at the moment Analysis renders (one-line debug log of
+   `openedProject.mediaPath` after adopt) to see whether (a) the promoted sibling
+   funscript reopened without mediaPath, or (b) the user reached Analysis via a
+   path that never set it. Likely same family as D22 (both are "the new funscript
+   isn't linked back to its source video"). NOT root-caused.
+
+D24. **Harmless: `[TAURI] Couldn't find callback id …` console spam.** Async
+   callbacks resolving after an HMR/webview reload (forgemoment rebuild + reloads
+   this session), not a real bug — same class as the D1 reload-orphan note.
+
+D25. **★ Analysis KPI/Structure don't progressively reveal — they wait on the
+   slow `chapter_clips` tail even though chapters + phrases are already on disk.**
+   Repro (screenshot, ddt483, 167 min / 27 chapters): the progress footer shows
+   the whole structure pipeline DONE — `detect — 27 chapters detected`,
+   `chapters_sidecar — 27 chapters on disk`, `beats — 18869 beats / 1193
+   stanzas`, `classify — 1193 stanzas classified`, `audio_peaks`, `spectrogram`,
+   `audio_beats`, `sidecar — merged: 27 chapters, 1193 stanzas` — and is now only
+   on `chapter_clips` ("Extracting chapter clip 1/27…", the minutes-long tail).
+   Yet the KPI strip still reads **CHAPTERS 0** + "Chapters at a glance: No
+   chapters", **PHRASES —**, while **STANZAS 1193** DID populate. So phrases were
+   built + the merged sidecar (27 ch) is on disk, but neither the chapter list
+   nor the phrases KPI surface until clip extraction finishes. **Root cause:**
+   `triggerAnalysis` lifts the chapter list via `onChaptersChange(newChapters)`
+   only AFTER `await analyzeChaptersWithVideoflow(...)` resolves
+   (`AnalysisTab.jsx:170-175`), and that await is gated on the FULL pipeline incl.
+   `chapter_clips`. The `chapters_sidecar` progress event lands early (footer
+   proves it) but the progress-event handler refreshes audio sidecars, NOT the
+   chapter list or the phrases/phrase-KPI. Phrase analysis was de-coupled to fire
+   on `chapters_sidecar` (the :186-191 comment) and clearly ran (phrases on disk),
+   but the Analysis PHRASES KPI cell isn't re-read from the new `phrases.json`
+   mid-pipeline. **Asymmetry to exploit:** STANZAS surfaced but CHAPTERS didn't —
+   pin which path lifts stanzas (works) vs chapters (post-await only) and mirror
+   it. **Fix direction:** on the `chapters_sidecar` / merged-`sidecar` progress
+   events, lift the chapter list to App + refresh the phrases/stanzas KPI from
+   disk — `chapter_clips` only produces video clips for in-app playback, NOT the
+   structure/phrase data, so the KPI + "Chapters at a glance" should fill in as
+   soon as the merged sidecar lands (seconds/minutes in), not after all 27 clips
+   extract. Same progressive-reveal theme as D2/D3/D14. UI fix
+   (`AnalysisTab.jsx`, maybe `App.jsx`) — staged, NOT applied (user mid-build).
+   **★ D25 IS THE SPINE — it cascades into D26 + the gates (see below).**
+
+D26. **No "Accept and next chapter" button in the Chapters footer.** User on
+   Chapters sees no Accept button at all. **Root cause = D25 cascade, two
+   compounding gates:** (1) ChaptersTab registers the footer nav ONLY when
+   `chapters.length > 0` (`ChaptersTab.jsx:949`); while D25 holds the chapter list
+   out of App memory (`chapterArr` empty until clips finish), ChaptersTab has 0
+   chapters → registers `null` → no button. (2) Even once registered, the footer
+   secondary is gated on `!busy && !gateMsg` (`App.jsx:1057`), and `analysisUnready
+   = !chapterArr?.length` (`App.jsx:922-923`) makes every consuming tab show the
+   "Analyzing… finish on the Analysis tab" gate (`App.jsx:960-963`) for the same
+   reason — empty `chapterArr`. So fixing D25 (lift the chapter list on the
+   merged-`sidecar` event, not after clips) restores the Accept button AND clears
+   the false "finish analyzing" gate in one move. Secondary hardening (D12 class):
+   don't let a transient `busy` fully HIDE the Accept button — disable+grey it
+   instead of removing it, so it never silently vanishes. UI fix — NOT applied.
+
+D27. **Phrase assess re-runs redundantly + opaque "Analyzing…" footer with no
+   "why" / no progress, on a long file ("I thought we fixed this").** Two parts.
+   **✅ (a) FIXED 2026-06-28 (backend fast-path):** `cmd_assess` (json_mode)
+   now short-circuits to a FRESH `<stem>.phrases.json` via
+   `_fresh_phrases_payload` — reuses the cached slices when the sidecar is
+   newer than the funscript AND the chapters sidecar (schema-version gated),
+   so re-entering Phrases is a quick JSON read instead of the full pipeline.
+   A tone edit (funscript rewrite) or chapter re-detect makes the sidecar
+   stale → correct reassess. Live in `tauri:dev` (source cli.py, no recompile);
+   bundled forge-cli needs a PyInstaller rebuild for the shipped build. Regression
+   test `tests/test_assess_freshness.py` (5 cases). (b) below still stands.
+   (a) **Redundant recompute:** analyze already computed `phrases.json` on disk
+   (the de-coupled fire on `chapters_sidecar`), but PhrasesTab's cache gate is
+   `phrasesByPath[project.path]?.loaded` (`PhrasesTab.jsx:308`) — an IN-MEMORY
+   App cache the backend compute never populated. So opening Phrases sees no cache
+   hit and re-runs `analyzePhrases` (full `cmd_assess`) even though a fresh sidecar
+   exists; `cmd_assess` itself also doesn't short-circuit on a fresh `phrases.json`.
+   Fix: PhrasesTab should treat a fresh on-disk `phrases.json` as a cache hit
+   (load it) rather than re-assessing; or `cmd_assess` skips when the sidecar is
+   newer than the funscript. (b) **Legit-but-painful invalidation:** changing +
+   Accept-and-chaining a tone runs `commitAll` → `mergeWorkingActions` →
+   `onActionsPatch` (the funscript actually changes) → phrase cache invalidated →
+   assess re-runs. On a 167-min file that's the D16 ~12-min assess. So the
+   recompute is *correct* (funscript changed), but slow + the footer headline is a
+   bare **"Analyzing…"** with no project name and no plain-language "why" — the D3
+   sub-note flagged as fixed that evidently never landed (PhrasesTab sets
+   "Assessing phrases…" at `:312`, so the bare "Analyzing…" came from a DIFFERENT
+   path — pin it: candidates = ChaptersTab `recomputePhrasesAfterChapterChange`
+   (:828) or the busy-banner default). Fixes: (1) name the headline ("Assessing
+   phrases — <project>…") on EVERY assess trigger; (2) make the recompute a
+   cache-hit when the sidecar is fresh (part a); (3) the D16 assess-speed item
+   stands. UI + possibly Python (`cmd_assess` freshness) — NOT applied.
+
+D28. **Editor ↔ viewer desync after applying a tone: player shows the toned
+   funscript, the Chapters editor reverts to the pre-tone shape on return.**
+   Repro (ddt483): apply Climax to a chapter (bars move to top/bottom — the
+   "After · Climax · impact 50%" preview looks right), navigate away, come back →
+   the **viewer/player** shows the correct (toned) funscript but the **editor
+   chart** shows the OLD pre-Climax shape. **Likely root cause:** the player reads
+   the patched in-memory `project.actions` (updated via `onActionsPatch` when the
+   tone is applied/accepted), but the Chapters editor re-derives its baseline from
+   `originalActions` (the pristine original funscript), which never received the
+   applied tone — so on remount the editor reseeds from stale memory while the
+   viewer keeps the patched copy. Same family as D15 (in-memory `chapterList` /
+   `originalActions` not updated after Accept — the sidecar gets written but the
+   in-memory baseline doesn't). Fix: after a tone is committed, update the
+   in-memory baseline (`originalActions`/`chapterList`) the editor reseeds from,
+   so editor + viewer read the same actions. UI fix — NOT applied.
+
+D29. **★ SHIP-BLOCKER — chapter-clip extraction can silently produce AUDIO-ONLY
+   clips that poison the cache (no video, sound only).** Repro (ddt483, 4K HEVC
+   2h47m): ch22–ch27 (the last 6 chapters) play audio but show NO video. ffprobe:
+   those 6 clip files exist but have `video=[]` (no video stream); ch1–21 are
+   fine. The 38 GB source HAS full video at those timestamps (verified: hevc
+   3840×2160, 27 frames/2s at ch23/25/27) — so it's an EXTRACTION defect, not a
+   source problem. **Root cause:** `extract_chapter_clip`
+   (`videoflow/chapter_clips.py:370-395`) uses INPUT-side fast seek (`-ss`/`-to`
+   BEFORE `-i`) and validates success by `returncode == 0` ONLY. On a long-GOP 4K
+   HEVC source, a deep input seek can land where ffmpeg passes the window's audio
+   through but decodes ZERO video frames (no usable keyframe in range / scale
+   filter gets no frames) and STILL exits 0. The audio-only tmp passes the
+   returncode check → atomic-published → cached. `--resume` then sees the file
+   present and skips it forever → the broken clip is permanent. Correlates exactly
+   with seek depth (only the deepest 6 fail). **Fix (do BOTH):** (1) after encode,
+   **ffprobe the tmp for a video stream before publishing** — if the source had
+   video but the clip has none, treat as FAILURE (unlink tmp + raise) so it's
+   re-extracted, never cached; (2) make the deep seek robust — use accurate/
+   output-side seek (move `-ss` after `-i`, or `-ss` before + `-t <dur>` after +
+   `-noaccurate_seek` off) so video actually decodes from a real keyframe at deep
+   offsets. **Mirror the same validation in the Rust `extract_chapter_clip`
+   command** (commands.rs) — both paths write the same cache. Add a regression
+   test: extract a deep slice of a long HEVC fixture → assert the clip has a video
+   stream. Until fixed, a 4K-HEVC user gets silently video-less reference clips on
+   the chapter tail. (User on ddt483 deferred re-extraction — doesn't need the
+   video now — but flagged: do NOT ship this.)
+
+D30. **Oversized chapter clips (181–452 MB) → cumulative WebView2 video-memory
+   pressure; later chapters fail to render.** ch21 (199 MB, valid h264 720p)
+   showed no video even though the clip is fine — after a session of loading
+   ch1–20 (each 280–452 MB), WebView2 runs out of video-decode memory and can't
+   paint new clips (the bug-#6 / D6 wedge, now reproduced via clip size). Root:
+   the v12 downscale caps RESOLUTION (720p) but not DURATION — a long chapter
+   (5–7 min) at 720p is still 300–450 MB, and several held at once exhaust the
+   webview. Fix directions: cap clip BITRATE/size (lower CRF won't help much;
+   consider a hard size target or segmenting very long chapters), and/or release
+   the previous chapter's `<video>` buffer on chapter switch so memory doesn't
+   accumulate. Pairs with the standing large-file WebView2 pressure items.
+
+### ✅ Fix LANDED this session (D25/D26 chapter-keying) + on-disk verification
+
+- **Threaded the known `mediaPath` into `load_project`** so chapter resolution
+  uses the real media instead of strict same-stem guessing: Rust
+  `load_project(path, media_hint)` + `media_kind_from_path` helper
+  (`commands.rs`); `loadProject(path, mediaPath)` → `{ mediaHint }` (`forge.js`);
+  callers pass it (`App.jsx` handleOpenScript + handleSelectProject,
+  `AnalysisTab.jsx` chapter-lift, `GenerateTab.jsx` restore). cargo check + vite
+  build green. ⚠️ Built + running but the user's same-stem case (funscript stem
+  == media stem) means strict `find_adjacent_media` already paired the media, so
+  the hint is belt-and-suspenders here — NOT yet proven to be the fix for the
+  re-analyze trigger.
+- **On-disk verification (ddt483, `D:\funscriptforge_complete\wip\ddt483\`):** all
+  data is INTACT and valid. `cli.py chapters <media>` resolves **27 chapters in
+  seconds** by reading the existing sidecar (no re-analysis). `chapters.json`
+  `analyzer_version='1'` == current `ANALYZER_VERSION='1'` → NOT version-stale, so
+  the re-analyze trigger is case (a) `chapterList` empty in-app, NOT case (b)
+  staleness. phrases/beats/audio/spectrogram/beatmap + clips all present; the
+  sibling `.funscript` exists (adopt completed).
+- **The "long load / hang" on reopen was the WebView2 memory wedge (bug #6), NOT
+  re-analysis:** host + WebView2 both 0% CPU, but WebView2 held **7.8 GB across 41
+  procs** (big 4K project + many chapter clips + a session's worth of reloads).
+  Only a full app restart reclaims it (page reload doesn't). Restarted clean.
+  **★ Open perf question:** why does in-app `load_project` return empty chapters
+  (triggering re-analyze) when the CLI returns 27 from the same sidecar? Next
+  live test: open ddt483 via Library → Resume on the fresh build; if it still
+  re-analyzes, add a one-line log of the project's `mediaPath` + resolved chapter
+  count at open to pin whether the open carries the media link.
+
+---
+
 ## Session 2026-06-18 (beta dogfood — Prisoner, post-recompile)
 
 ### 🔴 Open — found in the 4K/Generate dogfood (2026-06-18, hovixag935 4k60 + others)

@@ -382,6 +382,12 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     setAcceptedChapterIds(chapterEdits?.accepted ? new Set(chapterEdits.accepted) : new Set());
   }, [project?.path]);  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Collapse toggle for the chapter-scoped video viewer — same affordance as
+  // Phrases/Patterns. When collapsed the ribbon spans full width (more room for
+  // the chapter waveforms). Sticky across chapter switches; reset per project.
+  const [isViewerExpanded, setIsViewerExpanded] = useState(true);
+  useEffect(() => { setIsViewerExpanded(true); }, [project?.path]);
+
   // Mirror the per-chapter edits up to App session state so they survive THIS
   // tab unmounting (D15). Keyed by project path in App; the on-Accept sidecar
   // write still handles cross-restart persistence. A ref keeps the callback
@@ -708,14 +714,17 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       if (i < 0 || i >= chapters.length - 1) return;
       const nextId = chapters[i + 1].id;
       // Carry the just-accepted tone (and its tuned params) forward to the
-      // next chapter, so applying one tone down the timeline is fast — pick
-      // it once, Accept-Accept-Accept. The user overrides per chapter as
-      // needed. We don't clobber a chapter the user already accepted (it's
-      // signed off), but an un-accepted next chapter inherits regardless of
-      // its analyzer seed — that's the point of carry-forward.
+      // next chapter, so applying one tone down the timeline is fast — pick it
+      // once, Accept-Accept-Accept. But carry-forward FILLS GAPS ONLY: it never
+      // replaces a tone that's already there. We skip a chapter that's already
+      // accepted (signed off) OR already carries a non-Untoned tone — a user
+      // pick or a distinct analyzer seed the user was considering but hadn't
+      // accepted (user: "it should not replace a tone that is already there";
+      // e.g. accepting Edge must not clobber Climax on the next chapter).
       const carriedToneId = tonesByChapter[active.id] ?? tone.id;
       const carriedParams = paramsByChapter[active.id]?.[carriedToneId];
-      if (!acceptedChapterIds.has(nextId)) {
+      const nextToneId = tonesByChapter[nextId] ?? 'none';
+      if (!acceptedChapterIds.has(nextId) && nextToneId === 'none') {
         setTonesByChapter((s) => ({ ...s, [nextId]: carriedToneId }));
         if (carriedParams) {
           setParamsByChapter((s) => ({
@@ -943,6 +952,31 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       catch (err) { console.warn('ChaptersTab: commit-all tone persist failed', err); }
     }
   };
+  // One-click "trust the defaults" — mark EVERY chapter considered (untoned)
+  // so the footer's "Accept and chain" unlocks without walking each chapter.
+  // Preserves any tones already picked (mergeWorkingActions applies the tone
+  // for accepted chapters that have one; the rest pass through untoned). Lives
+  // above the chapter bar so the footer stays uncluttered (user: "we can put
+  // the button to accept all as untoned above the chapter bar").
+  const acceptAllAsUntoned = () => {
+    const all = new Set(chapters.map((c) => c.id));
+    setAcceptedChapterIds(all);
+    const merged = mergeWorkingActions({
+      originalActions, chapters, acceptedIds: all,
+      tones: tonesByChapter, params: paramsByChapter,
+    });
+    onActionsPatch?.(merged);
+    const sourcePath = project?.mediaPath ?? project?.path;
+    if (sourcePath) {
+      writeChaptersSidecar(sourcePath, attachTones(chapters, tonesByChapter))
+        .catch((err) => console.warn('ChaptersTab: accept-all-untoned persist failed', err));
+    }
+  };
+  // Completion gate — every chapter considered (accepted, toned or not) unlocks
+  // the footer's "Accept and chain to Phrases". Until then the red primary is
+  // the per-chapter walk (App.jsx reads `complete`).
+  const chaptersAllAccepted = chapters.length > 0
+    && chapters.every((c) => acceptedChapterIds.has(c.id));
   useEffect(() => {
     if (!onRegisterChapterNav) return undefined;
     onRegisterChapterNav(
@@ -952,30 +986,71 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             label: isLastChapter ? 'Accept last chapter changes' : 'Accept and next chapter',
             run: () => acceptRunRef.current(),
             commit: () => commitAllRef.current(),
+            // Drives the footer completion gate (same contract as Phrases/
+            // Stanzas): no chaining until every chapter has been considered.
+            complete: chaptersAllAccepted,
+            considered: chapters.filter((c) => acceptedChapterIds.has(c.id)).length,
+            total: chapters.length,
           }
         : null,
     );
     return () => onRegisterChapterNav(null);
-  }, [isLastChapter, chapters.length, onRegisterChapterNav]);
+  }, [isLastChapter, chapters.length, onRegisterChapterNav, chaptersAllAccepted, acceptedChapterIds]);
 
   return (
     <section style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* Page header */}
-      <div>
-        <div style={{
-          fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
-          textTransform: 'uppercase', color: 'var(--text-dim)',
-        }}>
-          Chapters · tone
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+            textTransform: 'uppercase', color: 'var(--text-dim)',
+          }}>
+            Chapters · tone
+          </div>
+          <h2 style={{ margin: '4px 0 6px', fontSize: 24, fontWeight: 700, letterSpacing: '-0.01em' }}>
+            Set the emotional arc
+          </h2>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 780, lineHeight: 1.5 }}>
+            Each chapter gets one tone. Tone is a script-wide bias that shapes
+            the phrase-level suggestions on the Edit tab — set the stage here,
+            refine per-phrase next. <em>Preview only;</em> tone CLI lands later.
+          </div>
         </div>
-        <h2 style={{ margin: '4px 0 6px', fontSize: 24, fontWeight: 700, letterSpacing: '-0.01em' }}>
-          Set the emotional arc
-        </h2>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 780, lineHeight: 1.5 }}>
-          Each chapter gets one tone. Tone is a script-wide bias that shapes
-          the phrase-level suggestions on the Edit tab — set the stage here,
-          refine per-phrase next. <em>Preview only;</em> tone CLI lands later.
-        </div>
+        {/* Accept-all lives ABOVE the chapter bar (footer stays uncluttered):
+            one click marks every chapter considered — untoned — so chaining
+            unlocks without walking each one. Preserves any tones already set. */}
+        <button
+          onClick={acceptAllAsUntoned}
+          disabled={chaptersAllAccepted}
+          title="Accept every chapter as-is (no tone required) and unlock chaining to Phrases"
+          style={{
+            flexShrink: 0, marginTop: 2, padding: '6px 12px', borderRadius: 6,
+            border: '1px solid var(--border)', background: 'transparent',
+            color: chaptersAllAccepted ? 'var(--text-dim)' : 'var(--text)',
+            cursor: chaptersAllAccepted ? 'default' : 'pointer',
+            opacity: chaptersAllAccepted ? 0.6 : 1,
+            fontFamily: 'inherit', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+          }}
+        >
+          {chaptersAllAccepted ? 'All chapters considered ✓' : 'Accept all as untoned'}
+        </button>
+        {/* Collapse the chapter-scoped video viewer — right-aligned above it,
+            matching Phrases/Patterns. Collapsed → ribbon spans full width. */}
+        <button
+          onClick={() => setIsViewerExpanded((v) => !v)}
+          title={isViewerExpanded ? 'Collapse video' : 'Expand video'}
+          aria-label={isViewerExpanded ? 'Collapse video' : 'Expand video'}
+          style={{
+            flexShrink: 0, marginTop: 2, display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)',
+            background: 'transparent', color: 'var(--text-dim)',
+            cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
+          }}
+        >
+          <Icon name={isViewerExpanded ? 'chevron-up' : 'chevron-down'} size={12} />
+          {isViewerExpanded ? 'Collapse' : 'Expand'}
+        </button>
       </div>
 
       {/* Top row: ChapterRibbon (left) + chapter-scoped MediaViewer (right).
@@ -1007,7 +1082,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
         background: 'var(--surface)', border: '1px solid var(--border)',
         borderRadius: 8, padding: 12,
       }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isViewerExpanded ? '1fr 320px' : '1fr', gap: 24, alignItems: 'stretch' }}>
           <ChapterRibbon
             bands={chapters.map((c, i) => ({
               id: c.id,
@@ -1065,6 +1140,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             // band velocity waveforms more vertical detail.
             height={220}
           />
+          {isViewerExpanded && (
           <MediaViewer
             // Prefer the per-chapter temp clip when available — small
             // standalone file, no range-request overhead, smooth play
@@ -1174,6 +1250,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             // taller card.
             thumbnailAspect="16/7"
           />
+          )}
       </div>
       </div>
 

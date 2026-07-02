@@ -6053,6 +6053,21 @@ def _load_downbeats_for_phrases(funscript_path: str) -> list:
     return data.get("downbeats_ms") or []
 
 
+def _chapters_boundary_sig(funscript_path: str):
+    """Ordered ``[[at_ms, end_ms], …]`` of the chapters phrase detection is
+    scoped to — or ``None`` when there are no chapters (global detection).
+
+    Phrase detection depends ONLY on chapter BOUNDARIES, never on tone/metadata.
+    Stamping this signature into the phrases sidecar lets the freshness check
+    reuse cached phrases across a chapters.json rewrite that only changed tone
+    (mtime bumps, boundaries identical) — killing the spurious full-analyzer
+    recalc on a mere Chapters→Phrases hop (D31b)."""
+    chapters = _load_chapters_for_phrases(funscript_path)
+    if not chapters:
+        return None
+    return [[int(c.get("at_ms", 0)), int(c.get("end_ms", 0))] for c in chapters]
+
+
 def _fresh_phrases_payload(funscript_path: str) -> Optional[dict]:
     """Rebuild the assess JSON payload from a FRESH `<stem>.phrases.json`
     sidecar, or ``None`` when it's absent / stale / a different schema version.
@@ -6079,14 +6094,27 @@ def _fresh_phrases_payload(funscript_path: str) -> Optional[dict]:
         s_mtime = sidecar.stat().st_mtime
         if s_mtime < fpath.stat().st_mtime:
             return None  # funscript changed after the sidecar → stale
-        chapters = target_dir / f"{fpath.stem}.chapters.json"
-        if chapters.is_file() and s_mtime < chapters.stat().st_mtime:
-            return None  # chapters re-detected after the sidecar → stale
         data = json.loads(sidecar.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if data.get("version") != _PHRASES_SIDECAR_VERSION:
         return None  # schema bump → recompute
+    # Chapter freshness — phrase spans are scoped to chapter BOUNDARIES, so
+    # invalidate only when the boundaries actually changed (split/join), NOT
+    # when chapters.json was merely rewritten with identical boundaries (a
+    # tone-metadata accept bumps its mtime without touching phrase spans — the
+    # spurious Chapters→Phrases recalc, D31b). Newer sidecars carry a boundary
+    # signature; legacy ones (pre-fix) fall back to the coarse mtime test.
+    if "chapters_sig" in data:
+        if data.get("chapters_sig") != _chapters_boundary_sig(funscript_path):
+            return None  # boundaries changed (or chapters appeared/vanished)
+    else:
+        chapters = target_dir / f"{fpath.stem}.chapters.json"
+        try:
+            if chapters.is_file() and s_mtime < chapters.stat().st_mtime:
+                return None  # legacy fallback: chapters rewritten after sidecar
+        except OSError:
+            return None
     slices = data.get("slices")
     if not isinstance(slices, list):
         return None
@@ -6163,10 +6191,14 @@ def _write_phrases_slice_sidecar(funscript_path: str, result) -> Optional[Path]:
         slices.append(slice_rec)
 
     payload = {
-        "version":     _PHRASES_SIDECAR_VERSION,
-        "kind":        "phrase",
-        "source_file": str(Path(funscript_path).resolve()),
-        "slices":      slices,
+        "version":      _PHRASES_SIDECAR_VERSION,
+        "kind":         "phrase",
+        "source_file":  str(Path(funscript_path).resolve()),
+        # Boundary signature of the chapters detection was scoped to, so the
+        # freshness check invalidates on a real boundary change (split/join)
+        # but NOT a tone-only chapters.json rewrite (D31b).
+        "chapters_sig": _chapters_boundary_sig(funscript_path),
+        "slices":       slices,
     }
     out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return out

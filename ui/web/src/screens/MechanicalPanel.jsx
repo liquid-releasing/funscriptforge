@@ -34,7 +34,7 @@ function SectionLabel({ children, right }) {
 }
 
 export default function MechanicalPanel({
-  styleId, onSelectStyle,
+  styleId, onSelectStyle, onApplyToAll,
   axisData = null, loading = false, chapter = null,
   dirty = false, onReset,
   onUseDefault, defaultStyleId,
@@ -98,9 +98,25 @@ export default function MechanicalPanel({
   return (
     <div>
       <SectionLabel right={(
-        <span className="mono" style={{ fontSize: 10, color: 'var(--text-dim)' }}>
-          T-code · multi-axis
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {onApplyToAll && (
+            <button
+              onClick={onApplyToAll}
+              title="Set every chapter to this mechanical style — fills the mechanical pass in one click"
+              style={{
+                padding: '5px 11px', borderRadius: 6, border: '1px solid var(--border)',
+                background: 'transparent', color: 'var(--text)', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
+                textTransform: 'none', letterSpacing: 0, whiteSpace: 'nowrap',
+              }}
+            >
+              Apply to all chapters
+            </button>
+          )}
+          <span className="mono" style={{ fontSize: 10, color: 'var(--text-dim)' }}>
+            T-code · multi-axis
+          </span>
+        </div>
       )}>
         Mechanical
       </SectionLabel>

@@ -1645,6 +1645,17 @@ class TestHeroBeat(unittest.TestCase):
         self.assertEqual(min(pos), 40)       # own bottom kept
         self.assertLessEqual(max(pos), 70)   # 40 + (90-40)*.6
 
+    def test_varied_strokes_each_keep_own_floor(self):
+        # REGRESSION: adjacent strokes of different height each keep THEIR OWN
+        # bottom (no neighbour-window drift). Tall floor 0, short floor 0; only
+        # the tops ease down, by each stroke's own amount.
+        sig = [0, 100, 0, 60, 0, 100, 0, 60, 0]
+        acts = [{"at": i * 100, "pos": v} for i, v in enumerate(sig)]
+        out = TRANSFORM_CATALOG["hero_beat"].apply(
+            acts, self._all(**{f"beat{i}": 80 for i in range(1, 9)}))
+        pos = [a["pos"] for a in out]
+        self.assertEqual(pos, [0, 80, 0, 48, 0, 80, 0, 48, 0])  # floors kept, tops eased
+
     def test_positions_stay_in_range(self):
         acts = self._wall()
         out = TRANSFORM_CATALOG["hero_beat"].apply(acts, self._all(beat1=0, beat5=20))
@@ -1689,6 +1700,21 @@ class TestShortBeats(unittest.TestCase):
         pos = [a["pos"] for a in out]
         self.assertEqual(min(pos), 50)   # 65 + (40-65)*.6
         self.assertEqual(max(pos), 80)   # 65 + (90-65)*.6
+
+    def test_varied_strokes_each_scale_about_own_center(self):
+        # REGRESSION: adjacent strokes of DIFFERENT height. The old sequencer
+        # anchored each beat over a neighbour-spanning window, so a short stroke
+        # drifted toward its tall neighbour's bottom ("bottom became the
+        # center"). Each stroke must scale about ITS OWN center only.
+        sig = [0, 100, 0, 60, 0, 100, 0, 60, 0]   # tall 0↔100, short 0↔60
+        acts = [{"at": i * 100, "pos": v} for i, v in enumerate(sig)]
+        out = TRANSFORM_CATALOG["short_beats"].apply(
+            acts, self._all(**{f"beat{i}": 80 for i in range(1, 9)}))
+        pos = [a["pos"] for a in out]
+        # Tall stroke about center 50: 100→90, 0→10 (10 off each end).
+        # Short stroke about center 30: 60→54, 0→6 (6 off each end) — NOT pulled
+        # toward the tall neighbour.
+        self.assertEqual(pos, [10, 90, 6, 54, 10, 90, 6, 54, 6])
 
     def test_preserves_count_and_timing(self):
         acts = self._wall()

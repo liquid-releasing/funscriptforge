@@ -224,6 +224,18 @@ export default function CharactersTab({
     if (path) saveCharacters(path, nextMap).catch(() => {});
   };
 
+  // Per-axis "considered" — Channels is a TWO-PASS gate (user decision): a
+  // chapter is BUILT only when BOTH its character AND its mechanical have been
+  // accepted. The footer's "Accept and chain to Polish" stays tentative
+  // (white, no ✓) until every chapter has both. Session-local, reset per
+  // project — same shape as Chapters/Phrases considered-sets.
+  const [charConsideredIds, setCharConsideredIds] = useState(() => new Set());
+  const [mechConsideredIds, setMechConsideredIds] = useState(() => new Set());
+  useEffect(() => {
+    setCharConsideredIds(new Set());
+    setMechConsideredIds(new Set());
+  }, [path]);
+
   // Seed from the shared active chapter (App) so Channels opens on the same
   // chapter you were editing in Chapters; fall back to the first.
   const [activeChapterId, setActiveChapterId] = useState(() => initialChapterId ?? chapters[0]?.id ?? null);
@@ -449,42 +461,112 @@ export default function CharactersTab({
     () => chapters.findIndex((c) => c.id === activeChapterId),
     [chapters, activeChapterId],
   );
-  // Footer "Accept and next chapter" — commit BOTH the staged character AND the
-  // staged mechanical for this chapter (one applied entry), then advance. This
-  // is the single accept now that the in-body Accept buttons are gone; it lives
-  // on the always-visible footer (dogfood 2026-06-16).
-  const acceptAllAndNext = () => {
+  // Advance the shared cursor to the next chapter (forward, wrapping) that
+  // still needs THIS axis — so a full character pass and then a full mechanical
+  // pass each walk only the chapters they haven't covered yet. Returns null
+  // when every chapter already has this axis (that pass is done → stay put).
+  const nextNeeding = (consideredSet) => {
+    const n = chapters.length;
+    if (n === 0) return null;
+    for (let k = 1; k <= n; k += 1) {
+      const idx = (activeChapterIdx + k) % n;
+      if (!consideredSet.has(chapters[idx].id)) return chapters[idx].id;
+    }
+    return null;
+  };
+
+  // Pass 1 — commit the staged CHARACTER for the active chapter (leave its
+  // mechanical untouched), mark it considered, advance to the next chapter
+  // still missing a character.
+  const acceptCharacterAndNext = () => {
     if (!activeChapterId) return;
-    const prevEntry = applied?.[activeChapterId] || {};
+    const prev = applied?.[activeChapterId] || {};
     commitApplied({
       ...(applied || {}),
-      [activeChapterId]: {
-        ...prevEntry,
-        characterId: staged.characterId,
-        params: { ...staged.params },
-        mechStyle: stagedMechStyle,
-      },
+      [activeChapterId]: { ...prev, characterId: staged.characterId, params: { ...staged.params } },
     });
-    if (activeChapterIdx >= 0 && activeChapterIdx < chapters.length - 1) {
-      setActiveChapterId(chapters[activeChapterIdx + 1].id);
-    }
+    const nextSet = new Set(charConsideredIds).add(activeChapterId);
+    setCharConsideredIds(nextSet);
+    const nx = nextNeeding(nextSet);
+    if (nx) setActiveChapterId(nx);
   };
-  const isLastChapter = activeChapterIdx >= chapters.length - 1;
-  const acceptRunRef = useRef(acceptAllAndNext);
-  acceptRunRef.current = acceptAllAndNext;
+
+  // Pass 2 — same, for the staged MECHANICAL (leave its character untouched).
+  const acceptMechanicalAndNext = () => {
+    if (!activeChapterId) return;
+    const prev = applied?.[activeChapterId] || {};
+    commitApplied({
+      ...(applied || {}),
+      [activeChapterId]: { ...prev, mechStyle: stagedMechStyle },
+    });
+    const nextSet = new Set(mechConsideredIds).add(activeChapterId);
+    setMechConsideredIds(nextSet);
+    const nx = nextNeeding(nextSet);
+    if (nx) setActiveChapterId(nx);
+  };
+
+  // Broadcast the currently-staged pick to EVERY chapter (header "Apply
+  // selected … to all chapters"). Fills the whole axis in one click — the
+  // efficient path through the strict both-axes gate — and marks every chapter
+  // considered for that axis. Preserves the OTHER axis on each chapter.
+  const applyCharacterToAll = () => {
+    if (!chapters.length) return;
+    const next = { ...(applied || {}) };
+    chapters.forEach((c) => {
+      next[c.id] = { ...(next[c.id] || {}), characterId: staged.characterId, params: { ...staged.params } };
+    });
+    commitApplied(next);
+    setCharConsideredIds(new Set(chapters.map((c) => c.id)));
+  };
+  const applyMechanicalToAll = () => {
+    if (!chapters.length) return;
+    const next = { ...(applied || {}) };
+    chapters.forEach((c) => {
+      next[c.id] = { ...(next[c.id] || {}), mechStyle: stagedMechStyle };
+    });
+    commitApplied(next);
+    setMechConsideredIds(new Set(chapters.map((c) => c.id)));
+  };
+
+  // Completion — a chapter is BUILT when its PERSISTED entry has both a
+  // character and a mechanical style. We read this from the saved `applied`
+  // map (characters.json), NOT the session-local considered sets, so the gate
+  // reflects work done in a PRIOR visit and survives leaving + re-entering the
+  // tab (the considered sets are component-local and reset on remount — the
+  // "came back to Channels, chain isn't red" bug). Chapters auto-seed with
+  // journey-arc defaults for both axes, so a fully-seeded project reads as
+  // built; the two per-pass walks remain for deliberate review/refinement.
+  const chapterBuilt = (c) => {
+    const a = applied?.[c.id];
+    return !!a && a.characterId !== undefined && a.mechStyle !== undefined;
+  };
+  const channelsComplete = chapters.length > 0 && chapters.every(chapterBuilt);
+  const builtCount = chapters.filter(chapterBuilt).length;
+  const charRunRef = useRef(() => {});
+  charRunRef.current = acceptCharacterAndNext;
+  const mechRunRef = useRef(() => {});
+  mechRunRef.current = acceptMechanicalAndNext;
   useEffect(() => {
     if (!onRegisterChapterNav) return undefined;
     onRegisterChapterNav(
       chapters.length > 0
         ? {
-            hasNext: !isLastChapter,
-            label: isLastChapter ? 'Accept chapter' : 'Accept and next chapter',
-            run: () => acceptRunRef.current(),
+            // TWO per-pass walks → App renders them as the footer's secondary
+            // (white) buttons, left of the tentative "Accept and chain to
+            // Polish" primary. `complete` drives the gate; `considered` counts
+            // chapters that have BOTH axes.
+            passes: [
+              { key: 'character', label: 'Character · accept & next', run: () => charRunRef.current() },
+              { key: 'mechanical', label: 'Mechanical · accept & next', run: () => mechRunRef.current() },
+            ],
+            complete: channelsComplete,
+            considered: builtCount,
+            total: chapters.length,
           }
         : null,
     );
     return () => onRegisterChapterNav(null);
-  }, [isLastChapter, chapters.length, onRegisterChapterNav]);
+  }, [chapters.length, onRegisterChapterNav, channelsComplete, builtCount]);
 
   // The journey-arc default for THIS chapter's position — what the auto-seed
   // would assign. Exposed as an explicit "Use default" button under each grid
@@ -832,6 +914,7 @@ export default function CharactersTab({
           <MechanicalPanel
             styleId={stagedMechStyle}
             onSelectStyle={setStagedMechStyle}
+            onApplyToAll={applyMechanicalToAll}
             axisData={axisData}
             loading={axisLoading}
             chapter={activeChapter}
@@ -858,6 +941,8 @@ export default function CharactersTab({
               onReset={resetStaged}
               onUseDefault={useDefaultCharacter}
               defaultLabel={defaultCharLabel}
+              onApplyToAll={applyCharacterToAll}
+              applyToAllDisabled={staged.characterId === undefined}
               dirty={dirty}
               isLastChapter={chapters.findIndex((c) => c.id === activeChapterId) >= chapters.length - 1}
               estimSelected={estimSelected}
@@ -1310,6 +1395,7 @@ function CharacterPanel({
   onSelectCharacter, onParamChange, onAccept, onReset, onUseDefault, defaultLabel,
   dirty, isLastChapter,
   estimSelected, catalogWarning,
+  onApplyToAll, applyToAllDisabled = false,
 }) {
   // Card grid auto-sizes — usually 5 + Nothing = 6, but accommodates a
   // custom preset the user dropped into stim_presets.json. Cap at 7
@@ -1319,13 +1405,35 @@ function CharacterPanel({
   return (
     <div>
       <SectionLabel
-        right={catalogWarning ? (
-          <span title={catalogWarning}
-            style={{ fontSize: 10, color: '#ffb547', cursor: 'help' }}>
-            <Icon name="alert-triangle" size={10} style={{ verticalAlign: '-1px', marginRight: 3 }} />
-            user preset file ignored
-          </span>
-        ) : null}
+        right={(
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {catalogWarning && (
+              <span title={catalogWarning}
+                style={{ fontSize: 10, color: '#ffb547', cursor: 'help' }}>
+                <Icon name="alert-triangle" size={10} style={{ verticalAlign: '-1px', marginRight: 3 }} />
+                user preset file ignored
+              </span>
+            )}
+            {onApplyToAll && (
+              <button
+                onClick={onApplyToAll}
+                disabled={applyToAllDisabled}
+                title="Set every chapter to this character — fills the character pass in one click"
+                style={{
+                  padding: '5px 11px', borderRadius: 6, border: '1px solid var(--border)',
+                  background: 'transparent',
+                  color: applyToAllDisabled ? 'var(--text-dim)' : 'var(--text)',
+                  cursor: applyToAllDisabled ? 'default' : 'pointer',
+                  opacity: applyToAllDisabled ? 0.6 : 1,
+                  fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
+                  textTransform: 'none', letterSpacing: 0, whiteSpace: 'nowrap',
+                }}
+              >
+                Apply to all chapters
+              </button>
+            )}
+          </div>
+        )}
       >
         Character
       </SectionLabel>

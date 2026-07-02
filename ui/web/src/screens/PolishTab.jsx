@@ -8,7 +8,7 @@
 // polishEngine.js on a representative window; Stamp writes the whole track via
 // Python (polishApply) and records it in <stem>.polish.yml (polishWrite).
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { polishApply, polishChannels, polishRead, polishWrite, isTauri } from '../api/forge.js';
 import { POLISH_DEVICES, outputFilesFor } from '../data/polishDevices.js';
@@ -48,7 +48,7 @@ function burnOff(tr) {
   return Math.min(1, Math.sqrt(s / n) / 30);
 }
 
-export default function PolishTab({ project, setAppError = () => {}, setBusy = () => {} }) {
+export default function PolishTab({ project, setAppError = () => {}, setBusy = () => {}, onRegisterChapterNav }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
   const path = project?.path ?? null;
@@ -218,8 +218,10 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
 
   const stampedCount = POLISH_DEVICES.filter((d) => stateOf(d) === 'accepted').length;
 
+  // Returns true when the device actually got stamped (so the footer walk only
+  // advances on success, and "Accept all defaults" can count what it forged).
   const stamp = async (d) => {
-    if (!canStamp) return;
+    if (!canStamp) return false;
     setStamping(d.id);
     setStampError((e) => ({ ...e, [d.id]: null }));
     // Forging the whole track is slow — e-stim regenerates 9 channels per
@@ -255,7 +257,7 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
         // the station's Stamp button, not via the global app-error banner
         // (which would bleed onto every other tab, incl. Export).
         setStampError((e) => ({ ...e, [d.id]: res?.error || 'Stamp failed' }));
-        return;
+        return false;
       }
       const next = {
         ...passes,
@@ -269,16 +271,103 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
       setPasses(next);
       if (res.source_hash) setCurrentHash(res.source_hash);
       await polishWrite(path, next);
+      return true;
     } catch (err) {
       const msg = String(err?.message || err);
       setStampError((e) => ({ ...e, [d.id]: msg }));
       setAppError(msg);
+      return false;
     } finally {
       if (offProgress) { try { offProgress(); } catch { /* already torn down */ } }
       setStamping(null);
       setBusy(null);
     }
   };
+
+  // ── Footer walk + bulk defaults (device gate) ──────────────────────────
+  // Polish is a per-DEVICE gate: entering shows no ✓; the footer's "Accept and
+  // next device" STAMPS the focused device (identical to the bench Stamp — it
+  // just also advances focus so you skip clicking the next station), and the
+  // chain to Export unlocks (red + ✓) only once every device is stamped.
+  const focusedIndex = POLISH_DEVICES.findIndex((d) => d.id === focused);
+  const allStamped = POLISH_DEVICES.length > 0 && stampedCount === POLISH_DEVICES.length;
+
+  const stampAndNext = async () => {
+    const ok = await stamp(focusedDevice);
+    if (ok && focusedIndex >= 0 && focusedIndex < POLISH_DEVICES.length - 1) {
+      setFocused(POLISH_DEVICES[focusedIndex + 1].id);
+    }
+  };
+
+  // "Accept all defaults" (header, by the N/6 counter) — stamp every device
+  // that isn't already accepted, with its current/default knobs. PRESERVES any
+  // station the user already tuned + stamped (user: "keep whatever the user
+  // set").
+  //
+  // Loop-safe by construction: it does NOT call the single-device stamp() in a
+  // loop. That would re-spread the SAME render-closure `passes`/`currentHash`
+  // each iteration (React state doesn't update mid-loop), so every write
+  // clobbered the previous and the survivors read back as `stale`
+  // (source_hash ≠ the final currentHash). Instead we forge each device,
+  // accumulate the records, then commit ONE passes update + ONE polish.yml
+  // write, normalising every record to the final source_hash so none is stale.
+  const acceptAllDefaults = async () => {
+    if (!canStamp || stamping !== null) return;
+    const targets = POLISH_DEVICES.filter((d) => stateOf(d) !== 'accepted');
+    if (!targets.length) return;
+    const stamped = {};
+    let latestHash = currentHash;
+    for (const d of targets) {
+      setStamping(d.id);
+      setStampError((e) => ({ ...e, [d.id]: null }));
+      setBusy({ message: `Forging ${d.label}…` });
+      try {
+        const res = await polishApply(path, d.id, knobs[d.id]); // eslint-disable-line no-await-in-loop
+        if (!res || res.error) {
+          setStampError((e) => ({ ...e, [d.id]: res?.error || 'Stamp failed' }));
+          continue;
+        }
+        if (res.source_hash) latestHash = res.source_hash;
+        stamped[d.id] = {
+          accepted: true,
+          accepted_at: new Date().toISOString(),
+          knobs: knobs[d.id],
+          source_hash: res.source_hash || latestHash,
+        };
+      } catch (err) {
+        setStampError((e) => ({ ...e, [d.id]: String(err?.message || err) }));
+      }
+    }
+    setStamping(null);
+    setBusy(null);
+    if (Object.keys(stamped).length) {
+      // Normalise every freshly-stamped record to the final hash so they all
+      // match currentHash (no false 'stale'), then commit once. `passes` is
+      // stable here — concurrent stamps are blocked while stamping !== null.
+      for (const id of Object.keys(stamped)) stamped[id].source_hash = latestHash;
+      const next = { ...passes, ...stamped };
+      setPasses(next);
+      setCurrentHash(latestHash);
+      try { await polishWrite(path, next); } catch { /* best-effort persist */ }
+    }
+  };
+
+  const stampAndNextRef = useRef(stampAndNext);
+  stampAndNextRef.current = stampAndNext;
+  useEffect(() => {
+    if (!onRegisterChapterNav) return undefined;
+    onRegisterChapterNav({
+      hasNext: focusedIndex >= 0 && focusedIndex < POLISH_DEVICES.length - 1,
+      label: 'Accept and next device',
+      run: () => stampAndNextRef.current(),
+      complete: allStamped,
+      considered: stampedCount,
+      total: POLISH_DEVICES.length,
+      // Device-worded summary override (App defaults to "chapters considered").
+      summary: `${stampedCount} of ${POLISH_DEVICES.length} devices stamped · stamp each (or “Accept all defaults”) to unlock chaining to Export`,
+    });
+    return () => onRegisterChapterNav(null);
+  }, [onRegisterChapterNav, allStamped, stampedCount, focusedIndex]);
 
   const outputFiles = outputFilesFor(focusedDevice, stem);
   const focusedState = stateOf(focusedDevice);
@@ -326,6 +415,23 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
           )}
         </span>
         <span style={{ flex: 1 }} />
+        {/* Bulk escape from the strict all-devices gate: stamp every not-yet-
+            accepted device with its defaults, preserving any the user tuned. */}
+        <button
+          onClick={acceptAllDefaults}
+          disabled={!canStamp || stamping !== null || allStamped}
+          title="Stamp every device with its defaults (keeps any you've already tuned) — unlocks chaining to Export"
+          style={{
+            padding: '5px 11px', borderRadius: 6, border: '1px solid #2d3148',
+            background: 'transparent',
+            color: (!canStamp || allStamped) ? '#6b7390' : '#c7cce0',
+            cursor: (!canStamp || stamping !== null || allStamped) ? 'default' : 'pointer',
+            opacity: (!canStamp || stamping !== null || allStamped) ? 0.6 : 1,
+            fontFamily: 'inherit', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+          }}
+        >
+          {allStamped ? 'All devices stamped ✓' : 'Accept all defaults'}
+        </button>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#6b7390' }}>
           {stampedCount}/{POLISH_DEVICES.length} stamped
         </span>

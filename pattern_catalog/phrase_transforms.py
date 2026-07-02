@@ -710,34 +710,36 @@ def _beat_sequencer(actions, steps, anchor_mode):
         return actions  # identity — nothing pulled in
 
     extrema_idx = _find_extrema(actions, min_prominence=5)
-    beat_times = [actions[i]["at"] for i in extrema_idx]
-    if len(beat_times) < 1:
-        return actions
+    if not extrema_idx:
+        return actions  # no reversals → no beats to scale
 
-    # Per-beat LOCAL anchor from the stroke around each reversal (bounded by its
-    # neighbours): floor = local min, center = midpoint of local min/max.
-    n = len(extrema_idx)
-    anchors = []
-    for k in range(n):
-        a0 = extrema_idx[k - 1] if k > 0 else 0
-        a1 = extrema_idx[k + 1] if k < n - 1 else len(actions) - 1
-        seg = [actions[i]["pos"] for i in range(a0, a1 + 1)]
-        lo, hi = min(seg), max(seg)
-        anchors.append(lo if anchor_mode == "floor" else (lo + hi) / 2.0)
-
-    import bisect
-    for a in actions:
-        t = a["at"]
-        j = bisect.bisect_left(beat_times, t)
-        if j <= 0:
-            nb = 0
-        elif j >= len(beat_times):
-            nb = len(beat_times) - 1
-        else:
-            nb = j if (beat_times[j] - t) < (t - beat_times[j - 1]) else j - 1
-        scale = steps[nb % 8]
-        anchor = anchors[nb]
-        a["pos"] = max(0, min(100, int(round(anchor + (a["pos"] - anchor) * scale))))
+    # A beat is ONE stroke: the span between two consecutive reversals (plus the
+    # head before the first reversal and the tail after the last). We scale each
+    # stroke about ITS OWN top/bottom — the min/max of that single stroke, NOT a
+    # neighbour-spanning window — so a lifted or shallow stroke keeps its own
+    # center/floor instead of drifting toward a taller neighbour's bottom.
+    #
+    #   floor  → anchor = the stroke's own bottom (Hero Beat: top eases down,
+    #            bottom stays; a full stroke lands at 0, a lifted one at its low).
+    #   center → anchor = midpoint of the stroke's own bottom+top (Short Beats:
+    #            both ends pull in equally — 80% = 10% off the top, 10% off the
+    #            bottom of THIS stroke).
+    bounds = ([0]
+              + [i for i in extrema_idx if 0 < i < len(actions) - 1]
+              + [len(actions) - 1])
+    last_seg = len(bounds) - 2
+    for s in range(len(bounds) - 1):
+        i0, i1 = bounds[s], bounds[s + 1]
+        seg_pos = [actions[i]["pos"] for i in range(i0, i1 + 1)]
+        lo, hi = min(seg_pos), max(seg_pos)
+        anchor = lo if anchor_mode == "floor" else (lo + hi) / 2.0
+        scale = steps[s % 8]
+        # Half-open [i0, i1) so the shared reversal point belongs to exactly one
+        # stroke (the next one owns it); the final stroke includes its endpoint.
+        end = i1 + 1 if s == last_seg else i1
+        for i in range(i0, end):
+            p = actions[i]["pos"]
+            actions[i]["pos"] = max(0, min(100, int(round(anchor + (p - anchor) * scale))))
 
     return actions
 

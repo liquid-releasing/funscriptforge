@@ -41,7 +41,7 @@ const STROKER_STATIONS = ['handy', 'tcode', 'lovense', 'vacuglide'];
 // ──────────────────────────────────────────────────────────────
 export default function ExportTab({
   project, trackPeaks = null, trackSpectrogram = null,
-  setBusy = () => {}, setAppError = () => {},
+  setBusy = () => {}, setAppError = () => {}, onRegisterExport,
 }) {
   const projectStem = useMemo(() => {
     if (!project?.path) return 'project';
@@ -273,6 +273,23 @@ export default function ExportTab({
       setWriting(false);
     }
   };
+
+  // Expose the export action + completion to the App footer so it can host the
+  // primary "Export" button and flip it to "Chain to Viewer" ✓ once the write
+  // succeeds (user: the footer owns the export verb, like every other tab).
+  // Must sit ABOVE the early return (Rules of Hooks); reads live state via
+  // `results`/`writing` (declared earlier) and the action via a ref.
+  const doWriteRef = useRef(doWrite);
+  doWriteRef.current = doWrite;
+  useEffect(() => {
+    if (!onRegisterExport) return undefined;
+    onRegisterExport({
+      run: () => doWriteRef.current(),
+      done: !!(results && results.length),
+      busy: writing,
+    });
+    return () => onRegisterExport(null);
+  }, [onRegisterExport, results, writing]);
 
   if (!project?.path) {
     return (
