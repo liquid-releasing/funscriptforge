@@ -315,7 +315,9 @@ function mergeWorkingActions({ originalActions, chapters, acceptedIds, tones, pa
     let j = inRangeStart;
     while (j < originalActions.length && originalActions[j].at <= ch.endMs) j += 1;
     if (acceptedIds.has(ch.id)) {
-      const toneObj = findTone(tones[ch.id]);
+      // `?? 'none'` — an unseeded chapter must read as Untoned passthrough,
+      // NOT findTone's 'build' fallback (which would darken the whole script).
+      const toneObj = findTone(tones[ch.id] ?? 'none');
       const toneParamsObj = params[ch.id]?.[toneObj.id] ?? {};
       out.push(...applyTone(originalActions, ch.atMs, ch.endMs, toneObj, toneParamsObj));
     } else {
@@ -402,6 +404,34 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     setParamsByChapter(chapterEdits?.params ?? seedParams(next));
     setAcceptedChapterIds(seedAccepted(next, chapterEdits));
   }, [project?.path]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fill a tone/param entry for any chapter that lacks one. Chapters can
+  // arrive — or change IDs — AFTER mount (analysis completing, or a re-analyze),
+  // and the restored `chapterEdits.tones` above may be keyed to the PRIOR
+  // chapter set, leaving the new chapters with no entry. Without this,
+  // tonesByChapter[id] is undefined → findTone() falls back to 'build' → the
+  // rail shows every chapter as "Build" AND acceptAllAsUntoned applies the Build
+  // transform to the whole script (the dark-funscript bug). Fill-only: returns
+  // the prior map unchanged when nothing's missing (no render loop), and never
+  // clobbers a real user pick.
+  useEffect(() => {
+    setTonesByChapter((prev) => {
+      let changed = false;
+      const nextMap = { ...prev };
+      for (const c of chapters) {
+        if (nextMap[c.id] === undefined) { nextMap[c.id] = intentToToneId(c.tone) ?? 'none'; changed = true; }
+      }
+      return changed ? nextMap : prev;
+    });
+    setParamsByChapter((prev) => {
+      let changed = false;
+      const nextMap = { ...prev };
+      for (const c of chapters) {
+        if (nextMap[c.id] === undefined) { nextMap[c.id] = defaultToneParams(); changed = true; }
+      }
+      return changed ? nextMap : prev;
+    });
+  }, [chapters]);
 
   // Collapse toggle for the chapter-scoped video viewer — same affordance as
   // Phrases/Patterns. When collapsed the ribbon spans full width (more room for
@@ -1191,7 +1221,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
         background: 'var(--surface)', border: '1px solid var(--border)',
         borderRadius: 8, padding: 12,
       }}>
-      <div style={{ display: 'grid', gridTemplateColumns: isViewerExpanded ? '1fr 320px' : '1fr', gap: 24, alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isViewerExpanded ? '1fr 280px' : '1fr', gap: 24, alignItems: 'stretch' }}>
           <ChapterRibbon
             bands={chapters.map((c, i) => ({
               id: c.id,
@@ -1204,7 +1234,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
               // it is. See project-split-join-in-flight memory.
               name: chapterDisplayLabel(c, i),
               color: c.color,
-              toneColor: findTone(tonesByChapter[c.id])?.color,
+              toneColor: findTone(tonesByChapter[c.id] ?? 'none')?.color,
               // Surface per-chapter acceptance to the ribbon so the
               // upper-left corner of each band can render a checkmark
               // for chapters the user has signed off on. The ribbon's
@@ -1662,7 +1692,9 @@ function ChapterRail({ chapters, tones, activeId, acceptedIds, onSelect }) {
       </div>
       {chapters.map((c, i) => {
         const sel = c.id === activeId;
-        const t = findTone(tones[c.id]);
+        // `?? 'none'` — a chapter with no tone entry is Untoned, not findTone's
+        // 'build' fallback (which was mislabeling every fresh chapter "Build").
+        const t = findTone(tones[c.id] ?? 'none');
         const accepted = acceptedIds?.has(c.id) ?? false;
         return (
           <button

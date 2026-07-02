@@ -625,6 +625,7 @@ function ProjectPills({ pills, status }) {
       {pills.video && <span style={pillStyle('#4dabf7')}>video</span>}
       {pills.audio && <span style={pillStyle('#3ed598')}>audio</span>}
       {pills.funscript && <span style={pillStyle('#ffb547')}>funscript</span>}
+      {pills.forge && <span style={pillStyle('#ff6b30')}>forge</span>}
       {pills.forged && <span style={pillStyle('#ff5470')}>forged</span>}
       {status === 'completed' && <span style={pillStyle('#c77dff')}>completed</span>}
     </>
