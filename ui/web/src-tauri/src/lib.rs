@@ -48,6 +48,8 @@ pub fn run() {
             commands::contact_sheet,
             commands::promote_generated_funscript,
             commands::write_chapters_sidecar,
+            commands::read_markers_sidecar,
+            commands::write_markers_sidecar,
             commands::analyze_phrases,
             commands::load_phrases_sidecar,
             commands::read_stanzas_from_chapters_sidecar,

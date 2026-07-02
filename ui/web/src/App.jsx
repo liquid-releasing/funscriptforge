@@ -1124,6 +1124,18 @@ export default function App() {
     footerSummary = chapterNav.summary
       ?? `${chapterNav.considered ?? 0} of ${chapterNav.total ?? 0} chapters considered · accept each (or “Accept all as-is”) to unlock chaining${nextLabel ? ` to ${nextLabel}` : ''}`;
   }
+  // Sub-unit walk (Phrases "Accept and next phrase"): a gated chapter tab may
+  // ALSO expose a finer walk over the focused sub-unit. It rides as a white
+  // secondary beside whatever primary the gate chose (chapter-walk while
+  // incomplete, chain when complete). Independent of the Channels multi-pass;
+  // appended so it coexists with any existing secondaries.
+  if (chapterGateActive && chapterNav.subWalk && !gateMsg && !busy) {
+    const sw = chapterNav.subWalk;
+    footerSecondaryActions = [
+      ...(footerSecondaryActions ?? []),
+      { key: 'phrase-walk', label: sw.label, onClick: sw.run, disabled: sw.disabled },
+    ];
+  }
 
   const handleAccept = async () => {
     if (gateMsg) {

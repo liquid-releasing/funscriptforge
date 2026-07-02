@@ -389,6 +389,27 @@ export function writeChaptersSidecar(sourcePath, chapters) {
   );
 }
 
+/** Markers — user-authored navigation points stored as a top-level
+ *  `markers` array in the SAME `<stem>.chapters.json` sidecar. Each is
+ *  `{ id, at_ms, name }` (snake_case on both sides — a self-owned shape,
+ *  no camelCase transcription). `sourcePath` = `mediaPath ?? path`, same
+ *  as chapters. Browser-mode reads empty / writes a no-op. */
+export function readMarkers(sourcePath) {
+  return call(
+    'read_markers_sidecar',
+    { sourcePath },
+    () => Promise.resolve([]),
+  );
+}
+
+export function saveMarkers(sourcePath, markers) {
+  return call(
+    'write_markers_sidecar',
+    { sourcePath, markers },
+    () => Promise.resolve(),
+  );
+}
+
 /** Read videoflow-classified stanzas (audio phrases) plus computed
  *  clusters from the `<stem>.chapters.json` sidecar next to a funscript
  *  or media file.

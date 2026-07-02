@@ -33,6 +33,8 @@ import {
   extractChapterClip,
   transformApplyActions,
   saveWorkingFunscript,
+  readMarkers,
+  saveMarkers,
 } from '../api/forge.js';
 import { useTransformPreview } from '../api/useTransformPreview.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
@@ -202,6 +204,25 @@ function seedParams(chapters) {
   return out;
 }
 
+// Seed the per-chapter "accepted" set. Acceptance is session-local (lifted to
+// App's chapterEditsByPath) and NOT written to disk — but a chapter's *tone* IS
+// (attachTones → sidecar, round-tripped by seedTones on reopen). So a project
+// fully toned in a PREVIOUS pass would otherwise reload with an empty accepted
+// set, leaving the footer stuck on the tentative "Accept and next chapter" walk
+// even though every chapter is clearly done (GTJ-173). Treat a persisted real
+// tone (anything but 'none'/Untoned) as prior acceptance so the completion gate
+// AND the per-row accepted dots reflect the earlier pass. The lifted-session
+// `accepted` list still merges in — it covers untoned-but-accepted chapters
+// (e.g. "Accept all as untoned") within the same run.
+function seedAccepted(chapters, chapterEdits) {
+  const set = chapterEdits?.accepted ? new Set(chapterEdits.accepted) : new Set();
+  (chapters ?? []).forEach((c) => {
+    const toneId = intentToToneId(c.tone);
+    if (toneId && toneId !== 'none') set.add(c.id);
+  });
+  return set;
+}
+
 // Apply a tone to a chapter's slice of actions. JS preview only — the
 // canonical transform will move to `python cli.py tone`. Curve shapes mirror
 // the prototype (ui_design/.../tab-Chapters.jsx::applyToneCurve) so the
@@ -363,7 +384,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // not just at chain time. Local Set; lives only for the session — the
   // tab-level chain step is still where persistence happens.
   const [acceptedChapterIds, setAcceptedChapterIds] = useState(() =>
-    chapterEdits?.accepted ? new Set(chapterEdits.accepted) : new Set(),
+    seedAccepted(chapters, chapterEdits),
   );
 
   // When the user opens a different project, reset the local chapter list
@@ -379,7 +400,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     // defaults. Accept still writes the sidecar for cross-restart persistence.
     setTonesByChapter(chapterEdits?.tones ?? seedTones(next));
     setParamsByChapter(chapterEdits?.params ?? seedParams(next));
-    setAcceptedChapterIds(chapterEdits?.accepted ? new Set(chapterEdits.accepted) : new Set());
+    setAcceptedChapterIds(seedAccepted(next, chapterEdits));
   }, [project?.path]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Collapse toggle for the chapter-scoped video viewer — same affordance as
@@ -533,6 +554,75 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   const toneId = tonesByChapter[active.id] ?? 'none';
   const tone = findTone(toneId);
   const toneParams = paramsByChapter[active.id]?.[tone.id] ?? {};
+
+  // ── Markers ────────────────────────────────────────────────────────
+  // User-authored navigation points (id / at_ms / name), stored as a
+  // top-level `markers` array in <stem>.chapters.json — so they ride the
+  // .forge bundle into ForgePlayer. Loaded per project; write-through to
+  // disk on every add / rename / delete (like Events → feel.yml), no
+  // tab-level Accept needed. Default name = the chapter the baton sits in.
+  const [markers, setMarkers] = useState([]);
+  const markerSourcePath = project?.mediaPath ?? project?.path ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    if (!markerSourcePath) { setMarkers([]); return undefined; }
+    readMarkers(markerSourcePath)
+      .then((arr) => { if (!cancelled && Array.isArray(arr)) setMarkers(arr); })
+      .catch(() => { if (!cancelled) setMarkers([]); });
+    return () => { cancelled = true; };
+  }, [markerSourcePath]);
+  // Write-through: keep the list time-sorted, persist, mirror to state.
+  const commitMarkers = (next) => {
+    const sorted = [...next].sort((a, b) => (a.at_ms ?? 0) - (b.at_ms ?? 0));
+    setMarkers(sorted);
+    if (markerSourcePath) {
+      saveMarkers(markerSourcePath, sorted)
+        .catch((e) => setAppError?.(`Could not save markers: ${e?.message ?? e}`));
+    }
+  };
+  const addMarkerAtPlayhead = () => {
+    const at = Math.round(currentMs || 0);
+    const name = (active !== EMPTY_CHAPTER && active?.name) || `Marker ${markers.length + 1}`;
+    // Unique across sessions: timestamp + index. Date.now is fine in app
+    // runtime (unlike workflow scripts); collisions are impossible within
+    // a click and unlikely across reloads given the ms + count.
+    const id = `m-${Date.now()}-${markers.length}`;
+    commitMarkers([...markers, { id, at_ms: at, name }]);
+  };
+  const renameMarker = (id, name) => commitMarkers(
+    markers.map((m) => (m.id === id ? { ...m, name } : m)),
+  );
+  const deleteMarker = (id) => commitMarkers(markers.filter((m) => m.id !== id));
+
+  // ── YouTube chapters export ──────────────────────────────────────────
+  // YouTube derives "chapters" from the video DESCRIPTION: mm:ss (or
+  // h:mm:ss) lines, first MUST be 0:00, ≥3 entries, each ≥10s apart. No
+  // API — the user pastes the copied block into their description. Sourced
+  // from the structural chapters (markers are the finer ForgePlayer-tick
+  // layer, not YouTube chapters).
+  const [ytCopied, setYtCopied] = useState(false);
+  const copyYouTubeChapters = async () => {
+    if (!chapters.length) return;
+    const fmt = (ms) => {
+      const s = Math.max(0, Math.floor((ms ?? 0) / 1000));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      return h > 0
+        ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+        : `${m}:${String(sec).padStart(2, '0')}`;
+    };
+    const text = chapters
+      .map((c, i) => `${fmt(i === 0 ? 0 : c.atMs)} ${c.name || `Chapter ${i + 1}`}`)
+      .join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setYtCopied(true);
+      setTimeout(() => setYtCopied(false), 1800);
+    } catch (e) {
+      setAppError?.(`Could not copy to clipboard: ${e?.message ?? e}`);
+    }
+  };
 
   // Full-track peaks pass through directly to MediaViewer — same model
   // as spectrogram. WaveformCanvas (post-2026-05-21) does its own
@@ -1017,6 +1107,25 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             refine per-phrase next. <em>Preview only;</em> tone CLI lands later.
           </div>
         </div>
+        {/* Copy the structural chapters as YouTube description timestamps.
+            No API — paste into the video description; YouTube renders them. */}
+        <button
+          onClick={copyYouTubeChapters}
+          disabled={!chapters.length}
+          title="Copy chapters as YouTube description timestamps. Paste into your video description. (YouTube needs the first at 0:00, ≥3 chapters, ≥10s apart.)"
+          style={{
+            flexShrink: 0, marginTop: 2, padding: '6px 12px', borderRadius: 6,
+            border: '1px solid var(--border)', background: 'transparent',
+            color: chapters.length ? 'var(--text)' : 'var(--text-dim)',
+            cursor: chapters.length ? 'pointer' : 'default',
+            opacity: chapters.length ? 1 : 0.6,
+            fontFamily: 'inherit', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+          }}
+        >
+          <Icon name={ytCopied ? 'check' : 'copy'} size={12} />
+          {ytCopied ? 'Copied ✓' : 'Copy YouTube chapters'}
+        </button>
         {/* Accept-all lives ABOVE the chapter bar (footer stays uncluttered):
             one click marks every chapter considered — untoned — so chaining
             unlocks without walking each one. Preserves any tones already set. */}
@@ -1112,6 +1221,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             // the onSeek handler on MediaViewer anyway).
             onSeek={(ms) => setCurrentMs(Math.max(active.atMs, Math.min(active.endMs, ms)))}
             currentMs={currentMs}
+            markers={markers}
             menu={[
               {
                 id: 'split',
@@ -1253,6 +1363,99 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           )}
       </div>
       </div>
+
+      {/* ── Markers ── user-authored jump points. Position the baton, hit
+          "Add marker"; each shows its timestamp + an editable name (default =
+          the chapter name). Write-through to chapters.json → rides the .forge
+          bundle into ForgePlayer. Scoped to the active chapter's span. */}
+      {active !== EMPTY_CHAPTER && (() => {
+        const markersInChapter = markers.filter(
+          (m) => (m.at_ms ?? 0) >= active.atMs && (m.at_ms ?? 0) < active.endMs,
+        );
+        return (
+          <div style={{
+            margin: '0 var(--s-5) var(--s-4)', padding: '10px 12px',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 8,
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              marginBottom: markersInChapter.length ? 8 : 0,
+            }}>
+              <span style={{
+                fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+                textTransform: 'uppercase', color: 'var(--text-dim)',
+              }}>
+                Markers
+              </span>
+              <button
+                onClick={() => addMarkerAtPlayhead()}
+                title="Drop a marker at the current playhead position"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '5px 10px', borderRadius: 6,
+                  border: '1px solid var(--border)', background: 'var(--surface-2)',
+                  color: 'var(--text)', cursor: 'pointer', fontFamily: 'inherit',
+                  fontSize: 12, fontWeight: 600,
+                }}
+              >
+                <Icon name="bookmark" size={12} /> Add marker at playhead
+              </button>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                {fmtTimeShort(currentMs)}
+                {markers.length > markersInChapter.length
+                  ? ` · ${markers.length} total` : ''}
+              </span>
+            </div>
+            {markersInChapter.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {markersInChapter.map((m) => (
+                  <div key={m.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '4px 6px', borderRadius: 6, background: 'var(--surface-2)',
+                  }}>
+                    <button
+                      onClick={() => setCurrentMs(Math.max(active.atMs, Math.min(active.endMs, m.at_ms)))}
+                      title="Seek to this marker"
+                      style={{
+                        flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 11,
+                        color: 'var(--accent, #4a86c8)', background: 'transparent',
+                        border: 'none', cursor: 'pointer', padding: '2px 4px',
+                      }}
+                    >
+                      {fmtTimeShort(m.at_ms)}
+                    </button>
+                    <input
+                      value={m.name}
+                      onChange={(e) => renameMarker(m.id, e.target.value)}
+                      placeholder="Marker name"
+                      style={{
+                        flex: 1, minWidth: 0, background: 'transparent',
+                        border: '1px solid transparent', borderRadius: 4,
+                        padding: '3px 6px', color: 'var(--text)',
+                        fontFamily: 'inherit', fontSize: 12,
+                      }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
+                    />
+                    <button
+                      onClick={() => deleteMarker(m.id)}
+                      title="Delete marker"
+                      style={{
+                        flexShrink: 0, background: 'transparent', border: 'none',
+                        color: 'var(--text-dim)', cursor: 'pointer',
+                        padding: '2px 4px', display: 'inline-flex',
+                      }}
+                    >
+                      <Icon name="x" size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Rail + detail row. Rail is a scannable vertical list of all chapters;
           the bands above are the horizontal time-aware selector. Both drive

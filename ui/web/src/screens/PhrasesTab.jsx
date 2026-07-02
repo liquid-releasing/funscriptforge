@@ -220,6 +220,10 @@ export default function PhrasesTab({
   const navChapterIdx = chapters.findIndex((c) => c.id === activeChapter?.id);
   const navIsLast = navChapterIdx < 0 || navChapterIdx >= chapters.length - 1;
   const navRunRef = useRef(() => {});
+  // Sub-unit walk ("Accept and next phrase") — fresh-closure ref, assigned
+  // below once focusedPhrase / nextPhrase are in scope. Mirrors navRunRef so
+  // the registration effect need not re-run on every `actions` change.
+  const phraseWalkRunRef = useRef(() => {});
   navRunRef.current = () => {
     // Accepting a chapter marks it CONSIDERED — that's what unlocks the
     // footer's "Accept and chain" (every chapter must be considered first).
@@ -240,24 +244,9 @@ export default function PhrasesTab({
   // All chapters considered → the footer may chain. Recomputed each render.
   const chaptersConsideredComplete = chapters.length > 0
     && chapters.every((c) => consideredChapterIds.has(c.id));
-  useEffect(() => {
-    if (!onRegisterChapterNav) return undefined;
-    onRegisterChapterNav(
-      chapters.length > 0
-        ? {
-            hasNext: !navIsLast,
-            label: navIsLast ? 'Accept last chapter changes' : 'Accept and next chapter',
-            run: () => navRunRef.current(),
-            // Drives the footer completion gate. Only Phrases/Stanzas report
-            // `complete` today, so other chapter tabs stay ungated.
-            complete: chaptersConsideredComplete,
-            considered: chapters.filter((c) => consideredChapterIds.has(c.id)).length,
-            total: chapters.length,
-          }
-        : null,
-    );
-    return () => onRegisterChapterNav(null);
-  }, [navIsLast, chapters.length, onRegisterChapterNav, chaptersConsideredComplete, consideredChapterIds]);
+  // chapterNav registration lives BELOW the focused-phrase derivation — it now
+  // carries an optional "Accept and next phrase" sub-walk that needs
+  // focusedPhrase / nextPhrase. See the effect after `setFocusPhraseId`.
   const allPhrases = cacheEntry?.phrases ?? EMPTY_PHRASES;
   const phrasesLoaded = !!cacheEntry?.loaded;
   const phrasesInScope = useMemo(() => {
@@ -291,6 +280,44 @@ export default function PhrasesTab({
     ? phrasesInScope[focusedIdx + 1] : null;
   const focusPhraseId = focusedPhrase?.id ?? null;
   const setFocusPhraseId = (id) => (id == null ? clearFocusedPhrase() : focus(id));
+
+  // "Accept and next phrase" sub-walk. A white footer secondary beside the
+  // chapter walk, shown WHENEVER a single phrase is focused AND a next phrase
+  // exists in this chapter (hides on the last phrase — user decision). Accept =
+  // re-persist the working funscript (Apply already wrote it eagerly; this
+  // confirms the choice) + advance focus to the next phrase.
+  phraseWalkRunRef.current = () => {
+    if (!focusedPhrase || !nextPhrase) return;
+    if (project?.path) {
+      saveWorkingFunscript(project.path, actions)
+        .catch((e) => setAppError?.(`Could not save: ${e?.message ?? e}`));
+    }
+    focus(nextPhrase.id);
+  };
+  useEffect(() => {
+    if (!onRegisterChapterNav) return undefined;
+    onRegisterChapterNav(
+      chapters.length > 0
+        ? {
+            hasNext: !navIsLast,
+            label: navIsLast ? 'Accept last chapter changes' : 'Accept and next chapter',
+            run: () => navRunRef.current(),
+            // Drives the footer completion gate. Only Phrases/Stanzas report
+            // `complete` today, so other chapter tabs stay ungated.
+            complete: chaptersConsideredComplete,
+            considered: chapters.filter((c) => consideredChapterIds.has(c.id)).length,
+            total: chapters.length,
+            // Finer walk over the focused phrase; App renders it as a white
+            // secondary. Null when no phrase focused or on the last phrase.
+            subWalk: (focusedPhrase && nextPhrase)
+              ? { label: 'Accept and next phrase', run: () => phraseWalkRunRef.current() }
+              : null,
+          }
+        : null,
+    );
+    return () => onRegisterChapterNav(null);
+  }, [navIsLast, chapters.length, onRegisterChapterNav, chaptersConsideredComplete,
+      consideredChapterIds, focusedPhrase?.id, nextPhrase?.id]);
 
   // Chapter clip for the MediaViewer below — same shared hook that
   // ChaptersTab and PatternsTab use. Handles ffmpeg extract + blob /

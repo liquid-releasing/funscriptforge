@@ -1498,6 +1498,87 @@ pub async fn read_stanzas_from_chapters_sidecar(
     Ok(parsed.stanzas)
 }
 
+// ── Markers ────────────────────────────────────────────────────────
+// User-authored navigation points, stored as a TOP-LEVEL `markers`
+// array inside the same `<stem>.chapters.json` sidecar (sibling to
+// `chapters` / `stanzas` / `energy`). A marker is just a timeline point
+// — `{ id, at_ms, name }` — not chapter-owned, so chapter split/join
+// never moves or drops it. Riding chapters.json means markers travel in
+// the `.forge` bundle for free (it's already an export target) and reach
+// ForgePlayer, which reads the same file.
+//
+// On-disk AND wire shape are identical snake_case (`at_ms`) — markers are
+// a new self-owned shape, so we skip the camelCase transcription the
+// chapters path carries for backward-compat.
+#[derive(Deserialize, Serialize, Clone)]
+pub struct MarkerRecord {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub at_ms: u64,
+    #[serde(default)]
+    pub name: String,
+}
+
+#[tauri::command]
+pub async fn read_markers_sidecar(source_path: String) -> Result<Vec<MarkerRecord>, String> {
+    let sp = forge_sidecar_path(&source_path, ".chapters.json");
+    if !Path::new(&sp).exists() {
+        return Ok(Vec::new());
+    }
+    let raw = tokio::fs::read_to_string(&sp)
+        .await
+        .map_err(|e| format!("could not read chapters sidecar at {}: {}", sp, e))?;
+    let payload: serde_json::Value =
+        serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}));
+    // Tolerant: a missing or malformed `markers` array reads as empty
+    // rather than erroring the tab (mirrors the stanzas read).
+    let markers = payload
+        .get("markers")
+        .and_then(|v| serde_json::from_value::<Vec<MarkerRecord>>(v.clone()).ok())
+        .unwrap_or_default();
+    Ok(markers)
+}
+
+// Write-through the markers array. Read-merge-write so chapters / stanzas
+// / energy survive — we replace only `payload["markers"]`. Symmetric to
+// write_chapters_sidecar; the two never clobber each other because both
+// rewrite the full payload, touching only their own key.
+#[tauri::command]
+pub async fn write_markers_sidecar(
+    source_path: String,
+    markers: Vec<MarkerRecord>,
+) -> Result<(), String> {
+    let sidecar_path = forge_sidecar_path(&source_path, ".chapters.json");
+    if let Some(parent) = Path::new(&sidecar_path).parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("could not create forge dir: {}", e))?;
+    }
+    let mut payload: serde_json::Value = if Path::new(&sidecar_path).exists() {
+        let raw = tokio::fs::read_to_string(&sidecar_path)
+            .await
+            .map_err(|e| format!("could not read existing sidecar: {}", e))?;
+        serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+    payload["markers"] = serde_json::json!(
+        markers.iter().map(|m| serde_json::json!({
+            "id": m.id,
+            "at_ms": m.at_ms,
+            "name": m.name,
+        })).collect::<Vec<_>>()
+    );
+    payload["edited_by_user"] = serde_json::json!(true);
+    let json = serde_json::to_string_pretty(&payload)
+        .map_err(|e| format!("could not serialize sidecar: {}", e))?;
+    tokio::fs::write(&sidecar_path, json)
+        .await
+        .map_err(|e| format!("could not write sidecar: {}", e))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn load_audio_peaks(
     media_path: String,
