@@ -1,6 +1,6 @@
 # Transforms
 
-FunscriptForge groups its transforms into three families — **Tones**, **Behaviors**, and **Structurals** — plus your own recipes and plugins. The picker ships **10 Behaviors**, **7 Structurals**, and **7 Tones**. Each transform fixes a specific kind of problem; some are subtle finishing tools, others make substantial changes.
+FunscriptForge groups its transforms into three families — **Tones**, **Behaviors**, and **Structurals** — plus your own recipes and plugins. The picker ships **10 Behaviors**, **8 Structurals**, and **7 Tones**. Each transform fixes a specific kind of problem; some are subtle finishing tools, others make substantial changes.
 
 > **Note on names:** A few older transforms were consolidated into more capable ones (2026-06-01). They still work in saved recipes but no longer clutter the picker — see [Consolidated transforms](#consolidated-transforms) at the bottom.
 
@@ -186,17 +186,35 @@ Structure-level shaping — tempo, rhythmic patterning, and full replacements. M
 
 ### Hero Beat
 
-**What it does:** An 8-step groove sequencer over the phrase's own beats (stroke reversals). Each of the eight sliders sets how much **depth** that beat keeps: 100 = full, 0 = flat to center. Walk the beats in order, looping 1→8, and each beat's stroke is scaled to its step's emphasis. Set the hero beats high and the rest lower to carve a groove out of an even "wall" of strokes. All sliders at 100 (the default) makes no change.
+**What it does:** An 8-step groove sequencer over the phrase's own beats (stroke reversals). Each of the eight sliders sets how much **depth** that beat keeps: 100 = full height, 0 = flat to its floor. Hero Beat is **floor-anchored** — it keeps each beat's own *bottom* on its low rail and only eases the *top* down, so a lower step carves a groove without lifting the floor. A beat at 0 rests at the bottom. Walk the beats in order, looping 1→8; set the hero beats high and the rest lower to carve a groove out of an even "wall" of strokes. All sliders at 100 (the default) makes no change.
 
 **Parameters:**
 
 | Parameter | Default | Range | Description |
 |---|---|---|---|
-| Beat 1 … Beat 8 | 100 | 0 – 100 | Depth kept for each step of the repeating 8-beat cycle. 100 = full depth; 0 = flat to center. |
+| Beat 1 … Beat 8 | 100 | 0 – 100 | Height kept for each step of the repeating 8-beat cycle. 100 = full height; 0 = flat to the beat's own floor. |
 
 **Use it when:** A section is rhythmically even and you want to author accents — a strong-weak-medium-weak pulse, or any custom emphasis pattern. (A `[100,100,100,0,…]` pattern reproduces the old "Three-One Pulse".)
 
+Each beat is scaled about **its own stroke** (the bottom and top between its neighbouring reversals), not a global rail — so a lifted or shallow stroke keeps its own floor rather than snapping to 0. Its center-anchored twin is **[Short Beats](#short-beats)**.
+
 Hero Beat is **beat-preserving** — it keeps every action's count and timing, and only scales depth. It uses the script's *own* beats, not the music's grid: when you're editing a script the beats it already has are the right ones to shape (aligning to the music is a job for generation, not editing).
+
+---
+
+### Short Beats
+
+**What it does:** The **center-anchored** twin of Hero Beat — the same 8-step per-beat control, but each beat shrinks about **its own center** instead of its floor. Each slider sets how tall that beat stays: 100 = full, 80 = 10% off the top *and* 10% off the bottom of that stroke, 0 = collapsed to its mid-point. Use it to soften a run of beats toward their centers (calmer, "shorter" strokes) while keeping the rhythm.
+
+**Parameters:**
+
+| Parameter | Default | Range | Description |
+|---|---|---|---|
+| Beat 1 … Beat 8 | 100 | 0 – 100 | Height kept for each step of the repeating 8-beat cycle, trimmed equally off the top and bottom about the beat's own center. 100 = full; 0 = flat to the beat's own center. |
+
+**Use it when:** You want to ease strokes down without dropping them to the floor — Hero Beat pulls a beat toward its *bottom*, Short Beats pulls it toward its *middle*. Reach for Short Beats when a section should feel gentler but stay centered where it already sits.
+
+Like Hero Beat, Short Beats is **beat-preserving** and scales each beat about its own stroke (min/max between its neighbouring reversals), never a neighbour-spanning window — so adjacent beats of different heights each shrink around their own middle.
 
 ---
 

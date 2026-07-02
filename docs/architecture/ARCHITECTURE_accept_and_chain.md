@@ -160,6 +160,51 @@ project-specific data (paths, timestamps).
 v1: export only. v2: import templates to pre-fill all tabs, ship starter
 presets (Driving Beat, Hypnotic Mix, Romance), CLI batch processing.
 
+## Footer accept grammar (2026-07)
+
+> The tab order and chain-file sections above are historical. The current tab
+> chain is **Project → Generate → Analysis → Chapters → Phrases → Stanzas →
+> Events → Channels → Polish → Export → Viewer**, and several tabs now
+> **write through** as you work (Events → `feel.yml`, Channels →
+> `characters.json`, the working funscript on every transform Apply) rather
+> than only on Accept.
+
+The sticky footer (`AcceptBar`) is the canonical commit surface. One grammar
+runs across every tab:
+
+- **Red + ✓ = leave the tab.** Only the terminal `Accept and chain to <next>`
+  is red with a checkmark. Everything else completes work in place.
+- **Tentative (white, no ✓) = a step, not the commit.** A gated tab still being
+  walked shows its walk action as a quiet white primary (`AcceptBar`
+  `primaryTentative`); the red ✓ chain returns only once the tab's completion
+  predicate is satisfied. Export's `Export` button is white until the write
+  succeeds, then flips to red ✓ `Chain to Viewer`.
+- **Per-tab completion gates.** A chapter-scoped tab reports
+  `{ complete, considered, total }`; until `complete`, the footer shows the
+  walk and the chain stays tentative.
+  - *Chapters / Phrases / Stanzas* — every chapter considered (walk
+    `Accept and next chapter`, or **Accept all as-is / as untoned** above the
+    ribbon). Channels reads its completion from persisted `characters.json`, so
+    it **survives leaving and re-entering the tab**.
+  - *Channels (two passes)* — reports `passes: [character, mechanical]`, which
+    the footer renders as two white walk buttons (`AcceptBar`
+    `secondaryActions`). Complete when **every chapter has both** a character
+    and a mechanical; **Apply to all chapters** in each section header
+    broadcasts the staged pick.
+  - *Polish (per device)* — walk `Accept and next device` stamps the focused
+    device (identical to the bench Stamp) and advances; **Accept all defaults**
+    stamps the rest. Complete when every device is stamped.
+- **Bulk buttons never chain.** They fill gaps in place (preserving anything
+  already set) and live above the unit list, keeping the footer uncluttered.
+- **Carry-forward fills gaps only.** Accepting a chapter's tone carries it onto
+  the next chapter *only if that chapter is still untoned* — it never replaces a
+  tone already there.
+
+`AcceptBar` disables the primary on `error || busy || gate`; `ready` and
+`primaryTentative` only affect the lead icon / button styling, not whether it
+fires. See `ui/web/src/App.jsx` (footer fork) and forgemoment
+`src/AppShell.jsx` (`AcceptBar`).
+
 ---
 
 *© 2026 [Liquid Releasing](https://github.com/liquid-releasing). Licensed under the MIT License.*

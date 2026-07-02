@@ -1363,6 +1363,31 @@ def _probe_media_dict(media: str) -> dict:
     return out
 
 
+def _fps_to_float(fr: str) -> float:
+    """Parse an ffprobe frame-rate ('30/1', '2080658801/69461181', '29.97') to
+    float; 0.0 on anything unparseable or a zero denominator."""
+    try:
+        if "/" in fr:
+            n, d = fr.split("/", 1)
+            d = float(d)
+            return float(n) / d if d else 0.0
+        return float(fr)
+    except (ValueError, ZeroDivisionError):
+        return 0.0
+
+
+# Near-CFR tolerance: HandBrake / x264 report avg_frame_rate a hair below the
+# nominal r_frame_rate (avg = frames ÷ duration), e.g. 29.955 vs 30 — that's
+# effectively CFR and plays fine. True VFR (screen caps, phone video) diverges
+# far more. 1% of nominal keeps real VFR on the clip path.
+_CFR_FPS_TOLERANCE = 0.01
+
+
+def _is_cfr(avg: str, rrate: str) -> bool:
+    a, r = _fps_to_float(avg), _fps_to_float(rrate)
+    return a > 0 and r > 0 and abs(a - r) <= _CFR_FPS_TOLERANCE * r
+
+
 def _verdict_direct_playable(out: dict, st: dict) -> None:
     """Decide whether a video stream can stream straight into WebView2's
     <video> via asset:// without a normalizing re-encode — the single-file
@@ -1391,8 +1416,9 @@ def _verdict_direct_playable(out: dict, st: dict) -> None:
     out["codec_name"] = codec or None
     out["pix_fmt"] = pix_fmt or None
     out["profile"] = profile or None
-    # VFR is the primary stutter trigger; CFR has avg == r frame rate.
-    fps_mode = "cfr" if (avg and rrate and avg == rrate) else "vfr"
+    # VFR is the primary stutter trigger; CFR has avg ≈ r frame rate (within a
+    # small tolerance — HandBrake reports avg a touch below nominal).
+    fps_mode = "cfr" if _is_cfr(avg, rrate) else "vfr"
     out["fps_mode"] = fps_mode
 
     # H.264 is what WebView2 plays cleanly. HEVC/AV1/VP9 vary by platform.
