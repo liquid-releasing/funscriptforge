@@ -706,7 +706,19 @@ export default function EventsTab({
             isPlaying={isPlaying}
             onPlayPause={() => setIsPlaying((p) => !p)}
             onSeek={(ms) => setCurrentMs(Math.max(activeChapter.atMs, Math.min(activeChapter.endMs, ms)))}
-            onTimeChange={(ms) => setCurrentMs(Math.max(activeChapter.atMs, Math.min(activeChapter.endMs, ms)))}
+            // Stop at the chapter boundary. A per-chapter CLIP ends there on its
+            // own, but a DIRECT-PLAY source plays the whole video — so without an
+            // explicit pause it runs past the chapter. Clamp the baton AND pause.
+            onTimeChange={(ms) => {
+              if (ms >= activeChapter.endMs) {
+                setCurrentMs(activeChapter.endMs);
+                setIsPlaying(false);
+              } else if (ms < activeChapter.atMs) {
+                setCurrentMs(activeChapter.atMs);
+              } else {
+                setCurrentMs(ms);
+              }
+            }}
             // Steps grow outward from play: frame hugs play, then ±1s, then
             // the chapter-edge jumps. (1s is a bigger move than 1 frame.)
             controls={['chapter-start', 'back1', 'frame-back', 'play', 'frame-forward', 'forward1', 'chapter-end']}

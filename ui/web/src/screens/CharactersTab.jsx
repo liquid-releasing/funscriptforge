@@ -857,7 +857,7 @@ export default function CharactersTab({
                 modeToggleSize="sm"
                 showModeLabel={false}
                 showMark={false}
-                width={240}
+                width="100%"
                 thumbnailAspect="16/9"
               />
             </div>

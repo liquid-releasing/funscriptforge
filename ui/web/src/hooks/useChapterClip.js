@@ -29,6 +29,14 @@ import { toMediaUrl } from '../lib/mediaUrl.js';
 
 const BLOB_FETCH_CAP_BYTES = 150 * 1024 * 1024;
 
+// Direct-play (stream the whole source, seek per chapter) only stays "instant"
+// on SHORT files. In a long file a chapter jump is a DEEP seek into the whole
+// asset via WebView2 range requests, which stalls — the player keeps the prior
+// chapter's last frame and buffers forever (ddt483 ch23, a 2.5hr file). Above
+// this cap we fall back to per-chapter clips: a small standalone file per
+// chapter seeks instantly and is cheap to extract for these clean 720p sources.
+const DIRECT_PLAY_MAX_MS = 20 * 60 * 1000; // 20 min
+
 // One probe per media path, shared across chapter changes + HMR. The
 // `direct_playable` verdict decides streaming-vs-clips and never changes for a
 // given file, so probe once and reuse. Map survives Vite module replacement.
@@ -63,10 +71,13 @@ export function useChapterClip(mediaPath, chapter) {
     setClip(null);
 
     (async () => {
-      // Single-file streaming fast path — skip extraction entirely.
+      // Single-file streaming fast path — skip extraction entirely. Only for
+      // SHORT sources; long ones deep-seek-stall in WebView2 (see the cap
+      // above), so they fall through to the per-chapter clip path below.
       const probe = await probeMediaCached(mediaPath);
       if (cancelled) return;
-      if (probe?.direct_playable) {
+      const durMs = probe?.duration_ms || 0;
+      if (probe?.direct_playable && durMs > 0 && durMs <= DIRECT_PLAY_MAX_MS) {
         // Warm the chapter's byte range so the <video>'s range requests hit
         // cache, not cold disk — eliminates the long-file seek stutter.
         // Best-effort; never blocks playback.

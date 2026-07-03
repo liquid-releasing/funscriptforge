@@ -1162,15 +1162,23 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           }}>
             Chapters · tone
           </div>
-          {/* Project name as the headline (was the tall "Set the emotional arc"
-              + description block). Compact — reclaims vertical space so the tone
-              rail is visible without collapsing the viewer. */}
-          <h2 style={{
-            margin: '3px 0 0', fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {project?.title || 'Set the emotional arc'}
-          </h2>
+          {/* Headline: "Chapters of <project>" with a color swatch that tracks
+              the ACTIVE chapter's color (same color language as the rail), so
+              the header feels alive. Compact — replaced the tall "Set the
+              emotional arc" block to keep the tone rail in view. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, margin: '3px 0 0' }}>
+            <span style={{
+              width: 14, height: 14, borderRadius: 4, flexShrink: 0,
+              background: (active !== EMPTY_CHAPTER && active?.color) || 'var(--accent, #c45a3a)',
+              border: '1px solid rgba(255,255,255,0.18)',
+            }} />
+            <h2 style={{
+              margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
+            }}>
+              {project?.title ? `Chapters of ${project.title}` : 'Chapters'}
+            </h2>
+          </div>
         </div>
         {/* Copy the structural chapters as YouTube description timestamps.
             No API — paste into the video description; YouTube renders them. */}
