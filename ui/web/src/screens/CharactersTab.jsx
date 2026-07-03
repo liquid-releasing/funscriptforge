@@ -796,7 +796,7 @@ export default function CharactersTab({
               marginTop: 12,
               background: 'var(--surface)', border: '1px solid var(--border)',
               borderRadius: 8, padding: 12,
-              display: 'grid', gridTemplateColumns: '1fr 320px',
+              display: 'grid', gridTemplateColumns: '1fr 240px',
               gap: 'var(--s-5)', alignItems: 'stretch',
             }}>
               <ChapterRibbon
@@ -857,8 +857,8 @@ export default function CharactersTab({
                 modeToggleSize="sm"
                 showModeLabel={false}
                 showMark={false}
-                width={320}
-                thumbnailAspect="16/7"
+                width={240}
+                thumbnailAspect="16/9"
               />
             </div>
           )}

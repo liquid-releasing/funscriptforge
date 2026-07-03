@@ -638,7 +638,7 @@ export default function EventsTab({
           background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 10, padding: 12,
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 14, alignItems: 'start',
+          gridTemplateColumns: 'minmax(0, 1fr) 240px', gap: 14, alignItems: 'start',
         }}>
           {/* Left — TrackStack hero (no inner box) */}
           <div style={{ minWidth: 0 }}>

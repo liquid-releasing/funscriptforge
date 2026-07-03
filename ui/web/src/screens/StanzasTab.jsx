@@ -655,7 +655,7 @@ export default function StanzasTab({
         border: '1px solid var(--border)',
         borderRadius: 8,
         padding: 12,
-        display: 'grid', gridTemplateColumns: '1fr 320px',
+        display: 'grid', gridTemplateColumns: '1fr 240px',
         gap: 'var(--s-5)', alignItems: 'stretch',
       }}>
         <ChapterContextStrip
@@ -731,7 +731,7 @@ export default function StanzasTab({
           showModeLabel={false}
           showMark={false}
           width="100%"
-          thumbnailAspect="16/7"
+          thumbnailAspect="16/9"
         />
       </div>
       </div>
