@@ -618,11 +618,45 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     // a click and unlikely across reloads given the ms + count.
     const id = `m-${Date.now()}-${markers.length}`;
     commitMarkers([...markers, { id, at_ms: at, name }]);
+    setCurrentMarkerId(id); // the just-added marker becomes the current one
   };
   const renameMarker = (id, name) => commitMarkers(
     markers.map((m) => (m.id === id ? { ...m, name } : m)),
   );
   const deleteMarker = (id) => commitMarkers(markers.filter((m) => m.id !== id));
+
+  // Markers in the active chapter (time-scoped), memoized so the stepper
+  // handlers and the panel share one list.
+  const markersInChapter = useMemo(() => (
+    active === EMPTY_CHAPTER ? []
+      : markers.filter((m) => (m.at_ms ?? 0) >= active.atMs && (m.at_ms ?? 0) < active.endMs)
+  ), [markers, active]);
+  // Marker stepper — prev/next cycle the playhead through this chapter's
+  // markers (wrap-around, so it "rotates"); trash removes the current one.
+  const [currentMarkerId, setCurrentMarkerId] = useState(null);
+  const seekMarker = (m) => {
+    if (!m || active === EMPTY_CHAPTER) return;
+    setCurrentMarkerId(m.id);
+    setCurrentMs(Math.max(active.atMs, Math.min(active.endMs, m.at_ms ?? 0)));
+  };
+  const stepMarker = (dir) => {
+    const list = markersInChapter;
+    if (!list.length) return;
+    let idx = list.findIndex((m) => m.id === currentMarkerId);
+    if (idx < 0) idx = dir > 0 ? -1 : 0;           // next→first, prev→last on entry
+    seekMarker(list[(idx + dir + list.length) % list.length]);
+  };
+  const deleteCurrentMarker = () => {
+    const list = markersInChapter;
+    if (!list.length) return;
+    let idx = list.findIndex((m) => m.id === currentMarkerId);
+    if (idx < 0) idx = 0;
+    const target = list[idx];
+    const remaining = list.filter((m) => m.id !== target.id);
+    deleteMarker(target.id);
+    setCurrentMarkerId(remaining[Math.min(idx, remaining.length - 1)]?.id ?? null);
+  };
+  const currentMarker = markersInChapter.find((m) => m.id === currentMarkerId) ?? null;
 
   // ── YouTube chapters export ──────────────────────────────────────────
   // YouTube derives "chapters" from the video DESCRIPTION: mm:ss (or
@@ -1128,14 +1162,15 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           }}>
             Chapters · tone
           </div>
-          <h2 style={{ margin: '4px 0 6px', fontSize: 24, fontWeight: 700, letterSpacing: '-0.01em' }}>
-            Set the emotional arc
+          {/* Project name as the headline (was the tall "Set the emotional arc"
+              + description block). Compact — reclaims vertical space so the tone
+              rail is visible without collapsing the viewer. */}
+          <h2 style={{
+            margin: '3px 0 0', fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {project?.title || 'Set the emotional arc'}
           </h2>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 780, lineHeight: 1.5 }}>
-            Each chapter gets one tone. Tone is a script-wide bias that shapes
-            the phrase-level suggestions on the Edit tab — set the stage here,
-            refine per-phrase next. <em>Preview only;</em> tone CLI lands later.
-          </div>
         </div>
         {/* Copy the structural chapters as YouTube description timestamps.
             No API — paste into the video description; YouTube renders them. */}
@@ -1174,12 +1209,12 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
         >
           {chaptersAllAccepted ? 'All chapters considered ✓' : 'Accept all as untoned'}
         </button>
-        {/* Collapse the chapter-scoped video viewer — right-aligned above it,
-            matching Phrases/Patterns. Collapsed → ribbon spans full width. */}
+        {/* Collapse toggles the ENTIRE chapter frame (funscript ribbon + video
+            viewer) so the tab can focus on the tone rail. Lives in the header. */}
         <button
           onClick={() => setIsViewerExpanded((v) => !v)}
-          title={isViewerExpanded ? 'Collapse video' : 'Expand video'}
-          aria-label={isViewerExpanded ? 'Collapse video' : 'Expand video'}
+          title={isViewerExpanded ? 'Collapse viewer' : 'Expand viewer'}
+          aria-label={isViewerExpanded ? 'Collapse viewer' : 'Expand viewer'}
           style={{
             flexShrink: 0, marginTop: 2, display: 'inline-flex', alignItems: 'center', gap: 4,
             padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)',
@@ -1217,11 +1252,15 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
           single unit (paint mock 2026-05-23). Column 320px matches
           Phrases / Patterns; right edges and visual rhythm align across
           all three editing tabs. */}
+      {/* The whole chapter frame — funscript ribbon + video viewer — is gated
+          on isViewerExpanded so the header's Collapse hides BOTH, handing the
+          full height to the tone rail. Expand brings the frame back. */}
+      {isViewerExpanded && (
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)',
         borderRadius: 8, padding: 12,
       }}>
-      <div style={{ display: 'grid', gridTemplateColumns: isViewerExpanded ? '1fr 280px' : '1fr', gap: 24, alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 24, alignItems: 'stretch' }}>
           <ChapterRibbon
             bands={chapters.map((c, i) => ({
               id: c.id,
@@ -1388,104 +1427,118 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
             // legible. Video frames letterbox with side bars (objectFit:
             // contain) — user explicitly preferred letterbox over a
             // taller card.
-            thumbnailAspect="16/7"
+            thumbnailAspect="16/9"
           />
           )}
       </div>
       </div>
+      )}
 
       {/* ── Markers ── user-authored jump points. Position the baton, hit
           "Add marker"; each shows its timestamp + an editable name (default =
           the chapter name). Write-through to chapters.json → rides the .forge
           bundle into ForgePlayer. Scoped to the active chapter's span. */}
-      {active !== EMPTY_CHAPTER && (() => {
-        const markersInChapter = markers.filter(
-          (m) => (m.at_ms ?? 0) >= active.atMs && (m.at_ms ?? 0) < active.endMs,
-        );
-        return (
-          <div style={{
-            margin: '0 var(--s-5) var(--s-4)', padding: '10px 12px',
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 8,
+      {active !== EMPTY_CHAPTER && (
+        <div style={{
+          margin: '0 var(--s-5) var(--s-3)', padding: '6px 12px',
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+            textTransform: 'uppercase', color: 'var(--text-dim)', flexShrink: 0,
           }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              marginBottom: markersInChapter.length ? 8 : 0,
-            }}>
-              <span style={{
-                fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-                textTransform: 'uppercase', color: 'var(--text-dim)',
-              }}>
-                Markers
-              </span>
+            Markers
+          </span>
+          <button
+            onClick={() => addMarkerAtPlayhead()}
+            title="Drop a marker at the current playhead position"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+              padding: '5px 10px', borderRadius: 6,
+              border: '1px solid var(--border)', background: 'var(--surface-2)',
+              color: 'var(--text)', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 12, fontWeight: 600,
+            }}
+          >
+            <Icon name="bookmark" size={12} /> Add marker at playhead
+          </button>
+
+          {/* Stepper — ◀ prev · current (editable) · next ▶ · 🗑 delete. Cycles
+              (wraps) through this chapter's markers, seeking the playhead. */}
+          {markersInChapter.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
               <button
-                onClick={() => addMarkerAtPlayhead()}
-                title="Drop a marker at the current playhead position"
+                onClick={() => stepMarker(-1)}
+                title="Previous marker"
                 style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '5px 10px', borderRadius: 6,
-                  border: '1px solid var(--border)', background: 'var(--surface-2)',
-                  color: 'var(--text)', cursor: 'pointer', fontFamily: 'inherit',
-                  fontSize: 12, fontWeight: 600,
+                  flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 26, height: 26, borderRadius: 6, border: '1px solid var(--border)',
+                  background: 'var(--surface-2)', color: 'var(--text)', cursor: 'pointer',
                 }}
               >
-                <Icon name="bookmark" size={12} /> Add marker at playhead
+                <Icon name="chevron-left" size={14} />
               </button>
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                {fmtTimeShort(currentMs)}
-                {markers.length > markersInChapter.length
-                  ? ` · ${markers.length} total` : ''}
-              </span>
+              <button
+                onClick={() => seekMarker(currentMarker)}
+                title="Seek to the current marker"
+                disabled={!currentMarker}
+                style={{
+                  flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 11,
+                  color: currentMarker ? 'var(--accent, #4a86c8)' : 'var(--text-dim)',
+                  background: 'transparent', border: 'none',
+                  cursor: currentMarker ? 'pointer' : 'default', padding: '2px 4px',
+                }}
+              >
+                {currentMarker ? fmtTimeShort(currentMarker.at_ms) : '—'}
+              </button>
+              <input
+                value={currentMarker?.name ?? ''}
+                onChange={(e) => currentMarker && renameMarker(currentMarker.id, e.target.value)}
+                placeholder={currentMarker ? 'Marker name' : 'Step to a marker →'}
+                disabled={!currentMarker}
+                style={{
+                  flex: 1, minWidth: 0, background: 'transparent',
+                  border: '1px solid transparent', borderRadius: 4,
+                  padding: '3px 6px', color: 'var(--text)',
+                  fontFamily: 'inherit', fontSize: 12,
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
+              />
+              <button
+                onClick={() => stepMarker(1)}
+                title="Next marker"
+                style={{
+                  flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 26, height: 26, borderRadius: 6, border: '1px solid var(--border)',
+                  background: 'var(--surface-2)', color: 'var(--text)', cursor: 'pointer',
+                }}
+              >
+                <Icon name="chevron-right" size={14} />
+              </button>
+              <button
+                onClick={deleteCurrentMarker}
+                title="Delete the current marker"
+                disabled={!currentMarker}
+                style={{
+                  flexShrink: 0, background: 'transparent', border: 'none',
+                  color: currentMarker ? 'var(--text-dim)' : 'var(--border)',
+                  cursor: currentMarker ? 'pointer' : 'default',
+                  padding: '2px 4px', display: 'inline-flex',
+                }}
+              >
+                <Icon name="trash-2" size={14} />
+              </button>
             </div>
-            {markersInChapter.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {markersInChapter.map((m) => (
-                  <div key={m.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '4px 6px', borderRadius: 6, background: 'var(--surface-2)',
-                  }}>
-                    <button
-                      onClick={() => setCurrentMs(Math.max(active.atMs, Math.min(active.endMs, m.at_ms)))}
-                      title="Seek to this marker"
-                      style={{
-                        flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: 11,
-                        color: 'var(--accent, #4a86c8)', background: 'transparent',
-                        border: 'none', cursor: 'pointer', padding: '2px 4px',
-                      }}
-                    >
-                      {fmtTimeShort(m.at_ms)}
-                    </button>
-                    <input
-                      value={m.name}
-                      onChange={(e) => renameMarker(m.id, e.target.value)}
-                      placeholder="Marker name"
-                      style={{
-                        flex: 1, minWidth: 0, background: 'transparent',
-                        border: '1px solid transparent', borderRadius: 4,
-                        padding: '3px 6px', color: 'var(--text)',
-                        fontFamily: 'inherit', fontSize: 12,
-                      }}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
-                      onBlur={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
-                    />
-                    <button
-                      onClick={() => deleteMarker(m.id)}
-                      title="Delete marker"
-                      style={{
-                        flexShrink: 0, background: 'transparent', border: 'none',
-                        color: 'var(--text-dim)', cursor: 'pointer',
-                        padding: '2px 4px', display: 'inline-flex',
-                      }}
-                    >
-                      <Icon name="x" size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })()}
+          )}
+
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+            {fmtTimeShort(currentMs)}
+            {markersInChapter.length ? ` · ${markersInChapter.length}` : ''}
+          </span>
+        </div>
+      )}
 
       {/* Rail + detail row. Rail is a scannable vertical list of all chapters;
           the bands above are the horizontal time-aware selector. Both drive
