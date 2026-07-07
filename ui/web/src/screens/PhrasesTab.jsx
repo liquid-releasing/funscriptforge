@@ -262,12 +262,26 @@ export default function PhrasesTab({
   // re-click as a no-op. Clears on parent-chapter change.
   const [focusedPhraseId, setFocusedPhraseId] = useState(null);
   const [selectNonce, setSelectNonce] = useState(0);
+  // Manual multi-selection set for `single` mode. In single mode THIS is the
+  // edit set (see the derivation effect below) — the preview/apply pipeline
+  // is already multi-span, so a set here transforms every member at once.
+  // `focusedPhraseId` is the ANCHOR (last plain/ctrl/shift-clicked) that
+  // drives the viewer + before/after chart; the whole set gets the transform.
+  const [selectedPhraseIds, setSelectedPhraseIds] = useState([]);
+  // Plain focus = replace the selection with just this phrase (also the
+  // anchor). Used by the phrase walk, prev/next, and un-modified clicks.
   const focus = (id) => {
     setFocusedPhraseId(id);
     setSelectNonce((n) => n + 1);
+    setSelectedPhraseIds(id == null ? [] : [id]);
   };
-  const clearFocusedPhrase = () => setFocusedPhraseId(null);
-  useEffect(() => { setFocusedPhraseId(null); }, [activeChapter?.id]);
+  // Move the anchor WITHOUT collapsing the selection (ctrl / shift clicks).
+  const setAnchor = (id) => {
+    setFocusedPhraseId(id);
+    setSelectNonce((n) => n + 1);
+  };
+  const clearFocusedPhrase = () => { setFocusedPhraseId(null); setSelectedPhraseIds([]); };
+  useEffect(() => { setFocusedPhraseId(null); setSelectedPhraseIds([]); }, [activeChapter?.id]);
   const focusedPhrase = useMemo(
     () => (focusedPhraseId != null
       ? phrasesInScope.find((p) => p.id === focusedPhraseId) ?? null
@@ -280,6 +294,30 @@ export default function PhrasesTab({
     ? phrasesInScope[focusedIdx + 1] : null;
   const focusPhraseId = focusedPhrase?.id ?? null;
   const setFocusPhraseId = (id) => (id == null ? clearFocusedPhrase() : focus(id));
+
+  // Unified phrase click, honoring keyboard modifiers (rail rows + strip
+  // bands + center table all route here). Plain = focus one (anchor); Ctrl/
+  // Cmd = toggle into the set; Shift = range from the anchor. Always lands in
+  // `single` mode — the manual-selection lens. See the derivation effect.
+  const selectPhrase = (id, mods = {}) => {
+    setMode('single');
+    if (mods.shift && focusedPhraseId != null && focusedPhraseId !== id) {
+      const order = phrasesInScope.map((p) => p.id);
+      const a = order.indexOf(focusedPhraseId);
+      const b = order.indexOf(id);
+      if (a === -1 || b === -1) { focus(id); return; }
+      const [lo, hi] = a <= b ? [a, b] : [b, a];
+      const range = order.slice(lo, hi + 1);
+      setSelectedPhraseIds((prev) => Array.from(new Set([...prev, ...range])));
+      setAnchor(id);
+    } else if (mods.ctrl || mods.meta) {
+      setSelectedPhraseIds((prev) =>
+        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+      setAnchor(id);
+    } else {
+      focus(id);
+    }
+  };
 
   // "Accept and next phrase" sub-walk. A white footer secondary beside the
   // chapter walk, shown WHENEVER a single phrase is focused AND a next phrase
@@ -482,11 +520,16 @@ export default function PhrasesTab({
     } else if (mode === 'shape') {
       setEditedPhraseIds(phrasesInScope.filter((p) => shapeByAtMs.get(p.at_ms) === activeShapeId).map((p) => p.id));
     } else if (mode === 'single') {
-      setEditedPhraseIds(focusPhraseId ? [focusPhraseId] : []);
+      // Manual-selection lens: the edit set IS the multi-select set (falls
+      // back to the anchor so a bare focus still targets one phrase). Filter
+      // to in-scope ids so a chapter switch can't leave a stale target.
+      const scopeIds = new Set(phrasesInScope.map((p) => p.id));
+      const sel = selectedPhraseIds.filter((id) => scopeIds.has(id));
+      setEditedPhraseIds(sel.length ? sel : (focusPhraseId ? [focusPhraseId] : []));
     } else {
       setEditedPhraseIds(phrasesInScope.map((p) => p.id));
     }
-  }, [mode, activeTagId, activeShapeId, focusPhraseId, phrasesInScope, shapeByAtMs]);
+  }, [mode, activeTagId, activeShapeId, focusPhraseId, selectedPhraseIds, phrasesInScope, shapeByAtMs]);
 
   // Project phrases into ChapterContextStrip's band vocabulary. Targets
   // (edit set) get a brighter category-color wash + a crisp WHITE border;
@@ -846,17 +889,21 @@ export default function PhrasesTab({
           spectrogram={trackSpectrogram}
           beats={trackBeats}
           fill
-          onSelectBand={(pid, clickedMs) => {
-            // Two-stage click semantics:
-            //   1st click on a band  → focus + land at phrase start
-            //   2nd click on focused → seek to clicked position
-            setMode('single');
+          onSelectBand={(pid, clickedMs, mods = {}) => {
             const newPhrase = phrasesInScope.find((x) => x.id === pid);
             if (!newPhrase) return;
+            // Ctrl/Cmd or Shift → multi-select (same as the rail): toggle /
+            // range into the edit set. No seek — selection is the intent.
+            if (mods.ctrl || mods.meta || mods.shift) {
+              selectPhrase(pid, mods);
+              return;
+            }
+            // Plain click — two-stage: 1st focuses the band (anchor + replace
+            // selection); 2nd click on the focused band seeks to that point.
             if (pid === focusPhraseId && clickedMs != null) {
               setCurrentMs(Math.max(newPhrase.at_ms, Math.min(newPhrase.end_ms, clickedMs)));
             } else {
-              setFocusPhraseId(pid);
+              selectPhrase(pid);
             }
           }}
           expanded={true}
@@ -964,7 +1011,9 @@ export default function PhrasesTab({
               { value: 'all',     label: 'All' },
               { value: 'tag',     label: 'Behavior' },
               { value: 'shape',   label: 'Shape' },
-              { value: 'single',  label: 'Single' },
+              // "Single" flips to "Multiple" once 2+ phrases are selected
+              // (Ctrl/Cmd-click to add, Shift-click for a range).
+              { value: 'single',  label: editedPhraseIds.length >= 2 ? 'Multiple' : 'Single' },
             ]} />
           </div>
           <div style={{ flex: 1, overflow: 'auto' }}>
@@ -984,7 +1033,8 @@ export default function PhrasesTab({
               <PhraseRail
                 phrases={phrasesInScope}
                 focusPhraseId={focusPhraseId}
-                onSelect={setFocusPhraseId}
+                selectedIds={editedPhraseIds}
+                onSelect={selectPhrase}
               />
             )}
           </div>
@@ -1008,15 +1058,25 @@ export default function PhrasesTab({
                 ? phrasesInScope.filter((p) => p.tag === activeTagId)
                 : mode === 'shape'
                 ? phrasesInScope.filter((p) => shapeByAtMs.get(p.at_ms) === activeShapeId)
-                : (focusPhraseId
-                  ? phrasesInScope.filter((p) => p.id === focusPhraseId)
-                  : [])
+                // Single/Multiple: show every selected phrase (the edit set),
+                // so a multi-select shows all its rows to review + tweak.
+                : phrasesInScope.filter((p) => editedPhraseIdSet.has(p.id))
             }
             actions={actions}
             editedPhraseIds={editedPhraseIds}
             previewBySpanStart={previewBySpanStart}
             previewLoading={previewLoading}
-            onTogglePhrase={toggleEditedPhrase}
+            onTogglePhrase={(id) => {
+              // In single/multiple mode the per-row Edit/Skip toggles the
+              // manual selection (kept in sync with Ctrl-click); other lenses
+              // toggle the derived edit set directly.
+              if (mode === 'single') {
+                setSelectedPhraseIds((prev) =>
+                  prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+              } else {
+                toggleEditedPhrase(id);
+              }
+            }}
             loaded={phrasesLoaded}
           />
         </div>
@@ -1252,7 +1312,8 @@ function ShapeRail({ shapesWithCount, activeShapeId, onSelect }) {
   );
 }
 
-function PhraseRail({ phrases, focusPhraseId, onSelect }) {
+function PhraseRail({ phrases, focusPhraseId, selectedIds, onSelect }) {
+  const selSet = useMemo(() => new Set(selectedIds || []), [selectedIds]);
   if (phrases.length === 0) {
     return (
       <>
@@ -1266,20 +1327,28 @@ function PhraseRail({ phrases, focusPhraseId, onSelect }) {
   return (
     <>
       <RailSectionHeader>Jump to phrase ({phrases.length})</RailSectionHeader>
+      <div style={{ padding: '0 14px 6px', fontSize: 10.5, color: 'var(--text-dim)', lineHeight: 1.4 }}>
+        Ctrl/⌘-click to multi-select · Shift-click for a range
+      </div>
       {phrases.map((p) => {
-        const sel = p.id === focusPhraseId;
+        // Anchor = the phrase driving the viewer; member = in the edit set.
+        const isAnchor = p.id === focusPhraseId;
+        const inSet = selSet.has(p.id);
+        const sel = isAnchor || inSet;
         const tag = findTag(p.tag);
         const color = tag?.color || 'var(--text-dim)';
         return (
           <button
             key={p.id}
-            onClick={() => onSelect(p.id)}
+            onClick={(e) => onSelect(p.id, { ctrl: e.ctrlKey, meta: e.metaKey, shift: e.shiftKey })}
             title={tag ? `${tag.label} · ${fmtTimeShort(p.at_ms)}` : fmtTimeShort(p.at_ms)}
             style={{
               display: 'flex', alignItems: 'center', gap: 10, width: '100%',
               padding: '8px 14px', border: 'none',
               borderLeft: `3px solid ${sel ? color : 'transparent'}`,
-              background: sel ? 'var(--surface-2)' : 'transparent',
+              // Anchor gets the brighter fill; other selected members a fainter
+              // one so the set reads as "selected" while the anchor stands out.
+              background: isAnchor ? 'var(--surface-2)' : (inSet ? 'rgba(255,255,255,0.05)' : 'transparent'),
               cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
             }}
           >

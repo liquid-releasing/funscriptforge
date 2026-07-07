@@ -129,9 +129,40 @@ export default function StanzasTab({
   // a no-op.
   const [focusStanzaId, setFocusStanzaId] = useState(null);
   const [selectNonce, setSelectNonce] = useState(0);
+  // Manual multi-selection set for `single` mode — the edit set in that mode
+  // (preview/apply are already multi-span). `focusStanzaId` is the ANCHOR
+  // (drives the viewer + before/after chart); the whole set gets transformed.
+  const [selectedStanzaIds, setSelectedStanzaIds] = useState([]);
+  // Plain focus = replace selection with one (also the anchor).
   const focusStanza = (id) => {
     setFocusStanzaId(id);
     setSelectNonce((n) => n + 1);
+    setSelectedStanzaIds(id == null ? [] : [id]);
+  };
+  // Move the anchor without collapsing the selection (ctrl / shift clicks).
+  const setAnchorStanza = (id) => {
+    setFocusStanzaId(id);
+    setSelectNonce((n) => n + 1);
+  };
+  // Unified stanza click honoring modifiers (rail + strip + table route here).
+  const selectStanza = (id, mods = {}) => {
+    setMode('single');
+    if (mods.shift && focusStanzaId != null && focusStanzaId !== id) {
+      const order = stanzasInScope.map((s) => s.id);
+      const a = order.indexOf(focusStanzaId);
+      const b = order.indexOf(id);
+      if (a === -1 || b === -1) { focusStanza(id); return; }
+      const [lo, hi] = a <= b ? [a, b] : [b, a];
+      const range = order.slice(lo, hi + 1);
+      setSelectedStanzaIds((prev) => Array.from(new Set([...prev, ...range])));
+      setAnchorStanza(id);
+    } else if (mods.ctrl || mods.meta) {
+      setSelectedStanzaIds((prev) =>
+        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+      setAnchorStanza(id);
+    } else {
+      focusStanza(id);
+    }
   };
 
   const [isStanzaViewExpanded, setIsStanzaViewExpanded] = useState(true);
@@ -303,7 +334,7 @@ export default function StanzasTab({
   useEffect(() => {
     if (mode === 'single' && stanzasInScope.length > 0) {
       const stillExists = focusStanzaId && stanzasInScope.some((s) => s.id === focusStanzaId);
-      if (!stillExists) setFocusStanzaId(stanzasInScope[0].id);
+      if (!stillExists) focusStanza(stanzasInScope[0].id);
     }
   }, [mode, stanzasInScope, focusStanzaId]);
 
@@ -314,11 +345,16 @@ export default function StanzasTab({
       const active = clustersInScope.find((c) => c.id === activeClusterId);
       setEditedStanzaIds(active ? active.members_in_scope : []);
     } else if (mode === 'single') {
-      setEditedStanzaIds(focusStanzaId ? [focusStanzaId] : []);
+      // Manual-selection lens: edit set IS the multi-select set (falls back to
+      // the anchor). Filter to in-scope ids so a chapter switch can't strand
+      // a stale target.
+      const scopeIds = new Set(stanzasInScope.map((s) => s.id));
+      const sel = selectedStanzaIds.filter((id) => scopeIds.has(id));
+      setEditedStanzaIds(sel.length ? sel : (focusStanzaId ? [focusStanzaId] : []));
     } else {
       setEditedStanzaIds(stanzasInScope.map((s) => s.id));
     }
-  }, [mode, activeModeId, activeClusterId, focusStanzaId, stanzasInScope, clustersInScope]);
+  }, [mode, activeModeId, activeClusterId, focusStanzaId, selectedStanzaIds, stanzasInScope, clustersInScope]);
 
   // Project stanzas into ChapterContextStrip's band vocabulary.
   const editedStanzaIdSet = useMemo(() => new Set(editedStanzaIds), [editedStanzaIds]);
@@ -447,8 +483,8 @@ export default function StanzasTab({
   const nextStanza = (focusedIdx >= 0 && focusedIdx < stanzasInScope.length - 1)
     ? stanzasInScope[focusedIdx + 1] : null;
 
-  // Clear focus when chapter changes — same rule as PhrasesTab.
-  useEffect(() => { setFocusStanzaId(null); }, [activeChapter?.id]);
+  // Clear focus + selection when chapter changes — same rule as PhrasesTab.
+  useEffect(() => { setFocusStanzaId(null); setSelectedStanzaIds([]); }, [activeChapter?.id]);
 
   // Chapter clip for the MediaViewer below — same shared hook
   // ChaptersTab / PhrasesTab / PatternsTab use.
@@ -666,17 +702,20 @@ export default function StanzasTab({
           spectrogram={trackSpectrogram}
           beats={trackBeats}
           fill
-          onSelectBand={(sid, clickedMs) => {
-            // Two-stage click semantics — same as PhrasesTab.
-            //   1st click on a band   → focus + land at stanza start
-            //   2nd click on focused  → seek to clicked position
-            setMode('single');
+          onSelectBand={(sid, clickedMs, mods = {}) => {
             const newStanza = stanzasInScope.find((x) => x.id === sid);
             if (!newStanza) return;
+            // Ctrl/Cmd or Shift → multi-select (same as the rail).
+            if (mods.ctrl || mods.meta || mods.shift) {
+              selectStanza(sid, mods);
+              return;
+            }
+            // Plain click — two-stage: 1st focuses (anchor + replace), 2nd on
+            // the focused band seeks to that point.
             if (sid === focusStanzaId && clickedMs != null) {
               setCurrentMs(Math.max(newStanza.at_ms, Math.min(newStanza.end_ms, clickedMs)));
             } else {
-              focusStanza(sid);
+              selectStanza(sid);
             }
           }}
           expanded={true}
@@ -752,7 +791,9 @@ export default function StanzasTab({
               { value: 'all',     label: 'All' },
               { value: 'tag',     label: 'Mode' },
               { value: 'cluster', label: 'Cluster' },
-              { value: 'single',  label: 'Single' },
+              // "Single" → "Multiple" once 2+ stanzas are selected (Ctrl/Cmd-
+              // click to add, Shift-click for a range).
+              { value: 'single',  label: editedStanzaIds.length >= 2 ? 'Multiple' : 'Single' },
             ]} />
           </div>
           <div style={{ flex: 1, overflow: 'auto' }}>
@@ -774,7 +815,8 @@ export default function StanzasTab({
               <StanzaRail
                 stanzas={stanzasInScope}
                 focusStanzaId={focusStanzaId}
-                onSelect={focusStanza}
+                selectedIds={editedStanzaIds}
+                onSelect={selectStanza}
               />
             )}
           </div>
@@ -797,15 +839,23 @@ export default function StanzasTab({
                 const ids = new Set(active.members_in_scope);
                 return stanzasInScope.filter((s) => ids.has(s.id));
               }
-              return focusStanzaId
-                ? stanzasInScope.filter((s) => s.id === focusStanzaId)
-                : [];
+              // Single/Multiple: show every selected stanza (the edit set).
+              return stanzasInScope.filter((s) => editedStanzaIdSet.has(s.id));
             })()}
             actions={actions}
             editedStanzaIds={editedStanzaIds}
             previewBySpanStart={previewBySpanStart}
             previewLoading={previewLoading}
-            onToggleStanza={toggleEditedStanza}
+            onToggleStanza={(id) => {
+              // Single/Multiple → toggle the manual selection (kept in sync
+              // with Ctrl-click); other lenses toggle the derived edit set.
+              if (mode === 'single') {
+                setSelectedStanzaIds((prev) =>
+                  prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+              } else {
+                toggleEditedStanza(id);
+              }
+            }}
             loaded={stanzasLoaded}
             allStanzasCount={allStanzas.length}
           />
@@ -1027,7 +1077,8 @@ function ClusterRail({ clusters, activeClusterId, onSelect }) {
   );
 }
 
-function StanzaRail({ stanzas, focusStanzaId, onSelect }) {
+function StanzaRail({ stanzas, focusStanzaId, selectedIds, onSelect }) {
+  const selSet = new Set(selectedIds || []);
   if (stanzas.length === 0) {
     return (
       <>
@@ -1041,20 +1092,25 @@ function StanzaRail({ stanzas, focusStanzaId, onSelect }) {
   return (
     <>
       <RailSectionHeader>Jump to stanza ({stanzas.length})</RailSectionHeader>
+      <div style={{ padding: '0 14px 6px', fontSize: 10.5, color: 'var(--text-dim)', lineHeight: 1.4 }}>
+        Ctrl/⌘-click to multi-select · Shift-click for a range
+      </div>
       {stanzas.map((s) => {
-        const sel = s.id === focusStanzaId;
+        const isAnchor = s.id === focusStanzaId;
+        const inSet = selSet.has(s.id);
+        const sel = isAnchor || inSet;
         const m = findMode(s.mode);
         const color = m?.color || 'var(--text-dim)';
         return (
           <button
             key={s.id}
-            onClick={() => onSelect(s.id)}
+            onClick={(e) => onSelect(s.id, { ctrl: e.ctrlKey, meta: e.metaKey, shift: e.shiftKey })}
             title={m ? `${m.label} · ${fmtTimeShort(s.at_ms)}` : fmtTimeShort(s.at_ms)}
             style={{
               display: 'flex', alignItems: 'center', gap: 10, width: '100%',
               padding: '8px 14px', border: 'none',
               borderLeft: `3px solid ${sel ? color : 'transparent'}`,
-              background: sel ? 'var(--surface-2)' : 'transparent',
+              background: isAnchor ? 'var(--surface-2)' : (inSet ? 'rgba(255,255,255,0.05)' : 'transparent'),
               cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
             }}
           >
