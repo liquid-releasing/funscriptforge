@@ -195,10 +195,19 @@ export default function LibraryScreen({ onOpen, onOpenMedia, onAppError }) {
       ? config.roots.filter((r) => r.path === activeRootPath)
       : config.roots;
     let projects = [];
+    // Dedupe by project id (its media/dir path): when two configured roots
+    // overlap — one nests inside another, or the same folder is added twice —
+    // the same project folder scans under BOTH roots and would otherwise land
+    // in the grid twice, colliding on its React key (`p.id`) and rendering a
+    // duplicate card. First root wins (config order); its _locationLabel is
+    // computed against that root.
+    const seenIds = new Set();
     for (const r of rootsToInclude) {
       const result = scans.get(r.path);
       if (!result) continue;
       for (const p of result.projects) {
+        if (seenIds.has(p.id)) continue;
+        seenIds.add(p.id);
         projects.push({
           ...p,
           _locationLabel: computeLocationLabel(p.dirPath, r.path, r.label),
