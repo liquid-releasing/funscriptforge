@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -27,7 +27,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -300,7 +300,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../guide/phrase-editor/" class="md-tabs__link">
+        <a href="../../guide/generating-funscripts/" class="md-tabs__link">
           
   
   
@@ -656,6 +656,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guide/generating-funscripts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generating Funscripts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guide/phrase-editor/" class="md-nav__link">
         
   
@@ -720,6 +748,34 @@
     
   
     Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Viewer
   
 
     
@@ -1832,6 +1888,42 @@ pulse_wobble changes feel — all stackable.</p>
 </code></pre></div>
 <p>Sequential, not separate. Events enhance the generated channels — they layer
 on top of the baseline, they don't replace it.</p>
+<blockquote>
+<p><strong>Current implementation (Tauri app, 2026-06-08) — events bake into the
+e-stim channels at generation.</strong></p>
+<p>The design above is live, with the wiring updated for the Tauri rewrite.
+Authoring is canonical in <code>&lt;stem&gt;.feel.yml</code> (Events tab, write-through). The
+bake-in happens inside the <strong>shared e-stim generator</strong> so it covers both the
+<strong>Polish</strong> tab's Stamp and <strong>Export</strong>'s auto-generation:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>cli.py::_polish_generate_estim()
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>  1. per-chapter character → funscript-tools process() → 9 channels
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>  2. concatenate channels across chapters (absolute ms)
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>  3. _bake_events_into_channels():           ← the bake-in step
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>       feel.yml → _collect_events_yaml() → &lt;stem&gt;.events.yml
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>       write channels + events.yml to a tmp dir
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>       forge.funscript_tools.apply_events()  (Edger&#39;s process_events,
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>         globs &lt;stem&gt;.*.funscript siblings, modulates volume / pulse_freq /
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>         frequency / … in place against catalog/edger_event_definitions.yml)
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>       read the modulated channels back
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>  4. device clamp (forge.polish.apply_pass) runs on the event-shaped signal
+</code></pre></div>
+<p><strong>Why bake, not sidecar:</strong> restim and forgeplayer play <strong>channels</strong>, not
+events — they have no <code>events.yml</code> reader. So for an authored event to be
+<em>felt</em>, it must be written into the channel signal at generation. The
+<code>events.yml</code> sidecar is still shipped in the export bundle (human-readable,
+portable, and the re-gen path for Edger's Custom Event Builder); because our
+own players ignore it, there is no double-apply in our stack.</p>
+<p><strong>Fail-safe:</strong> any error in the bake step (malformed event, missing
+definitions) logs to stderr and ships the un-modulated channels — generation
+never breaks. Absent <code>feel.yml</code> events, the step is a transparent no-op.</p>
+<p>Strokers and TCode (OSR2/SR6) are unaffected — events are an e-stim concept;
+mechanical axes take no Edger events. The Polish live 3-pane preview still
+shows the base (un-baked) signal for now; baking events into per-tab previews
+is a separate cross-modality follow-up.</p>
+<p>Adapter: <code>forge/funscript_tools.py::apply_events()</code>. Bake step:
+<code>cli.py::_bake_events_into_channels()</code>. Tests:
+<code>tests/test_polish.py::test_estim_bakes_authored_events</code> (+ <code>_noop</code>).</p>
+</blockquote>
 <h3 id="enchantments-ship-with-funscriptforge">Enchantments (ship with FunscriptForge)<a class="headerlink" href="#enchantments-ship-with-funscriptforge" title="Permanent link">&para;</a></h3>
 <p>Ten enchantments ship with FunscriptForge — the General events from
 funscript-tools v2.2.0. These are NOT funscript transforms — Tone shapes
@@ -1978,19 +2070,19 @@ edger's tools make it powerful. The user's work isn't locked in our UI.</p>
 <p>Each event is deterministic math — <code>apply_linear_change</code> and <code>apply_modulation</code>
 with known parameters. We render previews directly from the YAML definitions
 without touching any funscript data.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>┌─────────────────────────────────────────┐
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>│  Edge                                   │
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>│  &quot;Builds tension across multiple        │
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>│   channels simultaneously&quot;              │
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>│                                         │
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>│  pulse_freq   ╱‾‾‾‾‾‾‾‾‾‾‾             │
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>│  volume       ∿∿∿∿∿∿∿∿∿∿∿∿             │
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>│  pulse_width  ∿∿∿∿∿∿∿∿∿∿∿∿             │
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>│                                         │
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>│  Duration: 15s    Mode: additive        │
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>│  Axes: pulse_frequency, volume,         │
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>│        volume-prostate, pulse_width     │
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>└─────────────────────────────────────────┘
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>┌─────────────────────────────────────────┐
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>│  Edge                                   │
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>│  &quot;Builds tension across multiple        │
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│   channels simultaneously&quot;              │
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>│                                         │
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>│  pulse_freq   ╱‾‾‾‾‾‾‾‾‾‾‾             │
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>│  volume       ∿∿∿∿∿∿∿∿∿∿∿∿             │
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>│  pulse_width  ∿∿∿∿∿∿∿∿∿∿∿∿             │
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│                                         │
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>│  Duration: 15s    Mode: additive        │
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>│  Axes: pulse_frequency, volume,         │
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>│        volume-prostate, pulse_width     │
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>└─────────────────────────────────────────┘
 </code></pre></div>
 <p>Each catalog card shows:
 - <strong>Name + description</strong> — what it feels like
@@ -2061,47 +2153,47 @@ on that exact timecode. Enchantments are moments, not phrase-wide blankets.</p>
 <p>This feature is about micro-updates within a phrase — not about the full
 funscript. The UI is scoped tight to keep focus.</p>
 <h3 id="layout_1">Layout<a class="headerlink" href="#layout_1" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>┌─────────────────────────────────────────────┬──────────────┐
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>│  [Vibrant phrase chart — dimmed context]     │ ◄Prev [P__] │
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>│  Current phrase highlighted, neighbors dim   │    Next►     │
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>├─────────────────────────────────────────────┴──────────────┤
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>│  Phrase stats table (start, end, duration, BPM, cycles)    │
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>├────────────────────────────────────────────────────────────┤
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>│  Editing Phrase 3                                          │
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>│  Tone: Tease | Transforms: Halve, Normalize                │
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│  Stim: Reactive                                            │
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>├─────────────────────────────────┬──────────────────────────┤
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>│                                 │                          │
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>│   [Video player]                │   Enchantment catalog    │
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>│   Scoped to current phrase      │                          │
-<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>│                                 │   ○ Cum                 │
-<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>│   [━━━━━━●━━━━━━━━━]            │   ○ Edge                │
-<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>│   1:45        2:15              │   ○ Fast                │
-<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>│                                 │   ○ Lube                │
-<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>│   Timecode: 1:52.300            │   ○ Medium              │
-<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>│                                 │   ○ Slow                │
-<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>│   Active: Edge (1:52-2:07) 🗑    │   ○ Stay               │
-<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>│                                 │   ○ Ruin                │
-<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>│  ─── or if no video: ───        │   ○ Stop               │
-<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>│                                 │   ○ Tranquil            │
-<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>│   Timecode: [____1:52.300___]   │                          │
-<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>│   (editable input field)        │  [Duration  ━━━●━━━━]    │
-<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>│                                 │  [Intensity ━━━━●━━]     │
-<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>│                                 │                          │
-<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a>│                                 │  [+ Add]                 │
-<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a>├─────────────────────────────────┴──────────────────────────┤
-<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a>│                                                            │
-<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a>│  Enchantments for Phrase 3:                                │
-<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a>│  ┌──────────┬──────────────┬──────────┬───┐                │
-<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a>│  │ Timecode │ Enchantment  │ Duration │   │                │
-<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a>│  ├──────────┼──────────────┼──────────┼───┤                │
-<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a>│  │ 1:52     │ Edge         │ 15s      │ 🗑 │               │
-<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a>│  │ 2:03     │ Cum          │ 15s      │ 🗑 │               │
-<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a>│  │ 2:41     │ Tranquil     │ 20s      │ 🗑 │               │
-<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a>│  └──────────┴──────────────┴──────────┴───┘                │
-<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a>│                                                            │
-<a id="__codelineno-4-40" name="__codelineno-4-40" href="#__codelineno-4-40"></a>│                       [Accept]                             │
-<a id="__codelineno-4-41" name="__codelineno-4-41" href="#__codelineno-4-41"></a>└────────────────────────────────────────────────────────────┘
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>┌─────────────────────────────────────────────┬──────────────┐
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>│  [Vibrant phrase chart — dimmed context]     │ ◄Prev [P__] │
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>│  Current phrase highlighted, neighbors dim   │    Next►     │
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>├─────────────────────────────────────────────┴──────────────┤
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>│  Phrase stats table (start, end, duration, BPM, cycles)    │
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>├────────────────────────────────────────────────────────────┤
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>│  Editing Phrase 3                                          │
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>│  Tone: Tease | Transforms: Halve, Normalize                │
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>│  Stim: Reactive                                            │
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>├─────────────────────────────────┬──────────────────────────┤
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>│                                 │                          │
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>│   [Video player]                │   Enchantment catalog    │
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>│   Scoped to current phrase      │                          │
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>│                                 │   ○ Cum                 │
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>│   [━━━━━━●━━━━━━━━━]            │   ○ Edge                │
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>│   1:45        2:15              │   ○ Fast                │
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>│                                 │   ○ Lube                │
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>│   Timecode: 1:52.300            │   ○ Medium              │
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>│                                 │   ○ Slow                │
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>│   Active: Edge (1:52-2:07) 🗑    │   ○ Stay               │
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>│                                 │   ○ Ruin                │
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>│  ─── or if no video: ───        │   ○ Stop               │
+<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>│                                 │   ○ Tranquil            │
+<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>│   Timecode: [____1:52.300___]   │                          │
+<a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a>│   (editable input field)        │  [Duration  ━━━●━━━━]    │
+<a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a>│                                 │  [Intensity ━━━━●━━]     │
+<a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a>│                                 │                          │
+<a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a>│                                 │  [+ Add]                 │
+<a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a>├─────────────────────────────────┴──────────────────────────┤
+<a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a>│                                                            │
+<a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a>│  Enchantments for Phrase 3:                                │
+<a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a>│  ┌──────────┬──────────────┬──────────┬───┐                │
+<a id="__codelineno-5-33" name="__codelineno-5-33" href="#__codelineno-5-33"></a>│  │ Timecode │ Enchantment  │ Duration │   │                │
+<a id="__codelineno-5-34" name="__codelineno-5-34" href="#__codelineno-5-34"></a>│  ├──────────┼──────────────┼──────────┼───┤                │
+<a id="__codelineno-5-35" name="__codelineno-5-35" href="#__codelineno-5-35"></a>│  │ 1:52     │ Edge         │ 15s      │ 🗑 │               │
+<a id="__codelineno-5-36" name="__codelineno-5-36" href="#__codelineno-5-36"></a>│  │ 2:03     │ Cum          │ 15s      │ 🗑 │               │
+<a id="__codelineno-5-37" name="__codelineno-5-37" href="#__codelineno-5-37"></a>│  │ 2:41     │ Tranquil     │ 20s      │ 🗑 │               │
+<a id="__codelineno-5-38" name="__codelineno-5-38" href="#__codelineno-5-38"></a>│  └──────────┴──────────────┴──────────┴───┘                │
+<a id="__codelineno-5-39" name="__codelineno-5-39" href="#__codelineno-5-39"></a>│                                                            │
+<a id="__codelineno-5-40" name="__codelineno-5-40" href="#__codelineno-5-40"></a>│                       [Accept]                             │
+<a id="__codelineno-5-41" name="__codelineno-5-41" href="#__codelineno-5-41"></a>└────────────────────────────────────────────────────────────┘
 </code></pre></div>
 <h3 id="top-section-context-not-editing">Top section — context, not editing<a class="headerlink" href="#top-section-context-not-editing" title="Permanent link">&para;</a></h3>
 <p>The top of the tab shows context for the current phrase. You can see it,
@@ -2186,19 +2278,19 @@ you can't change it here:</p>
 <h3 id="export-integration">Export integration<a class="headerlink" href="#export-integration" title="Permanent link">&para;</a></h3>
 <p>Accept saves the <code>.events.yml</code> per phrase to the working folder.
 At export time, all phrase <code>.events.yml</code> files merge into one:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">events</span><span class="p">:</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">112300</span><span class="w">       </span><span class="c1"># absolute timecode from phrase 3</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">edge</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nt">params</span><span class="p">:</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15000</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">123000</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cum</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">    </span><span class="nt">params</span><span class="p">:</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15000</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">161000</span>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tranquil</span>
-<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">    </span><span class="nt">params</span><span class="p">:</span>
-<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20000</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">events</span><span class="p">:</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">112300</span><span class="w">       </span><span class="c1"># absolute timecode from phrase 3</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">edge</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="nt">params</span><span class="p">:</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15000</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">123000</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cum</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="nt">params</span><span class="p">:</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15000</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">time</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">161000</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tranquil</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">    </span><span class="nt">params</span><span class="p">:</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">      </span><span class="nt">duration_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20000</span>
 </code></pre></div>
 <p>Then:
 1. <code>cli.process()</code> — generates 10 channel files from Stim config
@@ -2365,7 +2457,7 @@ At export time, all phrase <code>.events.yml</code> files merge into one:</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

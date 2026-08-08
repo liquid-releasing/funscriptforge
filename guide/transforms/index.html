@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -31,7 +31,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -306,7 +306,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../phrase-editor/" class="md-tabs__link">
+        <a href="../generating-funscripts/" class="md-tabs__link">
           
   
   
@@ -665,6 +665,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../generating-funscripts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generating Funscripts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../phrase-editor/" class="md-nav__link">
         
   
@@ -729,6 +757,34 @@
     
   
     Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Viewer
   
 
     
@@ -991,6 +1047,17 @@
     <span class="md-ellipsis">
       
         Hero Beat
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#short-beats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Short Beats
       
     </span>
   </a>
@@ -1707,6 +1774,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#short-beats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Short Beats
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#halve-tempo" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1831,7 +1909,7 @@
 
 
 <h1 id="transforms">Transforms<a class="headerlink" href="#transforms" title="Permanent link">&para;</a></h1>
-<p>FunscriptForge groups its transforms into three families — <strong>Tones</strong>, <strong>Behaviors</strong>, and <strong>Structurals</strong> — plus your own recipes and plugins. The picker ships <strong>10 Behaviors</strong>, <strong>7 Structurals</strong>, and <strong>7 Tones</strong>. Each transform fixes a specific kind of problem; some are subtle finishing tools, others make substantial changes.</p>
+<p>FunscriptForge groups its transforms into three families — <strong>Tones</strong>, <strong>Behaviors</strong>, and <strong>Structurals</strong> — plus your own recipes and plugins. The picker ships <strong>10 Behaviors</strong>, <strong>8 Structurals</strong>, and <strong>7 Tones</strong>. Each transform fixes a specific kind of problem; some are subtle finishing tools, others make substantial changes.</p>
 <blockquote>
 <p><strong>Note on names:</strong> A few older transforms were consolidated into more capable ones (2026-06-01). They still work in saved recipes but no longer clutter the picker — see <a href="#consolidated-transforms">Consolidated transforms</a> at the bottom.</p>
 </blockquote>
@@ -2173,7 +2251,7 @@
 <p>Structure-level shaping — tempo, rhythmic patterning, and full replacements. Most change the number of actions or their timestamps (the phrase duration is preserved, but the internal structure may change substantially). The one exception is <strong>Hero Beat</strong>, which is grouped here because it reshapes rhythmic <em>structure</em> even though it keeps every beat.</p>
 <hr />
 <h3 id="hero-beat">Hero Beat<a class="headerlink" href="#hero-beat" title="Permanent link">&para;</a></h3>
-<p><strong>What it does:</strong> An 8-step groove sequencer over the phrase's own beats (stroke reversals). Each of the eight sliders sets how much <strong>depth</strong> that beat keeps: 100 = full, 0 = flat to center. Walk the beats in order, looping 1→8, and each beat's stroke is scaled to its step's emphasis. Set the hero beats high and the rest lower to carve a groove out of an even "wall" of strokes. All sliders at 100 (the default) makes no change.</p>
+<p><strong>What it does:</strong> An 8-step groove sequencer over the phrase's own beats (stroke reversals). Each of the eight sliders sets how much <strong>depth</strong> that beat keeps: 100 = full height, 0 = flat to its floor. Hero Beat is <strong>floor-anchored</strong> — it keeps each beat's own <em>bottom</em> on its low rail and only eases the <em>top</em> down, so a lower step carves a groove without lifting the floor. A beat at 0 rests at the bottom. Walk the beats in order, looping 1→8; set the hero beats high and the rest lower to carve a groove out of an even "wall" of strokes. All sliders at 100 (the default) makes no change.</p>
 <p><strong>Parameters:</strong></p>
 <table>
 <thead>
@@ -2189,12 +2267,37 @@
 <td>Beat 1 … Beat 8</td>
 <td>100</td>
 <td>0 – 100</td>
-<td>Depth kept for each step of the repeating 8-beat cycle. 100 = full depth; 0 = flat to center.</td>
+<td>Height kept for each step of the repeating 8-beat cycle. 100 = full height; 0 = flat to the beat's own floor.</td>
 </tr>
 </tbody>
 </table>
 <p><strong>Use it when:</strong> A section is rhythmically even and you want to author accents — a strong-weak-medium-weak pulse, or any custom emphasis pattern. (A <code>[100,100,100,0,…]</code> pattern reproduces the old "Three-One Pulse".)</p>
+<p>Each beat is scaled about <strong>its own stroke</strong> (the bottom and top between its neighbouring reversals), not a global rail — so a lifted or shallow stroke keeps its own floor rather than snapping to 0. Its center-anchored twin is <strong><a href="#short-beats">Short Beats</a></strong>.</p>
 <p>Hero Beat is <strong>beat-preserving</strong> — it keeps every action's count and timing, and only scales depth. It uses the script's <em>own</em> beats, not the music's grid: when you're editing a script the beats it already has are the right ones to shape (aligning to the music is a job for generation, not editing).</p>
+<hr />
+<h3 id="short-beats">Short Beats<a class="headerlink" href="#short-beats" title="Permanent link">&para;</a></h3>
+<p><strong>What it does:</strong> The <strong>center-anchored</strong> twin of Hero Beat — the same 8-step per-beat control, but each beat shrinks about <strong>its own center</strong> instead of its floor. Each slider sets how tall that beat stays: 100 = full, 80 = 10% off the top <em>and</em> 10% off the bottom of that stroke, 0 = collapsed to its mid-point. Use it to soften a run of beats toward their centers (calmer, "shorter" strokes) while keeping the rhythm.</p>
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Range</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Beat 1 … Beat 8</td>
+<td>100</td>
+<td>0 – 100</td>
+<td>Height kept for each step of the repeating 8-beat cycle, trimmed equally off the top and bottom about the beat's own center. 100 = full; 0 = flat to the beat's own center.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Use it when:</strong> You want to ease strokes down without dropping them to the floor — Hero Beat pulls a beat toward its <em>bottom</em>, Short Beats pulls it toward its <em>middle</em>. Reach for Short Beats when a section should feel gentler but stay centered where it already sits.</p>
+<p>Like Hero Beat, Short Beats is <strong>beat-preserving</strong> and scales each beat about its own stroke (min/max between its neighbouring reversals), never a neighbour-spanning window — so adjacent beats of different heights each shrink around their own middle.</p>
 <hr />
 <h3 id="halve-tempo">Halve Tempo<a class="headerlink" href="#halve-tempo" title="Permanent link">&para;</a></h3>
 <p><strong>What it does:</strong> Keeps every other stroke cycle and retimes the remainder evenly across the original duration. The result has half the BPM with the same start time, end time, and amplitude.</p>
@@ -2579,7 +2682,7 @@
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

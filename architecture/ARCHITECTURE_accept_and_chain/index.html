@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -27,7 +27,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -300,7 +300,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../guide/phrase-editor/" class="md-tabs__link">
+        <a href="../../guide/generating-funscripts/" class="md-tabs__link">
           
   
   
@@ -656,6 +656,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guide/generating-funscripts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generating Funscripts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guide/phrase-editor/" class="md-nav__link">
         
   
@@ -720,6 +748,34 @@
     
   
     Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Viewer
   
 
     
@@ -1331,10 +1387,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4-progress-spinner-with-step-by-step-status" class="md-nav__link">
+  <a href="#4-progress-with-step-by-step-status" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Progress spinner with step-by-step status
+        4. Progress with step-by-step status
       
     </span>
   </a>
@@ -1412,6 +1468,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#footer-accept-grammar-2026-07" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Footer accept grammar (2026-07)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1475,62 +1542,46 @@ on each tab. Nothing is written to disk until Accept is clicked.</p>
 <h2 id="accept-pattern">Accept Pattern<a class="headerlink" href="#accept-pattern" title="Permanent link">&para;</a></h2>
 <p>Every tab that modifies data follows the same pattern:</p>
 <h3 id="1-user-makes-selections-no-disk-writes">1. User makes selections (no disk writes)<a class="headerlink" href="#1-user-makes-selections-no-disk-writes" title="Permanent link">&para;</a></h3>
-<p>The UI collects choices — tone, sliders, device settings — in <code>st.session_state</code>.
-Nothing is saved. The user can experiment freely.</p>
+<p>The React UI collects choices — character, sliders, device settings — in component
+state. Nothing is saved. The user can experiment freely.</p>
 <h3 id="2-preview-updates-in-real-time">2. Preview updates in real time<a class="headerlink" href="#2-preview-updates-in-real-time" title="Permanent link">&para;</a></h3>
-<p>Before/after charts show the effect of current selections. Preview recalculates
-on slider release (Streamlit rerun). No Accept needed to see the preview.</p>
+<p>Before/after charts show the effect of current selections. Preview recalculates as
+the user adjusts controls. No Accept needed to see the preview.</p>
 <h3 id="3-user-clicks-accept">3. User clicks Accept<a class="headerlink" href="#3-user-clicks-accept" title="Permanent link">&para;</a></h3>
-<p>A single <strong>Accept</strong> button (no arrow, no auto-navigation):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">if</span> <span class="n">st</span><span class="o">.</span><span class="n">button</span><span class="p">(</span><span class="s2">&quot;Accept&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="s2">&quot;primary&quot;</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="s2">&quot;stretch&quot;</span><span class="p">):</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">_apply</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">st</span><span class="o">.</span><span class="n">session_state</span><span class="p">[</span><span class="s2">&quot;tab_accepted&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">st</span><span class="o">.</span><span class="n">rerun</span><span class="p">()</span>
-</code></pre></div>
-<h3 id="4-progress-spinner-with-step-by-step-status">4. Progress spinner with step-by-step status<a class="headerlink" href="#4-progress-spinner-with-step-by-step-status" title="Permanent link">&para;</a></h3>
-<p><code>st.status()</code> shows each step as it runs:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">status</span> <span class="o">=</span> <span class="n">st</span><span class="o">.</span><span class="n">status</span><span class="p">(</span><span class="s2">&quot;Applying...&quot;</span><span class="p">,</span> <span class="n">expanded</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">status</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">&quot;Saving project file…&quot;</span><span class="p">)</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">save_forge</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">status</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;✅ Saved to my-project.forge&quot;</span><span class="p">)</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">status</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">&quot;Analyzing beats…&quot;</span><span class="p">)</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># ... long operation with progress callback ...</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="n">status</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;✅ Beat data: 142 beats, ~128 BPM&quot;</span><span class="p">)</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="n">status</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">&quot;Project ready!&quot;</span><span class="p">,</span> <span class="n">state</span><span class="o">=</span><span class="s2">&quot;complete&quot;</span><span class="p">,</span> <span class="n">expanded</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-</code></pre></div>
-<p><strong>Progress for long operations:</strong> Use callbacks that update the status label
-with counts (e.g., <code>frame 42 / 300</code>, <code>23,710 actions</code>). The user sees exactly
+<p>A single <strong>Accept</strong> button (no arrow, no auto-navigation). On click, the tab calls
+the corresponding <code>cli.py</code> subcommand through the Rust bridge (<code>forge.js</code> →
+<code>commands.rs</code>), then marks the tab accepted in component state.</p>
+<h3 id="4-progress-with-step-by-step-status">4. Progress with step-by-step status<a class="headerlink" href="#4-progress-with-step-by-step-status" title="Permanent link">&para;</a></h3>
+<p>Long operations stream stage labels back from the Python backend via
+<code>tauri::Emitter</code> events, which the footer/progress UI renders as they arrive.</p>
+<p><strong>Progress for long operations:</strong> the backend emits callbacks that update the status
+label with counts (e.g., <code>frame 42 / 300</code>, <code>23,710 actions</code>). The user sees exactly
 what's happening and knows whether to wait or get coffee.</p>
 <h3 id="5-advisory-text-no-auto-navigation">5. Advisory text (no auto-navigation)<a class="headerlink" href="#5-advisory-text-no-auto-navigation" title="Permanent link">&para;</a></h3>
-<p>After Accept completes, a success message advises the next step:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">if</span> <span class="n">st</span><span class="o">.</span><span class="n">session_state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tab_accepted&quot;</span><span class="p">):</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">st</span><span class="o">.</span><span class="n">success</span><span class="p">(</span><span class="s2">&quot;Your next step is the **Tone** tab.&quot;</span><span class="p">)</span>
-</code></pre></div>
-<p>The user clicks the tab themselves. No auto-navigation — it's disorienting
-and prevents the user from reviewing the completed state.</p>
+<p>After Accept completes, a success message advises the next step (e.g., "Your next
+step is the <strong>Phrases</strong> tab"). The user clicks the tab themselves. No auto-navigation
+— it's disorienting and prevents the user from reviewing the completed state.</p>
 <h3 id="6-history-snapshot-for-undo">6. History snapshot for undo<a class="headerlink" href="#6-history-snapshot-for-undo" title="Permanent link">&para;</a></h3>
 <p>Each Accept appends to the <code>.forge</code> history array:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">project</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="s2">&quot;tab&quot;</span><span class="p">:</span> <span class="s2">&quot;tone&quot;</span><span class="p">,</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="s2">&quot;tone&quot;</span><span class="p">:</span> <span class="n">tone_name</span><span class="p">,</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="s2">&quot;tone_sliders&quot;</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="p">})</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">save_forge</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">project</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="s2">&quot;tab&quot;</span><span class="p">:</span> <span class="s2">&quot;tone&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="s2">&quot;tone&quot;</span><span class="p">:</span> <span class="n">tone_name</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="s2">&quot;tone_sliders&quot;</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">})</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">save_forge</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="funscript-flow-between-tabs">Funscript flow between tabs<a class="headerlink" href="#funscript-flow-between-tabs" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>│  Project  │────▶│  Device  │────▶│   Tone   │────▶│ Phrases  │────▶│  Export  │
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>│          │     │          │     │          │     │          │     │          │
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>│ original │     │ device-  │     │ tone-    │     │ phrase-  │     │ final    │
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>│ funscript│     │ aware    │     │ applied  │     │ edited   │     │ output   │
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>└──────────┘     └──────────┘     └──────────┘     └──────────┘     └──────────┘
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>     │                │                │                │                │
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>     ▼                ▼                ▼                ▼                ▼
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>  _funscript_     _funscript_     _funscript_     _funscript_      device/
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>  original.json   device.json     tone.json       phrases.json    subfolders
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>│  Project  │────▶│  Device  │────▶│   Tone   │────▶│ Phrases  │────▶│  Export  │
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>│          │     │          │     │          │     │          │     │          │
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│ original │     │ device-  │     │ tone-    │     │ phrase-  │     │ final    │
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>│ funscript│     │ aware    │     │ applied  │     │ edited   │     │ output   │
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>└──────────┘     └──────────┘     └──────────┘     └──────────┘     └──────────┘
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>     │                │                │                │                │
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>     ▼                ▼                ▼                ▼                ▼
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>  _funscript_     _funscript_     _funscript_     _funscript_      device/
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>  original.json   device.json     tone.json       phrases.json    subfolders
 </code></pre></div>
 <p>Each tab reads from the <strong>previous tab's output</strong>, not the original funscript.
 This is the cascading chain — changes accumulate through the workflow.</p>
@@ -1593,7 +1644,7 @@ walks backward to find the most recent saved state.</p>
 <ol>
 <li>Pops the last entry from the <code>.forge</code> history array</li>
 <li>Removes the chain funscript file for that stage</li>
-<li>Clears the accepted flag in session state</li>
+<li>Clears the accepted flag in the tab's component state</li>
 <li>Saves the updated <code>.forge</code></li>
 </ol>
 <p>One level deep per tab — undoes the last Accept, not individual slider changes.</p>
@@ -1605,6 +1656,50 @@ captures all workflow decisions (tone, sliders, device settings) without
 project-specific data (paths, timestamps).</p>
 <p>v1: export only. v2: import templates to pre-fill all tabs, ship starter
 presets (Driving Beat, Hypnotic Mix, Romance), CLI batch processing.</p>
+<h2 id="footer-accept-grammar-2026-07">Footer accept grammar (2026-07)<a class="headerlink" href="#footer-accept-grammar-2026-07" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p>The tab order and chain-file sections above are historical. The current tab
+chain is <strong>Project → Generate → Analysis → Chapters → Phrases → Stanzas →
+Events → Channels → Polish → Export → Viewer</strong>, and several tabs now
+<strong>write through</strong> as you work (Events → <code>feel.yml</code>, Channels →
+<code>characters.json</code>, the working funscript on every transform Apply) rather
+than only on Accept.</p>
+</blockquote>
+<p>The sticky footer (<code>AcceptBar</code>) is the canonical commit surface. One grammar
+runs across every tab:</p>
+<ul>
+<li><strong>Red + ✓ = leave the tab.</strong> Only the terminal <code>Accept and chain to &lt;next&gt;</code>
+  is red with a checkmark. Everything else completes work in place.</li>
+<li><strong>Tentative (white, no ✓) = a step, not the commit.</strong> A gated tab still being
+  walked shows its walk action as a quiet white primary (<code>AcceptBar</code>
+  <code>primaryTentative</code>); the red ✓ chain returns only once the tab's completion
+  predicate is satisfied. Export's <code>Export</code> button is white until the write
+  succeeds, then flips to red ✓ <code>Chain to Viewer</code>.</li>
+<li><strong>Per-tab completion gates.</strong> A chapter-scoped tab reports
+  <code>{ complete, considered, total }</code>; until <code>complete</code>, the footer shows the
+  walk and the chain stays tentative.</li>
+<li><em>Chapters / Phrases / Stanzas</em> — every chapter considered (walk
+    <code>Accept and next chapter</code>, or <strong>Accept all as-is / as untoned</strong> above the
+    ribbon). Channels reads its completion from persisted <code>characters.json</code>, so
+    it <strong>survives leaving and re-entering the tab</strong>.</li>
+<li><em>Channels (two passes)</em> — reports <code>passes: [character, mechanical]</code>, which
+    the footer renders as two white walk buttons (<code>AcceptBar</code>
+    <code>secondaryActions</code>). Complete when <strong>every chapter has both</strong> a character
+    and a mechanical; <strong>Apply to all chapters</strong> in each section header
+    broadcasts the staged pick.</li>
+<li><em>Polish (per device)</em> — walk <code>Accept and next device</code> stamps the focused
+    device (identical to the bench Stamp) and advances; <strong>Accept all defaults</strong>
+    stamps the rest. Complete when every device is stamped.</li>
+<li><strong>Bulk buttons never chain.</strong> They fill gaps in place (preserving anything
+  already set) and live above the unit list, keeping the footer uncluttered.</li>
+<li><strong>Carry-forward fills gaps only.</strong> Accepting a chapter's tone carries it onto
+  the next chapter <em>only if that chapter is still untoned</em> — it never replaces a
+  tone already there.</li>
+</ul>
+<p><code>AcceptBar</code> disables the primary on <code>error || busy || gate</code>; <code>ready</code> and
+<code>primaryTentative</code> only affect the lead icon / button styling, not whether it
+fires. See <code>ui/web/src/App.jsx</code> (footer fork) and forgemoment
+<code>src/AppShell.jsx</code> (<code>AcceptBar</code>).</p>
 <hr />
 <p><em>© 2026 <a href="https://github.com/liquid-releasing">Liquid Releasing</a>. Licensed under the MIT License.</em></p>
 
@@ -1684,7 +1779,7 @@ presets (Driving Beat, Hypnotic Mix, Romance), CLI batch processing.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

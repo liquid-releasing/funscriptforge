@@ -10,9 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://help.funscriptforge.com/architecture/DEVELOPMENT/">
+        <link rel="canonical" href="https://help.funscriptforge.com/guide/viewer/">
       
       
+        <link rel="prev" href="../export/">
+      
+      
+        <link rel="next" href="../media-player/">
       
       
         
@@ -23,7 +27,7 @@
     
     
       
-        <title>Development Notes - FunscriptForge</title>
+        <title>Viewer - FunscriptForge</title>
       
     
     
@@ -74,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#development-notes" class="md-skip">
+        <a href="#viewer" class="md-skip">
           Skip to content
         </a>
       
@@ -108,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Development Notes
+              Viewer
             
           </span>
         </div>
@@ -296,11 +300,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../guide/generating-funscripts/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../generating-funscripts/" class="md-tabs__link">
           
   
   
@@ -599,28 +605,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
-        
-          
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
             
   
   
@@ -638,7 +647,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -656,7 +665,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/generating-funscripts/" class="md-nav__link">
+      <a href="../generating-funscripts/" class="md-nav__link">
         
   
   
@@ -684,7 +693,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/phrase-editor/" class="md-nav__link">
+      <a href="../phrase-editor/" class="md-nav__link">
         
   
   
@@ -712,7 +721,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/pattern-editor/" class="md-nav__link">
+      <a href="../pattern-editor/" class="md-nav__link">
         
   
   
@@ -740,7 +749,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/export/" class="md-nav__link">
+      <a href="../export/" class="md-nav__link">
         
   
   
@@ -765,10 +774,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../guide/viewer/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Viewer
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -784,6 +820,131 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-reads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it reads
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layout
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layout">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#device-picker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Device picker
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-lane-stack" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The lane stack
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-monitor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The monitor
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#liveliness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Liveliness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-chapter-liveliness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-chapter liveliness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#to-edit-what-you-see" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        To edit what you see
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -796,7 +957,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/media-player/" class="md-nav__link">
+      <a href="../media-player/" class="md-nav__link">
         
   
   
@@ -824,7 +985,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/transforms/" class="md-nav__link">
+      <a href="../transforms/" class="md-nav__link">
         
   
   
@@ -1281,22 +1442,33 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#test-assets" class="md-nav__link">
+  <a href="#what-it-reads" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Test assets
+        What it reads
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Test assets">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layout
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layout">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#funscript" class="md-nav__link">
+  <a href="#device-picker" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Funscript
+        Device picker
       
     </span>
   </a>
@@ -1304,10 +1476,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#video" class="md-nav__link">
+  <a href="#the-lane-stack" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Video
+        The lane stack
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-monitor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The monitor
       
     </span>
   </a>
@@ -1320,10 +1503,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#running-the-app-windows" class="md-nav__link">
+  <a href="#liveliness" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Running the app (Windows)
+        Liveliness
       
     </span>
   </a>
@@ -1331,41 +1514,35 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#python-environment" class="md-nav__link">
+  <a href="#per-chapter-liveliness" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Python environment
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Python environment">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#optional-beat-detection" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Optional — beat detection
+        Per-chapter liveliness
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#optional-captions" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#to-edit-what-you-see" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Optional — captions
+        To edit what you see
       
     </span>
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1389,61 +1566,120 @@
   
 
 
-<h1 id="development-notes">Development Notes<a class="headerlink" href="#development-notes" title="Permanent link">&para;</a></h1>
-<h2 id="test-assets">Test assets<a class="headerlink" href="#test-assets" title="Permanent link">&para;</a></h2>
-<h3 id="funscript">Funscript<a class="headerlink" href="#funscript" title="Permanent link">&para;</a></h3>
-<p><code>assets/samples/big_buck_bunny.raw.funscript</code> ships with the repo and loads automatically.</p>
-<h3 id="video">Video<a class="headerlink" href="#video" title="Permanent link">&para;</a></h3>
-<p>Video files are not committed to the repo (file size). To test the video metadata panel
-in the Project tab, bring your own MP4 and drop it into the Media expander.</p>
-<p>Any MP4 works. The test file used during development:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>C:\Users\bruce\OneDrive\ai books\9781788997713\Package\videos\video1_1.mp4
-</code></pre></div></p>
-<p>The stats table shows Duration, Resolution, Frame rate, File size, Video codec, and Audio codec.
-Duration gets a ✅ if it matches the loaded funscript within 5 seconds, ⚠️ if not.</p>
+<h1 id="viewer">Viewer<a class="headerlink" href="#viewer" title="Permanent link">&para;</a></h1>
+<p>The Viewer is the last stop in the FunscriptForge workflow — a review surface for what generation actually <em>produced</em>. Everywhere else in the app you author intent; here you see the finished device channels laid out across the whole timeline, so inconsistencies pop: a soft intro against a hot body, a channel that went flat, a device that never got busy.</p>
+<p>The Viewer <strong>reads exported output</strong> — it does not edit. To change something you saw here, open the project and work on it (see <a href="#to-edit-what-you-see">To edit what you see</a> below).</p>
 <hr />
-<h2 id="running-the-app-windows">Running the app (Windows)<a class="headerlink" href="#running-the-app-windows" title="Permanent link">&para;</a></h2>
-<p>FunscriptForge is a Tauri 2 + React + Vite desktop app. The frontend lives in
-<code>ui/web/</code>; the Rust shell drives the repo-root Python backend (<code>cli.py</code>) as a
-subprocess. From <code>ui/web/</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>npm<span class="w"> </span>install<span class="w">            </span><span class="c1"># once</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>npm<span class="w"> </span>run<span class="w"> </span>tauri:dev<span class="w">      </span><span class="c1"># full desktop app (Rust shell + React + Python backend)</span>
-</code></pre></div>
-<p>In development the Rust shell invokes the backend through the project <code>.venv</code>
-(<code>python cli.py &lt;command&gt;</code>), with <code>ffmpeg</code> / <code>ffprobe</code> resolved on PATH.</p>
-<p>Useful variants:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>npm<span class="w"> </span>run<span class="w"> </span>dev<span class="w">            </span><span class="c1"># browser-only UI loop (forge.js returns mock data)</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>npx<span class="w"> </span>tauri<span class="w"> </span>build<span class="w">        </span><span class="c1"># production installers → src-tauri/target/release/bundle/</span>
-</code></pre></div>
-<blockquote>
-<p>Rust commands in <code>ui/web/src-tauri/src/commands.rs</code> only recompile on a fresh
-<code>npm run tauri:dev</code>. After editing Rust, restart the dev server — React HMR
-alone will not pick up new bridge commands.</p>
-</blockquote>
-<p>See <a href="../../ui/web/README.md"><code>ui/web/README.md</code></a> for prerequisites (Node, Rust,
-WebView2) and the <code>forge.js</code> platform adapter.</p>
+<h2 id="what-it-reads">What it reads<a class="headerlink" href="#what-it-reads" title="Permanent link">&para;</a></h2>
+<p>The Viewer loads, in order of preference:</p>
+<ol>
+<li>The loose <strong><code>&lt;stem&gt;.output/</code></strong> folder written by Export (the live, most-recent render).</li>
+<li>The <strong><code>&lt;stem&gt;.forge</code></strong> bundle (the shipped snapshot) when only that was kept.</li>
+</ol>
+<p>Because a folder often holds several renders of the same title (1080p / 4K / VR) but generation runs for just one, the Viewer applies a <strong>sibling fallback</strong>: open <em>any</em> of those files and it adopts the one output set that exists. The <strong>footer</strong> always shows exactly which output folder (or bundle) you are looking at, so there is never any doubt.</p>
+<p>If nothing is found, the Viewer tells you where it looked and points you to the Export tab.</p>
 <hr />
-<h2 id="python-environment">Python environment<a class="headerlink" href="#python-environment" title="Permanent link">&para;</a></h2>
-<p>The Python backend (<code>cli.py</code> and its modules) runs in a project virtualenv:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>.venv<span class="se">\S</span>cripts<span class="se">\a</span>ctivate<span class="w">          </span><span class="c1"># Windows</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>pip<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>requirements.txt
-</code></pre></div>
-<p>For distribution the backend is frozen into a <code>forge-cli</code> binary with PyInstaller
-(<code>pyinstaller forge-cli.spec</code>) and bundled into the Tauri build as a resource; the
-release CI does this automatically. See <code>.github/workflows/release.yml</code>.</p>
-<p>Required: <code>pandas</code>, <code>plotly</code>, <code>pymediainfo</code> (plus the analysis stack below)</p>
-<h3 id="optional-beat-detection">Optional — beat detection<a class="headerlink" href="#optional-beat-detection" title="Permanent link">&para;</a></h3>
-<p>The <code>beats</code> CLI command and beat-detection panel require two additional packages:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>pip<span class="w"> </span>install<span class="w"> </span>av<span class="w"> </span>librosa
-</code></pre></div>
+<h2 id="layout">Layout<a class="headerlink" href="#layout" title="Permanent link">&para;</a></h2>
+<p>Three columns under a device picker:</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>What it shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Left — stats</strong></td>
+<td>Whole-device headline numbers (Liveliness, Channels, Actions, Density, Usable range, Avg velocity, Avg stroke), the selected channel's stats, and the <strong>per-chapter liveliness</strong> readout.</td>
+</tr>
+<tr>
+<td><strong>Center — lane stack</strong></td>
+<td>The star. Every context lane + every device channel stacked on one shared time axis: audio, spectrogram, intensity arc, events, then each channel as a velocity-coloured curve.</td>
+</tr>
+<tr>
+<td><strong>Right — monitor</strong></td>
+<td>A reference player (Video / Audio / Funscript) tied to the same playhead, so you can watch the source frame while reading the curves.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="device-picker">Device picker<a class="headerlink" href="#device-picker" title="Permanent link">&para;</a></h3>
+<p>The header chips switch devices (E-Stim, Handy, Lovense, MultiFunPlayer, OSR2, SR6, …). Each chip shows its channel count. E-Stim sorts first and is selected by default.</p>
+<h3 id="the-lane-stack">The lane stack<a class="headerlink" href="#the-lane-stack" title="Permanent link">&para;</a></h3>
+<p>Reading <strong>down</strong> the stack is what surfaces problems — "the audio is loud here but my channels are pale." Click any channel lane to select it; its curve thickens, the left panel switches to that channel's stats, and the per-chapter readout re-scopes to it. Click anywhere on the chart to move the playhead.</p>
+<p>Lanes only appear when their data exists:</p>
 <ul>
-<li><code>av</code> (PyAV) — bundles FFmpeg libs; extracts audio from video without an external <code>ffmpeg</code> binary</li>
-<li><code>librosa</code> — beat tracking via <code>librosa.beat.beat_track()</code></li>
+<li><strong>Audio</strong> — peak envelope with beat ticks.</li>
+<li><strong>Spectro</strong> — the shipped spectrogram PNG (what's in the audio: bass, vocal, percussive bands).</li>
+<li><strong>Intensity</strong> — the felt-intensity arc (the <code>volume</code> channel, or a velocity envelope when there's no volume channel).</li>
+<li><strong>Events</strong> — coloured Edger event bands with labels.</li>
+<li><strong>Channels</strong> — every device channel, coloured blue→red by stroke velocity.</li>
 </ul>
-<p>When these packages are absent the UI degrades gracefully (beat-data features are unavailable) and <code>cli.py beats</code> exits with a clear error message.</p>
-<h3 id="optional-captions">Optional — captions<a class="headerlink" href="#optional-captions" title="Permanent link">&para;</a></h3>
-<p>SRT / WebVTT parsing (<code>forge/captions.py</code>, <code>cli.py parse-captions</code>) uses only the Python standard library. No additional packages required.</p>
+<h3 id="the-monitor">The monitor<a class="headerlink" href="#the-monitor" title="Permanent link">&para;</a></h3>
+<p>A narrow player on the right, synced to the same playhead by one shared baton. The <strong>Funscript</strong> mode shows the selected channel at full resolution (real strokes, not the lane's decimated envelope). The <strong>Audio</strong> mode shows a high-resolution waveform with the energy / tempo readout. Spectro mode only appears when raw spectrogram cells are available (an exported project ships only the PNG, so the monitor's live Spectro tab is hidden there — the center stack still shows the full image).</p>
+<hr />
+<h2 id="liveliness">Liveliness<a class="headerlink" href="#liveliness" title="Permanent link">&para;</a></h2>
+<p><strong>Liveliness</strong> is a single <strong>0–100</strong> "how energetic is this output" headline, so you don't have to read four numbers to get a feel. It blends four normalized metrics:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Weight</th>
+<th>What it rewards</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Avg velocity</strong></td>
+<td>40%</td>
+<td>Fast motion — what you feel most.</td>
+</tr>
+<tr>
+<td><strong>Avg stroke</strong></td>
+<td>25%</td>
+<td>Big moves rather than tiny wiggles.</td>
+</tr>
+<tr>
+<td><strong>Usable range</strong></td>
+<td>20%</td>
+<td>Using more of the 0–100 span (p5→p95).</td>
+</tr>
+<tr>
+<td><strong>Density</strong></td>
+<td>15%</td>
+<td>More actions per second.</td>
+</tr>
+</tbody>
+</table>
+<p>Each metric is capped at a reference maximum (tuned on a known-good test clip), weighted, summed, and scaled to 0–100. So <strong>fast, full-range, dense motion scores high; slow, shallow, sparse motion scores low.</strong> Velocity dominates because it's the dimension you perceive most strongly.</p>
+<p>Two things to keep in mind:</p>
+<ul>
+<li><strong>The device headline averages every channel.</strong> For E-Stim that's the mean of all nine — so flatter channels like <code>volume</code> pull it down. Click a single channel to read <em>its</em> liveliness, which is often the more meaningful number.</li>
+<li><strong>The headline covers the whole timeline.</strong> It tells you <em>whether</em> the output is alive overall, not <em>where</em> it sags. For that, use the per-chapter readout and the intensity arc.</li>
+</ul>
+<hr />
+<h2 id="per-chapter-liveliness">Per-chapter liveliness<a class="headerlink" href="#per-chapter-liveliness" title="Permanent link">&para;</a></h2>
+<p>Below the stats, each chapter gets its own liveliness bar and number. This is what turns "the intro feels too soft" into a measurement: a quiet opening reads as a short, cool bar (e.g. <code>28</code>) against a warm body (e.g. <code>77</code>).</p>
+<ul>
+<li>The bars are <strong>warm where lively, cool where the output sags</strong>, scaled to the busiest chapter.</li>
+<li>The readout <strong>re-scopes to the selected channel</strong> when you pick one (header reads <code>Per chapter · alpha</code>), else it's the whole device.</li>
+<li><strong>Click a chapter</strong> to jump the playhead to its start and inspect it in the monitor.</li>
+</ul>
+<p>Use it to spot uneven energy — a build-up that never builds, a comedown that drops too early, or an intro running at half the body's intensity — then fix it in <strong>Passages</strong>.</p>
+<hr />
+<h2 id="to-edit-what-you-see">To edit what you see<a class="headerlink" href="#to-edit-what-you-see" title="Permanent link">&para;</a></h2>
+<p>The Viewer is read-only by design. The editable project is the working <code>.forge</code> — so when you find something to change:</p>
+<blockquote>
+<p><strong>Project tab → "Import a <code>.forge</code> bundle…"</strong> → pick the project's <code>&lt;stem&gt;.forge</code>.</p>
+</blockquote>
+<p>The bundle carries everything needed to re-edit (the motion funscript plus the <code>characters</code>, <code>phrases</code>, <code>chapters</code>, audio and beats sidecars), so importing it reconstructs a fully editable project. Then make the change where it belongs — e.g. lift a soft intro in <strong>Passages</strong> — and re-export.</p>
+<hr />
+<h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../export/">Export →</a> — produces the output the Viewer reviews</li>
+<li><a href="../generating-funscripts/">Generating Funscripts →</a> — where the channels come from</li>
+<li><a href="../media-player/">Media Player →</a> — the shared monitor component</li>
+</ul>
 
 
 
@@ -1476,6 +1712,44 @@ release CI does this automatically. See <code>.github/workflows/release.yml</cod
       
         <footer class="md-footer">
   
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../export/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Export">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Export
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../media-player/" class="md-footer__link md-footer__link--next" aria-label="Next: Media Player">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Media Player
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
     
   
   <div class="md-footer-meta md-typeset">

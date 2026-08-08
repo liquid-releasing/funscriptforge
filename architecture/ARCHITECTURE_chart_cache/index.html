@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -27,7 +27,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -300,7 +300,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../guide/phrase-editor/" class="md-tabs__link">
+        <a href="../../guide/generating-funscripts/" class="md-tabs__link">
           
   
   
@@ -656,6 +656,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guide/generating-funscripts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generating Funscripts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guide/phrase-editor/" class="md-nav__link">
         
   
@@ -720,6 +748,34 @@
     
   
     Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Viewer
   
 
     
@@ -1225,10 +1281,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#problem" class="md-nav__link">
+  <a href="#original-problem-streamlit-era" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Problem
+        Original problem (Streamlit era)
       
     </span>
   </a>
@@ -1236,15 +1292,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#solution-chain-cached-pointseries-on-demand-png" class="md-nav__link">
+  <a href="#solution-chain-cached-pointseries" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Solution: Chain-Cached PointSeries + On-Demand PNG
+        Solution: Chain-Cached PointSeries
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Solution: Chain-Cached PointSeries + On-Demand PNG">
+    <nav class="md-nav" aria-label="Solution: Chain-Cached PointSeries">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1259,10 +1315,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#cache-keys-in-session_state" class="md-nav__link">
+  <a href="#cache-keys" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Cache keys in session_state
+        Cache keys
       
     </span>
   </a>
@@ -1270,10 +1326,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#png-rendering-cheap-05s-from-cached-pointseries" class="md-nav__link">
+  <a href="#chart-rendering-cheap-from-cached-pointseries" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PNG rendering (cheap, ~0.5s from cached PointSeries)
+        Chart rendering (cheap, from cached PointSeries)
       
     </span>
   </a>
@@ -1317,7 +1373,7 @@
   <a href="#why-pointseries-not-png" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Why PointSeries not PNG
+        Why PointSeries, not PNG
       
     </span>
   </a>
@@ -1325,10 +1381,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#streamlit-limitation" class="md-nav__link">
+  <a href="#why-caching-still-helps" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Streamlit limitation
+        Why caching still helps
       
     </span>
   </a>
@@ -1361,24 +1417,36 @@
 
 
 <h1 id="chart-cache-architecture">Chart Cache Architecture<a class="headerlink" href="#chart-cache-architecture" title="Permanent link">&para;</a></h1>
-<h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">&para;</a></h2>
-<p>Streamlit re-renders ALL tabs on every <code>st.rerun()</code>. Each Accept triggers
+<blockquote>
+<p><strong>Historical note.</strong> This document originally addressed a Streamlit-specific
+re-render problem (Streamlit re-ran every tab on each <code>st.rerun()</code>, forcing
+full-page PNG repaints). The Tauri + React app no longer has that constraint —
+React re-renders only the active component, and charts are drawn live by
+forgemoment from data rather than as server-rendered PNGs. The <strong>chain-cached
+<code>PointSeries</code></strong> model below survives because it is framework-agnostic: <code>cli.py</code>
+still emits per-stage <code>PointSeries</code> JSON, and caching avoids recomputing the
+expensive velocity-color pass for every view.</p>
+</blockquote>
+<h2 id="original-problem-streamlit-era">Original problem (Streamlit era)<a class="headerlink" href="#original-problem-streamlit-era" title="Permanent link">&para;</a></h2>
+<p>Streamlit re-rendered ALL tabs on every <code>st.rerun()</code>. Each Accept triggered
 a full page rebuild. With vibrant static PNG charts (2-3s each) across
-8 tabs, this creates 15-20s repaints even when the user only sees one tab.</p>
-<h2 id="solution-chain-cached-pointseries-on-demand-png">Solution: Chain-Cached PointSeries + On-Demand PNG<a class="headerlink" href="#solution-chain-cached-pointseries-on-demand-png" title="Permanent link">&para;</a></h2>
+8 tabs, this created 15-20s repaints even when the user only saw one tab.</p>
+<h2 id="solution-chain-cached-pointseries">Solution: Chain-Cached PointSeries<a class="headerlink" href="#solution-chain-cached-pointseries" title="Permanent link">&para;</a></h2>
 <h3 id="chain-stages">Chain stages<a class="headerlink" href="#chain-stages" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Original → Device → Tone → Phrases
 </code></pre></div>
 <p>Each Accept computes and caches a <code>PointSeries</code> (velocity colors, positions,
 timestamps) for its output. This is the expensive step (~1s for 23K actions).</p>
-<h3 id="cache-keys-in-session_state">Cache keys in session_state<a class="headerlink" href="#cache-keys-in-session_state" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="s2">&quot;chain_series_device&quot;</span>   <span class="err">→</span> <span class="n">PointSeries</span> <span class="n">after</span> <span class="n">device</span> <span class="n">awareness</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="s2">&quot;chain_series_tone&quot;</span>     <span class="err">→</span> <span class="n">PointSeries</span> <span class="n">after</span> <span class="n">tone</span> <span class="n">applied</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="s2">&quot;chain_series_phrases&quot;</span>  <span class="err">→</span> <span class="n">PointSeries</span> <span class="n">after</span> <span class="n">phrase</span> <span class="n">edits</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="s2">&quot;chain_bands&quot;</span>           <span class="err">→</span> <span class="n">AnnotationBand</span> <span class="nb">list</span> <span class="p">(</span><span class="n">phrase</span> <span class="n">boundaries</span><span class="p">)</span>
+<h3 id="cache-keys">Cache keys<a class="headerlink" href="#cache-keys" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>chain_series_device   → PointSeries after device awareness
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>chain_series_tone     → PointSeries after tone applied
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>chain_series_phrases  → PointSeries after phrase edits
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>chain_bands           → AnnotationBand list (phrase boundaries)
 </code></pre></div>
-<h3 id="png-rendering-cheap-05s-from-cached-pointseries">PNG rendering (cheap, ~0.5s from cached PointSeries)<a class="headerlink" href="#png-rendering-cheap-05s-from-cached-pointseries" title="Permanent link">&para;</a></h3>
-<p>Each tab requests a PNG with or without overlays:</p>
+<h3 id="chart-rendering-cheap-from-cached-pointseries">Chart rendering (cheap, from cached PointSeries)<a class="headerlink" href="#chart-rendering-cheap-from-cached-pointseries" title="Permanent link">&para;</a></h3>
+<p>Each view requests a chart with or without overlays. (In the Streamlit era this
+was a server-rendered PNG; in the React app forgemoment Charts draw the same
+cached <code>PointSeries</code> directly.)</p>
 <table>
 <thead>
 <tr>
@@ -1476,17 +1544,20 @@ timestamps) for its output. This is the expensive step (~1s for 23K actions).</p
 - Check if cached PointSeries exists
 - If yes: render PNG from cache (0.5s)
 - If no: show spinner, compute, cache, render</p>
-<h3 id="why-pointseries-not-png">Why PointSeries not PNG<a class="headerlink" href="#why-pointseries-not-png" title="Permanent link">&para;</a></h3>
+<h3 id="why-pointseries-not-png">Why PointSeries, not PNG<a class="headerlink" href="#why-pointseries-not-png" title="Permanent link">&para;</a></h3>
 <ul>
-<li>PointSeries is framework-agnostic (can render to Matplotlib PNG, Plotly, or future React)</li>
-<li>Same data, different overlays per tab (with/without phrase boxes)</li>
+<li>PointSeries is framework-agnostic — it now renders directly in React (forgemoment
+  Charts), and historically rendered to Matplotlib PNG / Plotly</li>
+<li>Same data, different overlays per view (with/without phrase boxes)</li>
 <li>Phrase box changes don't require re-computing velocity colors</li>
-<li>Smaller in memory than PNG bytes</li>
+<li>Smaller in memory than PNG bytes, and serializes cleanly to JSON across the
+  <code>cli.py</code> → Rust → React bridge</li>
 </ul>
-<h3 id="streamlit-limitation">Streamlit limitation<a class="headerlink" href="#streamlit-limitation" title="Permanent link">&para;</a></h3>
-<p><code>st.tabs</code> executes ALL tab blocks on every rerun. We cannot skip inactive
-tabs. The cache strategy makes this tolerable — each tab renders from
-cached data in milliseconds, only computing if cache is missing.</p>
+<h3 id="why-caching-still-helps">Why caching still helps<a class="headerlink" href="#why-caching-still-helps" title="Permanent link">&para;</a></h3>
+<p>In the React app the UI no longer re-renders every tab, so the original full-page
+repaint cost is gone. Caching the per-stage <code>PointSeries</code> still pays off because the
+velocity-color pass (~1s for 23K actions) is expensive — computing it once per stage
+and reusing it across views keeps interactions instant.</p>
 
 
 
@@ -1564,7 +1635,7 @@ cached data in milliseconds, only computing if cache is missing.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

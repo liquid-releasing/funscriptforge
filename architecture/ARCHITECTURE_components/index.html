@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -27,7 +27,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -300,7 +300,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../guide/phrase-editor/" class="md-tabs__link">
+        <a href="../../guide/generating-funscripts/" class="md-tabs__link">
           
   
   
@@ -656,6 +656,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guide/generating-funscripts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generating Funscripts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guide/phrase-editor/" class="md-nav__link">
         
   
@@ -720,6 +748,34 @@
     
   
     Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Viewer
   
 
     
@@ -1247,15 +1303,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-moved-where" class="md-nav__link">
+  <a href="#what-the-core-layer-provides" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What Moved Where
+        What the core layer provides
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="What Moved Where">
+    <nav class="md-nav" aria-label="What the core layer provides">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1270,32 +1326,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#file_picker" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        file_picker
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#beat_bar" class="md-nav__link">
     <span class="md-ellipsis">
       
         beat_bar
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#project_status" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        project_status
       
     </span>
   </a>
@@ -1319,10 +1353,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#session-state-contract" class="md-nav__link">
+  <a href="#state-contract" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Session State Contract
+        State Contract
       
     </span>
   </a>
@@ -1351,88 +1385,88 @@
 
 <h1 id="architecture-shared-component-library">Architecture: Shared Component Library<a class="headerlink" href="#architecture-shared-component-library" title="Permanent link">&para;</a></h1>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>FunscriptForge uses <a href="https://github.com/liquid-releasing/forge-ui-components">forge-ui-components</a> as a shared component library. Components follow a two-layer pattern: framework-agnostic <code>core.py</code> (pure Python, testable without Streamlit) and thin <code>streamlit.py</code> render layer.</p>
+<p>FunscriptForge is a Tauri 2 + React app (<code>ui/web/</code>). Its React UI imports shared
+components from the sibling <strong>forgemoment</strong> library (AppShell, Charts, MediaViewer,
+TransformPanel, primitives) by bare specifier, resolved via a Vite alias to the
+sibling source tree.</p>
+<p>The Python backend additionally uses
+<a href="https://github.com/liquid-releasing/forge-ui-components">forge-ui-components</a> for
+the framework-agnostic side of chart/analysis logic. Historically those components
+followed a two-layer pattern — framework-agnostic <code>core.py</code> (pure Python) plus a
+thin render layer — and the predicted <strong>migration to React/Tauri has happened</strong>:
+the render layer is now React, while the pure-<code>core.py</code> logic (chart data shaping,
+beat analysis wrappers) is still reused by <code>cli.py</code> and its modules.</p>
 <p>This separation enables:
-- Reuse across FunscriptForge, SyncPlayer, forgegen, and future apps
-- Migration to React/Tauri v2 by replacing only the render layer
-- Testing core logic without UI framework dependencies</p>
+- Reuse across FunscriptForge, ForgePlayer, forgegen, and future apps
+- A React render layer over the same framework-agnostic core logic
+- Testing core logic without any UI-framework dependency</p>
 <h2 id="dependency-graph">Dependency Graph<a class="headerlink" href="#dependency-graph" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>FunscriptForge (ui/streamlit/app.py)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>FunscriptForge desktop app (ui/web/ — React + Vite)
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>├── forge-ui-components          ← shared UI components
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│   ├── funscript_chart          ← Plotly charts (mono + vibrant)
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│   ├── file_picker              ← upload, guard, clear, stats
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│   ├── beat_bar                 ← wraps videoflow AudioBeatMap
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│   └── project_status           ← sidebar dashboard
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>├── videoflow (xolvco)           ← beat analysis, scene detection
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>│   └── audio.AudioBeatMap       ← BPM, beats, downbeats, phrases, energy
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>│
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>├── media-tools (xolvco)         ← ffmpeg probe, audio extraction, video ops
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>│   └── probe.ProbeResult        ← (future: replace pymediainfo)
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>│
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>└── visualizations/              ← backward-compat shims → forge-ui-components
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    ├── chart_data.py            ← re-exports from funscript_chart.core
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    └── funscript_chart.py       ← FunscriptChart wrapper → vibrant_figure()
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>├── forgemoment                  ← shared React UI library (Vite alias to sibling)
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│   ├── AppShell / Charts        ← chart + layout primitives
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│   ├── MediaViewer              ← video / audio / spectrogram / funscript modes
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│   └── TransformPanel           ← before/after preview UI
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>└── Rust bridge (src-tauri/) ──► cli.py  (Python backend)
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        │
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        ├── forge-ui-components          ← framework-agnostic core logic
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        │   ├── funscript_chart.core     ← chart data (PointSeries, colors, slicing)
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        │   └── beat_bar.core            ← wraps videoflow AudioBeatMap
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        │
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        ├── videoflow (xolvco)           ← beat analysis, scene/chapter detection
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>        │   └── audio.AudioBeatMap       ← BPM, beats, downbeats, phrases, energy
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>        │
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>        └── visualizations/              ← backward-compat shims → forge-ui-components
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>            ├── chart_data.py            ← re-exports from funscript_chart.core
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>            └── funscript_chart.py       ← FunscriptChart wrapper → vibrant_figure()
 </code></pre></div>
-<h2 id="what-moved-where">What Moved Where<a class="headerlink" href="#what-moved-where" title="Permanent link">&para;</a></h2>
+<h2 id="what-the-core-layer-provides">What the core layer provides<a class="headerlink" href="#what-the-core-layer-provides" title="Permanent link">&para;</a></h2>
 <h3 id="funscript_chart">funscript_chart<a class="headerlink" href="#funscript_chart" title="Permanent link">&para;</a></h3>
+<p>The chart data layer lives in <code>funscript_chart.core</code> (PointSeries, velocity colors,
+slicing) — framework-agnostic and reusable by <code>cli.py</code>. FunscriptForge's
+<code>visualizations/</code> directory is now thin backward-compat shims that re-export from
+the component library:</p>
 <table>
 <thead>
 <tr>
-<th>Before (FunscriptForge)</th>
-<th>After (forge-ui-components)</th>
+<th>Shim</th>
+<th>Re-exports</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>project_tab._funscript_chart()</code></td>
-<td><code>funscript_chart.streamlit.render_monochrome()</code></td>
-</tr>
-<tr>
-<td><code>project_tab._funscript_stats_row()</code></td>
-<td><code>funscript_chart.streamlit.render_stats_row()</code></td>
-</tr>
-<tr>
-<td><code>device_tab._plot_device()</code></td>
-<td><code>funscript_chart.streamlit.render_monochrome_from_arrays()</code></td>
-</tr>
-<tr>
-<td><code>tone_tab._plot_funscript()</code></td>
-<td><code>funscript_chart.streamlit.render_monochrome_from_arrays()</code></td>
-</tr>
-<tr>
-<td><code>visualizations/chart_data.py</code> (274 lines)</td>
+<td><code>visualizations/chart_data.py</code></td>
 <td><code>funscript_chart.core</code> (PointSeries, colors, slicing)</td>
 </tr>
 <tr>
-<td><code>visualizations/funscript_chart.py</code> (315 lines)</td>
+<td><code>visualizations/funscript_chart.py</code></td>
 <td><code>funscript_chart.core.vibrant_figure()</code></td>
 </tr>
 </tbody>
 </table>
-<p>FunscriptForge's <code>visualizations/</code> directory is now thin backward-compat shims that re-export from the component library.</p>
-<h3 id="file_picker">file_picker<a class="headerlink" href="#file_picker" title="Permanent link">&para;</a></h3>
-<p>All 4 file uploaders in <code>project_tab.py</code> (funscript, video, audio, captions) now use <code>render_upload()</code> with <code>on_upload</code>/<code>on_clear</code> callbacks for context-specific behavior.</p>
+<p>The React UI consumes the same <code>PointSeries</code> data shape (emitted as JSON by <code>cli.py</code>)
+and renders it with forgemoment Charts.</p>
 <h3 id="beat_bar">beat_bar<a class="headerlink" href="#beat_bar" title="Permanent link">&para;</a></h3>
-<p>Beat detection moved from inline librosa in <code>project_tab._analyze_beats()</code> to <code>forge_ui_components.beat_bar.core.analyze_beats()</code> which delegates to <code>videoflow.audio.analyze_beats()</code>. Cache format upgraded from simple <code>{tempo_bpm, beats}</code> to full <code>AudioBeatMap</code> JSON (BPM, beats, downbeats, phrases, per-beat energy).</p>
-<h3 id="project_status">project_status<a class="headerlink" href="#project_status" title="Permanent link">&para;</a></h3>
-<p>Sidebar display logic extracted from <code>app.py._sidebar()</code> into <code>ProjectStatus</code> dataclass + render functions. The app builds a snapshot from session state; render code never touches session state directly.</p>
+<p>Beat detection delegates to <code>forge_ui_components.beat_bar.core.analyze_beats()</code>, which
+in turn calls <code>videoflow.audio.analyze_beats()</code>. The cache is full <code>AudioBeatMap</code> JSON
+(BPM, beats, downbeats, phrases, per-beat energy).</p>
 <h2 id="adding-a-new-component">Adding a New Component<a class="headerlink" href="#adding-a-new-component" title="Permanent link">&para;</a></h2>
+<p>For shared <strong>React</strong> UI, add it to the sibling forgemoment library and import it in
+<code>ui/web/</code>. For framework-agnostic backend logic:</p>
 <ol>
 <li>Create <code>forge_ui_components/&lt;name&gt;/core.py</code> — pure logic, no UI imports</li>
-<li>Create <code>forge_ui_components/&lt;name&gt;/streamlit.py</code> — thin render layer</li>
 <li>Create <code>forge_ui_components/&lt;name&gt;/__init__.py</code> — public API exports</li>
 <li>Add tests in <code>tests/test_&lt;name&gt;.py</code></li>
-<li>Wire consumer app to import from <code>forge_ui_components.&lt;name&gt;</code></li>
+<li>Expose it through a <code>cli.py</code> subcommand so the React UI can call it via the Rust bridge</li>
 </ol>
-<h2 id="session-state-contract">Session State Contract<a class="headerlink" href="#session-state-contract" title="Permanent link">&para;</a></h2>
-<p>Components never read from <code>st.session_state</code> directly. Instead:
-- The calling tab/panel builds a data object (e.g., <code>ProjectStatus</code>, <code>FilePickerConfig</code>)
-- Passes it to the render function
-- Render function returns results via return values, not side effects
-- Interactive callbacks (<code>on_upload</code>, <code>on_clear</code>) are passed in by the caller</p>
-<p>This keeps components stateless and testable.</p>
+<h2 id="state-contract">State Contract<a class="headerlink" href="#state-contract" title="Permanent link">&para;</a></h2>
+<p>Core components are pure and stateless:
+- The caller builds a plain data object (e.g., <code>ProjectStatus</code>, <code>FilePickerConfig</code>)
+- Passes it to the core function
+- The function returns results via return values, not side effects</p>
+<p>This keeps the core logic UI-framework agnostic and testable, and lets the React
+front-end consume the same logic over JSON.</p>
 
 
 
@@ -1510,7 +1544,7 @@
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

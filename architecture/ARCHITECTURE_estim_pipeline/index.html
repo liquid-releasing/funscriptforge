@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -27,7 +27,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -300,7 +300,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../guide/phrase-editor/" class="md-tabs__link">
+        <a href="../../guide/generating-funscripts/" class="md-tabs__link">
           
   
   
@@ -656,6 +656,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guide/generating-funscripts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generating Funscripts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guide/phrase-editor/" class="md-nav__link">
         
   
@@ -720,6 +748,34 @@
     
   
     Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Viewer
   
 
     
@@ -1457,15 +1513,15 @@
 <p>The remaining channels (pulse_width, pulse_rise, E1-E4, prostate) are texture for specialist hardware.</p>
 <hr />
 <h2 id="the-adapter-boundary">The Adapter Boundary<a class="headerlink" href="#the-adapter-boundary" title="Permanent link">&para;</a></h2>
-<p><code>forge_window.py</code> imports ONLY from <code>cli.py</code>. Zero upstream imports. This is the adapter boundary.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>forge_window.py  →  cli.py  →  upstream processor.py
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>     UI               API           implementation
+<p>The front-end imports ONLY from <code>cli.py</code>. Zero upstream imports. This is the adapter boundary.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>React app  →  Rust bridge  →  cli.py  →  upstream processor.py
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>   UI          commands.rs      API          implementation
 </code></pre></div>
-<p>This means:
+<p>The React desktop app (<code>ui/web/</code>) calls <code>cli.py</code> subcommands through the Tauri
+Rust bridge (<code>src-tauri/src/commands.rs</code>) — it never touches Python directly. This means:
 - The UI can be rebuilt without touching upstream code
 - The CLI can be tested independently
-- FunscriptForge can call the same CLI functions
-- Streamlit and tkinter use identical logic</p>
+- The desktop app, a future web server, and CI scripts all call the same CLI functions</p>
 <hr />
 <h2 id="the-project-bundle">The Project Bundle<a class="headerlink" href="#the-project-bundle" title="Permanent link">&para;</a></h2>
 <p>One folder = one restim session.</p>
@@ -1513,27 +1569,23 @@
 </thead>
 <tbody>
 <tr>
-<td>Windows desktop (PyInstaller exe)</td>
+<td>Windows desktop (Tauri MSI + NSIS, bundled <code>forge-cli</code> + ffmpeg)</td>
+<td>Published (<code>v0.1.0-alpha</code>)</td>
+</tr>
+<tr>
+<td>macOS desktop (Tauri)</td>
+<td>Post-beta follow-up</td>
+</tr>
+<tr>
+<td>Linux desktop (Tauri)</td>
+<td>Post-beta follow-up</td>
+</tr>
+<tr>
+<td>SaaS (React → HTTP server wrapping <code>cli.py</code>)</td>
 <td>Planned</td>
 </tr>
 <tr>
-<td>macOS desktop</td>
-<td>Planned</td>
-</tr>
-<tr>
-<td>Linux desktop</td>
-<td>Planned</td>
-</tr>
-<tr>
-<td>SaaS (Streamlit cloud)</td>
-<td>Planned</td>
-</tr>
-<tr>
-<td>funscript-tools tkinter standalone</td>
-<td>Working today</td>
-</tr>
-<tr>
-<td>FunscriptForge Streamlit</td>
+<td><code>cli.py</code> command line</td>
 <td>Working today</td>
 </tr>
 </tbody>
@@ -1615,7 +1667,7 @@
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.footer", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>
