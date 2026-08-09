@@ -60,8 +60,24 @@ D22. **✅ FIXED 2026-08-08 (option (c) + the flag flip) — needs a live dogfoo
    chapter-windowed one, which are different computations. 20 new tests
    (`videoflow/tests/test_audio_cache.py`) incl. the regression proper: patch
    ffmpeg, run both stages, assert ONE invocation. No new failures either repo
-   (verified against a stashed baseline). ⚠️ Needs `tauri:dev` recompile + a
-   live Generate→Analysis run to confirm the double extract is gone.
+   (verified against a stashed baseline).
+   **✅ LIVE-CONFIRMED 2026-08-09 dogfood** (no Rust changed, so no recompile —
+   videoflow is editable-installed and AnalysisTab hot-reloads): Generate→
+   Analysis now shows "Reusing extracted audio (cached)…" instead of a second
+   "Extracting audio…", chapters unchanged; a cold never-analyzed project still
+   extracts exactly once.
+   **⚠️ The damaged-source path could NOT be live-verified — no corrupt source
+   remains on disk.** ddt483 was the D22 *session's* file but its defect was a
+   truncated VIDEO (repaired + swapped 2026-07-02), not damaged audio; the
+   damaged-audio case was Astrid, and BOTH
+   `E:\wowgirls\Astrid_FreyaMayer_NancyA_NewSensations_{3840x2160,5568x3132}_60fps.mp4`
+   now decode their full audio clean (rc=0, mono downmix — re-downloaded since
+   June), with no `.forge` dir left to hold the old `damaged_after_ms`. Covered
+   instead by unit tests + a code trace: `audio.py` assigns `_damaged_after_ms`
+   from the cache hit (:448) or from ffmpeg (:471) and BOTH converge on the
+   single stamp at :611, so the cached value cannot diverge from the fresh one.
+   If a corrupt source ever reappears, run Generate→Analysis and confirm the
+   amber "audio is damaged after MM:SS" banner still shows on the cached pass.
 
    _(original report:)_ **★ Analysis RE-EXTRACTS audio that generation just
    extracted (the D9
