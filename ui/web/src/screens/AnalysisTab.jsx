@@ -146,10 +146,12 @@ export default function AnalysisTab({
   // to videoflow which checks sidecars itself — but skipping the call
   // when chapters already exist avoids a redundant round-trip.
   const triggerAnalysis = useCallback(async (opts = {}) => {
-    // `resume: true` (from the Partial banner's Resume CTA) passes --resume so
-    // videoflow skips stages whose sidecar already exists instead of
-    // recomputing. Any other caller (auto-trigger, Re-analyze, Retry — some of
-    // which pass a DOM event here) runs a full pass.
+    // `resume: true` passes --resume so videoflow skips stages whose sidecar
+    // already exists instead of recomputing. Two callers opt in: the Partial
+    // banner's Resume CTA, and the auto-trigger (see D22 at its call site).
+    // Re-analyze and Retry — some of which pass a DOM event here, which is why
+    // this reads `=== true` rather than a truthiness check — run a full pass.
+    // Re-analyze wipes `.forge/` first, so for it a resume would be a no-op.
     const resume = opts?.resume === true;
     if (!projectExists || isSample) return;
     if (!isTauri()) return;
@@ -336,7 +338,17 @@ export default function AnalysisTab({
       return; // already analyzed — don't re-run the pipeline
     }
     if (analyzing) return;
-    triggerAnalysis();
+    // The auto-trigger RESUMES. Video-derived stages (audio extraction, peaks,
+    // spectrogram, beats) are reusable across pipelines, so a project landing
+    // here without chapters — the post-Generate case — should compute only
+    // what's missing instead of re-grinding audio that generation just
+    // produced. That double grind was bug D22 ("Extracting audio… 40:38 done"
+    // twice in a row); the shared videoflow audio cache kills the duplicate
+    // ffmpeg decode, and --resume skips the sidecars that are already fresh.
+    // EXCEPTION: a stale analyzer version means the chapter/beat ALGORITHM
+    // changed, which is exactly what the stamp exists to force — that path
+    // takes a full pass so the new algorithm actually reruns.
+    triggerAnalysis({ resume: !versionStale });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.path, project?.analyzerVersion]);
 

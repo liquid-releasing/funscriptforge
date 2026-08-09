@@ -41,7 +41,30 @@ D31. **Loud transient safety — alarm-clock sound at 5:56–6:01 in
 
 ### 🔴 Open
 
-D22. **★ Analysis RE-EXTRACTS audio that generation just extracted (the D9
+D22. **✅ FIXED 2026-08-08 (option (c) + the flag flip) — needs a live dogfood
+   confirm.** Shipped the shared extraction cache the investigation below called
+   for: new `videoflow/audio_cache.py` keys an extracted WAV on source
+   path+mtime+size+sample-rate and publishes it atomically (`os.replace`) into
+   the existing `forge-audio` temp dir, so BOTH `structural._prepare_audio`
+   (analysis) and `audio.analyze_beats`' extractor (generation) reuse one
+   decode. Lifetime is delegated to the existing `sweep_audio_temp` orphan
+   sweep — no `.forge/` bloat, no new cleanup policy. `damaged_after_ms` is
+   persisted beside the WAV so a cache HIT still raises the damaged-source
+   banner. Both callers now get `tmp=None` for a cache-owned WAV so their
+   cleanup `finally` can't delete it. Paired with the UI half:
+   `AnalysisTab.jsx` auto-trigger passes `resume: !versionStale` — a stale
+   ANALYZER VERSION still forces a full pass (that stamp exists to rerun the
+   algorithm); Re-analyze stays full (it wipes `.forge/` first anyway).
+   Chose (c) over (a)/(b) because it changes NO detection semantics — (b) would
+   have swapped generation's `chunk_secs=180` beat pass for analysis's
+   chapter-windowed one, which are different computations. 20 new tests
+   (`videoflow/tests/test_audio_cache.py`) incl. the regression proper: patch
+   ffmpeg, run both stages, assert ONE invocation. No new failures either repo
+   (verified against a stashed baseline). ⚠️ Needs `tauri:dev` recompile + a
+   live Generate→Analysis run to confirm the double extract is gone.
+
+   _(original report:)_ **★ Analysis RE-EXTRACTS audio that generation just
+   extracted (the D9
    "separate over-eager-reanalyze trigger" — now confirmed).** Repro: build a
    funscript from a video on the Generate tab → land on Analysis → it runs the
    full pipeline and re-extracts audio ("Extracting audio… 40:38 done") even
