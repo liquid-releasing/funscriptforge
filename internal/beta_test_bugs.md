@@ -6,6 +6,139 @@ verify + commit) · ✅ committed.
 
 ---
 
+## Session 2026-08-09 (D22 verification dogfood — Madmartigan vol2/vol6)
+
+Found while confirming the D22 audio-cache fix (which passed — see D22 above).
+None of these are caused by that change.
+
+### 🔴 Open
+
+D32. **★ 2.5K sources (>1920 wide) take the full clip-transcode path, and it
+   reads as a hang.** Repro: open `-Madmartigan- - It's Just AI Sex (vol2)`
+   (2560×1440) or `(vol6)` (2520×1440) → analysis reaches `chapter_clips` →
+   the app appears frozen for minutes. **NOT a hang** — verified live via the
+   process tree: `funscriptforge → cli.py auto-chapter --resume → ffmpeg`, with
+   ffmpeg mid-transcode (`-ss 553.123 -to 974.634 … -vf scale=1280:720`), i.e.
+   a 7-MINUTE chapter being re-encoded to 720p. Real work, no feedback.
+   - **Root cause = the direct-play width gate, not detection.** `_verdict_direct_playable`
+     requires ≤1920w; at 1440p these sources are disqualified, so EVERY chapter
+     gets a full 720p re-encode. Working as designed — but the design was aimed
+     at RAW 4K (heavy decode / WebView2 OOM), and 2.5K is a much lighter decode
+     than the 4K case the gate was written for.
+   - **⚠️ MISDIAGNOSIS WORTH RECORDING:** first read was "chapter over-merge."
+     WRONG — measured chapter lengths are ON TARGET (`target_minutes=5.5`):
+     vol6 11.6min → 2 chapters (6.1, 5.5); vol2 16.2min → 3 (4.6, 4.6, 7.0).
+     Detection is correct here; "fix the over-merge" would have changed a
+     healthy algorithm and left the hang in place. (The separate LongandCut
+     single-616s-chapter over-merge in [[project_funscriptforge_pending]] is a
+     REAL but DIFFERENT bug — don't conflate them.)
+   - **Fix directions:** (a) raise the direct-play width gate (is 1440p really
+     too heavy to stream? measure before assuming), or (b) the already-planned
+     **single whole-file 720p proxy** — transcode once, stream + seek per
+     chapter, instead of N per-chapter clips. (b) is the logged follow-up for
+     4K and would cover this case too. Either way, (c) **clip extraction needs
+     progress in the footer** — minutes of silent ffmpeg is the actual
+     user-facing defect.
+   - **✅ (c) FIXED 2026-08-09.** `chapter_clips._run_ffmpeg_clip` runs the
+     encode with `-progress <file> -nostats` and a 0.5s poller thread that
+     turns ffmpeg's `out_time_us` into a 0–1 fraction (whole-percent throttled);
+     `structural._extract_chapter_clips` renders it as
+     `Extracting chapter clip 2/3 (7.0 min) — 44%`. The clip's LENGTH is now in
+     the label too, which is the honest explanation for the wait. Verified on
+     the real 2.5K source: 14 monotonic updates reaching 91%. Progress is
+     strictly best-effort — no callback, a zero duration, or a callback that
+     raises all leave the encode untouched (7 tests).
+     ⚠️ **Known residual:** the first ~20s of a COLD encode are still silent —
+     that window is source I/O (re-running the same slice warm took 6.5s total
+     vs 26.7s cold), not the encoder. The pre-encode label covers it, but a
+     "seeking…" state would cover it better.
+   - **(a) and (b) still OPEN** — the width gate is untouched.
+
+D33. **Channels per-chapter preview costs ~22s on a real chapter.** Measured
+   directly: `cli.py stim-process <fs> --character Reactive --mode 3phase
+   --start-ms 0 --end-ms 365970` → rc=0, all 9 channels (alpha/beta 3630,
+   prostate trio 9134/9134/3640), **22 seconds**. Generation is CORRECT, just
+   slow, and the user saw no preview at all.
+   - **The design assumption is stale.** The per-chapter draw was benchmarked at
+     ~0.7s on a **30s** window ([[project_channels_character_merge]]), and that
+     is what justified drawing all 9 channels live per chapter. But at
+     `target_minutes=5.5` a real chapter is 5–7 min = ~10× that window, so the
+     cost is ~20s+, with only an inline "generating…" and no progress.
+   - **Why no preview appeared is still UNCONFIRMED.** Backend succeeds, so the
+     failure is UI-side across a 22s round trip. Leading hypothesis: the draw
+     effect is debounced + cancel-safe, so a re-render during those 22s
+     supersedes the in-flight request and nothing lands (the session was also
+     under 7.2GB WebView2 pressure = plenty of re-renders). **Confirm on a
+     clean renderer before fixing.**
+   - Note `<stem>.characters.json` was ABSENT for vol6 — consistent with the
+     draw never completing / never being written through.
+
+D35. **★ Chapter clips are ~3–5× larger than the design intended — `-preset
+   ultrafast` costs 2.5× the size and buys almost no speed.** Found while
+   fixing D32. MEASURED on the vol2 2560×1440 source, same 60s slice, same
+   720p downscale args, only preset/CRF varied:
+
+   | variant | time | size | bitrate | projected 7-min chapter |
+   |---|---|---|---|---|
+   | `ultrafast`/20 **(current)** | 6.5s | 119.9 MB | 16.0 Mbps | **839 MB** |
+   | `superfast`/20 | 6.8s | 84.8 MB | 11.3 Mbps | 593 MB |
+   | `veryfast`/20 | 7.8s | 73.2 MB | 9.8 Mbps | 512 MB |
+   | `veryfast`/23 | 7.8s | 49.8 MB | 6.6 Mbps | 348 MB |
+   | `faster`/23 | 9.1s | 48.1 MB | 6.4 Mbps | 337 MB |
+
+   - **`ultrafast` is nearly free to leave.** It saves ~1.3s over `veryfast`
+     on a 60s slice while producing 2.4× the bytes — the encode is dominated by
+     source I/O and scaling, not by x264's tools. 16 Mbps for 720p is ~4× a
+     normal 720p rate.
+   - **Consequence:** the [[feedback_chapter_clip_blob_cap]] ~150 MB threshold
+     is blown by every chapter on these sources (the design note in
+     [[project_funscriptforge_pending]] expected "~100 MB" clips). Clips over
+     the cap skip `createObjectURL` and fall back, so this degrades rather than
+     crashes — but it also means large temp writes on a disk that is currently
+     98% full.
+   - **⚠️ NOT a free change:** encode args are pinned in BOTH
+     `videoflow/chapter_clips.py` (`FFMPEG_CLIP_ARGS*`) AND the Rust mirror
+     `commands.rs::extract_chapter_clip`, and changing them requires bumping
+     `CACHE_VERSION` in both so stale clips age out. See
+     [[feedback_rust_mirror_drift]]. Not applied — needs the paired change.
+   - Even `faster`/23 projects 337 MB for a 7-min chapter, so preset alone
+     does not reach the cap; pairing it with the D32 single-file 720p proxy
+     (or a lower CRF target) is the real answer.
+
+D34. **`load_funscript` returns `None` on ANY failure and callers don't check.**
+   `forge/funscript.py:11-15` swallows every exception → `None`; `cli.py:3321`
+   (`cmd_stim_process`) does `parse_actions(load_funscript(args.input))` →
+   `AttributeError: 'NoneType' object has no attribute 'get'`. A missing or
+   unreadable funscript reports a Python attribute error instead of naming the
+   file it could not read. Violates [[feedback_user_actionable_errors]]. Found
+   by accident (passing a Git-Bash-style path to a Windows Python), but the
+   failure mode is real for any missing/corrupt input. Audit other
+   `load_funscript` callers for the same unguarded pattern.
+
+### ✅ Confirmed working this session
+
+- **D7 process reaping — LIVE-VERIFIED AGAIN under the hardest case.** Closed
+  the window DURING chapter-clip extraction (ffmpeg actively holding the 2.5K
+  source): `funscriptforge`, both `python` workers and `ffmpeg` all reaped to
+  zero, source immediately free. Gate #2 holds.
+- **D22 `--resume` reaching the backend**, confirmed in the live process
+  command line: `cli.py auto-chapter … --format json --resume`.
+- **Audio cache self-bounds.** Peaked at 473MB / 3 slots, and `sweep_audio_temp`
+  had reclaimed it to 41MB / 2 slots unprompted. A size cap was considered and
+  is NOT needed — the existing 1-hour sweep is sufficient.
+
+### 🟡 Environment / known-issue data points
+
+- **WebView2 renderer hit 7,195 MB** (1,280s CPU) after a normal working
+  session — same signature as the VictoriaOaks freeze. It did not freeze, but
+  it degraded real work (this is what made D33 feel like a hang). Live evidence
+  for **pre-beta gate #3**, which currently reads "may be deferrable if it's not
+  freezing in practice." It isn't freezing; it IS degrading. Cleared by restart.
+- **`C:` is 98% full** (52 GB free of 1.9 TB). Not a cause today, but Windows
+  stalls on large writes at that fill level and chapter clips are exactly that.
+
+---
+
 ## Session 2026-07-02 (Accept/Undo polish + Short Beats dogfood)
 
 ### ✅ Investigated — SAFE

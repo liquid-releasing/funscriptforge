@@ -15,6 +15,43 @@ def load_funscript(path: str) -> Optional[dict]:
         return None
 
 
+def load_funscript_strict(path: str) -> dict:
+    """Load a funscript, raising an actionable error instead of returning None.
+
+    :func:`load_funscript` swallows every failure into ``None``, which suits
+    callers that treat "absent" as an ordinary case. It does NOT suit a command
+    handed a bad path: the ``None`` flows onward and surfaces as
+    ``AttributeError: 'NoneType' object has no attribute 'get'`` — a stack trace
+    that names no file and tells the user nothing they can act on (D34).
+
+    This raises ``FileNotFoundError`` / ``ValueError`` instead, naming the path.
+    Those are exactly the two exceptions ``cli._cli_command`` renders as a clean
+    one-line ``Error: …`` message, so the diagnosis reaches the user intact.
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Funscript not found: {path}")
+    if p.is_dir():
+        raise ValueError(f"Expected a funscript file but got a directory: {path}")
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"Could not read funscript {path}: {exc}") from exc
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Funscript is not valid JSON ({path}): line {exc.lineno}, "
+            f"column {exc.colno}: {exc.msg}"
+        ) from exc
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"Funscript must be a JSON object with an 'actions' array, "
+            f"got {type(data).__name__}: {path}"
+        )
+    return data
+
+
 def parse_actions(data: dict) -> tuple[list, list]:
     """Return (times_ms, positions) arrays."""
     actions = data.get("actions", [])

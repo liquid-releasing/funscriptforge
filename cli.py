@@ -3303,6 +3303,7 @@ def _load_resolved_passages(funscript_path, chapters=None) -> list:
     return _passages_mod.resolve_passages(recs, chapters)
 
 
+@_cli_command
 def cmd_stim_process(args):
     """Generate e-stim channel funscripts for a window (a chapter) via the
     proven funscript-tools pipeline, and emit them as JSON channel actions.
@@ -3317,8 +3318,8 @@ def cmd_stim_process(args):
                           "error": "funscript-tools not found"}))
         return
 
-    from forge.funscript import load_funscript, parse_actions
-    times, pos = parse_actions(load_funscript(args.input))
+    from forge.funscript import load_funscript_strict, parse_actions
+    times, pos = parse_actions(load_funscript_strict(args.input))
     pairs = list(zip(times, pos))
     if args.start_ms is not None or args.end_ms is not None:
         lo = args.start_ms if args.start_ms is not None else (times[0] if times else 0)
@@ -3469,6 +3470,7 @@ def cmd_warmup(args):
     print("warm")
 
 
+@_cli_command
 def cmd_multiaxis_process(args):
     """Generate secondary-axis funscripts for a window (a chapter) via the
     multiaxis engine, emit as JSON axis actions. React bridge to
@@ -3477,9 +3479,9 @@ def cmd_multiaxis_process(args):
     live; export writes them as `<stem>.<axis>.funscript`."""
     from forge.multiaxis import generate_multiaxis
     from forge.multiaxis_presets import MULTIAXIS_PRESETS
-    from forge.funscript import load_funscript, parse_actions
+    from forge.funscript import load_funscript_strict, parse_actions
 
-    times, pos = parse_actions(load_funscript(args.input))
+    times, pos = parse_actions(load_funscript_strict(args.input))
     pairs = list(zip(times, pos))
     if args.start_ms is not None or args.end_ms is not None:
         lo = args.start_ms if args.start_ms is not None else (times[0] if times else 0)
@@ -5355,7 +5357,7 @@ def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> 
     import tempfile
 
     from forge import polish
-    from forge.funscript import load_funscript, parse_actions
+    from forge.funscript import load_funscript_strict, parse_actions
     from forge.funscript_tools import AVAILABLE, build_config, process
     from videoflow.sidecar import forge_dir
 
@@ -5383,7 +5385,7 @@ def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> 
         except (OSError, json.JSONDecodeError):
             chars_doc = {}
 
-    times, pos = parse_actions(load_funscript(funscript_path))
+    times, pos = parse_actions(load_funscript_strict(funscript_path))
     pairs = list(zip(times, pos))
     if len(pairs) < 2:
         raise ValueError("no actions to generate e-stim from")
@@ -5506,7 +5508,7 @@ def _polish_preview_estim_channels(funscript_path: str, start_ms: int, end_ms: i
     import shutil
     import tempfile
 
-    from forge.funscript import load_funscript, parse_actions
+    from forge.funscript import load_funscript_strict, parse_actions
     from forge.funscript_tools import AVAILABLE, build_config, process
     from videoflow.sidecar import forge_dir
 
@@ -5535,7 +5537,7 @@ def _polish_preview_estim_channels(funscript_path: str, start_ms: int, end_ms: i
         except (OSError, json.JSONDecodeError):
             chars_doc = {}
 
-    times, pos = parse_actions(load_funscript(funscript_path))
+    times, pos = parse_actions(load_funscript_strict(funscript_path))
     pairs = list(zip(times, pos))
     if len(pairs) < 2:
         raise ValueError("no actions to preview e-stim from")
@@ -5621,7 +5623,7 @@ def _polish_generate_tcode(funscript_path: str, knobs: dict | None, station) -> 
     falls back to clamping any existing sibling sidecars).
     """
     from forge import polish
-    from forge.funscript import load_funscript, parse_actions
+    from forge.funscript import load_funscript_strict, parse_actions
     from forge.multiaxis import generate_multiaxis
     from forge.multiaxis_presets import MULTIAXIS_PRESETS
     from videoflow.sidecar import forge_dir
@@ -5646,7 +5648,7 @@ def _polish_generate_tcode(funscript_path: str, knobs: dict | None, station) -> 
         except (OSError, json.JSONDecodeError):
             chars_doc = {}
 
-    times, pos = parse_actions(load_funscript(funscript_path))
+    times, pos = parse_actions(load_funscript_strict(funscript_path))
     pairs = list(zip(times, pos))
     if len(pairs) < 2:
         raise ValueError("no actions to generate axes from")
