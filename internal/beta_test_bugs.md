@@ -89,6 +89,32 @@ D33. **Channels per-chapter preview costs ~22s on a real chapter.** Measured
    - Note `<stem>.characters.json` was ABSENT for vol6 — consistent with the
      draw never completing / never being written through.
 
+D36. **✅ FIXED — Events never offered "chain to Channels" after the last
+   chapter.** Repro: edit each chapter's events (navigating by clicking chapter
+   bands), then press "Accept last chapter changes" — the footer stayed on the
+   walk and never offered the chain.
+   - **Cause:** `markConsidered` was called from exactly ONE place, the footer
+     walk button (`EventsTab.jsx` `goNextRef`). Clicking a chapter band only
+     called `setScope`. So band-navigation marked NOTHING and the gate — which
+     needs every chapter considered — could only be satisfied by walking with
+     the footer button or by "Accept all as-is". The code's own comment already
+     described considered as the "walk/**visit**" signal; the visit half was
+     documented but never wired.
+   - **Fix, second pass:** the rule is **considered = you're DONE with a
+     chapter**, i.e. you LEFT it or explicitly accepted it. The first attempt
+     marked on ARRIVAL, which overshot: merely landing on the final chapter
+     completed the gate and swapped the footer straight to "chain to Channels",
+     taking away the chance to accept that chapter's work (user, on review:
+     "I want it to show accept this chapter on the last chapter, click on that
+     and then show chain"). Marking on LEAVE has no such problem — you cannot
+     leave a chapter you never opened — and on the last chapter there is
+     nowhere to leave to, so its accept button is what commits it. Moving to
+     the 'all' scope counts as leaving; LANDING on 'all' (the tab default)
+     marks nothing, so the gate keeps its meaning.
+   - Resulting sequence on a 2-chapter project: land ch1 (0 considered) → click
+     ch2 (ch1 considered) → "Accept last chapter changes" (ch2 considered,
+     gate completes) → footer becomes "Accept and chain to Channels".
+
 D35. **★ Chapter clips are ~3–5× larger than the design intended — `-preset
    ultrafast` costs 2.5× the size and buys almost no speed.** Found while
    fixing D32. MEASURED on the vol2 2560×1440 source, same 60s slice, same

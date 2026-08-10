@@ -283,20 +283,28 @@ export default function EventsTab({
   const acceptAllChaptersAsIs = () =>
     setConsideredChapterIds(new Set(chapters.map((c) => c.id)));
 
-  // The VISIT half of "walk/visit" above. It was documented but never wired:
-  // only the footer walk button marked anything, so a user who navigated by
-  // clicking chapter bands — then edited each chapter and pressed "Accept last
-  // chapter changes" — had exactly ONE chapter considered and could never
-  // unlock the chain to Channels (D36).
+  // The VISIT half of "walk/visit" above — it was documented but never wired,
+  // so only the footer walk marked anything and a user who navigated by
+  // clicking chapter bands could never unlock the chain to Channels (D36).
   //
-  // Opening a chapter IS the review on this tab: events auto-save and there is
-  // nothing to per-chapter "accept", so there's no further act of acceptance to
-  // wait for. Deliberately scoped to a REAL chapter — the 'all' scope must not
-  // count, or merely landing on the tab (which defaults to 'all') would mark
-  // every chapter considered and the gate would mean nothing.
+  // The rule is "considered = you're DONE with it", which means you either
+  // LEFT it or explicitly accepted it. Marking on arrival instead would mean
+  // simply landing on the final chapter completes the gate and swaps the
+  // footer straight to "chain to Channels" — taking away the chance to accept
+  // that chapter's work, which is the one place the grammar wants a deliberate
+  // click. Leaving has no such problem: you cannot leave a chapter you haven't
+  // opened. On the LAST chapter there is nowhere to leave to, so its accept
+  // button (goNext below, which marks the active chapter) is what commits it —
+  // and only then does the chain appear.
+  //
+  // Moving to the 'all' scope counts as leaving too. Landing on 'all' (the
+  // tab's default) marks nothing, so the gate keeps its meaning.
+  const prevChapterRef = useRef(null);
   useEffect(() => {
-    if (scope === 'all') return;
-    markConsidered(activeChapter?.id);
+    const current = scope === 'all' ? null : (activeChapter?.id ?? null);
+    const prev = prevChapterRef.current;
+    if (prev != null && prev !== current) markConsidered(prev);
+    prevChapterRef.current = current;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, activeChapter?.id]);
 
