@@ -1388,6 +1388,17 @@ def _is_cfr(avg: str, rrate: str) -> bool:
     return a > 0 and r > 0 and abs(a - r) <= _CFR_FPS_TOLERANCE * r
 
 
+# Widest source WebView2 is trusted to stream raw. Above this we pre-extract
+# 720p chapter clips instead. Mirrored in videoflow chapter_clips.py — the two
+# must agree or analysis and playback disagree about whether clips exist.
+#
+# 2560 covers 1440p / 2.5K (2520 and 2560 wide sources both qualify); 4K (3840)
+# and up still clip. This is the ONE value to change if 1440p playback turns out
+# to stutter or OOM in the live test — drop it back to 1920 and the old
+# behaviour returns exactly.
+DIRECT_PLAY_MAX_WIDTH = 2560
+
+
 def _verdict_direct_playable(out: dict, st: dict) -> None:
     """Decide whether a video stream can stream straight into WebView2's
     <video> via asset:// without a normalizing re-encode — the single-file
@@ -1430,8 +1441,17 @@ def _verdict_direct_playable(out: dict, st: dict) -> None:
     # High 10 / 4:2:2 / 4:4:4 profiles imply >8-bit or chroma the decoder chokes on.
     if any(tok in profile.lower() for tok in ("10", "422", "444")):
         reasons.append(f"profile:{profile}")
-    # ≤1080p — 4K decode is the heaviest op + the WebView2 blob/OOM cliff.
-    if width and width > 1920:
+    # Raw decode is the heaviest op and 4K is where WebView2 hits the blob/OOM
+    # cliff, so wide sources fall back to pre-extracted 720p chapter clips.
+    #
+    # The gate was 1920 (≤1080p). Raised to 2560 so 1440p / 2.5K sources stream
+    # directly instead of paying a full transcode per chapter: on a 2560×1440
+    # source that was minutes of silent ffmpeg per analysis (D32), and skipping
+    # extraction is the only change that takes it to zero — encoding faster
+    # does not. 1440p is ~2.4× 1080p's pixels where 4K is ~4×, so it sits on
+    # the near side of the cliff the original gate was drawn against; true 4K
+    # (3840) and up still clip. MIRROR: videoflow chapter_clips.is_direct_playable.
+    if width and width > DIRECT_PLAY_MAX_WIDTH:
         reasons.append(f"width:{width}")
     # HDR (BT.2020 / PQ / HLG) needs tone-mapping; SDR BT.709 only.
     if transfer in ("smpte2084", "arib-std-b67") or primaries == "bt2020":

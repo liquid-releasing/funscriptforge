@@ -52,7 +52,23 @@ D32. **★ 2.5K sources (>1920 wide) take the full clip-transcode path, and it
      that window is source I/O (re-running the same slice warm took 6.5s total
      vs 26.7s cold), not the encoder. The pre-encode label covers it, but a
      "seeking…" state would cover it better.
-   - **(a) and (b) still OPEN** — the width gate is untouched.
+   - **✅ (a) FIXED + LIVE-CONFIRMED 2026-08-09.** `DIRECT_PLAY_MAX_WIDTH`
+     1920 → **2560** (a NAMED constant now, replacing a bare literal, in BOTH
+     `cli.py::_verdict_direct_playable` and
+     `videoflow chapter_clips.is_direct_playable`). 1440p / 2.5K sources now
+     stream raw and **skip clip extraction entirely** — backend confirmed
+     `progress: done::2::chapter_clips::skipped (direct-play)` on vol6, and the
+     user confirmed live: "able to continue edit vol6 · viewer seems to play as
+     expected on various tabs · overall editing is very smooth."
+     Verified both implementations agree on real files (2520 ✓, 2560 ✓,
+     3840 ✗ width, 5568 ✗ hevc+width). 14 tests pin each disqualifier
+     independently incl. the inclusive 2560 boundary and 2561 falling through.
+     **This — not the D35 preset — is the fix for the minutes-long waits.**
+     ⚠️ To revert: set `DIRECT_PLAY_MAX_WIDTH` back to 1920 in BOTH files.
+     NOTE it is independent of `DOWNSCALE_WIDTH_THRESHOLD` (still 1920), which
+     decides how a clip is encoded once we've decided to make one; everything
+     still clipping is >2560 so it all downscales as before.
+   - **(b) single whole-file proxy still OPEN** — now only needed for true 4K+.
 
 D33. **Channels per-chapter preview costs ~22s on a real chapter.** Measured
    directly: `cli.py stim-process <fs> --character Reactive --mode 3phase
