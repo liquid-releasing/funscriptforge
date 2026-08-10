@@ -391,7 +391,15 @@ function ProjectRow({ project, active, onClick }) {
             fontFamily: 'var(--font-mono)',
           }}
         >
-          {project.duration} · {project.chapters} ch · {project.edited}
+          {/* No chapter count here: the recents list is built from the file
+              index, which doesn't read each project's chapters sidecar, so it
+              reported "0 ch" for every entry including fully-analyzed ones —
+              worse than silent, since it looked like a project had lost its
+              chapters. Duration and last-edited both come from the file itself
+              and are the two facts that actually help you pick a project. The
+              active-project pill below still shows a real count, guarded on
+              `> 0`. */}
+          {project.duration} · {project.edited}
         </div>
       </div>
     </button>
