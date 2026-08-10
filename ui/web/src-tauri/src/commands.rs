@@ -3194,7 +3194,7 @@ const FFMPEG_ENCODE_ARGS_SDR: &[&str] = &[
     "-c:v", "libx264",
     "-profile:v", "baseline",
     "-level", "3.1",
-    "-preset", "ultrafast",
+    "-preset", "veryfast",
     "-crf", "23",
     "-pix_fmt", "yuv420p",
     "-r", "30",
@@ -3221,7 +3221,7 @@ const FFMPEG_ENCODE_ARGS_4K_DOWNSCALE: &[&str] = &[
     "-c:v", "libx264",
     "-profile:v", "baseline",
     "-level", "3.1",
-    "-preset", "ultrafast",
+    "-preset", "veryfast",
     "-crf", "20",
     "-pix_fmt", "yuv420p",
     "-r", "30",
@@ -3376,7 +3376,17 @@ pub async fn extract_chapter_clip(
     // AAC. SDR (≤1920px) keeps v11 args verbatim. Mirrors videoflow's
     // chapter_clips.py CACHE_VERSION — both paths produce the same
     // bytes for the same source so they share cache hits.
-    const CACHE_VERSION: &str = "v12";
+    //
+    // v13: `-preset ultrafast` → `veryfast` on BOTH arg sets. ultrafast
+    // disables nearly all of x264's compression tools, and these encodes
+    // are dominated by source I/O and scaling rather than those tools —
+    // so it bought almost no speed while paying ~2x the bytes. Measured
+    // on 60s slices (2026-08-09): 2560×1440→720p 119.9MB/6.5s →
+    // 73.2MB/7.8s; 1920×1080 SDR 78.0MB/4.0s → 36.8MB/4.9s. CRFs are
+    // unchanged, so quality headroom (incl. graded-source iris coloring)
+    // is preserved or better at the lower bitrate. This costs ~20% MORE
+    // encode time — it is a size/quality change, not a speed one.
+    const CACHE_VERSION: &str = "v13";
 
     let src_path = Path::new(&media_path);
     let ext = src_path
