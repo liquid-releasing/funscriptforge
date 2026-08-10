@@ -70,7 +70,20 @@ D32. **★ 2.5K sources (>1920 wide) take the full clip-transcode path, and it
      still clipping is >2560 so it all downscales as before.
    - **(b) single whole-file proxy still OPEN** — now only needed for true 4K+.
 
-D33. **Channels per-chapter preview costs ~22s on a real chapter.** Measured
+D33. **✅ CLOSED 2026-08-09 — not reproduced on a clean renderer** (user:
+   "channels doesn't seem to be an issue… I'll complain if we run into it
+   again"). The missing preview was almost certainly the 7.2 GB WebView2
+   renderer documented below: under that pressure the debounced draw was being
+   superseded by re-renders across a 22-second round trip. After a restart the
+   preview lands. Reopen if it recurs — the leading hypothesis to test first is
+   still the cancel/debounce path, not the backend.
+   **The measured cost below is NOT a bug and remains true** — keep it in mind
+   before assuming a hang: a 5–7 minute chapter genuinely takes ~20s to draw
+   all 9 channels. If that ever needs attacking, the levers are footer progress
+   (as done for chapter clips in D32c) or drawing fewer channels until one is
+   focused. _(original measurement:)_
+
+   **Channels per-chapter preview costs ~22s on a real chapter.** Measured
    directly: `cli.py stim-process <fs> --character Reactive --mode 3phase
    --start-ms 0 --end-ms 365970` → rc=0, all 9 channels (alpha/beta 3630,
    prostate trio 9134/9134/3640), **22 seconds**. Generation is CORRECT, just
