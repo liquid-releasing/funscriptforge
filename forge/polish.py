@@ -147,6 +147,30 @@ STATIONS: dict[str, Station] = {
         default_knobs={"maxBpm": 120, "smoothing": 0.40, "latency": 0, "quantize": 1},
         constraint_hint="Cloud stroker · uploads funscript",
     ),
+    # The "subwoofer" row this catalog's header anticipated. Unlike every other
+    # station, a shaker has no POSITION — it renders the scene's INTENSITY as
+    # rumble, so the stamped funscript is an amplitude envelope (0 = still,
+    # 100 = full shake) rather than a travel path. Events already model it that
+    # way (`axes: ['volume']`, "sub-bass intensity"); this is the station that
+    # finally renders that intent instead of only letting you author it.
+    #
+    # Stamps TWO artifacts: the envelope funscript (for bridges that drive a
+    # transducer from a script) and an LFE audio file (for plugging straight
+    # into a shaker amp, no bridge software needed).
+    "shaker": Station(
+        id="shaker",
+        label="Bass Shaker",
+        sublabel="Tactile transducer",
+        kind="shaker",
+        device_keys=["shaker"],
+        axes=["V0"],  # amplitude, not a TCode travel axis
+        output_template="{stem}.shaker.funscript",
+        # `smoothing` is high by default: a suspended mass settles slowly, so a
+        # jumpy envelope reads as mush rather than as punctuation.
+        default_knobs={"smoothing": 0.55, "latency": 0, "carrierHz": 40, "gain": 0.85},
+        experimental=True,
+        constraint_hint="Sub-bass envelope · 20–80 Hz",
+    ),
 }
 
 
@@ -272,6 +296,7 @@ def lag_for_device(station_id: str) -> float:
         "lovense": 35,   # Bluetooth — higher command latency
         "vacuglide": 28, # Autoblow stroker — cloud-synced
         "estim3p": 6,    # near-instant
+        "shaker": 45,    # suspended mass on a spring — slowest to settle
     }.get(station_id, 30)
 
 

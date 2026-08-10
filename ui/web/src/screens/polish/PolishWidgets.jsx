@@ -280,6 +280,21 @@ export function DeviceGlyph({ kind, size = 28, ember = '#ff7a3a', glow = false }
           <circle cx={27} cy={16} r={1.5} fill={stroke} />
         </svg>
       );
+    case 'shaker':
+      // A transducer puck radiating rumble: the body, plus widening arcs. No
+      // travel path in the mark, because the device has no position — the
+      // other glyphs all show a carriage moving along an axis, and drawing one
+      // here would promise motion this station never sends.
+      return (
+        <svg {...props}>
+          <rect x={11} y={11} width={10} height={10} rx={2} stroke={stroke} fill="none" strokeWidth={1.5} />
+          <circle cx={16} cy={16} r={2} fill={stroke} />
+          <path d="M 8 11 Q 5 16 8 21" stroke={stroke} fill="none" strokeWidth={1.3} />
+          <path d="M 24 11 Q 27 16 24 21" stroke={stroke} fill="none" strokeWidth={1.3} />
+          <path d="M 5 7 Q 0 16 5 25" stroke={stroke} fill="none" strokeWidth={1} opacity={0.55} />
+          <path d="M 27 7 Q 32 16 27 25" stroke={stroke} fill="none" strokeWidth={1} opacity={0.55} />
+        </svg>
+      );
     default:
       return <svg {...props}><circle cx={16} cy={16} r={6} stroke={stroke} fill="none" strokeWidth={1.5} /></svg>;
   }

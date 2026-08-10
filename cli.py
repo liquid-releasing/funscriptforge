@@ -5775,7 +5775,24 @@ def cmd_polish_apply(args):
             lo = args.start_ms if args.start_ms is not None else actions[0]["at"]
             hi = args.end_ms if args.end_ms is not None else actions[-1]["at"]
             win = [a for a in actions if lo <= a["at"] <= hi]
-        pv = polish.preview_pass(win, station.id, knobs)
+        if station.kind == "shaker":
+            # The shaker's three panes tell a different story from a stroker's.
+            # Pane 1 stays the SOURCE motion, but panes 2 and 3 are the derived
+            # intensity envelope and how the transducer's suspended mass
+            # actually delivers it — so the user sees motion becoming rumble,
+            # which is the whole transformation this station performs. Feeding
+            # the raw positions through unchanged would draw a travel path the
+            # hardware has no way to reproduce.
+            from forge import shaker as shaker_mod
+            _knob = dict(station.default_knobs)
+            _knob.update(knobs or {})
+            env = shaker_mod.envelope_from_actions(
+                win, smoothing=float(_knob.get("smoothing", 0.55)),
+            )
+            pv = polish.preview_pass(env, station.id, knobs)
+            pv["character"] = polish.actions_to_dense(win)
+        else:
+            pv = polish.preview_pass(win, station.id, knobs)
         json.dump({
             "station": station.id,
             "character": pv["character"],
@@ -5811,6 +5828,48 @@ def cmd_polish_apply(args):
         return
 
     saved = []
+
+    # Bass shaker: the scene's INTENSITY, not its position. Stamps the envelope
+    # funscript plus an LFE audio file so the result is usable both by a bridge
+    # that drives a transducer from a script and by a bare shaker amp.
+    if station.kind == "shaker":
+        from forge import shaker as shaker_mod
+        knob = dict(station.default_knobs)
+        knob.update(knobs or {})
+        env = shaker_mod.envelope_from_actions(
+            actions, smoothing=float(knob.get("smoothing", 0.55)),
+        )
+        if not env:
+            print(json.dumps({
+                "station": station.id, "saved": [],
+                "error": "Not enough motion to derive a shaker envelope "
+                         "(need at least two actions).",
+            }))
+            return
+        main_path = out_dir / station.output_template.format(stem=stem)
+        _write_funscript_like(main_path, data, env)
+        saved.append(str(main_path))
+
+        # The audio half is best-effort: a missing/failing soundfile must not
+        # cost the user the envelope they just stamped.
+        audio_meta = None
+        try:
+            audio_path = out_dir / f"{stem}.shaker.wav"
+            audio_meta = shaker_mod.render_lfe_audio(
+                env, str(audio_path),
+                carrier_hz=float(knob.get("carrierHz", 40)),
+                gain=float(knob.get("gain", 0.85)),
+            )
+            saved.append(str(audio_path))
+        except Exception as exc:  # noqa: BLE001 — report, don't fail the stamp
+            audio_meta = {"error": f"{type(exc).__name__}: {exc}"}
+        print(json.dumps({
+            "station": station.id, "saved": saved,
+            "samples": len(env),
+            "audio": audio_meta,
+            "source_hash": _polish_source_hash(args.funscript),
+        }))
+        return
 
     # TCode multi-axis (OSR2/SR6): generate the axis set from per-chapter
     # mechStyle (the live Mechanical engine), clamp each, write the sibling

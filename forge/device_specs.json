@@ -166,6 +166,23 @@
       "max_acceleration": 9000,
       "max_delta": 100,
       "notes": "Confidence: VERY LOW. No documentation found (web search returned medical devices). 550 is interpolated between stereostim and FOC. Update immediately when a NeoStim user reports real-world limits."
+    },
+    "shaker": {
+      "name": "Bass Shaker",
+      "type": "transducer",
+      "max_speed": 250,
+      "max_bpm": 180,
+      "min_cycle_ms": 160,
+      "position_min": 0,
+      "position_max": 100,
+      "max_acceleration": 1500,
+      "max_delta": 100,
+      "band_hz": [
+        20,
+        80
+      ],
+      "carrier_hz": 40,
+      "notes": "Confidence: LOW (no vendor spec; values are conservative defaults, not measured). Tactile transducer / bass shaker (Dayton TT25, BST-1 class). AMPLITUDE-ONLY: 'position' here is rumble intensity, not travel, so the stroker constraints are reinterpreted -- max_speed bounds how fast the intensity envelope may change, not carriage speed. A suspended mass on a spring settles slowly, so fast envelope steps read as mush; the ceiling keeps the rumble legible. band_hz/carrier_hz drive the LFE audio render (40 Hz sits in the tactile sweet spot and passes most shaker amps)."
     }
   }
 }

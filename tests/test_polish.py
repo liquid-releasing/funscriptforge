@@ -29,7 +29,10 @@ def _jerky(n=200, dt=20):
 class TestStationCatalog(unittest.TestCase):
 
     def test_v1_stations_present(self):
-        self.assertEqual(set(polish.STATIONS), {"estim3p", "handy", "ossm", "tcode", "lovense", "vacuglide"})
+        self.assertEqual(
+            set(polish.STATIONS),
+            {"estim3p", "handy", "ossm", "tcode", "lovense", "vacuglide", "shaker"},
+        )
 
     def test_every_station_resolves_in_device_specs(self):
         specs = load_device_specs()
@@ -46,11 +49,36 @@ class TestStationCatalog(unittest.TestCase):
         self.assertEqual(specs["sr6"].device_type, "stroker")
         self.assertGreater(specs["sr6"].max_speed, 0)
 
-    def test_no_experimental_stations(self):
-        # v1 ships four owned/verifiable stations — none flagged experimental.
+    def test_hardware_stations_are_not_experimental(self):
+        # The stroker/e-stim stations are hardware we own and can verify
+        # end-to-end, so none of them may carry the experimental flag.
         for sid, st in polish.STATIONS.items():
+            if st.kind == "shaker":
+                continue  # see test_shaker_is_flagged_experimental
             with self.subTest(station=sid):
                 self.assertFalse(st.experimental)
+
+    def test_shaker_is_flagged_experimental(self):
+        """Its device spec is conservative defaults, not measured hardware.
+
+        Every other station's caps came off real gear; the shaker's came off
+        reasoning about a class of transducer. The flag is what keeps that
+        distinction visible in the UI instead of implying equal confidence.
+        """
+        self.assertTrue(polish.STATIONS["shaker"].experimental)
+
+    def test_shaker_is_amplitude_not_travel(self):
+        """The one station with no position — guard against it being 'fixed'
+        into an L0 stroker by someone normalising the catalog."""
+        st = polish.STATIONS["shaker"]
+        self.assertEqual(st.kind, "shaker")
+        self.assertEqual(st.axes, ["V0"])
+        self.assertNotIn("L0", st.axes)
+
+    def test_shaker_has_the_slowest_settling_lag(self):
+        """A suspended mass on a spring settles slower than any motor here."""
+        others = [polish.lag_for_device(s) for s in polish.STATIONS if s != "shaker"]
+        self.assertGreater(polish.lag_for_device("shaker"), max(others))
 
     def test_axis_topology(self):
         self.assertEqual(polish.STATIONS["handy"].axes, ["L0"])           # single

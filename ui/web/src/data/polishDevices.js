@@ -134,6 +134,31 @@ export const POLISH_DEVICES = [
       { key: 'quantize',  label: 'Position step', min: 1, max: 10,  step: 1,    unit: '%',   default: 1,    help: 'Smallest position increment the device resolves.' },
     ],
   },
+  {
+    // The "subwoofer" row this file's header anticipated. Unlike every other
+    // station a shaker has no position — it renders the scene's INTENSITY as
+    // rumble, so the stamped funscript is an amplitude envelope (0 still, 100
+    // full shake) rather than a travel path. Severity is last: it constrains
+    // the signal least, because there is no carriage to outrun.
+    id: 'shaker',
+    label: 'Bass Shaker',
+    sublabel: 'Tactile transducer',
+    kind: 'shaker',
+    deviceKeys: ['shaker'],
+    axes: ['V0'],
+    severity: 6,
+    ember: '#8f7aff',
+    glyph: 'shaker',
+    experimental: true,
+    constraintHint: 'Sub-bass envelope · 20–80 Hz',
+    outputFile: '{stem}.shaker.funscript',
+    knobs: [
+      { key: 'smoothing', label: 'Smoothing',  min: 0,  max: 1,  step: 0.05, unit: '',   default: 0.55, help: 'Low-pass on the intensity envelope. A suspended mass settles slowly, so a jumpy envelope reads as mush.' },
+      { key: 'carrierHz', label: 'Rumble tone', min: 20, max: 80, step: 1,   unit: 'Hz', default: 40,   help: 'Frequency of the rendered LFE tone. Below ~20 Hz you feel nothing; above ~80 Hz you start hearing it instead of feeling it.' },
+      { key: 'gain',      label: 'Gain',       min: 0,  max: 1,  step: 0.05, unit: '',   default: 0.85, help: 'Master level of the rendered audio, applied after the envelope.' },
+      { key: 'latency',   label: 'Lead-time',  min: -20, max: 200, step: 5,  unit: 'ms', default: 0,    help: 'Send the rumble this many ms early to land with the hit.' },
+    ],
+  },
 ];
 
 export const POLISH_BY_ID = Object.fromEntries(POLISH_DEVICES.map((d) => [d.id, d]));

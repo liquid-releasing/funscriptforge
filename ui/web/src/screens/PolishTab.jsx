@@ -439,23 +439,15 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
 
       {/* ── Conveyor: stations row (slim — leave the bench room) ────── */}
       <div style={{ padding: '8px 28px 10px' }}>
+        {/* The "Channels · source" origin block used to sit at the head of this
+            row. Dropped to buy back ~128px for a seventh station: it was pure
+            ornament — the per-card → arrows already read as a conveyor, and the
+            tab chain above states the source. */}
         <div style={{
-          display: 'grid', gridTemplateColumns: `auto repeat(${POLISH_DEVICES.length}, 1fr)`,
+          display: 'grid', gridTemplateColumns: `repeat(${POLISH_DEVICES.length}, 1fr)`,
           alignItems: 'stretch', gap: 0, background: '#12151e', border: '1px solid #2d3148',
           borderRadius: 12, padding: 10,
         }}>
-          {/* Origin — Channels source */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 18px 0 6px', borderRight: '1px dashed #3a3f5c', minWidth: 110 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 22, display: 'grid', placeItems: 'center', background: 'rgba(155,163,196,0.08)', border: '1px solid #3a3f5c' }}>
-              <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#9ba3c4" strokeWidth={1.8}>
-                <path d="M4 14 Q 8 6 12 14 T 20 14" />
-                <circle cx={4} cy={14} r={1.5} fill="#9ba3c4" />
-              </svg>
-            </div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#9ba3c4', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 8 }}>Channels</div>
-            <div style={{ fontSize: 10, color: '#6b7390', marginTop: 2 }}>source</div>
-          </div>
-
           {POLISH_DEVICES.map((d, i) => {
             const isFocused = d.id === focused;
             const st = stateOf(d);
@@ -467,7 +459,12 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
                 borderRadius: 8, cursor: 'pointer', textAlign: 'left', color: 'inherit',
                 outline: isFocused ? `1px solid ${d.ember}66` : '1px solid transparent',
               }}>
-                <span style={{ position: 'absolute', left: -8, top: '50%', transform: 'translateY(-50%)', color: '#3a3f5c', fontSize: 14 }}>→</span>
+                {/* Between-station arrows only. The first card's arrow used to
+                    originate from the "Channels · source" block; with that gone
+                    it would dangle off the row's left edge. */}
+                {i > 0 && (
+                  <span style={{ position: 'absolute', left: -8, top: '50%', transform: 'translateY(-50%)', color: '#3a3f5c', fontSize: 14 }}>→</span>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 28, height: 28, borderRadius: 6, display: 'grid', placeItems: 'center', background: isFocused ? `${d.ember}22` : '#1a1d27', border: `1px solid ${isFocused ? d.ember + '55' : '#2d3148'}` }}>
                     <DeviceGlyph kind={d.glyph} size={16} ember={isFocused || st === 'accepted' ? d.ember : '#9ba3c4'} glow={isFocused && EXPRESSIVE} />
