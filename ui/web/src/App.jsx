@@ -84,7 +84,7 @@ const TABS = [
   { id: 'phrases',   label: 'Phrases' },
   // 'stanzas' (2026-05-18) sits between Phrases and Stim. Sibling lens
   // to Phrases — same chassis, but the unit is videoflow's audio-derived
-  // phrases (forgegen intent vocabulary: tease/steady/edging/...). See
+  // phrases (videoflow intent vocabulary: tease/steady/edging/...). See
   // project_stanzas_tab memory for rationale.
   { id: 'stanzas',   label: 'Stanzas' },
   // 'events' (2026-05-18) sits between Stanzas and Stim. Point-in-time

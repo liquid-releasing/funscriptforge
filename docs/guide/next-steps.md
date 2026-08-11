@@ -69,7 +69,11 @@ The exported `.alpha.funscript` and `.beta.funscript` files contain the position
 The Next Steps tab also previews upcoming tools:
 
 - **ForgePlayer** — play funscripts directly on your devices with real-time visualization, tone, and groove. No editing required.
-- **forgegen** — generate funscripts from audio and video automatically with beat detection and scene analysis.
+
+Automatic generation from audio and video — beat detection and scene
+analysis — is no longer a separate tool to wait for. It is built in: see
+the **Generate** tab, covered in
+[Generating Funscripts](generating-funscripts.md).
 
 ---
 

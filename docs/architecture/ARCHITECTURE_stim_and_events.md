@@ -494,17 +494,25 @@ Then:
 2. `process_events()` — applies enchantments from merged `.events.yml`
 3. Output folder has final files + the `.events.yml` (editable, portable)
 
-### forgegen integration (future)
+### Auto-placement from analysis (future)
 
-The enchantment catalog is the content generation seed for forgegen:
+The enchantment catalog is also the seed for placing events automatically
+from the analysis the app already runs:
 - Beat detection says "hit at 3:42.300" → place `edge` at that timecode
 - Energy drops at 5:10 → place `tranquil`
 - Scene texture change at 7:00 → place `fast`
 
-Three layers, one catalog:
-1. **FunscriptForge** (manual) — user watches video, places enchantments
-2. **forgegen** (auto) — algorithm places enchantments based on analysis
+Two sources, one catalog, one engine:
+1. **Manual** — user watches video, places enchantments on the Events tab
+2. **Automatic** — the analysis pass proposes placements from beats,
+   energy and texture
 3. **funscript-tools** (engine) — executes them all via `process_events()`
+
+_(This was originally scoped as a forgegen integration, back when
+generation was a separate app. Generation now runs inside FunscriptForge
+via the Generate tab, so the "auto" layer is a stage of this app's own
+pipeline rather than a handoff from another one — the catalog and the
+placement rules are unchanged.)_
 
 ## Processing Time Budget
 
@@ -551,6 +559,6 @@ Stim tab is interactive. Export is async with progress bar.
 - [ ] Wire into export pipeline: `cli.process()` then `process_events()`
 - [ ] Docs: how to add custom enchantments (MCB, Clutch, user-defined)
 
-### Phase 4: forgegen integration (future)
+### Phase 4: auto-placement from analysis (future)
 - [ ] Auto-assign events based on scene analysis
 - [ ] Suggestion engine: "this phrase looks like a climax → try Edge?"

@@ -4,7 +4,7 @@
 // A "stanza" is a videoflow-classified audio phrase (variable length,
 // intent vocabulary). Phrases tab uses the FF analyzer's motion-
 // uniformity classification (diagnostic vocabulary: stingy / giggle /
-// plateau …); Stanzas tab uses forgegen's audio-rhythm classification
+// plateau …); Stanzas tab uses videoflow's audio-rhythm classification
 // (intent vocabulary: tease / steady / edging / break / fast / slow).
 // Two complementary lenses on the same funscript. See
 // project_stanzas_tab.md for the full rationale.
@@ -38,7 +38,7 @@ import {
 } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { useChapterClip } from '../hooks/useChapterClip.js';
-import { BEHAVIOR_TAGS, FORGEGEN_MODES } from '../data/transforms.js';
+import { BEHAVIOR_TAGS, STANZA_MODES } from '../data/transforms.js';
 import { useTransformCatalog } from '../data/useTransformCatalog.js';
 import { useTransformPreview } from '../api/useTransformPreview.js';
 import { readStanzas, transformApplyActions, saveWorkingFunscript } from '../api/forge.js';
@@ -61,7 +61,7 @@ function rebasePreview(previewAbs, stanza) {
 }
 
 function findMode(id) {
-  return FORGEGEN_MODES.find((m) => m.id === id) || null;
+  return STANZA_MODES.find((m) => m.id === id) || null;
 }
 
 // Module-level stable empty arrays for the cache-miss fallback. `?? []`
@@ -96,7 +96,7 @@ export default function StanzasTab({
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
   const [activeChapterId, setActiveChapterId] = useState(chapters[0]?.id ?? null);
-  const [mode, setMode] = useState('tag');   // 'tag' (forgegen mode) | 'single'
+  const [mode, setMode] = useState('tag');   // 'tag' (stanza mode) | 'single'
 
   // Edit set — derived from rail selection, toggleable per-row.
   const [editedStanzaIds, setEditedStanzaIds] = useState([]);
@@ -296,7 +296,7 @@ export default function StanzasTab({
     for (const s of stanzasInScope) {
       if (s.mode) counts[s.mode] = (counts[s.mode] || 0) + 1;
     }
-    return FORGEGEN_MODES.map((m) => ({ ...m, count: counts[m.id] || 0 }));
+    return STANZA_MODES.map((m) => ({ ...m, count: counts[m.id] || 0 }));
   }, [stanzasInScope]);
   const firstPresentModeId = useMemo(
     () => modesWithCount.find((m) => m.count > 0)?.id ?? null,

@@ -1,5 +1,22 @@
 # forgegen → FunscriptForge handoff
 
+> **DEPRECATED — forgegen is no longer a separate product.** Generation
+> now runs inside FunscriptForge itself: the Generate tab drives the
+> videoflow engine directly, so there is no second app to hand off
+> *from*. Nothing here describes a workflow a user can follow today.
+>
+> **Kept, not deleted**, because the artifact it specifies is still
+> real. `<stem>.analysis.json` remains a format FunscriptForge can read,
+> and this is the record of what its fields mean and why the sidecar
+> (rather than IPC or a URL handler) was chosen as the vehicle. If a
+> future tool writes analysis alongside a funscript, this is still the
+> contract to implement.
+>
+> Read the rest as history: statements about "what forgegen writes" mean
+> "what an external analysis producer would write."
+
+_Original document follows._
+
 > When a user opens a funscript that forgegen produced, FunscriptForge
 > picks up forgegen's analysis context (chapters first, more later)
 > rather than re-deriving it. This doc records the decision and scopes

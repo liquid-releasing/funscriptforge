@@ -96,8 +96,8 @@ Always "device aware" / "awareness". Never "device safe" — liability concern.
 ## Shared Library (planned)
 
 Extract `device_specs.py` + `device_specs.json` to a shared location for reuse
-across FunscriptForge, ForgePlayer, SyncPlayer, and forgegen. Any app that
-plays or generates funscripts needs device awareness.
+across FunscriptForge, ForgePlayer, and SyncPlayer. Any app that plays or
+generates funscripts needs device awareness.
 
 ---
 

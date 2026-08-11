@@ -2807,9 +2807,9 @@ def cmd_parse_captions(args):
 # Chapter resolution / auto-detection (videoflow bridge)
 # ------------------------------------------------------------------
 #
-# These two commands delegate to videoflow so that FunscriptForge,
-# forgegen, and forgeplayer all see the same chapters from the same
-# resolver and the same auto-detector. They normalize the JSON shape
+# These two commands delegate to videoflow so that FunscriptForge and
+# forgeplayer see the same chapters from the same resolver and the same
+# auto-detector. They normalize the JSON shape
 # so end_ms is always present (videoflow.Chapter omits end_ms when
 # None — for mp4-embedded chapters that only carry start times).
 
@@ -3881,7 +3881,7 @@ def cmd_auto_chapter(args):
 
 
 # ------------------------------------------------------------------
-# generate — beat-map → funscript (the forgegen engine, in FSF)
+# generate — beat-map → funscript (the videoflow engine, in-app)
 # ------------------------------------------------------------------
 
 # The proven-band targets from the data-science work (memory:
@@ -4148,7 +4148,7 @@ def cmd_generate(args):
     _emit_progress("done::1::generate")
 
     # Grade the result against the oracle — the same fingerprint the user
-    # diagnostic lens and the forgegen bench use (videoflow.funscript_stats).
+    # diagnostic lens and the generation bench use (videoflow.funscript_stats).
     actions = json.loads(Path(path).read_text(encoding="utf-8"))["actions"]
     fp = summarize(actions)
     dyn = fp.get("dynamics", {})

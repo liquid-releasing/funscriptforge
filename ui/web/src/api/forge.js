@@ -85,7 +85,7 @@ function dedupedCall(key, runFn) {
 }
 
 // ---------------------------------------------------------------------------
-// API surface — one wrapper per Tauri command. Mirrors forgegen/api/videoflow.
+// API surface — one wrapper per Tauri command. Mirrors videoflow's API.
 // As real commands land in src-tauri/src/commands.rs, add wrappers here.
 // ---------------------------------------------------------------------------
 

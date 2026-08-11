@@ -16,7 +16,7 @@ the render layer is now React, while the pure-`core.py` logic (chart data shapin
 beat analysis wrappers) is still reused by `cli.py` and its modules.
 
 This separation enables:
-- Reuse across FunscriptForge, ForgePlayer, forgegen, and future apps
+- Reuse across FunscriptForge, ForgePlayer, and future apps
 - A React render layer over the same framework-agnostic core logic
 - Testing core logic without any UI-framework dependency
 

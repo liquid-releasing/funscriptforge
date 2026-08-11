@@ -307,7 +307,7 @@ export const TRANSFORMS = [
 // Canonical behavioral tags — the 10 the FF classifier surfaces. Used by
 // PhrasesTab for tag-bucket selection and by TransformPanel for the
 // "suggested for this tag" hint (`primary` → transform id).
-// FORGEGEN_MODES — intent vocabulary forgegen / videoflow uses to
+// STANZA_MODES — intent vocabulary videoflow uses to
 // classify audio-derived phrases (a.k.a. *stanzas* in the FF UI).
 // Source of truth: `videoflow.phrases.Phrase.mode` field; emitted by
 // `_classify_phrases` inside `videoflow.structural.auto_chapter` and
@@ -320,7 +320,7 @@ export const TRANSFORMS = [
 //
 // Color palette intentionally distinct from BEHAVIOR_TAGS so the
 // Stanzas tab reads as a different context than Phrases at a glance.
-export const FORGEGEN_MODES = [
+export const STANZA_MODES = [
   { id: 'tease',  label: 'Tease',  color: '#f78fb3', desc: 'Hint, withdraw, hint again. Pulls back before payoff.' },
   { id: 'steady', label: 'Steady', color: '#56cfe1', desc: 'Consistent rhythm. Holds the groove without escalation.' },
   { id: 'edging', label: 'Edging', color: '#ffd166', desc: 'Approach the threshold and back off. Repeated near-peaks.' },
