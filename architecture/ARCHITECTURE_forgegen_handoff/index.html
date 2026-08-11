@@ -1413,6 +1413,21 @@
 
 <h1 id="forgegen-funscriptforge-handoff">forgegen → FunscriptForge handoff<a class="headerlink" href="#forgegen-funscriptforge-handoff" title="Permanent link">&para;</a></h1>
 <blockquote>
+<p><strong>DEPRECATED — forgegen is no longer a separate product.</strong> Generation
+now runs inside FunscriptForge itself: the Generate tab drives the
+videoflow engine directly, so there is no second app to hand off
+<em>from</em>. Nothing here describes a workflow a user can follow today.</p>
+<p><strong>Kept, not deleted</strong>, because the artifact it specifies is still
+real. <code>&lt;stem&gt;.analysis.json</code> remains a format FunscriptForge can read,
+and this is the record of what its fields mean and why the sidecar
+(rather than IPC or a URL handler) was chosen as the vehicle. If a
+future tool writes analysis alongside a funscript, this is still the
+contract to implement.</p>
+<p>Read the rest as history: statements about "what forgegen writes" mean
+"what an external analysis producer would write."</p>
+</blockquote>
+<p><em>Original document follows.</em></p>
+<blockquote>
 <p>When a user opens a funscript that forgegen produced, FunscriptForge
 picks up forgegen's analysis context (chapters first, more later)
 rather than re-deriving it. This doc records the decision and scopes

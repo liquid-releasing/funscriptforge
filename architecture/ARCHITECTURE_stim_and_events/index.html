@@ -1613,10 +1613,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#forgegen-integration-future" class="md-nav__link">
+  <a href="#auto-placement-from-analysis-future" class="md-nav__link">
     <span class="md-ellipsis">
       
-        forgegen integration (future)
+        Auto-placement from analysis (future)
       
     </span>
   </a>
@@ -1696,10 +1696,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#phase-4-forgegen-integration-future" class="md-nav__link">
+  <a href="#phase-4-auto-placement-from-analysis-future" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Phase 4: forgegen integration (future)
+        Phase 4: auto-placement from analysis (future)
       
     </span>
   </a>
@@ -2296,15 +2296,22 @@ At export time, all phrase <code>.events.yml</code> files merge into one:</p>
 1. <code>cli.process()</code> — generates 10 channel files from Stim config
 2. <code>process_events()</code> — applies enchantments from merged <code>.events.yml</code>
 3. Output folder has final files + the <code>.events.yml</code> (editable, portable)</p>
-<h3 id="forgegen-integration-future">forgegen integration (future)<a class="headerlink" href="#forgegen-integration-future" title="Permanent link">&para;</a></h3>
-<p>The enchantment catalog is the content generation seed for forgegen:
+<h3 id="auto-placement-from-analysis-future">Auto-placement from analysis (future)<a class="headerlink" href="#auto-placement-from-analysis-future" title="Permanent link">&para;</a></h3>
+<p>The enchantment catalog is also the seed for placing events automatically
+from the analysis the app already runs:
 - Beat detection says "hit at 3:42.300" → place <code>edge</code> at that timecode
 - Energy drops at 5:10 → place <code>tranquil</code>
 - Scene texture change at 7:00 → place <code>fast</code></p>
-<p>Three layers, one catalog:
-1. <strong>FunscriptForge</strong> (manual) — user watches video, places enchantments
-2. <strong>forgegen</strong> (auto) — algorithm places enchantments based on analysis
+<p>Two sources, one catalog, one engine:
+1. <strong>Manual</strong> — user watches video, places enchantments on the Events tab
+2. <strong>Automatic</strong> — the analysis pass proposes placements from beats,
+   energy and texture
 3. <strong>funscript-tools</strong> (engine) — executes them all via <code>process_events()</code></p>
+<p><em>(This was originally scoped as a forgegen integration, back when
+generation was a separate app. Generation now runs inside FunscriptForge
+via the Generate tab, so the "auto" layer is a stage of this app's own
+pipeline rather than a handoff from another one — the catalog and the
+placement rules are unchanged.)</em></p>
 <h2 id="processing-time-budget">Processing Time Budget<a class="headerlink" href="#processing-time-budget" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -2375,7 +2382,7 @@ At export time, all phrase <code>.events.yml</code> files merge into one:</p>
 <li>[ ] Wire into export pipeline: <code>cli.process()</code> then <code>process_events()</code></li>
 <li>[ ] Docs: how to add custom enchantments (MCB, Clutch, user-defined)</li>
 </ul>
-<h3 id="phase-4-forgegen-integration-future">Phase 4: forgegen integration (future)<a class="headerlink" href="#phase-4-forgegen-integration-future" title="Permanent link">&para;</a></h3>
+<h3 id="phase-4-auto-placement-from-analysis-future">Phase 4: auto-placement from analysis (future)<a class="headerlink" href="#phase-4-auto-placement-from-analysis-future" title="Permanent link">&para;</a></h3>
 <ul>
 <li>[ ] Auto-assign events based on scene analysis</li>
 <li>[ ] Suggestion engine: "this phrase looks like a climax → try Edge?"</li>
