@@ -217,8 +217,17 @@ export default function PhrasesTab({
   // leaving the tab. Hidden on the last chapter (no next; the primary "chain to
   // Stanzas" is the action there). The ref keeps `run` fresh without
   // re-registering every chapter change.
-  const navChapterIdx = chapters.findIndex((c) => c.id === activeChapter?.id);
-  const navIsLast = navChapterIdx < 0 || navChapterIdx >= chapters.length - 1;
+  // Accept commits the chapter you're ON, then moves to the next chapter that
+  // still NEEDS a look — not the positionally-next one. The chapter strip lets
+  // you jump anywhere, so you can sit on the last chapter with chapter 1 still
+  // outstanding; advancing positionally then did nothing, the accept re-marked
+  // a chapter already credited, the count stayed frozen, and the button was
+  // dead with no way forward. Events hit exactly this on 2026-08-11.
+  const isConsidered = (id) => consideredChapterIds.has(id);
+  const outstandingElsewhere = chapters
+    .filter((c) => !isConsidered(c.id) && c.id !== activeChapter?.id).length;
+  // Lastness is about remaining WORK, not position.
+  const navIsLast = outstandingElsewhere === 0;
   const navRunRef = useRef(() => {});
   // Sub-unit walk ("Accept and next phrase") — fresh-closure ref, assigned
   // below once focusedPhrase / nextPhrase are in scope. Mirrors navRunRef so
@@ -227,9 +236,11 @@ export default function PhrasesTab({
   navRunRef.current = () => {
     // Accepting a chapter marks it CONSIDERED — that's what unlocks the
     // footer's "Accept and chain" (every chapter must be considered first).
-    markChapterConsidered(activeChapter?.id);
-    if (navChapterIdx >= 0 && navChapterIdx < chapters.length - 1) {
-      setActiveChapterId(chapters[navChapterIdx + 1].id);   // advance
+    const activeId = activeChapter?.id;
+    markChapterConsidered(activeId);
+    const nextNeeding = chapters.find((c) => c.id !== activeId && !isConsidered(c.id));
+    if (nextNeeding) {
+      setActiveChapterId(nextNeeding.id);   // advance to the outstanding one
     } else if (project?.path) {
       // Last chapter: nothing to advance to. Phrase edits already roll forward
       // on Apply (which saves), so "accept" re-persists the current working
@@ -338,13 +349,21 @@ export default function PhrasesTab({
       chapters.length > 0
         ? {
             hasNext: !navIsLast,
-            label: navIsLast ? 'Accept last chapter changes' : 'Accept and next chapter',
+            // Label follows the work: more chapters outstanding → keep walking;
+            // otherwise this accept is the one that completes the gate.
+            label: !navIsLast
+              ? 'Accept and next chapter'
+              : (chapters.length === 1 ? 'Accept changes' : 'Accept last chapter changes'),
             run: () => navRunRef.current(),
             // Drives the footer completion gate. Only Phrases/Stanzas report
             // `complete` today, so other chapter tabs stay ungated.
             complete: chaptersConsideredComplete,
             considered: chapters.filter((c) => consideredChapterIds.has(c.id)).length,
             total: chapters.length,
+            // When the ONLY chapter left is the one you're looking at, the
+            // generic "accept each" copy reads as "you left work elsewhere".
+            summary: (!navIsLast || chaptersConsideredComplete) ? undefined
+              : `${chapters.length - 1} of ${chapters.length} chapters considered · accept this chapter to unlock chaining`,
             // Finer walk over the focused phrase; App renders it as a white
             // secondary. Null when no phrase focused or on the last phrase.
             subWalk: (focusedPhrase && nextPhrase)

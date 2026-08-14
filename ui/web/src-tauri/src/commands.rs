@@ -2372,9 +2372,14 @@ pub async fn save_feel_events(
         .unwrap_or(0);
     let mut tmp = std::env::temp_dir();
     tmp.push(format!("ff_feel_{}.json", nanos));
-    tokio::fs::write(&tmp, body)
-        .await
-        .map_err(|e| format!("write temp events: {}", e))?;
+    // A failed write can still leave a partial file behind — a full disk during
+    // the 2026-08-14 dogfood stranded one ff_feel_*.json per failed save. Clean
+    // up before propagating, so a disk that's already full doesn't keep
+    // accumulating the debris that helps keep it that way.
+    if let Err(e) = tokio::fs::write(&tmp, body).await {
+        let _ = tokio::fs::remove_file(&tmp).await;
+        return Err(format!("write temp events: {}", e));
+    }
     let tmp_str = tmp.to_string_lossy().into_owned();
     let res = run_cli(&["feel-write", &funscript_path, "--events-json", &tmp_str]).await;
     let _ = tokio::fs::remove_file(&tmp).await;

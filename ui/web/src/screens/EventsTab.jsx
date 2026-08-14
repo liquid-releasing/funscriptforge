@@ -102,6 +102,7 @@ export default function EventsTab({
   // same chapter you were editing, report changes back, and host an "Accept and
   // next chapter" on the footer like Chapters / Channels.
   initialChapterId = null, onActiveChapterChange, onRegisterChapterNav,
+  setAppError = () => {},
 }) {
   const chapters = project?.chapterList ?? [];
   const actions = project?.actions ?? [];
@@ -148,10 +149,25 @@ export default function EventsTab({
   // Write-through: persist the full events list to <stem>.feel.yml after a
   // discrete mutation (add / edit / delete). Fire-and-forget so the UI stays
   // instant; the funscript is never touched (events layer on output).
+  // Write-through is fire-and-forget so the UI stays instant — which means a
+  // failure here is INVISIBLE unless we say so. During the 2026-08-14 dogfood a
+  // full disk failed three saves in a row while the tab went on cheerfully
+  // accepting events; the only trace was a console line, so the user kept
+  // authoring into a session that was no longer reaching disk. Until this call
+  // lands, the events exist ONLY in component state — that's worth interrupting
+  // for, and the message says what to DO, not what threw.
   const persist = (nextEvents) => {
     const path = project?.path;
     if (!path) return;
-    saveFeelEvents(path, nextEvents).catch((e) => console.error('save .feel.yml failed', e));
+    saveFeelEvents(path, nextEvents).catch((e) => {
+      console.error('save .feel.yml failed', e);
+      const detail = String(e?.message ?? e);
+      setAppError(
+        /not enough space on the disk|os error 112/i.test(detail)
+          ? 'Events could not be saved — the drive is full. Free some space, then reopen this project to check which events survived.'
+          : `Events could not be saved: ${detail}`,
+      );
+    });
   };
 
   // Effect catalog — the 32 Edger events, backend-sourced (list-event-recipes).
@@ -257,11 +273,11 @@ export default function EventsTab({
   }, [scope, chapters]);
 
   // Footer "Accept and next chapter" (same as Channels). Events auto-save, so
-  // this just advances the scoped chapter; on the last chapter it's a no-op
-  // "Accept chapter". Registered with App so it sits on the always-visible
-  // footer next to "Accept and chain to Channels" (dogfood 2026-06-16).
-  const activeIdx = chapters.findIndex((c) => c.id === activeChapter?.id);
-  const isLastChapter = activeIdx >= chapters.length - 1;
+  // this just advances the scoped chapter. Registered with App so it sits on
+  // the always-visible footer next to "Accept and chain to Channels" (dogfood
+  // 2026-06-16). Position is deliberately NOT tracked here — the walk advances
+  // by outstanding WORK (see goNextRef below), so a positional "is this the
+  // last chapter" index would only invite the bug it used to cause.
 
   // Completion gate — same contract as Chapters / Phrases / Stanzas. Events
   // auto-save, but the footer must NOT offer "chain to Channels" (nor show the
@@ -278,8 +294,15 @@ export default function EventsTab({
       const next = new Set(prev); next.add(id); return next;
     });
   };
+  // NOT derived from "does this chapter hold events". That was tried (2026-08-11)
+  // and is wrong: it completes the gate the instant the first event lands, which
+  // flips the primary straight to the red chain and steals the deliberate accept
+  // click. The grammar is white "Accept changes" while you work → red chain once
+  // accepted, so acceptance must stay an explicit act.
+  const isConsidered = (id) => consideredChapterIds.has(id);
+
   const chaptersConsideredComplete = chapters.length > 0
-    && chapters.every((c) => consideredChapterIds.has(c.id));
+    && chapters.every((c) => isConsidered(c.id));
   const acceptAllChaptersAsIs = () =>
     setConsideredChapterIds(new Set(chapters.map((c) => c.id)));
 
@@ -297,52 +320,84 @@ export default function EventsTab({
   // button (goNext below, which marks the active chapter) is what commits it —
   // and only then does the chain appear.
   //
-  // Moving to the 'all' scope counts as leaving too. Landing on 'all' (the
-  // tab's default) marks nothing, so the gate keeps its meaning.
+  // Moving to the 'all' scope does NOT count as leaving. It used to, and that was
+  // wrong (dogfood 2026-08-11): on a single-chapter project the tab lands scoped
+  // to ch1, the scope then flips to 'all', and ch1 was silently credited — the
+  // gate completed and the footer jumped straight to the red chain, so the user
+  // never got the deliberate "Accept changes" click the grammar promises. 'all' is
+  // a lens over the same work, not a departure. prevChapterRef therefore KEEPS the
+  // last real chapter across an 'all' detour, so ch1 → all → ch2 still credits ch1.
   const prevChapterRef = useRef(null);
   useEffect(() => {
     const current = scope === 'all' ? null : (activeChapter?.id ?? null);
     const prev = prevChapterRef.current;
-    if (prev != null && prev !== current) markConsidered(prev);
-    prevChapterRef.current = current;
+    if (prev != null && current != null && prev !== current) markConsidered(prev);
+    if (current != null) prevChapterRef.current = current;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, activeChapter?.id]);
 
   const goNextRef = useRef(() => {});
   goNextRef.current = () => {
-    // Walking a chapter marks it considered — that's what unlocks chaining.
-    markConsidered(activeChapter?.id);
-    if (activeIdx >= 0 && activeIdx < chapters.length - 1) {
-      setScope(chapters[activeIdx + 1].id);
+    // Accept commits the chapter you're on, then goes to the next chapter that
+    // still needs a look — NOT the positionally-next one. Sitting on the LAST
+    // chapter with an earlier chapter outstanding used to re-mark the chapter you
+    // were already credited for: the set didn't change, the footer didn't move,
+    // and there was no way forward (dogfood 2026-08-11 — stuck at "1 of 2" with a
+    // button that did nothing).
+    const activeId = activeChapter?.id;
+    markConsidered(activeId);
+    const nextNeeding = chapters.find((c) => c.id !== activeId && !isConsidered(c.id));
+    if (nextNeeding) {
+      setScope(nextNeeding.id);
       return;
     }
-    // Last chapter: there's no next to advance to. Events already write
-    // through on every edit, but the user needs to SEE that the final
-    // chapter's events (e.g. a Scene Closer) are committed — so flush-persist
-    // and pulse a confirmation rather than silently doing nothing.
+    // Nothing outstanding: this accept completes the gate. Events already write
+    // through on every edit, but the user needs to SEE that the final chapter's
+    // events (e.g. a Scene Closer) are committed — so flush-persist and pulse a
+    // confirmation rather than silently doing nothing.
     persist(events);
     setSavedPulse(true);
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
     savedTimerRef.current = setTimeout(() => setSavedPulse(false), 2400);
   };
+  // When the ONLY chapter still unconsidered is the one you're looking at, the
+  // default summary ("accept each…") misreads as "you left work on some other
+  // chapter" — the user hit this on a 2-chapter project, having finished both.
+  // Name the actual remaining action instead. Computed here, not in App, because
+  // only the tab knows WHICH chapter is outstanding: leaving marks chapters, so
+  // you can reach considered == total-1 with the gap on a chapter you're not on
+  // (visit 1 → 3 → 1 leaves ch2 unvisited), and that case must keep the generic copy.
+  const unconsidered = chapters.filter((c) => !isConsidered(c.id));
+  const onlyActiveLeft = unconsidered.length === 1 && activeChapter?.id === unconsidered[0].id;
+  // Does accepting THIS chapter finish the gate, or is there still another
+  // chapter to visit? Drives both the label and hasNext. Positional lastness is
+  // the wrong question — you can be on the last chapter with ch1 outstanding.
+  const othersOutstanding = unconsidered.filter((c) => c.id !== activeChapter?.id).length;
+  const acceptLabel = othersOutstanding > 0
+    ? 'Accept and next chapter'
+    : (chapters.length === 1 ? 'Accept changes' : 'Accept last chapter changes');
+
   useEffect(() => {
     if (!onRegisterChapterNav) return undefined;
     onRegisterChapterNav(
       chapters.length > 0
         ? {
-            hasNext: !isLastChapter,
-            label: isLastChapter ? 'Accept last chapter changes' : 'Accept and next chapter',
+            hasNext: othersOutstanding > 0,
+            label: acceptLabel,
             run: () => goNextRef.current(),
             // Drives the footer gate: no chain to Channels (and no ready ✓)
             // until every chapter is considered.
             complete: chaptersConsideredComplete,
-            considered: chapters.filter((c) => consideredChapterIds.has(c.id)).length,
+            considered: chapters.filter((c) => isConsidered(c.id)).length,
             total: chapters.length,
+            summary: onlyActiveLeft
+              ? `${chapters.length - 1} of ${chapters.length} chapters considered · accept this chapter to unlock chaining to Channels`
+              : undefined,
           }
         : null,
     );
     return () => onRegisterChapterNav(null);
-  }, [isLastChapter, chapters.length, onRegisterChapterNav, chaptersConsideredComplete, consideredChapterIds]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [acceptLabel, othersOutstanding, chapters.length, onRegisterChapterNav, chaptersConsideredComplete, consideredChapterIds, onlyActiveLeft]);  // eslint-disable-line react-hooks/exhaustive-deps
   // Drop the confirmation timer on unmount.
   useEffect(() => () => { if (savedTimerRef.current) clearTimeout(savedTimerRef.current); }, []);
 
@@ -365,8 +420,12 @@ export default function EventsTab({
   // Snap the playhead to the active chapter's start when it changes, so the
   // baton begins inside the visible window rather than at 0. Also clear any
   // in-progress capture — marks belong to the chapter they were taken in.
+  // True from a chapter switch until the media reports a position actually
+  // inside the new chapter. See onTimeChange below for why that matters.
+  const awaitingSeekRef = useRef(false);
   useEffect(() => {
     if (activeChapter) { setCurrentMs(activeChapter.atMs); setIsPlaying(false); }
+    awaitingSeekRef.current = true;
     setBeginMs(null); setEndMs(null);
   }, [activeChapter?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -735,6 +794,21 @@ export default function EventsTab({
             // own, but a DIRECT-PLAY source plays the whole video — so without an
             // explicit pause it runs past the chapter. Clamp the baton AND pause.
             onTimeChange={(ms) => {
+              // A chapter switch moves this tab's clock immediately, but the
+              // media element is still parked in the OLD chapter (big clips and
+              // direct-play sources hold the whole video) and keeps emitting
+              // timeupdates from there. Clamping those stale echoes into the new
+              // window pinned the baton to a chapter EDGE — invisible moving
+              // FORWARD, where the echo clamps to atMs and looks like a correct
+              // seek, but moving BACKWARD it clamped to endMs and paused, so
+              // returning to chapter 1 landed the baton at the end of it
+              // (dogfood 2026-08-14). Ignore out-of-scope reports until the seek
+              // actually lands; the clamp below then only ever sees real
+              // playback, which is the one case it was written for.
+              if (awaitingSeekRef.current) {
+                if (ms < activeChapter.atMs || ms > activeChapter.endMs) return;
+                awaitingSeekRef.current = false;
+              }
               if (ms >= activeChapter.endMs) {
                 setCurrentMs(activeChapter.endMs);
                 setIsPlaying(false);

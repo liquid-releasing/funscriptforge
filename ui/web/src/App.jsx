@@ -868,7 +868,31 @@ export default function App() {
   // instead of an in-body button that scrolls out of view (dogfood 2026-06-16).
   // { hasNext, run } | null; cleared by the tab's unmount, so non-chapter tabs
   // never read a stale value (and the footer also gates on the tab id).
-  const [chapterNav, setChapterNav] = useState(null);
+  //
+  // Stored WITH the tab that reported it. A tab registers from an effect, i.e.
+  // after its first paint, so for one commit the ARRIVING tab's footer was
+  // being computed from the DEPARTING tab's object — long enough to flash the
+  // red "Accept and chain" on a gated tab, and that button is live (dogfood
+  // 2026-08-11, entering Events from Stanzas). Keying by tab makes "hasn't
+  // reported yet" distinguishable from "reported that it isn't gated", which a
+  // bare null cannot express.
+  const [chapterNavReg, setChapterNavReg] = useState({ tab: null, nav: null });
+  const chapterNavRegistrarsRef = useRef({});
+  // One STABLE registrar per tab — the tabs list this in their registration
+  // effect's dep array, so handing out a fresh function each render would make
+  // them re-register forever.
+  const chapterNavRegistrarFor = useCallback((forTab) => {
+    const cache = chapterNavRegistrarsRef.current;
+    if (!cache[forTab]) {
+      cache[forTab] = (nav) => setChapterNavReg((prev) => (
+        // A departing tab's unmount cleanup fires null AFTER the arriving tab
+        // has rendered, so it may only clear its OWN record — otherwise it
+        // wipes the record the new tab just wrote.
+        nav === null && prev.tab !== forTab ? prev : { tab: forTab, nav }
+      ));
+    }
+    return cache[forTab];
+  }, []);
   // Export tab registers its write action + completion so the footer can host
   // the "Export" primary and flip it to "Chain to Viewer" ✓ once it's written.
   const [exportReg, setExportReg] = useState(null);
@@ -1086,6 +1110,18 @@ export default function App() {
   // so they register null on the last chapter (the primary "chain to <next>" is
   // the action there).
   const CHAPTER_NAV_TABS = ['chapters', 'stim', 'events', 'phrases', 'stanzas', 'polish'];
+  // Only trust a registration that belongs to the tab currently on screen.
+  const chapterNav = chapterNavReg.tab === tab ? chapterNavReg.nav : null;
+  // A gated tab that hasn't reported yet must not offer a live chain. Guarded
+  // on chapterArr.length because ChaptersTab is the one tab that early-returns
+  // its empty state ABOVE its registration effect — with no chapters it never
+  // reports at all, and without this guard its chain would stay dead forever.
+  // No chapters also means there is nothing to gate, so the guard is honest
+  // rather than a workaround. (See the ChaptersTab hook-order note in the
+  // punch list: fixing that lets this simplify to a plain tab comparison.)
+  const chapterNavPending = CHAPTER_NAV_TABS.includes(tab)
+    && chapterNavReg.tab !== tab
+    && chapterArr.length > 0;
   // Completion gate — chapter-scoped tabs that REPORT `complete` (Phrases/
   // Stanzas today) drive the whole footer off it; tabs that don't
   // (Chapters/Channels/Events) leave it undefined → old behavior.
@@ -1136,6 +1172,16 @@ export default function App() {
       { key: 'phrase-walk', label: sw.label, onClick: sw.run, disabled: sw.disabled },
     ];
   }
+  // Still waiting on the arriving tab's registration — keep the primary quiet
+  // and inert for that commit. Rendering it TENTATIVE (white) rather than
+  // gating it avoids trading a red flash for an amber-banner flash: white to
+  // white is invisible, and an inert handler can't skip the gate if that frame
+  // happens to catch a click.
+  if (chapterNavPending) {
+    footerOnPrimary = () => {};
+    footerSecondary = null;
+    footerSecondaryActions = null;
+  }
 
   const handleAccept = async () => {
     if (gateMsg) {
@@ -1163,6 +1209,11 @@ export default function App() {
       try { await chapterNav.commit(); }
       catch (e) { console.warn('accept-and-chain commit failed', e); }
     }
+    // Chaining hands the next tab a FRESH chapter walk — start at chapter 1, not
+    // wherever the previous tab's walk happened to stop. `activeChapterId` is
+    // shared by every chapter-scoped tab, so finishing Events on the last chapter
+    // opened Channels on chapter 2 (dogfood 2026-08-11).
+    if (chapterArr[0]?.id != null) setActiveChapterId(chapterArr[0].id);
     // TODO: write chain file with the active tab's working state.
     console.log(`accept-and-chain: ${tab} → ${nextTab}`);
     setTab(nextTab);
@@ -1309,7 +1360,7 @@ export default function App() {
             project={typeof openedProject === 'object' ? openedProject : null}
             setAppError={setAppError}
             setBusy={setBusy}
-            onRegisterChapterNav={setChapterNav}
+            onRegisterChapterNav={chapterNavRegistrarFor('polish')}
           />
         )}
         {tab === 'viewer' && (
@@ -1349,7 +1400,7 @@ export default function App() {
             setPhrasesByPath={setPhrasesByPath}
             initialChapterId={activeChapterId}
             onActiveChapterChange={setActiveChapterId}
-            onRegisterChapterNav={setChapterNav}
+            onRegisterChapterNav={chapterNavRegistrarFor('chapters')}
             chapterEdits={project?.path ? chapterEditsByPath[project.path] : null}
             onChapterEditsChange={(edits) => {
               if (project?.path) setChapterEditsByPath((prev) => ({ ...prev, [project.path]: edits }));
@@ -1367,7 +1418,7 @@ export default function App() {
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}
-            onRegisterChapterNav={setChapterNav}
+            onRegisterChapterNav={chapterNavRegistrarFor('phrases')}
           />
         )}
         {tab === 'stanzas' && (
@@ -1381,7 +1432,7 @@ export default function App() {
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}
-            onRegisterChapterNav={setChapterNav}
+            onRegisterChapterNav={chapterNavRegistrarFor('stanzas')}
           />
         )}
         {tab === 'events' && (
@@ -1393,7 +1444,8 @@ export default function App() {
             trackBeats={trackBeats}
             initialChapterId={activeChapterId}
             onActiveChapterChange={setActiveChapterId}
-            onRegisterChapterNav={setChapterNav}
+            onRegisterChapterNav={chapterNavRegistrarFor('events')}
+            setAppError={setAppError}
           />
         )}
         {tab === 'stim' && (
@@ -1408,7 +1460,7 @@ export default function App() {
             onBusy={setBusy}
             initialChapterId={activeChapterId}
             onActiveChapterChange={setActiveChapterId}
-            onRegisterChapterNav={setChapterNav}
+            onRegisterChapterNav={chapterNavRegistrarFor('stim')}
           />
         )}
         {tab === 'export' && (
@@ -1474,7 +1526,7 @@ export default function App() {
           // Tentative (white, no ✓) while a gated chapter tab is being walked
           // OR while Export hasn't written yet (the "Export" verb precedes the
           // real red ✓ "Chain to Viewer"). Red + ✓ returns only on completion.
-          primaryTentative={chapterIncomplete || (tab === 'export' && !exportReg?.done)}
+          primaryTentative={chapterIncomplete || chapterNavPending || (tab === 'export' && !exportReg?.done)}
           // Project is a CHOICE fork ("Generate new" vs "Edit this"), not an
           // accept — so no lead checkmark on entry; it's just a door, not an
           // endorsed default the user has completed. Likewise a gated chapter
