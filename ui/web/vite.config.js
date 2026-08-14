@@ -44,9 +44,15 @@ export default defineConfig({
     port: 1430,
     strictPort: true,
     host: host || false,
-    hmr: host
-      ? { protocol: 'ws', host, port: 1431 }
-      : undefined,
+    // HMR is OFF for the release push (2026-08-14). Fast Refresh was applying
+    // in-flight edits — including broken intermediate states — straight into
+    // the session under test, so a dogfood result never reliably described the
+    // code we thought was running. Off means edits are inert until a manual
+    // reload, which makes "what am I testing?" answerable. Turning it back on
+    // is this one field:
+    //   hmr: host ? { protocol: 'ws', host, port: 1431 } : undefined,
+    // Read at dev-server startup only — restart `tauri:dev` after changing it.
+    hmr: false,
     watch: { ignored: ['**/src-tauri/**'] },
     fs: {
       // Vite restricts file access to the project root by default;
