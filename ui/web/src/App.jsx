@@ -1121,7 +1121,10 @@ export default function App() {
   // punch list: fixing that lets this simplify to a plain tab comparison.)
   const chapterNavPending = CHAPTER_NAV_TABS.includes(tab)
     && chapterNavReg.tab !== tab
-    && chapterArr.length > 0;
+    // chapterArr is NULL, not [], when a project has no chapter list yet — a
+    // partially-analysed funscript is exactly that, and this runs on every
+    // render, so a bare .length black-screened the app (dogfood 2026-08-14).
+    && (chapterArr?.length ?? 0) > 0;
   // Completion gate — chapter-scoped tabs that REPORT `complete` (Phrases/
   // Stanzas today) drive the whole footer off it; tabs that don't
   // (Chapters/Channels/Events) leave it undefined → old behavior.
@@ -1213,7 +1216,7 @@ export default function App() {
     // wherever the previous tab's walk happened to stop. `activeChapterId` is
     // shared by every chapter-scoped tab, so finishing Events on the last chapter
     // opened Channels on chapter 2 (dogfood 2026-08-11).
-    if (chapterArr[0]?.id != null) setActiveChapterId(chapterArr[0].id);
+    if (chapterArr?.[0]?.id != null) setActiveChapterId(chapterArr[0].id);
     // TODO: write chain file with the active tab's working state.
     console.log(`accept-and-chain: ${tab} → ${nextTab}`);
     setTab(nextTab);
