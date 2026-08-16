@@ -1515,6 +1515,26 @@ def cmd_contact_sheet(args):
         if _extract_frame(media, t_ms, out_path):
             thumbs.append({"index": i, "at_ms": t_ms, "path": str(out_path)})
 
+    # Publish one frame as the project's cover at `<forge_dir>/thumb.jpg`.
+    # The Library scanner already looks for exactly that path and already
+    # surfaces it as `project.thumbPath`; nothing had ever written it, so every
+    # card fell back to the film icon. Costs one file copy over frames we just
+    # generated anyway — no extra ffmpeg work, and no thumb appears until a
+    # project has actually been opened far enough to build its contact sheet.
+    if thumbs:
+        try:
+            import shutil
+            from videoflow.sidecar import forge_dir as _forge_dir
+            # A middle frame: openings are titles or black far more often than
+            # the middle of a scene is.
+            cover_src = Path(thumbs[len(thumbs) // 2]["path"])
+            cover_dst = _forge_dir(media) / "thumb.jpg"
+            if cover_src.exists() and (args.force or not cover_dst.exists()):
+                cover_dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(cover_src, cover_dst)
+        except Exception as exc:  # cover art is never worth failing the sheet
+            print(f"library cover thumb skipped: {exc}", file=sys.stderr)
+
     print(json.dumps({
         "ok": bool(thumbs),
         "media": media,
