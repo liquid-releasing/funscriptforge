@@ -536,6 +536,14 @@ function ProjectCard({ project, onClick, onReveal }) {
   // failure and show the icon for a cover that would have loaded fine.
   const [thumbFailed, setThumbFailed] = useState(false);
   useEffect(() => { setThumbFailed(false); }, [project.thumbPath]);
+  // Resolve BEFORE render rather than inline: toMediaUrl returns undefined for
+  // a path it can't convert, and `<img src={undefined}>` renders the browser's
+  // broken-image glyph WITHOUT firing onError — no load is attempted, so the
+  // fallback never runs and the card looks broken with nothing to catch it.
+  // Deciding here means we only ever mount an <img> that has a real src.
+  const thumbUrl = (project.thumbPath && !thumbFailed)
+    ? toMediaUrl(project.thumbPath)
+    : null;
   return (
     <div
       onClick={onClick}
@@ -566,10 +574,15 @@ function ProjectCard({ project, onClick, onReveal }) {
             was written when nothing populated thumbPath. `onError` falls back
             to the icon so a missing or unreadable cover degrades to the old
             look instead of a broken-image glyph. */}
-        {project.thumbPath && !thumbFailed
-          ? <img src={toMediaUrl(project.thumbPath)}
+        {thumbUrl
+          ? <img src={thumbUrl}
                  alt=""
-                 onError={() => setThumbFailed(true)}
+                 onError={() => {
+                   // Log the URL we actually tried — a cover that fails is
+                   // otherwise indistinguishable from one that was never there.
+                   console.warn('library cover failed to load', thumbUrl, project.thumbPath);
+                   setThumbFailed(true);
+                 }}
                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <Icon name={project.kind === 'audio' ? 'music' : 'film'} size={32} />}
         {/* Edit / open-project button — top-right overlay on the thumb.
