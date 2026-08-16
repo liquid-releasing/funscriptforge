@@ -1874,10 +1874,10 @@ def cmd_export(args):
                     if _seam_windows is None:
                         _seam_windows = _estim_seam_windows(src)
                     if len(_seam_windows) >= 2:
-                        from forge.stim_config import match_chapter_volumes
+                        from forge.stim_config import match_chapter_seams
                         try:
                             doc = json.loads(fp.read_text(encoding="utf-8"))
-                            doc["actions"] = match_chapter_volumes(
+                            doc["actions"] = match_chapter_seams(
                                 suffix, doc.get("actions") or [], _seam_windows,
                             )
                             (dest / fp.name).write_text(json.dumps(doc), encoding="utf-8")
@@ -5608,9 +5608,9 @@ def _polish_generate_estim(
     # Builder / Scene Closer are left alone; their ramp IS the intent.
     if match_chapter_volume:
         _emit_progress("Forging E-Stim — matching volume across chapters…")
-        from forge.stim_config import match_chapter_volumes
+        from forge.stim_config import match_chapter_seams
         for suf in list(raw):
-            raw[suf] = match_chapter_volumes(suf, raw[suf], windows)
+            raw[suf] = match_chapter_seams(suf, raw[suf], windows)
 
     # Bake authored events into the channels before clamping, so the device
     # signal carries the effects (restim/forgeplayer play channels, not events).

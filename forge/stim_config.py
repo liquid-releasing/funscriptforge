@@ -189,6 +189,19 @@ VIRTUAL_CHARACTERS: dict[str, dict] = {
 # scales these; motion/frequency/pulse channels are left untouched.
 _VOLUME_CHANNELS = ("volume", "volume-prostate")
 
+# Channels the SEAM repair covers: the continuous parameter channels, whose
+# value is a level that should carry across a chapter change (user, 2026-08-16:
+# "intensity, frequency, volume, pulse rise time, volume-prostate ... none of
+# these should be affected by a chapter transition").
+#
+# alpha / beta / alpha-prostate / beta-prostate are deliberately NOT here. Those
+# are phase channels encoding WHERE the sensation sits, so a dip in them is real
+# motion, not a seam artifact — smoothing it would change the sensation instead
+# of repairing a boundary.
+SEAM_MATCHED_CHANNELS = (
+    "volume", "volume-prostate", "frequency", "pulse_frequency", "pulse_rise_time",
+)
+
 
 def _slug(s: str) -> str:
     """Slugify a character label/id (``Scene Builder`` -> ``scene_builder``)."""
@@ -266,7 +279,7 @@ def _plateau(actions: list[dict], lo: int, hi: int) -> Optional[int]:
     return vals[len(vals) // 2]
 
 
-def match_chapter_volumes(
+def match_chapter_seams(
     channel_name: str,
     actions: list[dict],
     windows: list[tuple],
@@ -287,9 +300,15 @@ def match_chapter_volumes(
     no-op. Instead the plateau is sampled from OUTSIDE the fade on each side,
     and the notch is lifted to the line between them.
 
-    Values are only ever raised, never lowered, so real quiet content inside a
-    chapter survives. The fade at the very start and very end of the TRACK is
-    left alone — a scene should still open and close.
+    The seam window is REPLACED by that line, not merely lifted toward it. An
+    earlier version only ever raised values, which quietly made half the problem
+    unfixable: `frequency` and `volume` dive at a boundary, but `pulse_rise_time`
+    SPIKES (measured: a plateau of ~30 jumping to 70 and decaying over 10s), and
+    a raise-only rule can't touch that. The line meets the untouched data at both
+    window edges, so replacing introduces no new discontinuity.
+
+    The fade at the very start and very end of the TRACK is left alone — a scene
+    should still open and close.
 
     ``windows`` is the per-chapter ``(lo_ms, hi_ms, character_id, ...)`` list
     used to generate the channels. A boundary touching a chapter with a shaped
@@ -298,7 +317,7 @@ def match_chapter_volumes(
 
     Non-volume channels pass through unchanged.
     """
-    if channel_name not in _VOLUME_CHANNELS:
+    if channel_name not in SEAM_MATCHED_CHANNELS:
         return actions
     if not actions or len(windows) < 2:
         return actions
@@ -345,8 +364,7 @@ def match_chapter_volumes(
                 continue
             frac = (a["at"] - lo_edge) / span
             target = before + (after - before) * frac
-            if target > a["pos"]:
-                a["pos"] = int(round(0 if target < 0 else (100 if target > 100 else target)))
+            a["pos"] = int(round(0 if target < 0 else (100 if target > 100 else target)))
 
     return out
 
