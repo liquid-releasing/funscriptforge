@@ -1868,7 +1868,14 @@ def cmd_export(args):
                 # whole feature silently did nothing for anyone who had stamped
                 # Polish (dogfood 2026-08-16). Repair on the way into the
                 # bundle; the stamped files on disk are left as authored.
-                suffix = next((s for s in ("volume-prostate", "volume")
+                # Derived from SEAM_MATCHED_CHANNELS, never a local list: this
+                # was hardcoded to the two volume channels, so when the set
+                # broadened to frequency / pulse_frequency / pulse_rise_time
+                # those three kept being copied verbatim and the widened fix
+                # silently did nothing for them (dogfood 2026-08-16). Longest
+                # first so "volume-prostate" wins over "volume".
+                from forge.stim_config import SEAM_MATCHED_CHANNELS
+                suffix = next((s for s in sorted(SEAM_MATCHED_CHANNELS, key=len, reverse=True)
                                if fp.name.endswith(f".{s}.funscript")), None)
                 if (args.match_chapter_volume and sid == "estim3p" and suffix):
                     if _seam_windows is None:
