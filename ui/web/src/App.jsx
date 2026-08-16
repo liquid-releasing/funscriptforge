@@ -684,11 +684,20 @@ export default function App() {
     const filename = path.split(/[\\/]/).pop() || 'project';
     const fallbackTitle = filename.replace(/\.funscript$/i, '');
     const placeholderTitle = meta.title || fallbackTitle;
+    // Carry the caller's media hints into the placeholder too. Library already
+    // knows the matched media at click time, and dropping it meant the Source
+    // media block unmounted for the length of the load and then reappeared,
+    // while `openedMediaPath` churned null → real and re-ran the sidecar reads.
+    // Keeping it means the header describes the project you clicked from the
+    // first frame. (`isVideoOnly` is gated on `!isQuiet`, so a pending project
+    // carrying mediaPath is still not mistaken for a video-only one.)
     setOpenedProject({
       id: `pending:${path}`,
       path,
       title: placeholderTitle,
       duration: '—',
+      ...(meta.mediaPath ? { mediaPath: meta.mediaPath } : {}),
+      ...(meta.mediaKind ? { mediaKind: meta.mediaKind } : {}),
       _pending: true,
     });
     setIsLoadingProject(true);
