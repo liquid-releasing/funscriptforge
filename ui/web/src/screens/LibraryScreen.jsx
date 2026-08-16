@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Pill, Icon, Button } from 'forgemoment';
+import { toMediaUrl } from '../lib/mediaUrl.js';
 import {
   getConfigPath,
   loadConfig,
@@ -531,6 +532,10 @@ function ProjectGrid({ projects, onClick, onReveal }) {
 }
 
 function ProjectCard({ project, onClick, onReveal }) {
+  // Reset per project so a recycled card doesn't inherit a previous project's
+  // failure and show the icon for a cover that would have loaded fine.
+  const [thumbFailed, setThumbFailed] = useState(false);
+  useEffect(() => { setThumbFailed(false); }, [project.thumbPath]);
   return (
     <div
       onClick={onClick}
@@ -553,9 +558,18 @@ function ProjectCard({ project, onClick, onReveal }) {
         borderBottom: '1px solid var(--border)',
         position: 'relative',
       }}>
-        {project.thumbPath
-          ? <img src={`asset://localhost/${project.thumbPath}`}
+        {/* toMediaUrl, not a hand-built asset:// string: on Windows a raw path
+            interpolates as `asset://localhost/D:\dir\thumb.jpg`, whose
+            backslashes and drive colon are never encoded, so the image simply
+            fails to load. This line had never actually run until the contact
+            sheet started publishing thumb.jpg (2026-08-16) — the placeholder
+            was written when nothing populated thumbPath. `onError` falls back
+            to the icon so a missing or unreadable cover degrades to the old
+            look instead of a broken-image glyph. */}
+        {project.thumbPath && !thumbFailed
+          ? <img src={toMediaUrl(project.thumbPath)}
                  alt=""
+                 onError={() => setThumbFailed(true)}
                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <Icon name={project.kind === 'audio' ? 'music' : 'film'} size={32} />}
         {/* Edit / open-project button — top-right overlay on the thumb.
