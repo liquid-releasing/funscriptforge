@@ -177,6 +177,11 @@ VIRTUAL_CHARACTERS: dict[str, dict] = {
         "base": "Scene Builder",       # Edger preset to generate from
         "envelope": "descending",      # scale volume 1.0 → floor across the span
         "envelope_floor": 0.2,         # intensity at the end of the span (0..1)
+        # Fraction of the span held at FULL intensity before the taper starts.
+        # 0.75 = the wind-down happens in the closing quarter. Tapering from the
+        # very first beat made the chapter read as already-ending the moment it
+        # began; a closer should hold the scene and then let it go (user, 2026-08-16).
+        "envelope_hold": 0.75,
     },
 }
 
@@ -228,6 +233,76 @@ def virtual_character_records() -> list[dict]:
     return out
 
 
+# Characters whose volume shape IS the point — a deliberate ramp that opens or
+# closes a scene. Seam-matching would flatten exactly what they exist to do, so
+# a chapter assigned one of these is never lifted (its NEIGHBOURS still are, and
+# they lift toward it, which is what keeps the arc continuous).
+SHAPED_CHARACTERS = frozenset({"scene_builder", "scene_closer"})
+
+# How long the lifted head takes to ease back to the chapter's own curve.
+DEFAULT_SEAM_DECAY_MS = 12_000
+
+
+def match_chapter_volumes(
+    channel_name: str,
+    actions: list[dict],
+    windows: list[tuple],
+    *,
+    decay_ms: int = DEFAULT_SEAM_DECAY_MS,
+) -> list[dict]:
+    """Remove the volume STEP at each chapter seam.
+
+    Channels are generated one chapter at a time and concatenated, and Edger's
+    volume ramp is hard-coded rising from 0 — so every chapter restarts near
+    silence and each boundary lands as an audible drop. This repairs the seam
+    without touching how any chapter is generated: the incoming chapter is
+    lifted to the level the outgoing one ended at, then eased back to its own
+    curve over ``decay_ms``. Only the HEAD of a chapter moves; the body keeps
+    its character exactly.
+
+    ``windows`` is the per-chapter ``(lo_ms, hi_ms, character_id, ...)`` list
+    used to generate the channels. Chapters assigned a shaped character
+    (Scene Builder / Scene Closer) are left alone — see SHAPED_CHARACTERS.
+
+    Non-volume channels pass through unchanged.
+    """
+    if channel_name not in _VOLUME_CHANNELS:
+        return actions
+    if not actions or len(windows) < 2:
+        return actions
+
+    out = [{"at": int(a["at"]), "pos": int(a["pos"])} for a in
+           sorted(actions, key=lambda a: a["at"])]
+
+    for i in range(1, len(windows)):
+        wlo, whi = windows[i][0], windows[i][1]
+        cid = windows[i][2] if len(windows[i]) > 2 else None
+        if wlo is None or whi is None:
+            continue
+        if _slug(cid or "") in SHAPED_CHARACTERS:
+            continue
+
+        prev_level = next((a["pos"] for a in reversed(out) if a["at"] < wlo), None)
+        head_idx = next((j for j, a in enumerate(out) if a["at"] >= wlo), None)
+        if prev_level is None or head_idx is None:
+            continue
+        delta = prev_level - out[head_idx]["pos"]
+        if delta == 0:
+            continue
+
+        # Never spend more than half a chapter recovering — on a short chapter a
+        # fixed 12s ramp would shift most of it and read as a different scene.
+        span = min(decay_ms, max(1, (whi - wlo) // 2))
+        for a in out[head_idx:]:
+            offset = a["at"] - wlo
+            if offset > span:
+                break
+            lifted = a["pos"] + delta * (1.0 - offset / span)
+            a["pos"] = int(round(0 if lifted < 0 else (100 if lifted > 100 else lifted)))
+
+    return out
+
+
 def apply_virtual_envelope(
     channel_name: str,
     actions: list[dict],
@@ -237,8 +312,12 @@ def apply_virtual_envelope(
 ) -> list[dict]:
     """Apply a virtual character's post-process to one channel's actions.
 
-    ``descending``: scale the volume channels by a linear taper from 1.0 at
-    ``window_lo`` down to ``envelope_floor`` at ``window_hi`` — the unbuild.
+    ``descending``: hold the volume channels at full for the first
+    ``envelope_hold`` of the span, then taper linearly to ``envelope_floor`` at
+    ``window_hi`` — the unbuild. With the default hold of 0.75 the wind-down
+    lives entirely in the closing quarter, which is what "closing a scene"
+    means: the scene runs at strength and then releases, rather than fading
+    from its first beat. A hold of 0.0 restores the original full-span taper.
     Non-volume channels and non-descending specs pass through unchanged.
     """
     if not spec or spec.get("envelope") != "descending":
@@ -246,11 +325,18 @@ def apply_virtual_envelope(
     if channel_name not in _VOLUME_CHANNELS:
         return actions
     floor = float(spec.get("envelope_floor", 0.2))
+    # Clamped below 1.0: a hold of exactly 1.0 would leave no room to taper in
+    # and make the closer a no-op that silently stops closing anything.
+    hold = float(spec.get("envelope_hold", 0.0))
+    hold = 0.0 if hold < 0.0 else (0.99 if hold > 0.99 else hold)
     span = max(1, window_hi - window_lo)
     out: list[dict] = []
     for a in actions:
         frac = (a["at"] - window_lo) / span
         frac = 1.0 if frac > 1.0 else (0.0 if frac < 0.0 else frac)
-        factor = 1.0 - (1.0 - floor) * frac
+        if frac <= hold:
+            factor = 1.0
+        else:
+            factor = 1.0 - (1.0 - floor) * ((frac - hold) / (1.0 - hold))
         out.append({"at": a["at"], "pos": int(round(a["pos"] * factor))})
     return out

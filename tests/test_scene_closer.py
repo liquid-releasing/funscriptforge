@@ -66,12 +66,36 @@ class TestDescendingEnvelope(unittest.TestCase):
         self.assertEqual(short[-1]["pos"], round(80 * floor))
         self.assertEqual(long[-1]["pos"], round(80 * floor))
 
-    def test_midpoint_is_halfway(self):
+    def test_midpoint_is_still_at_full(self):
+        # The wind-down lives in the closing quarter, so the middle of the span
+        # is untouched. (This replaced a midpoint-is-halfway test when the hold
+        # landed — fading from the first beat made a chapter read as ending
+        # before it had started.)
         out = apply_virtual_envelope("volume", self._flat(0, 1000), 0, 1000, _SPEC)
+        self.assertEqual(out[len(out) // 2]["pos"], 80)
+
+    def test_full_until_the_hold_point_then_drops(self):
+        out = apply_virtual_envelope("volume", self._flat(0, 1000, 10), 0, 1000, _SPEC)
+        hold = _SPEC["envelope_hold"]
+        at_hold = {a["at"]: a["pos"] for a in out}
+        # Everything up to the hold point is untouched...
+        for t in range(0, int(1000 * hold) + 1, 10):
+            self.assertEqual(at_hold[t], 80, f"expected full volume at {t}ms")
+        # ...and it is strictly falling somewhere after it.
+        self.assertLess(at_hold[1000], 80)
+
+    def test_hold_zero_restores_the_full_span_taper(self):
+        spec = dict(_SPEC, envelope_hold=0.0)
+        out = apply_virtual_envelope("volume", self._flat(0, 1000), 0, 1000, spec)
+        floor = spec["envelope_floor"]
         mid = out[len(out) // 2]
-        floor = _SPEC["envelope_floor"]
-        expected = round(80 * (1.0 - (1.0 - floor) * 0.5))
-        self.assertEqual(mid["pos"], expected)
+        self.assertEqual(mid["pos"], round(80 * (1.0 - (1.0 - floor) * 0.5)))
+
+    def test_hold_of_one_still_closes(self):
+        # Clamped below 1.0 — otherwise the closer would silently stop closing.
+        spec = dict(_SPEC, envelope_hold=1.0)
+        out = apply_virtual_envelope("volume", self._flat(0, 1000), 0, 1000, spec)
+        self.assertLess(out[-1]["pos"], 80)
 
     def test_non_volume_channels_untouched(self):
         acts = self._flat(0, 1000)
