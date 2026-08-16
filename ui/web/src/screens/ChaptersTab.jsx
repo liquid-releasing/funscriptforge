@@ -822,7 +822,48 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     return () => document.removeEventListener('keydown', onKey);
   }, [chapters, active.id, active.atMs, active.endMs]);
 
-  // Empty-state early return AFTER all hooks have run.
+  // ── Footer chapter-nav registration ─────────────────────────────────
+  // These live ABOVE the empty-state early return because they contain hooks,
+  // and hooks must run on every render. They used to sit ~250 lines below it,
+  // which meant a `chapters.length` transition of 0 → N without a remount —
+  // sitting on this tab while analysis finishes and chapters populate —
+  // rendered more hooks than the previous render and threw. The comment here
+  // claimed "AFTER all hooks have run"; it wasn't true.
+  //
+  // Only the hook CALLS need to be up here. The `.current =` assignments stay
+  // further down next to the handlers they close over: with zero chapters the
+  // early return means they never run, but the effect registers `null` in that
+  // case anyway, so nothing can call a stub.
+  const navIdx = chapters.findIndex((c) => c.id === active.id);
+  const isLastChapter = chapters.length > 0 && navIdx >= chapters.length - 1;
+  const acceptRunRef = useRef(() => {});
+  const commitAllRef = useRef(() => {});
+  // Completion gate — every chapter considered (accepted, toned or not) unlocks
+  // the footer's "Accept and chain to Phrases". Until then the red primary is
+  // the per-chapter walk (App.jsx reads `complete`).
+  const chaptersAllAccepted = chapters.length > 0
+    && chapters.every((c) => acceptedChapterIds.has(c.id));
+  useEffect(() => {
+    if (!onRegisterChapterNav) return undefined;
+    onRegisterChapterNav(
+      chapters.length > 0
+        ? {
+            hasNext: !isLastChapter,
+            label: isLastChapter ? 'Accept last chapter changes' : 'Accept and next chapter',
+            run: () => acceptRunRef.current(),
+            commit: () => commitAllRef.current(),
+            // Drives the footer completion gate (same contract as Phrases/
+            // Stanzas): no chaining until every chapter has been considered.
+            complete: chaptersAllAccepted,
+            considered: chapters.filter((c) => acceptedChapterIds.has(c.id)).length,
+            total: chapters.length,
+          }
+        : null,
+    );
+    return () => onRegisterChapterNav(null);
+  }, [isLastChapter, chapters.length, onRegisterChapterNav, chaptersAllAccepted, acceptedChapterIds]);
+
+  // Empty-state early return — now genuinely after all hooks have run.
   if (chapters.length === 0) {
     return (
       <ChaptersEmptyState
@@ -1075,9 +1116,6 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // the handler fresh without re-registering on every chapter change; only
   // last-ness / chapter-count toggles re-register. (dogfood 2026-06-16: the
   // in-body accept scrolled out of view.)
-  const navIdx = chapters.findIndex((c) => c.id === active.id);
-  const isLastChapter = chapters.length > 0 && navIdx >= chapters.length - 1;
-  const acceptRunRef = useRef(() => {});
   acceptRunRef.current = handleAcceptTone;
   // Commit ALL selected chapter tones at once — apply the toned shape to the
   // working funscript (mergeWorkingActions) AND persist the whole tone map to
@@ -1087,7 +1125,6 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // un-Accepted tones. (Per-chapter 'tame' still needs its own Accept — its
   // backend transform isn't part of the synchronous merge; the selection is
   // persisted regardless so it's remembered.)
-  const commitAllRef = useRef(() => {});
   commitAllRef.current = async () => {
     const allAccepted = new Set(acceptedChapterIds);
     chapters.forEach((c) => {
@@ -1126,31 +1163,6 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
         .catch((err) => console.warn('ChaptersTab: accept-all-untoned persist failed', err));
     }
   };
-  // Completion gate — every chapter considered (accepted, toned or not) unlocks
-  // the footer's "Accept and chain to Phrases". Until then the red primary is
-  // the per-chapter walk (App.jsx reads `complete`).
-  const chaptersAllAccepted = chapters.length > 0
-    && chapters.every((c) => acceptedChapterIds.has(c.id));
-  useEffect(() => {
-    if (!onRegisterChapterNav) return undefined;
-    onRegisterChapterNav(
-      chapters.length > 0
-        ? {
-            hasNext: !isLastChapter,
-            label: isLastChapter ? 'Accept last chapter changes' : 'Accept and next chapter',
-            run: () => acceptRunRef.current(),
-            commit: () => commitAllRef.current(),
-            // Drives the footer completion gate (same contract as Phrases/
-            // Stanzas): no chaining until every chapter has been considered.
-            complete: chaptersAllAccepted,
-            considered: chapters.filter((c) => acceptedChapterIds.has(c.id)).length,
-            total: chapters.length,
-          }
-        : null,
-    );
-    return () => onRegisterChapterNav(null);
-  }, [isLastChapter, chapters.length, onRegisterChapterNav, chaptersAllAccepted, acceptedChapterIds]);
-
   return (
     <section style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* Page header */}
