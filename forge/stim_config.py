@@ -234,13 +234,36 @@ def virtual_character_records() -> list[dict]:
 
 
 # Characters whose volume shape IS the point — a deliberate ramp that opens or
-# closes a scene. Seam-matching would flatten exactly what they exist to do, so
-# a chapter assigned one of these is never lifted (its NEIGHBOURS still are, and
-# they lift toward it, which is what keeps the arc continuous).
+# closes a scene.
 SHAPED_CHARACTERS = frozenset({"scene_builder", "scene_closer"})
 
-# How long the lifted head takes to ease back to the chapter's own curve.
-DEFAULT_SEAM_DECAY_MS = 12_000
+# ...but each of them only means it on ONE side. A Builder's intent is that it
+# opens from nothing; the fade-out at its END is just the per-window artifact
+# this pass exists to remove. A Closer is the mirror. Protecting both sides of a
+# shaped chapter left a Builder sitting mid-track with an unrepaired seam behind
+# it (dogfood 2026-08-16: ch2 was a Builder, and the 734.8s seam stayed at 6
+# while every unshaped seam went to ~96).
+_PROTECTS_ITS_OPENING = frozenset({"scene_builder"})
+_PROTECTS_ITS_ENDING = frozenset({"scene_closer"})
+
+# Half-width of the seam repair. Measured dips are 1-2s of floor plus a few
+# seconds of ramp either side, so ~6s each way covers a boundary without
+# reaching into the body of a chapter.
+DEFAULT_SEAM_HALF_WIDTH_MS = 6_000
+
+# How far past the repair window to sample for the chapter's real level. The
+# plateau is what the seam should hold, and it has to be read from OUTSIDE the
+# fade or it just measures the fade.
+_PLATEAU_PROBE_MS = 15_000
+
+
+def _plateau(actions: list[dict], lo: int, hi: int) -> Optional[int]:
+    """The representative level over [lo, hi] — the median, which ignores the
+    ripple on the plateau and any single stray sample."""
+    vals = sorted(a["pos"] for a in actions if lo <= a["at"] <= hi)
+    if not vals:
+        return None
+    return vals[len(vals) // 2]
 
 
 def match_chapter_volumes(
@@ -248,21 +271,30 @@ def match_chapter_volumes(
     actions: list[dict],
     windows: list[tuple],
     *,
-    decay_ms: int = DEFAULT_SEAM_DECAY_MS,
+    half_width_ms: int = DEFAULT_SEAM_HALF_WIDTH_MS,
 ) -> list[dict]:
-    """Remove the volume STEP at each chapter seam.
+    """Hold the volume plateau across INTERNAL chapter boundaries.
 
-    Channels are generated one chapter at a time and concatenated, and Edger's
-    volume ramp is hard-coded rising from 0 — so every chapter restarts near
-    silence and each boundary lands as an audible drop. This repairs the seam
-    without touching how any chapter is generated: the incoming chapter is
-    lifted to the level the outgoing one ended at, then eased back to its own
-    curve over ``decay_ms``. Only the HEAD of a chapter moves; the body keeps
-    its character exactly.
+    Channels are generated one chapter at a time and concatenated. Each
+    generated chapter fades in at its start and back out at its end, so every
+    internal boundary is a V-notch: the level dives to the floor and climbs
+    straight back. (Measured on a real 34-minute export: a plateau of 97 with
+    1-2s dips to 6 at all six internal seams.)
+
+    The repair spans the seam rather than one side of it. Both sides dive, so
+    reading the outgoing chapter's last sample as a target level just measures
+    the bottom of the notch — an earlier version did exactly that and was a
+    no-op. Instead the plateau is sampled from OUTSIDE the fade on each side,
+    and the notch is lifted to the line between them.
+
+    Values are only ever raised, never lowered, so real quiet content inside a
+    chapter survives. The fade at the very start and very end of the TRACK is
+    left alone — a scene should still open and close.
 
     ``windows`` is the per-chapter ``(lo_ms, hi_ms, character_id, ...)`` list
-    used to generate the channels. Chapters assigned a shaped character
-    (Scene Builder / Scene Closer) are left alone — see SHAPED_CHARACTERS.
+    used to generate the channels. A boundary touching a chapter with a shaped
+    character keeps that chapter's side of the fade (see SHAPED_CHARACTERS): a
+    Builder opening from silence and a Closer winding down are the intent.
 
     Non-volume channels pass through unchanged.
     """
@@ -275,30 +307,46 @@ def match_chapter_volumes(
            sorted(actions, key=lambda a: a["at"])]
 
     for i in range(1, len(windows)):
+        prev_lo, prev_hi = windows[i - 1][0], windows[i - 1][1]
         wlo, whi = windows[i][0], windows[i][1]
+        if wlo is None or whi is None or prev_lo is None:
+            continue
+        prev_cid = windows[i - 1][2] if len(windows[i - 1]) > 2 else None
         cid = windows[i][2] if len(windows[i]) > 2 else None
-        if wlo is None or whi is None:
-            continue
-        if _slug(cid or "") in SHAPED_CHARACTERS:
-            continue
-
-        prev_level = next((a["pos"] for a in reversed(out) if a["at"] < wlo), None)
-        head_idx = next((j for j, a in enumerate(out) if a["at"] >= wlo), None)
-        if prev_level is None or head_idx is None:
-            continue
-        delta = prev_level - out[head_idx]["pos"]
-        if delta == 0:
+        # The seam touches the outgoing chapter's TAIL and the incoming
+        # chapter's HEAD, so each side is judged by what that chapter protects
+        # on that side — not by whether it is "shaped" at all.
+        outgoing_shaped = _slug(prev_cid or "") in _PROTECTS_ITS_ENDING
+        incoming_shaped = _slug(cid or "") in _PROTECTS_ITS_OPENING
+        if outgoing_shaped and incoming_shaped:
             continue
 
-        # Never spend more than half a chapter recovering — on a short chapter a
-        # fixed 12s ramp would shift most of it and read as a different scene.
-        span = min(decay_ms, max(1, (whi - wlo) // 2))
-        for a in out[head_idx:]:
-            offset = a["at"] - wlo
-            if offset > span:
+        # Never reach more than a third into either neighbour: on a short
+        # chapter a fixed window would rewrite most of it.
+        back = min(half_width_ms, max(1, (wlo - prev_lo) // 3))
+        fwd = min(half_width_ms, max(1, (whi - wlo) // 3))
+        lo_edge, hi_edge = wlo - back, wlo + fwd
+
+        before = _plateau(out, lo_edge - _PLATEAU_PROBE_MS, lo_edge)
+        after = _plateau(out, hi_edge, hi_edge + _PLATEAU_PROBE_MS)
+        if before is None or after is None:
+            continue
+
+        span = max(1, hi_edge - lo_edge)
+        for a in out:
+            if a["at"] <= lo_edge:
+                continue
+            if a["at"] >= hi_edge:
                 break
-            lifted = a["pos"] + delta * (1.0 - offset / span)
-            a["pos"] = int(round(0 if lifted < 0 else (100 if lifted > 100 else lifted)))
+            # A shaped neighbour keeps its own side of the seam untouched.
+            if outgoing_shaped and a["at"] < wlo:
+                continue
+            if incoming_shaped and a["at"] >= wlo:
+                continue
+            frac = (a["at"] - lo_edge) / span
+            target = before + (after - before) * frac
+            if target > a["pos"]:
+                a["pos"] = int(round(0 if target < 0 else (100 if target > 100 else target)))
 
     return out
 

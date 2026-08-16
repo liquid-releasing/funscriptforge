@@ -954,6 +954,50 @@ def _export_finalize(actions: list, *, blend: bool, smooth: bool) -> list:
     return result
 
 
+def _estim_seam_windows(funscript_path: str) -> list[tuple]:
+    """`(lo_ms, hi_ms, character_id)` per chapter — the seam-matching view of
+    the Channels authoring.
+
+    Mirrors the window construction in `_polish_generate_estim`, but reads only
+    the sidecars: the STAMPED station files were generated in a previous
+    session and we need their chapter boundaries after the fact. Returns []
+    when there are no chapters (nothing to match across).
+    """
+    from forge.channels_defaults import default_character_for
+    from videoflow.sidecar import forge_dir
+
+    stem = Path(funscript_path).stem
+    chap_path = forge_dir(funscript_path) / f"{stem}.chapters.json"
+    chapters = []
+    if chap_path.exists():
+        try:
+            chapters = json.loads(chap_path.read_text(encoding="utf-8")).get("chapters") or []
+        except (OSError, json.JSONDecodeError):
+            chapters = []
+    if not chapters:
+        return []
+
+    chars_doc = {}
+    cp = _characters_path(funscript_path)
+    if cp.exists():
+        try:
+            chars_doc = json.loads(cp.read_text(encoding="utf-8")).get("characters") or {}
+        except (OSError, json.JSONDecodeError):
+            chars_doc = {}
+
+    n = len(chapters)
+    windows = []
+    for i, ch in enumerate(chapters):
+        # Positional `ch{i+1}` ids, same convention characters.json keys by.
+        assign = chars_doc.get(f"ch{i + 1}") or {}
+        windows.append((
+            ch.get("at_ms", ch.get("atMs", ch.get("start_ms"))),
+            ch.get("end_ms", ch.get("endMs")),
+            assign.get("characterId") or default_character_for(i, n),
+        ))
+    return windows
+
+
 def _collect_events_yaml(target) -> str | None:
     """Render a fresh playable Edger `events.yml` body from `<stem>.feel.yml`.
 
@@ -1804,6 +1848,8 @@ def cmd_export(args):
                 passes = {}
         polish_root = fdir / "polish"
         stations_meta = {}
+        # Built lazily — only a stamped e-stim pass needs them.
+        _seam_windows = None
         for sid, p in passes.items():
             if not (isinstance(p, dict) and p.get("accepted")):
                 continue
@@ -1816,7 +1862,32 @@ def cmd_export(args):
             dest.mkdir(parents=True, exist_ok=True)
             files = []
             for fp in sorted(sdir.glob("*.funscript")):
-                shutil.copy2(fp, dest / fp.name)
+                # A STAMPED e-stim pass was generated per chapter in an earlier
+                # session, so it carries the same V-notch at every seam as a
+                # freshly generated one — and copying it verbatim was how the
+                # whole feature silently did nothing for anyone who had stamped
+                # Polish (dogfood 2026-08-16). Repair on the way into the
+                # bundle; the stamped files on disk are left as authored.
+                suffix = next((s for s in ("volume-prostate", "volume")
+                               if fp.name.endswith(f".{s}.funscript")), None)
+                if (args.match_chapter_volume and sid == "estim3p" and suffix):
+                    if _seam_windows is None:
+                        _seam_windows = _estim_seam_windows(src)
+                    if len(_seam_windows) >= 2:
+                        from forge.stim_config import match_chapter_volumes
+                        try:
+                            doc = json.loads(fp.read_text(encoding="utf-8"))
+                            doc["actions"] = match_chapter_volumes(
+                                suffix, doc.get("actions") or [], _seam_windows,
+                            )
+                            (dest / fp.name).write_text(json.dumps(doc), encoding="utf-8")
+                        except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+                            print(f"seam match skipped for {fp.name}: {exc}", file=sys.stderr)
+                            shutil.copy2(fp, dest / fp.name)
+                    else:
+                        shutil.copy2(fp, dest / fp.name)
+                else:
+                    shutil.copy2(fp, dest / fp.name)
                 artifacts.append({
                     "path": f"stations/{sid}/{fp.name}", "kind": "funscript",
                     "role": "device", "station": sid,
