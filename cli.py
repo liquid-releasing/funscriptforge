@@ -1833,7 +1833,10 @@ def cmd_export(args):
         if inc_estim and "estim3p" not in stations_meta:
             _emit_progress("Export — generating e-stim channels (no stamped pass)…")
             try:
-                chans = _polish_generate_estim(src, None, _polish_mod.STATIONS["estim3p"])
+                chans = _polish_generate_estim(
+                    src, None, _polish_mod.STATIONS["estim3p"],
+                    match_chapter_volume=args.match_chapter_volume,
+                )
             except ValueError:
                 chans = {}            # no character assigned / tools missing — nothing to do
             if chans:
@@ -4522,6 +4525,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument("--media", metavar="PATH", help="Media file for hero + per-chapter frame thumbnails (optional).")
     p_exp.add_argument("--blend-seams", action="store_true", help="Apply blend_seams to the main funscript.")
     p_exp.add_argument("--final-smooth", action="store_true", help="Apply final_smooth to the main funscript.")
+    p_exp.add_argument(
+        "--match-chapter-volume", action="store_true",
+        help=(
+            "Match e-stim volume across chapter seams. Channels are generated one "
+            "chapter at a time and Edger's ramp restarts from 0, so every boundary "
+            "drops; this lifts each chapter to the previous one's ending level and "
+            "eases back to its own curve. Scene Builder / Scene Closer chapters are "
+            "left alone."
+        ),
+    )
     p_exp.add_argument("--stim-wav", action="store_true", help="Render audio/stim.wav from the e-stim channels (opt-in).")
     p_exp.add_argument("--stim-mp3", action="store_true", help="Render audio/stim.mp3 from the e-stim channels (opt-in; via ffmpeg).")
     p_exp.add_argument("--beat-mp3", action=argparse.BooleanOptionalAction, default=True, help="Render audio/beat.mp3 (metronome click track) from the beatmap sidecar. On by default; --no-beat-mp3 to skip.")
@@ -5359,7 +5372,13 @@ def _bake_events_into_channels(funscript_path: str, stem: str, raw: dict,
         shutil.rmtree(evdir, ignore_errors=True)
 
 
-def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> dict:
+def _polish_generate_estim(
+    funscript_path: str,
+    knobs: dict | None,
+    station,
+    *,
+    match_chapter_volume: bool = False,
+) -> dict:
     """Generate the whole-track e-stim 9-channel set and clamp each channel.
 
     E-stim characters are assigned per chapter (`<stem>.characters.json`), so
@@ -5490,6 +5509,17 @@ def _polish_generate_estim(funscript_path: str, knobs: dict | None, station) -> 
 
     if not raw:
         raise ValueError("No e-stim to generate — assign a character to at least one chapter in the Channels tab first.")
+
+    # Repair the volume step at each chapter seam, as close to its source as
+    # possible: it is an artifact of generating one window at a time (Edger's
+    # ramp restarts from 0 every chapter), and everything downstream — authored
+    # events, the Passages contour — is deliberate. Chapters assigned Scene
+    # Builder / Scene Closer are left alone; their ramp IS the intent.
+    if match_chapter_volume:
+        _emit_progress("Forging E-Stim — matching volume across chapters…")
+        from forge.stim_config import match_chapter_volumes
+        for suf in list(raw):
+            raw[suf] = match_chapter_volumes(suf, raw[suf], windows)
 
     # Bake authored events into the channels before clamping, so the device
     # signal carries the effects (restim/forgeplayer play channels, not events).

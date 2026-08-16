@@ -94,6 +94,7 @@ export default function ExportTab({
   const [options, setOptions] = useState({
     blendSeams: true,
     finalSmooth: true,
+    matchChapterVolume: true,
     stimWav: false,
     // Stim MP3 ON by default — the two rendered stim tracks (normal +
     // prostate) are the e-stim flagship deliverable; users expect them in the
@@ -249,6 +250,7 @@ export default function ExportTab({
           media: project?.mediaPath || null,
           blendSeams: options.blendSeams,
           finalSmooth: options.finalSmooth,
+          matchChapterVolume: options.matchChapterVolume,
           stimWav: options.stimWav,
           stimMp3: options.stimMp3,
           includeMedia: options.includeMedia,
@@ -771,6 +773,7 @@ function MultiSegmented({ selected, onToggle, options }) {
 const OPTION_DEFS = [
   { id: 'blendSeams', label: 'Blend seams', desc: 'Smooths high-velocity jumps only at phrase boundaries.' },
   { id: 'finalSmooth', label: 'Final smooth', desc: 'Light global low-pass that removes residual sharp edges.' },
+  { id: 'matchChapterVolume', label: 'Match volume across chapters', desc: 'E-stim channels are built one chapter at a time and each starts near silence, so every chapter change drops in level. This starts each chapter where the last one ended and eases back to its own curve. Scene Builder and Scene Closer chapters keep their ramps.', estim: true },
   { id: 'stimWav', label: 'Stim audio · WAV', desc: 'Pre-render the e-stim channels to stereo WAV (lossless, ~10 MB/min). Renders from the stamped E-Stim station, or the channels auto-generated from your Channels characters.', estim: true },
   { id: 'stimMp3', label: 'Stim audio · MP3', desc: 'Same render as MP3 (compact, the common real-world format). Renders from the stamped E-Stim station, or the auto-generated channels.', estim: true },
   { id: 'includeMedia', label: 'Include source media', desc: 'Embed the video/audio for a standalone bundle (big — GBs). Off = lean bundle that relinks to the original on disk (the manifest records its name + size).', media: true },

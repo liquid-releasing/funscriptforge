@@ -2733,6 +2733,10 @@ pub async fn export_write(
     out: Option<String>,
     blend_seams: bool,
     final_smooth: bool,
+    // Optional so a caller that omits it still deserializes — this landed after
+    // the other two toggles. (Command params aren't struct fields, so
+    // `#[serde(default)]` doesn't apply here.)
+    match_chapter_volume: Option<bool>,
     stem: Option<String>,
     media: Option<String>,
     stim_wav: bool,
@@ -2770,6 +2774,9 @@ pub async fn export_write(
     }
     if final_smooth {
         args.push("--final-smooth".into());
+    }
+    if match_chapter_volume.unwrap_or(false) {
+        args.push("--match-chapter-volume".into());
     }
     if stim_wav {
         args.push("--stim-wav".into());
