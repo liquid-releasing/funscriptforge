@@ -60,7 +60,16 @@ _cli = None
 
 
 def _ensure_cli():
-    """Import funscript-tools cli module on first use."""
+    """Import funscript-tools' ``cli`` module on first use.
+
+    Loaded from its file by an explicit path under a private module name, NOT
+    via ``import cli``: this repo has its own root ``cli.py``, so a bare import
+    resolves to whichever one reached ``sys.modules['cli']`` first. Ours
+    normally runs as ``__main__`` and never claims that name — but anything
+    that does ``import cli`` (a test, a future sidecar) silently hands
+    funscript-tools' name to our module, and every preset lookup then dies with
+    ``module 'cli' has no attribute 'BUILTIN_PRESETS'``.
+    """
     global _cli
     if _cli is not None:
         return _cli
@@ -70,10 +79,19 @@ def _ensure_cli():
             "clone it as a sibling (git clone <repo> ../funscript-tools), "
             "or install the bundled desktop app."
         )
+    # funscript-tools' own modules import each other by bare name, so its root
+    # still has to be importable.
     if str(_FT_ROOT) not in sys.path:
         sys.path.insert(0, str(_FT_ROOT))
-    import cli as ft_cli
-    _cli = ft_cli
+    import importlib.util
+    cli_py = Path(_FT_ROOT) / "cli.py"
+    spec = importlib.util.spec_from_file_location("_ft_upstream_cli", cli_py)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"funscript-tools cli.py not importable at {cli_py}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["_ft_upstream_cli"] = module
+    spec.loader.exec_module(module)
+    _cli = module
     return _cli
 
 

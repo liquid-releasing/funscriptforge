@@ -10,6 +10,7 @@ file IO; no generation.
 from __future__ import annotations
 
 import json
+import re
 import zipfile
 from pathlib import Path
 
@@ -109,37 +110,90 @@ def _stride_decimate(actions: list[dict], cap: int) -> list[dict]:
     return out
 
 
-def _resolve_output(path: str) -> tuple[Path | None, Path | None, str]:
-    """Resolve a media/funscript path to its (output_dir, forge_bundle, stem),
-    applying the sibling fallback (1080p/4K/VR renders share one generated set)."""
+_VERSION_RE = re.compile(r"^(.*) \(\d+\)$")
+
+
+def _unversioned(name: str) -> str:
+    """Strip Explorer-style versioning: `scene (3)` → `scene`."""
+    m = _VERSION_RE.match(name)
+    return m.group(1) if m else name
+
+
+def _output_candidates(parent: Path) -> list[tuple[Path, str]]:
+    """Every `<stem>.output` folder in `parent`, paired with the stem it belongs
+    to. Export versions FOLDERS after the name (`scene.output (2)`)."""
+    if not parent.is_dir():
+        return []
+    out = []
+    for d in parent.iterdir():
+        if not d.is_dir():
+            continue
+        base = _unversioned(d.name)
+        if base.endswith(".output"):
+            out.append((d, base[: -len(".output")]))
+    return out
+
+
+def _forge_candidates(parent: Path) -> list[tuple[Path, str]]:
+    """Every `.forge` bundle FILE, paired with its stem. Export versions files
+    inside the extension (`scene (2).forge`)."""
+    return [(f, _unversioned(f.name[: -len(".forge")]))
+            for f in parent.glob("*.forge") if f.is_file()]
+
+
+def _newest(cands: list[tuple[Path, str]], stem: str) -> tuple[Path | None, str]:
+    """The most recently WRITTEN candidate — this project's if it has one, else
+    a sibling render's (1080p/4K/VR share one generated set).
+
+    Picking by name is what made re-exporting look broken: export never
+    overwrites (`scene.forge` → `scene (2).forge`), so the original bundle keeps
+    winning and the Viewer shows the FIRST export forever, however many times
+    you re-generate. mtime is what "the thing I just produced" actually means.
+    """
+    pool = [c for c in cands if c[1] == stem] or cands
+    if not pool:
+        return None, stem
+    path, base = max(pool, key=lambda c: c[0].stat().st_mtime)
+    return path, base
+
+
+def _resolve_sources(path: str) -> list[tuple[str, Path, str]]:
+    """Generated-output sources for a project as ``[(kind, path, stem)]``,
+    newest first — kind is ``'output'`` (loose folder) or ``'forge'`` (bundle).
+
+    The loose folder and the bundle can be from different exports, so they are
+    ordered against each other by mtime rather than one always shadowing the
+    other; a caller takes the first that actually holds channels.
+    """
     p = Path(path)
-    stem = p.stem
     parent = p.parent
-    output_dir = parent / f"{stem}.output"
-    forge = parent / f"{stem}.forge"
-    if not output_dir.is_dir():
-        sibs = sorted(parent.glob("*.output"))
-        if sibs:
-            output_dir = sibs[0]
-            stem = output_dir.name[: -len(".output")]
-    if not forge.is_file():
-        fsibs = sorted(f for f in parent.glob("*.forge") if f.is_file())
-        if fsibs:
-            forge = fsibs[0]
-            if not output_dir.is_dir():
-                stem = forge.name[: -len(".forge")]
-    return (output_dir if output_dir.is_dir() else None,
-            forge if forge.is_file() else None, stem)
+    out_dir, out_stem = _newest(_output_candidates(parent), p.stem)
+    forge, forge_stem = _newest(_forge_candidates(parent), p.stem)
+    found = []
+    if out_dir is not None:
+        found.append(("output", out_dir, out_stem))
+    if forge is not None:
+        found.append(("forge", forge, forge_stem))
+    found.sort(key=lambda c: c[1].stat().st_mtime, reverse=True)
+    return found
+
+
+def _resolve_stem(path: str) -> str:
+    """The stem the generated files were written under — the project's own, or
+    an adopted sibling's."""
+    found = _resolve_sources(path)
+    return found[0][2] if found else Path(path).stem
 
 
 def load_single_channel(path: str, device: str, channel: str, *, cap: int = 40000) -> dict:
     """Full-resolution actions for ONE device channel — the monitor's funscript
     view (windowed to a few seconds, so it needs real samples, not the center
     lane's decimated envelope). Returns {available, name, actions, rawCount}."""
-    output_dir, forge, stem = _resolve_output(path)
-    if output_dir is not None:
-        dev_dir = output_dir / device
-        if dev_dir.is_dir():
+    for kind, src, stem in _resolve_sources(path):
+        if kind == "output":
+            dev_dir = src / device
+            if not dev_dir.is_dir():
+                continue
             for f in sorted(dev_dir.glob("*.funscript")):
                 if _channel_name(f.name, stem) == channel:
                     try:
@@ -149,24 +203,24 @@ def load_single_channel(path: str, device: str, channel: str, *, cap: int = 4000
                     if len(acts) >= 2:
                         return {"available": True, "name": channel,
                                 "actions": _stride_decimate(acts, cap), "rawCount": len(acts)}
-    if forge is not None:
-        try:
-            z = zipfile.ZipFile(forge)
-            for n in z.namelist():
-                if not n.endswith(".funscript"):
-                    continue
-                parts = n.split("/")
-                dev = (_STATION_DEVICE.get(parts[1], parts[1].title())
-                       if len(parts) >= 3 and parts[0] == "stations"
-                       else ("Motion" if n == "motion.funscript" else None))
-                nm = "stroke" if n == "motion.funscript" else _channel_name(parts[-1], stem)
-                if dev == device and nm == channel:
-                    acts = (json.loads(z.read(n).decode("utf-8")).get("actions") or [])
-                    if len(acts) >= 2:
-                        return {"available": True, "name": channel,
-                                "actions": _stride_decimate(acts, cap), "rawCount": len(acts)}
-        except Exception:
-            pass
+        else:
+            try:
+                z = zipfile.ZipFile(src)
+                for n in z.namelist():
+                    if not n.endswith(".funscript"):
+                        continue
+                    parts = n.split("/")
+                    dev = (_STATION_DEVICE.get(parts[1], parts[1].title())
+                           if len(parts) >= 3 and parts[0] == "stations"
+                           else ("Motion" if n == "motion.funscript" else None))
+                    nm = "stroke" if n == "motion.funscript" else _channel_name(parts[-1], stem)
+                    if dev == device and nm == channel:
+                        acts = (json.loads(z.read(n).decode("utf-8")).get("actions") or [])
+                        if len(acts) >= 2:
+                            return {"available": True, "name": channel,
+                                    "actions": _stride_decimate(acts, cap), "rawCount": len(acts)}
+            except Exception:
+                pass
     return {"available": False, "name": channel, "actions": [], "rawCount": 0}
 
 
@@ -174,7 +228,7 @@ def load_audio_only(path: str, *, points: int = 150000) -> dict:
     """High-resolution audio envelope for the monitor's windowed waveform (the
     main payload's 16k is fine for the full-timeline lane but blocky when the
     monitor zooms to ~12s). Returns {available, audio:{peaks,hopMs,durationMs}}."""
-    _, _, stem = _resolve_output(path)
+    stem = _resolve_stem(path)
     audio = _load_audio(Path(path).parent, stem, target=points)
     return {"available": bool(audio), "audio": audio}
 
@@ -182,48 +236,28 @@ def load_audio_only(path: str, *, points: int = 150000) -> dict:
 def load_device_outputs(path: str, *, max_points: int = 2000) -> dict:
     """Load a project's generated device channels for the Viewer.
 
-    ``path`` is the project's media or funscript path. Prefers the loose
-    sibling ``<stem>.output/`` (live, most-recent); falls back to the
-    ``<stem>.forge`` bundle (the shipped snapshot) so the Viewer still works
-    when only the bundle was kept. Returns
+    ``path`` is the project's media or funscript path. Takes the most recently
+    written of the loose ``<stem>.output/`` folder and the ``<stem>.forge``
+    bundle — export versions rather than overwrites, so "newest" has to mean
+    mtime, not name. Falls back to a sibling render's set (1080p/4K/VR share one
+    generated set). Returns
     ``{available, devices:[{name, channels:[{name, actions}]}], durationMs, screech, source}``.
     """
-    p = Path(path)
-    stem = p.stem
-    parent = p.parent
-    output_dir = parent / f"{stem}.output"
-    forge = parent / f"{stem}.forge"
-    # Sibling fallback — a folder may hold several renders of the same title
-    # (1080p / 4K / VR) but the output was generated for just one. If the opened
-    # media's exact <stem>.output/.forge isn't there, adopt the first sibling so
-    # opening ANY of those files still finds the work. The resolved stem then
-    # drives channel-name parsing + the audio/beats/events lookup.
-    if not output_dir.is_dir():
-        sibs = sorted(parent.glob("*.output"))
-        if sibs:
-            output_dir = sibs[0]
-            stem = output_dir.name[: -len(".output")]
-    if not forge.is_file():
-        fsibs = sorted(f for f in parent.glob("*.forge") if f.is_file())
-        if fsibs:
-            forge = fsibs[0]
-            if not output_dir.is_dir():
-                stem = forge.name[: -len(".forge")]
+    parent = Path(path).parent
     res = None
-    if output_dir.is_dir():
-        cand = _load_from_dir(output_dir, stem, max_points)
+    stem = Path(path).stem
+    output_dir = None
+    for kind, src, src_stem in _resolve_sources(path):
+        if kind == "output" and output_dir is None:
+            output_dir = src
+        cand = (_load_from_dir(src, src_stem, max_points) if kind == "output"
+                else _load_from_forge(src, src_stem, max_points))
         if cand["available"]:
-            cand["source"] = "output"
-            cand["sourcePath"] = str(output_dir)
-            cand["sourceName"] = output_dir.name
-            res = cand
-    if res is None and forge.is_file():
-        cand = _load_from_forge(forge, stem, max_points)
-        if cand["available"]:
-            cand["source"] = "forge"
-            cand["sourcePath"] = str(forge)
-            cand["sourceName"] = forge.name
-            res = cand
+            cand["source"] = kind
+            cand["sourcePath"] = str(src)
+            cand["sourceName"] = src.name
+            res, stem = cand, src_stem
+            break
     if res is None:
         return {"available": False, "error": "no <stem>.output dir or .forge bundle",
                 "devices": []}
@@ -236,8 +270,8 @@ def load_device_outputs(path: str, *, max_points: int = 2000) -> dict:
     res["chapters"] = _load_chapters(parent, stem)
     # Spectrogram is shipped as a static PNG in the export (Preview/), not as
     # rebuildable cells — so the center spectro lane renders the image directly.
-    spec = output_dir / "Preview" / "spectrogram.png"
-    res["spectrogramPng"] = str(spec) if spec.is_file() else None
+    spec = (output_dir / "Preview" / "spectrogram.png") if output_dir else None
+    res["spectrogramPng"] = str(spec) if spec and spec.is_file() else None
     return res
 
 

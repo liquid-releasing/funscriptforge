@@ -17,6 +17,41 @@ class TestAdapterAvailability(unittest.TestCase):
         self.assertEqual(AVAILABLE, expected)
 
 
+class TestUpstreamCliIsNotShadowed(unittest.TestCase):
+    """This repo has its own root `cli.py`, and so does funscript-tools.
+
+    A bare `import cli` inside the adapter resolves to whichever one reached
+    `sys.modules['cli']` first. Ours usually runs as `__main__` and never claims
+    the name — but the moment anything imports it as `cli` (a test did, and
+    every preset test downstream started failing with
+    `module 'cli' has no attribute 'BUILTIN_PRESETS'`), the adapter silently
+    reads OUR module. Load-by-path makes the collision unreachable.
+    """
+
+    def setUp(self):
+        from forge.funscript_tools import AVAILABLE
+        if not AVAILABLE:
+            self.skipTest("funscript-tools not available")
+
+    def test_presets_load_with_an_unrelated_cli_module_in_sys_modules(self):
+        import sys
+        import types
+
+        import forge.funscript_tools as ft
+        decoy = types.ModuleType("cli")   # no BUILTIN_PRESETS, like ours
+        saved_cli, saved_cache = sys.modules.get("cli"), ft._cli
+        sys.modules["cli"] = decoy
+        ft._cli = None                    # force a fresh resolve
+        try:
+            self.assertIn("Balanced", ft.get_builtin_presets())
+        finally:
+            ft._cli = saved_cache
+            if saved_cli is None:
+                sys.modules.pop("cli", None)
+            else:
+                sys.modules["cli"] = saved_cli
+
+
 class TestPresets(unittest.TestCase):
     """Test that presets load correctly from funscript-tools."""
 
