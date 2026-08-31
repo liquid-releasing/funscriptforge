@@ -1471,7 +1471,7 @@ one consumer among many (alongside ForgePlayer, forgevents, FF Pro).</p>
 <p>FF currently has no chapter representation in <code>forge/project.py</code>. Phase 1
 adds a minimal one:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># in forge/project.py default_forge()</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="s2">&quot;chapters&quot;</span><span class="p">:</span> <span class="p">[]</span>  <span class="c1"># list of {at_ms, end_ms, intent, source}</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="s2">"chapters"</span><span class="p">:</span> <span class="p">[]</span>  <span class="c1"># list of {at_ms, end_ms, intent, source}</span>
 </code></pre></div>
 <p><code>source</code> records provenance — <code>"forgegen_analysis"</code> for chapters loaded from
 analysis.json, vs. user-authored later. This matters for Phase 3 round-trips:

@@ -1464,15 +1464,15 @@ behavior we need to honor.</p>
 <p><code>apply_modulation</code> is the workhorse. It overlays a generated waveform
 on a target axis for a duration:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>apply_modulation(
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    axis: &quot;volume&quot;,                 # or pulse_frequency, pulse_width, alpha, beta
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    axis: "volume",                 # or pulse_frequency, pulse_width, alpha, beta
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    duration_ms: 5000,
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    waveform: &quot;sin&quot;,                # sin / square / triangle / sawtooth
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    waveform: "sin",                # sin / square / triangle / sawtooth
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    frequency: 15,                  # Hz — how fast the modulation oscillates
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    amplitude: 0.35,                # axis-units; 0..1 for volume
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    max_level_offset: 0.0,          # peak relative to original (additive) or absolute (overwrite)
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    phase: 0.0,                     # degrees, starting phase
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    duty_cycle: 0.5,                # for square only
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    mode: &quot;additive&quot;,               # additive layers on existing values; overwrite replaces
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    mode: "additive",               # additive layers on existing values; overwrite replaces
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    ramp_in_ms: 0, ramp_out_ms: 0,  # fade envelopes
 <a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>)
 </code></pre></div>

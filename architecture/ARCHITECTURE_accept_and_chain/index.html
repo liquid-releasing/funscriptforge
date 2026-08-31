@@ -1563,11 +1563,11 @@ step is the <strong>Phrases</strong> tab"). The user clicks the tab themselves. 
 — it's disorienting and prevents the user from reviewing the completed state.</p>
 <h3 id="6-history-snapshot-for-undo">6. History snapshot for undo<a class="headerlink" href="#6-history-snapshot-for-undo" title="Permanent link">&para;</a></h3>
 <p>Each Accept appends to the <code>.forge</code> history array:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">project</span><span class="p">[</span><span class="s2">&quot;history&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="s2">&quot;tab&quot;</span><span class="p">:</span> <span class="s2">&quot;tone&quot;</span><span class="p">,</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="s2">&quot;tone&quot;</span><span class="p">:</span> <span class="n">tone_name</span><span class="p">,</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="s2">&quot;tone_sliders&quot;</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">project</span><span class="p">[</span><span class="s2">"history"</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="s2">"tab"</span><span class="p">:</span> <span class="s2">"tone"</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="s2">"timestamp"</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="s2">"tone"</span><span class="p">:</span> <span class="n">tone_name</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="s2">"tone_sliders"</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span>
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">})</span>
 <a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">save_forge</span><span class="p">(</span><span class="n">project</span><span class="p">)</span>
 </code></pre></div>
