@@ -79,7 +79,7 @@ the **Generate** tab, covered in
 
 ## Community
 
-- [Discord](https://discord.gg/MHucAwwRc) — feedback, feature requests, sharing
+- [Discord](https://discord.gg/UHdJFhEZF) — feedback, feature requests, sharing
 - [GitHub](https://github.com/liquid-releasing/funscriptforge) — issues, contributions
 
 ---

@@ -66,7 +66,7 @@ Written by human and Claude AI (Anthropic).
 #### Community
 
 Questions, bug reports, and feedback welcome in
-[our Discord](https://discord.gg/MHucAwwRc).
+[our Discord](https://discord.gg/UHdJFhEZF).
 
 ---
 
@@ -102,7 +102,7 @@ def about_text() -> str:
         "Shared components: forge-ui-components.\n\n"
         "Written by human and Claude AI (Anthropic).\n\n"
         "Community:\n"
-        "  discord.gg/MHucAwwRc\n\n"
+        "  discord.gg/UHdJFhEZF\n\n"
         f"{APP_NAME} is a trademark of Liquid Releasing.\n"
         "© 2026 Liquid Releasing. MIT License.\n"
         "github.com/liquid-releasing/funscriptforge"

@@ -7,7 +7,7 @@ structure of an existing script, lets you review and tag sections through an
 interactive UI, and generates an improved script with smoother defaults,
 expressive performance sections, and gentle breaks.
 
-**Download:** [latest release](https://github.com/liquid-releasing/funscriptforge-releases/releases/latest) • **Docs:** [liquid-releasing.github.io/funscriptforge](https://liquid-releasing.github.io/funscriptforge/) • **Community:** [Discord](https://discord.gg/MHucAwwRc)
+**Download:** [latest release](https://github.com/liquid-releasing/funscriptforge-releases/releases/latest) • **Docs:** [liquid-releasing.github.io/funscriptforge](https://liquid-releasing.github.io/funscriptforge/) • **Community:** [Discord](https://discord.gg/UHdJFhEZF)
 
 ---
 
