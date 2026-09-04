@@ -156,6 +156,26 @@ export default function App() {
   // Long-running ops (load_project, classify-patterns, transform apply,
   // export) drive this; a single surface beats N per-tab spinners.
   const [busy, setBusy] = useState(null);
+  // Every long op sets busy and clears it in a `finally`. An unconditional
+  // setBusy(null) there clears whatever is CURRENT — not what that op set. So
+  // a slow open/attach/import finishing AFTER the Analysis pipeline started
+  // wiped the analysis progress banner, and the footer went back to claiming
+  // "ready to chain" while the pipeline was still running (dogfood
+  // 2026-09-04). Clear by token instead: an op only clears its own busy, and
+  // a busy set by a child tab (no token) is never clobbered from here.
+  const busyTokenRef = useRef(0);
+  const beginBusy = useCallback((next) => {
+    const token = ++busyTokenRef.current;
+    setBusy({ ...next, token });
+    return token;
+  }, []);
+  const endBusy = useCallback((token) => {
+    setBusy((prev) => (prev && prev.token !== token ? prev : null));
+  }, []);
+  // True while the Analysis pipeline is actually running, reported up by
+  // AnalysisTab. Deliberately independent of `busy`: the chain must not open
+  // mid-analysis just because some other op's finally cleared the banner.
+  const [analysisRunning, setAnalysisRunning] = useState(false);
   // App-level audio sidecars for the MediaViewer Audio + Spectrogram
   // modes. Both are pure sidecar reads off disk — the build happens
   // upstream during `videoflow.structural.auto_chapter` so they share
@@ -601,7 +621,7 @@ export default function App() {
     const filename = mediaPath.split(/[\\/]/).pop() || 'media';
     const stem = filename.replace(/\.[^.]+$/, '');
     setAppError(null);
-    setBusy({ message: `Opening ${filename}…` });
+    const _busy = beginBusy({ message: `Opening ${filename}…` });
     setTab('project');
     try {
       const info = await probeMedia(mediaPath);
@@ -623,7 +643,7 @@ export default function App() {
       setAppError(err?.message ? `Could not open media: ${err.message}` : 'Could not open media.');
       setOpenedProject(null);
     } finally {
-      setBusy(null);
+      endBusy(_busy);
     }
   };
 
@@ -649,7 +669,7 @@ export default function App() {
   // directly. Used by the Project tab empty state.
   const handleLoadSample = async () => {
     setAppError(null);
-    setBusy({ message: 'Loading sample…' });
+    const _busy = beginBusy({ message: 'Loading sample…' });
     setTab('project');
     try {
       const project = await loadSampleProject();
@@ -658,7 +678,7 @@ export default function App() {
       console.error('App: loadSampleProject failed', err);
       setAppError(err?.message ? `Failed to load sample: ${err.message}` : 'Failed to load sample.');
     } finally {
-      setBusy(null);
+      endBusy(_busy);
     }
   };
 
@@ -702,7 +722,7 @@ export default function App() {
     });
     setIsLoadingProject(true);
     setAppError(null);
-    setBusy({ message: `Loading ${filename}…` });
+    const _busy = beginBusy({ message: `Loading ${filename}…` });
     // Default landing is the Project tab, but a caller mid-flow can pin a
     // different destination (e.g. adopt-then-Analysis) so the reopen doesn't
     // bounce the user through Project. The placeholder already carries `path`,
@@ -729,7 +749,7 @@ export default function App() {
       setOpenedProject(null);
     } finally {
       setIsLoadingProject(false);
-      setBusy(null);
+      endBusy(_busy);
     }
   };
 
@@ -740,7 +760,7 @@ export default function App() {
   const importBundleAndOpen = async (path) => {
     const name = path.split(/[\\/]/).pop() || 'bundle';
     setAppError(null);
-    setBusy({ message: `Importing ${name}…` });
+    const _busy = beginBusy({ message: `Importing ${name}…` });
     setTab('project');
     try {
       const res = await importForgeBundle(path);
@@ -757,7 +777,7 @@ export default function App() {
       console.error('App: importBundleAndOpen failed', err);
       setAppError(`Import failed: ${String(err?.message || err)}`);
     } finally {
-      setBusy(null);
+      endBusy(_busy);
     }
   };
 
@@ -792,7 +812,7 @@ export default function App() {
       return;
     }
     setAppError(null);
-    setBusy({ message: `Attaching ${mediaPath.split(/[\\/]/).pop() || 'media'}…` });
+    const _busy = beginBusy({ message: `Attaching ${mediaPath.split(/[\\/]/).pop() || 'media'}…` });
     try {
       const res = await attachMedia(current.path, mediaPath);
       const patch = (prev) => {
@@ -807,7 +827,7 @@ export default function App() {
       console.error('App: attach_media failed', err);
       setAppError(err?.message ? `Attach failed: ${err.message}` : 'Attach failed.');
     } finally {
-      setBusy(null);
+      endBusy(_busy);
     }
   };
 
@@ -910,7 +930,7 @@ export default function App() {
     analysisSummary: globalAnalysisSummary,
   } = deriveAnalysisState({
     hasMedia: !!project?.mediaPath,
-    analyzing: !!busy,
+    analyzing: !!busy || analysisRunning,
     pipelineError: false,
     chapterList: chapterArr,
     trackPeaks, trackSpectrogram, trackBeats,
@@ -936,7 +956,7 @@ export default function App() {
   // complete. D5b.
   const handleAnalysisResume = useCallback(async () => {
     if (!project?.path) return false;
-    setBusy({ message: `Finishing analysis for ${project.title ?? 'project'}…`, steps: [] });
+    const _busy = beginBusy({ message: `Finishing analysis for ${project.title ?? 'project'}…`, steps: [] });
     try {
       await analyzeChaptersWithVideoflow(project.path, 5.5, project.mediaPath, true);
       return true;
@@ -944,7 +964,7 @@ export default function App() {
       setAppError(`Resume failed: ${err?.message ?? err}`);
       return false;
     } finally {
-      setBusy(null);
+      endBusy(_busy);
     }
   }, [project?.path, project?.mediaPath, project?.title]);
 
@@ -1008,6 +1028,15 @@ export default function App() {
     if (['analysis', 'polish', 'chapters', 'phrases', 'stanzas', 'events', 'stim', 'export'].includes(id)
         && !hasFunscript) {
       return 'Generate or open a funscript before continuing.';
+    }
+    // The Analysis tab is otherwise never gated (its footer doubles as Resume
+    // when partial). But while the pipeline is actually RUNNING the chain must
+    // not be offered — reported 2026-09-04: a live red "Accept and chain to
+    // Chapters" while the panels still read "Detecting chapters…". Keyed on
+    // the tab's own reported state rather than `busy`, which another op's
+    // finally could clear out from under it.
+    if (id === 'analysis' && analysisRunning) {
+      return 'Analyzing… the chain opens when this finishes.';
     }
     // Analysis is REQUIRED before any consuming tab is meaningful — chapters,
     // phrases, channels, events, polish + export all read sidecars the analyze
@@ -1266,7 +1295,7 @@ export default function App() {
   const handleRevertToOriginal = async () => {
     const current = typeof openedProject === 'object' ? openedProject : null;
     if (!current?.path) return;
-    setBusy({ message: 'Reverting to original…' });
+    const _busy = beginBusy({ message: 'Reverting to original…' });
     try {
       await revertWorkingFunscript(current.path);
       // Reload from the now-pristine effective path (work copy gone), which
@@ -1279,7 +1308,7 @@ export default function App() {
     } catch (err) {
       setAppError(`Could not revert: ${err?.message ?? err}`);
     } finally {
-      setBusy(null);
+      endBusy(_busy);
     }
   };
 
@@ -1388,6 +1417,7 @@ export default function App() {
             trackBeats={trackBeats}
             onChaptersChange={handleChaptersChange}
             refreshAudioSidecars={refreshAudioSidecars}
+            onAnalyzingChange={setAnalysisRunning}
             setBusy={setBusy}
             setAppError={setAppError}
           />

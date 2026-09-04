@@ -77,6 +77,7 @@ export default function AnalysisTab({
   trackBeats,
   onChaptersChange,
   refreshAudioSidecars,
+  onAnalyzingChange,
   setBusy,
   setAppError,
 }) {
@@ -132,6 +133,17 @@ export default function AnalysisTab({
   // Whether the auto-trigger effect below has run and made its decision. Gates
   // the not-started banner so it can't flash before the pipeline starts.
   const [autoTriggerSettled, setAutoTriggerSettled] = useState(false);
+
+  // Report the real pipeline state up. App gates the chain on THIS rather than
+  // on `busy`, which any other operation's finally can clear while analysis is
+  // still running — which is how a live red "Accept and chain to Chapters"
+  // ended up sitting over panels reading "Detecting chapters…".
+  useEffect(() => {
+    onAnalyzingChange?.(analyzing);
+  }, [analyzing, onAnalyzingChange]);
+  // Clear the flag if this tab unmounts mid-run, so a stale `true` can't
+  // wedge the chain shut on every other tab.
+  useEffect(() => () => onAnalyzingChange?.(false), [onAnalyzingChange]);
 
   const projectExists = !!project?.path;
   const isSample = String(project?.path ?? '').startsWith('sample://');
