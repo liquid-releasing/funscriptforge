@@ -129,6 +129,9 @@ export default function AnalysisTab({
   // forge.js also dedups at the entry point — this ref is belt-and-suspenders.
   const [analyzing, setAnalyzing] = useState(false);
   const analyzingRef = useRef(false);
+  // Whether the auto-trigger effect below has run and made its decision. Gates
+  // the not-started banner so it can't flash before the pipeline starts.
+  const [autoTriggerSettled, setAutoTriggerSettled] = useState(false);
 
   const projectExists = !!project?.path;
   const isSample = String(project?.path ?? '').startsWith('sample://');
@@ -317,6 +320,13 @@ export default function AnalysisTab({
   // MISSING stamp (legacy pre-stamp projects) is grandfathered, not re-ground.
   useEffect(() => {
     if (!projectExists || isSample) return;
+    // Mark the auto-trigger as having had its turn. Until it has, "nothing is
+    // analyzed and nothing is running" is indistinguishable from "the effect
+    // has not run yet", and the not-started banner would flash for a frame on
+    // every mount before the pipeline starts. Set before the branches below so
+    // it holds however this effect resolves — including the paths that decide
+    // not to analyze at all.
+    setAutoTriggerSettled(true);
     const versionStale = analyzerVersionStale(project?.analyzerVersion);
     if (chapterList?.length && !versionStale) {
       // Already analyzed (chapters on disk) → the pipeline won't re-run, so
@@ -577,6 +587,15 @@ export default function AnalysisTab({
      chapterClipsPresent, mediaDirectPlay],
   );
 
+  // deriveAnalysisState reports 'loading' whenever chapters are missing, on the
+  // assumption that the auto-trigger is about to run — so 'empty' never occurs
+  // for a project WITH media. When that trigger does not fire, the optimism
+  // becomes a lie: the tab sits in a permanent fake "loading" with no banner,
+  // no CTA, and a generic subtitle. The honest test for "nothing has happened
+  // and nothing is happening" is no chapters and no pipeline in flight.
+  const notStarted = autoTriggerSettled
+    && hasMedia && !analyzing && !chapterList?.length && !pipelineError;
+
   return (
     <div style={{ flex: 1, overflow: 'auto', background: 'var(--bg)' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 28px' }}>
@@ -584,6 +603,7 @@ export default function AnalysisTab({
           project={project}
           analyzing={analyzing}
           hasMedia={hasMedia}
+          notStarted={notStarted}
           confirming={confirmingReanalyze}
           onReanalyzeRequest={handleReanalyzeRequest}
           onReanalyzeConfirm={handleReanalyzeConfirm}
@@ -595,6 +615,7 @@ export default function AnalysisTab({
           summary={analysisSummary}
           analyzing={analyzing}
           hasMedia={hasMedia}
+          notStarted={notStarted}
           onResume={handleResume}
           onReanalyze={handleReanalyzeRequest}
         />
@@ -690,18 +711,23 @@ export default function AnalysisTab({
 }
 
 function Header({
-  project, analyzing, hasMedia, confirming,
+  project, analyzing, hasMedia, confirming, notStarted,
   onReanalyzeRequest, onReanalyzeConfirm, onReanalyzeCancel,
 }) {
   const subtitle = !hasMedia
     ? "No media attached — attach a video or audio file on the Project tab to analyze structure, beats, and energy."
     : analyzing
       ? 'Detecting chapters, beats, and energy from the media. Panels light up as each stage completes.'
-      : 'Chapters, beat grid, energy, and pitch — auto-detected from the media and funscript. Click a chapter band to focus the deep-dive panel below.';
+      : notStarted
+        ? 'Not analyzed yet — run the analysis to detect chapters, beats, and energy from the media.'
+        : 'Chapters, beat grid, energy, and pitch — auto-detected from the media and funscript. Click a chapter band to focus the deep-dive panel below.';
   // Re-analyze is only useful once media is attached. While a pipeline
   // is already running we hide it (re-triggering mid-run would just
-  // queue a second analyze and confuse the progress footer).
-  const canReanalyze = hasMedia && !analyzing && onReanalyzeRequest;
+  // queue a second analyze and confuse the progress footer). It is also
+  // hidden before the FIRST analysis: with nothing on disk there is nothing
+  // to re-do, and offering "Re-analyze" as the only control is what made an
+  // un-analyzed project look like it had no way to start.
+  const canReanalyze = hasMedia && !analyzing && !notStarted && onReanalyzeRequest;
   return (
     <div style={{
       marginBottom: 22,
@@ -793,8 +819,13 @@ const reanalyzeButtonStyle = {
 // exist vs missing and offers two CTAs: Resume (default — re-runs with
 // --resume so videoflow skips the stages already on disk) and Re-analyze
 // (escape hatch — wipes .forge/ and rebuilds from scratch).
-function AnalysisStateBanner({ state, summary, analyzing, hasMedia, onResume, onReanalyze }) {
-  if (state !== 'partial') return null;
+function AnalysisStateBanner({ state, summary, analyzing, hasMedia, notStarted, onResume, onReanalyze }) {
+  // `notStarted` is passed in rather than read off `state`: with media
+  // attached, deriveAnalysisState reports 'loading' (not 'empty') for a
+  // never-analyzed project, because it assumes the auto-trigger is about to
+  // run. When it doesn't, the tab used to render no banner at all — reported
+  // 2026-09-04 as "the analysis has not begun, there is no way to start it".
+  if (state !== 'partial' && !notStarted) return null;
   if (analyzing) return null; // pipeline is running — banner would lie within seconds
   if (!hasMedia) return null;
   const done = summary?.done ?? [];
@@ -812,11 +843,23 @@ function AnalysisStateBanner({ state, summary, analyzing, hasMedia, onResume, on
     }}>
       <div style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: 1.5 }}>
         <div style={{ fontWeight: 600, marginBottom: 2, color: 'var(--text)' }}>
-          Partial analysis — {done.length} of {done.length + missing.length} stages on disk
+          {notStarted
+            ? 'Not analyzed yet'
+            : `Partial analysis — ${done.length} of ${done.length + missing.length} stages on disk`}
         </div>
         <div style={{ color: 'var(--text-muted)' }}>
-          {done.length > 0 && <>Have: {done.join(', ')}. </>}
-          Missing: {missing.join(', ')}. Resume finishes the missing pieces; Re-analyze rebuilds from scratch.
+          {notStarted ? (
+            <>
+              Nothing has been analyzed for this project yet. Analyze to detect
+              chapters, beats, and energy from the media — the downstream tabs
+              read what it produces.
+            </>
+          ) : (
+            <>
+              {done.length > 0 && <>Have: {done.join(', ')}. </>}
+              Missing: {missing.join(', ')}. Resume finishes the missing pieces; Re-analyze rebuilds from scratch.
+            </>
+          )}
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -824,12 +867,16 @@ function AnalysisStateBanner({ state, summary, analyzing, hasMedia, onResume, on
           <button
             onClick={onResume}
             style={resumeButtonStyle}
-            title="Re-run the pipeline, skipping the stages already on disk"
+            title={notStarted
+              ? 'Run the analysis pipeline for this project'
+              : 'Re-run the pipeline, skipping the stages already on disk'}
           >
-            Resume
+            {notStarted ? 'Analyze' : 'Resume'}
           </button>
         )}
-        {onReanalyze && (
+        {/* Nothing on disk to wipe, so the "rebuild from scratch" door would
+            be the same action under a more alarming name. */}
+        {!notStarted && onReanalyze && (
           <button
             onClick={onReanalyze}
             style={reanalyzeButtonStyle}

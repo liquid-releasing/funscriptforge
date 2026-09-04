@@ -918,6 +918,15 @@ export default function App() {
     directPlay: mediaDirectPlay,
   });
   const analysisPartial = globalAnalysisState === 'partial';
+  // Red + ✓ is this app's grammar for "this step is done". Analysis is only
+  // done in 'complete'; 'empty' (never ran) and 'error' were both still
+  // rendering the terminal commit, so a project that had not been analyzed at
+  // all still offered a red "Accept and chain to Chapters".
+  //
+  // Scoped to projects WITH media on purpose: a funscript-only project never
+  // analyzes by design (tabGate deliberately leaves it editable), so treating
+  // its permanent 'empty' as incomplete would strand every chain forever.
+  const analysisIncomplete = !!project?.mediaPath && globalAnalysisState !== 'complete';
 
   // Finish an interrupted analyze — re-run with --resume so videoflow skips
   // every stage already on disk and only builds the missing chapter clips.
@@ -1041,14 +1050,19 @@ export default function App() {
     footerSummary = 'No funscript yet — generate one from this media to begin editing.';
   } else if (busy) {
     footerSummary = `${currentTabLabel} · in progress — chain can advance when complete`;
-  } else if (analysisPartial) {
-    // Analysis stopped short (sidecars on disk, something still missing).
-    // Saying "ready to chain" here is the same lie the red ✓ used to tell —
-    // name what's outstanding instead. Accept still finishes it and chains.
+  } else if (analysisIncomplete) {
+    // Analysis never ran, or stopped short. Saying "ready to chain" here is
+    // the same lie the red ✓ used to tell — name what is actually outstanding.
     const missing = globalAnalysisSummary?.missing ?? [];
-    footerSummary = missing.length
-      ? `${currentTabLabel} · incomplete — still missing ${missing.join(', ')}`
-      : `${currentTabLabel} · analysis incomplete`;
+    if (globalAnalysisState === 'empty') {
+      footerSummary = `${currentTabLabel} · not analyzed yet — run the analysis to continue`;
+    } else if (globalAnalysisState === 'error') {
+      footerSummary = `${currentTabLabel} · analysis failed — retry before continuing`;
+    } else {
+      footerSummary = missing.length
+        ? `${currentTabLabel} · incomplete — still missing ${missing.join(', ')}`
+        : `${currentTabLabel} · analysis incomplete`;
+    }
   } else if (nextTab) {
     const nextLabel = TABS.find((t) => t.id === nextTab)?.label ?? nextTab;
     footerSummary = `${currentTabLabel} · ready to chain to ${nextLabel}`;
@@ -1554,7 +1568,7 @@ export default function App() {
           // commit, so it must not wear red + ✓ while artifacts are still
           // missing (reported 2026-09-04: the red chain button was offered on
           // Analysis before analysis was complete).
-          primaryTentative={chapterIncomplete || chapterNavPending || analysisPartial
+          primaryTentative={chapterIncomplete || chapterNavPending || analysisIncomplete
             || (tab === 'export' && !exportReg?.done)}
           // Project is a CHOICE fork ("Generate new" vs "Edit this"), not an
           // accept — so no lead checkmark on entry; it's just a door, not an
@@ -1562,7 +1576,7 @@ export default function App() {
           // tab mid-walk, or Export before it's written, is NOT done — the lead
           // ✓ would falsely read "all set".
           ready={!gateMsg && !appError && !busy && tab !== 'project' && !chapterIncomplete
-            && !analysisPartial
+            && !analysisIncomplete
             && !(tab === 'export' && !exportReg?.done)
             && (Boolean(nextTab) || tab === 'export')}
         />
