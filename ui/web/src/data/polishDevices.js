@@ -35,6 +35,36 @@ export const POLISH_DEVICES = [
     ],
   },
   {
+    // FOC-Stim — restim's direct-current-control hardware (ESP32 + DRV8231A).
+    // Emits the same channel set as the E-Stim station above: restim's
+    // three-phase FOC algorithm consumes exactly alpha/beta + waveform
+    // amplitude + the pulse params, so the existing generator already
+    // produces a file it can play. What differs is the clamp — no audio path
+    // means a higher rate ceiling.
+    //
+    // This is NOT the four-phase mode. That takes four per-electrode power
+    // values (0..1 each) instead of a 2-D position, which nothing here
+    // synthesises; see the note in forge/polish.py.
+    id: 'focstim',
+    label: 'FOC-Stim',
+    sublabel: 'Direct current control',
+    kind: 'estim',
+    deviceKeys: ['foc3phase'],
+    axes: ['L0'],
+    severity: 1.5,                        // between E-Stim and the Handy
+    ember: '#8ad0ff',
+    glyph: 'estim',
+    experimental: true,
+    constraintHint: 'Rate-of-change ceiling · safety (limits unverified)',
+    outputFile: '{stem}.focstim.funscript',
+    knobs: [
+      { key: 'rateLimit',  label: 'Rate ceiling', min: 0.1, max: 1,   step: 0.05, unit: '/100ms', default: 0.65, help: 'Hard-clips the derivative for safety. Direct current control has no audio bottleneck, so this can sit higher than the audio-driven station — but the ceiling is unverified against hardware, so raise it slowly.' },
+      { key: 'quietFloor', label: 'Quiet floor',  min: 0,   max: 0.3, step: 0.01, unit: '',       default: 0.06, help: "Minimum signal so the channel doesn't drop into a cold gap." },
+      { key: 'smoothing',  label: 'Smoothing',    min: 0,   max: 1,   step: 0.05, unit: '',       default: 0.28, help: 'Low-pass on the envelope.' },
+      { key: 'latency',    label: 'Lead-time',    min: -20, max: 80,  step: 5,    unit: 'ms',     default: 15,   help: 'Sensation onset is near-instant — small compensation.' },
+    ],
+  },
+  {
     id: 'handy',
     label: 'The Handy',
     sublabel: '1-axis stroker',

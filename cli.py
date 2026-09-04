@@ -1670,11 +1670,12 @@ def _write_project_identity(target, ident: dict) -> None:
 # bundle keeps the flat machine layout (stations/<id>/) that import + the
 # assembler read; this human view is loose-mode only.
 _STATION_FOLDER = {
-    "estim3p": "E-Stim", "handy": "Handy", "tcode": "MultiFunPlayer",
+    "estim3p": "E-Stim", "focstim": "FOC-Stim", "handy": "Handy", "tcode": "MultiFunPlayer",
     "osr2": "OSR2", "sr6": "SR6", "lovense": "Lovense", "vacuglide": "Vacuglide",
 }
 _STATION_PURPOSE = {
     "estim3p": "E-stim channel set — load in restim or ForgePlayer.",
+    "focstim": "E-stim channel set clamped for FOC-Stim (direct current control) — load in restim. Experimental: the device limits are unverified.",
     "handy": "Clamped stroke script tuned for The Handy.",
     "tcode": "Multi-axis set — point MultiFunPlayer or XTPlayer at this folder (it auto-detects the axes).",
     "osr2": "T-code multi-axis set for the OSR2.",
@@ -1712,6 +1713,7 @@ def _emit_loose_output(staging: Path, out: Path, stem: str, manifest: dict) -> N
     the universal stroke at top, one folder per device/player, previews, and a
     generated README. Playables only — re-edit metadata + the full bundle live
     in the .forge backup."""
+    from forge import polish as _polish_mod
     import shutil
     out.mkdir(parents=True, exist_ok=True)
     placed = []  # (folder_label, [filenames], purpose) — drives the README
@@ -1737,7 +1739,7 @@ def _emit_loose_output(staging: Path, out: Path, stem: str, manifest: dict) -> N
             for fp in files:
                 shutil.copy2(fp, dst / fp.name)
                 names.append(fp.name)
-            if sid == "estim3p" and audio_dir.is_dir():  # stim audio rides with the channels
+            if _polish_mod.is_estim_station(sid) and audio_dir.is_dir():  # stim audio rides with the channels
                 for ap in sorted(audio_dir.glob("*")):
                     shutil.copy2(ap, dst / ap.name)
                     names.append(ap.name)
@@ -1792,6 +1794,10 @@ def cmd_export(args):
     import zipfile
     import yaml
     from videoflow.sidecar import forge_dir
+    # Bound here rather than part-way down: the e-stim station checks run
+    # before the block that used to own this import, and a skipped block
+    # left it unbound.
+    from forge import polish as _polish_mod
 
     # The positional `src` is the ORIGINAL funscript — it owns the stem, the
     # forge dir, the authoring sidecars, and the per-chapter character/style
@@ -1813,9 +1819,9 @@ def cmd_export(args):
     inc_estim = "estim" not in excluded
     inc_authoring = "authoring" not in excluded
     inc_preview = "preview" not in excluded
-    # A device station maps to the e-stim group iff it is the estim3p station.
+    # A device station maps to the e-stim group iff it emits the channel set.
     def _station_included(sid):
-        return inc_estim if sid == "estim3p" else inc_strokers
+        return inc_estim if _polish_mod.is_estim_station(sid) else inc_strokers
 
     staging = Path(tempfile.mkdtemp(prefix="ff_export_"))
     artifacts: list[dict] = []
@@ -1877,7 +1883,7 @@ def cmd_export(args):
                 from forge.stim_config import SEAM_MATCHED_CHANNELS
                 suffix = next((s for s in sorted(SEAM_MATCHED_CHANNELS, key=len, reverse=True)
                                if fp.name.endswith(f".{s}.funscript")), None)
-                if (args.match_chapter_volume and sid == "estim3p" and suffix):
+                if (args.match_chapter_volume and _polish_mod.is_estim_station(sid) and suffix):
                     if _seam_windows is None:
                         _seam_windows = _estim_seam_windows(src)
                     if len(_seam_windows) >= 2:
@@ -1910,7 +1916,6 @@ def cmd_export(args):
         # its own folder. e-stim ← per-chapter characters; multi-axis (TCode) ←
         # per-chapter Mechanical styles. motion.funscript already serves plain
         # 1-axis devices, so the per-device stroker clamps stay a Polish opt-in.
-        from forge import polish as _polish_mod
 
         def _emit_generated_station(sid, files_map):
             """files_map: {filename: (template_doc, actions)}. Writes the set,
@@ -2042,7 +2047,18 @@ def cmd_export(args):
         # channel funscripts remain the primary e-stim artifact.
         stim_formats = (["wav"] if args.stim_wav else []) + (["mp3"] if args.stim_mp3 else [])
         if inc_estim and stim_formats and duration_ms > 0:
+            # Whichever e-stim station actually produced channels. Hardcoding
+            # estim3p here meant a project that stamped only the FOC-Stim
+            # station rendered no stim audio at all, silently — the directory
+            # simply wasn't there. Prefer the flagship, fall back to any other
+            # e-stim station that has files.
             est_dir = staging / "stations" / "estim3p"
+            if not est_dir.is_dir():
+                est_dir = next(
+                    (d for d in sorted((staging / "stations").glob("*"))
+                     if d.is_dir() and _polish_mod.is_estim_station(d.name)),
+                    est_dir,
+                )
             adir = staging / "audio"
             # Each phase PAIR renders to its own stereo control signal. The
             # NORMAL set (alpha/beta) and the PROSTATE set (alpha-prostate/
@@ -6058,7 +6074,8 @@ def cmd_polish_channels(args):
     other stations have nothing to preview here (strokers already preview the
     position motion truthfully).
     """
-    if args.station != "estim3p":
+    from forge import polish as _polish_mod
+    if not _polish_mod.is_estim_station(args.station):
         print(json.dumps({"station": args.station, "window": None, "channels": {}}))
         return
     start_ms = int(args.start_ms)

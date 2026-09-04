@@ -19,6 +19,7 @@ Station catalog (v1 = owned / user-testable hardware):
   station id   hardware              device_specs limits             output
   ===========  ====================  ==============================  ============
   ``estim3p``  E-Stim 3-phase        ``foc3phase``                   9-channel set
+  ``focstim``  FOC-Stim (direct)     ``foc3phase``                   9-channel set
   ``handy``    The Handy (1-axis)    ``handy``                       ``.funscript``
   ``osr2``     OSR2 (TCode)          ``osr2``                        axis siblings
   ``sr6``      SR6 (TCode 6-axis)    ``sr6``                         axis siblings
@@ -87,6 +88,38 @@ STATIONS: dict[str, Station] = {
         output_template="{stem}.estim3.funscript",
         default_knobs={"rateLimit": 0.55, "quietFloor": 0.06, "smoothing": 0.30, "latency": 20},
         constraint_hint="Rate-of-change ceiling · safety",
+    ),
+    # FOC-Stim: restim's direct-current-control hardware (ESP32 + DRV8231A).
+    # Emits the SAME channel set as estim3p — restim's three-phase FOC
+    # algorithm consumes exactly alpha/beta + waveform amplitude + the pulse
+    # params, so the existing generator already produces a file it can play.
+    #
+    # It is NOT the four-phase mode. That one takes four per-electrode power
+    # values (AXIS_ELECTRODE_1..4_POWER, 0..1 each) rather than a 2-D position,
+    # and nothing here synthesises those. Mapping alpha/beta onto four
+    # electrodes decides where current flows — and the device carries its own
+    # per-electrode calibration axes — so it waits for hardware to validate it
+    # rather than being invented here.
+    "focstim": Station(
+        id="focstim",
+        label="FOC-Stim",
+        sublabel="Direct current control",
+        kind="estim",
+        # foc3phase, not foc4phase: these are the limits that apply to the
+        # channels we actually write, and they carry the higher confidence.
+        device_keys=["foc3phase"],
+        axes=["L0"],  # synthesised channel set, not TCode siblings
+        output_template="{stem}.focstim.funscript",
+        # No audio path to bottleneck the signal, so the derivative ceiling can
+        # open up relative to the audio-driven station. device_specs allows
+        # 700 pos/s / 360 BPM / 80 ms cycle, but stamps that "Confidence:
+        # LOW-MEDIUM … perceptual ceiling", so this starts only modestly hotter
+        # than estim3p and leaves headroom to the user.
+        default_knobs={"rateLimit": 0.65, "quietFloor": 0.06, "smoothing": 0.28, "latency": 15},
+        # Unverified against hardware we own. Say so rather than implying the
+        # ceiling is measured.
+        experimental=True,
+        constraint_hint="Rate-of-change ceiling · safety (limits unverified)",
     ),
     "handy": Station(
         id="handy",
@@ -287,6 +320,18 @@ def shift_time(samples: list[dict], delta_ms: float) -> list[dict]:
     return [{"at": s["at"] + delta_ms, "pos": s["pos"]} for s in samples]
 
 
+def is_estim_station(station_id: str) -> bool:
+    """True for stations that emit the synthesised e-stim channel set.
+
+    The export path used to test ``sid == "estim3p"`` in six places, which
+    silently excluded any second e-stim station from the channel generation,
+    the stim-audio pairing, the seam match and the .forge grouping. Ask the
+    catalog instead.
+    """
+    station = STATIONS.get(station_id)
+    return station is not None and station.kind == "estim"
+
+
 def lag_for_device(station_id: str) -> float:
     """Mechanical lag time-constant (ms) per station. Preview only."""
     return {
@@ -296,6 +341,7 @@ def lag_for_device(station_id: str) -> float:
         "lovense": 35,   # Bluetooth — higher command latency
         "vacuglide": 28, # Autoblow stroker — cloud-synced
         "estim3p": 6,    # near-instant
+        "focstim": 4,    # direct current control — no audio path to settle
         "shaker": 45,    # suspended mass on a spring — slowest to settle
     }.get(station_id, 30)
 

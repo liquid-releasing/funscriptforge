@@ -31,7 +31,8 @@ class TestStationCatalog(unittest.TestCase):
     def test_v1_stations_present(self):
         self.assertEqual(
             set(polish.STATIONS),
-            {"estim3p", "handy", "ossm", "tcode", "lovense", "vacuglide", "shaker"},
+            {"estim3p", "focstim", "handy", "ossm", "tcode", "lovense",
+             "vacuglide", "shaker"},
         )
 
     def test_every_station_resolves_in_device_specs(self):
@@ -49,14 +50,36 @@ class TestStationCatalog(unittest.TestCase):
         self.assertEqual(specs["sr6"].device_type, "stroker")
         self.assertGreater(specs["sr6"].max_speed, 0)
 
+    # Stations whose caps have NOT been confirmed against real gear. The
+    # experimental flag is what keeps that visible in the UI instead of
+    # implying the same confidence as a measured station — so this is an
+    # allow-list, not a loosened assertion. Drop an entry here (and the flag)
+    # once a file from that station has actually been played on the hardware.
+    UNVERIFIED_STATIONS = {
+        "shaker",   # caps reasoned about a class of transducer, not measured
+        "focstim",  # device_specs foc3phase is "Confidence: LOW-MEDIUM"
+    }
+
     def test_hardware_stations_are_not_experimental(self):
         # The stroker/e-stim stations are hardware we own and can verify
         # end-to-end, so none of them may carry the experimental flag.
         for sid, st in polish.STATIONS.items():
-            if st.kind == "shaker":
-                continue  # see test_shaker_is_flagged_experimental
+            if sid in self.UNVERIFIED_STATIONS:
+                continue  # see test_unverified_stations_are_flagged
             with self.subTest(station=sid):
                 self.assertFalse(st.experimental)
+
+    def test_unverified_stations_are_flagged(self):
+        """Every station in the allow-list must actually carry the flag.
+
+        Without this the allow-list would be a silent escape hatch: adding an
+        id would exempt a station from the check whether or not the UI warned
+        anyone.
+        """
+        for sid in self.UNVERIFIED_STATIONS:
+            with self.subTest(station=sid):
+                self.assertIn(sid, polish.STATIONS)
+                self.assertTrue(polish.STATIONS[sid].experimental)
 
     def test_shaker_is_flagged_experimental(self):
         """Its device spec is conservative defaults, not measured hardware.
