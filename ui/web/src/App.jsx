@@ -24,6 +24,7 @@ import {
   analyzerVersionStale,
 } from './api/forge.js';
 import { deriveAnalysisState } from './lib/analysisState.js';
+import { applyBusyUpdate } from './lib/busyOwner.js';
 import { probeMediaCached } from './hooks/useChapterClip.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
@@ -166,11 +167,28 @@ export default function App() {
   const busyTokenRef = useRef(0);
   const beginBusy = useCallback((next) => {
     const token = ++busyTokenRef.current;
-    setBusy({ ...next, token });
+    setBusy({ ...next, token, owner: 'app' });
     return token;
   }, []);
   const endBusy = useCallback((token) => {
     setBusy((prev) => (prev && prev.token !== token ? prev : null));
+  }, []);
+  // Same hazard one level down. Child tabs each set and clear this banner
+  // directly, and a tab that has UNMOUNTED can still resolve a promise and
+  // run `.finally(() => setBusy(null))` — clearing a banner it no longer
+  // owns. That is how analysis progress vanished shortly after it started:
+  // the user arrives from Generate, analysis sets the banner, and Generate's
+  // outstanding work lands a moment later and wipes it (dogfood 2026-09-04:
+  // "skips into showing accept and chain ... no longer showing the
+  // progress"). Tag each child's banner with its owner; a clear from anyone
+  // else is ignored.
+  const busySettersRef = useRef({});
+  const busySetterFor = useCallback((owner) => {
+    if (!busySettersRef.current[owner]) {
+      busySettersRef.current[owner] = (next) =>
+        setBusy((prev) => applyBusyUpdate(prev, next, owner));
+    }
+    return busySettersRef.current[owner];
   }, []);
   // True while the Analysis pipeline is actually running, reported up by
   // AnalysisTab. Deliberately independent of `busy`: the chain must not open
@@ -1406,7 +1424,7 @@ export default function App() {
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}
-            onBusy={setBusy}
+            onBusy={busySetterFor('generate')}
           />
         )}
         {tab === 'analysis' && (
@@ -1418,7 +1436,7 @@ export default function App() {
             onChaptersChange={handleChaptersChange}
             refreshAudioSidecars={refreshAudioSidecars}
             onAnalyzingChange={setAnalysisRunning}
-            setBusy={setBusy}
+            setBusy={busySetterFor('analysis')}
             setAppError={setAppError}
           />
         )}
@@ -1426,7 +1444,7 @@ export default function App() {
           <PolishTab
             project={typeof openedProject === 'object' ? openedProject : null}
             setAppError={setAppError}
-            setBusy={setBusy}
+            setBusy={busySetterFor('polish')}
             onRegisterChapterNav={chapterNavRegistrarFor('polish')}
           />
         )}
@@ -1452,7 +1470,7 @@ export default function App() {
             }}
             onChaptersChange={handleChaptersChange}
             onActionsPatch={handleActionsPatch}
-            setBusy={setBusy}
+            setBusy={busySetterFor('chapters')}
             setAppError={setAppError}
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
@@ -1477,7 +1495,7 @@ export default function App() {
         {tab === 'phrases' && (
           <PhrasesTab
             project={typeof openedProject === 'object' ? openedProject : null}
-            setBusy={setBusy}
+            setBusy={busySetterFor('phrases')}
             setAppError={setAppError}
             phrasesByPath={phrasesByPath}
             setPhrasesByPath={setPhrasesByPath}
@@ -1491,7 +1509,7 @@ export default function App() {
         {tab === 'stanzas' && (
           <StanzasTab
             project={typeof openedProject === 'object' ? openedProject : null}
-            setBusy={setBusy}
+            setBusy={busySetterFor('stanzas')}
             setAppError={setAppError}
             stanzasByPath={stanzasByPath}
             setStanzasByPath={setStanzasByPath}
@@ -1524,7 +1542,7 @@ export default function App() {
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
             trackBeats={trackBeats}
-            onBusy={setBusy}
+            onBusy={busySetterFor('characters')}
             initialChapterId={activeChapterId}
             onActiveChapterChange={setActiveChapterId}
             onRegisterChapterNav={chapterNavRegistrarFor('stim')}
@@ -1536,7 +1554,7 @@ export default function App() {
             selectedDevices={selectedDevices}
             trackPeaks={trackPeaks}
             trackSpectrogram={trackSpectrogram}
-            setBusy={setBusy}
+            setBusy={busySetterFor('export')}
             setAppError={setAppError}
             onRegisterExport={setExportReg}
           />
