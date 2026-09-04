@@ -103,7 +103,14 @@ jobs:
         run: |
           if (!(Test-Path "dist\forge-cli\forge-cli.exe")) { Write-Error "forge-cli not built"; exit 1 }
           & "dist\forge-cli\forge-cli.exe" list-characters --format json > $null
-          if ($LASTEXITCODE -ne 0) { Write-Error "forge-cli smoke test failed"; exit 1 }
+          if ($LASTEXITCODE -ne 0) { Write-Error "forge-cli list-characters failed"; exit 1 }
+          # Exercises a YAML path (reads the vendored Edger event catalog).
+          # PyYAML was undeclared in requirements.txt, so CI froze a build with
+          # no yaml module and shipped it: Export, Import, Events and Polish all
+          # died with ModuleNotFoundError while dev worked, because the dev venv
+          # had PyYAML transitively. list-characters alone never touched yaml.
+          & "dist\forge-cli\forge-cli.exe" list-event-recipes > $null
+          if ($LASTEXITCODE -ne 0) { Write-Error "forge-cli list-event-recipes failed"; exit 1 }
 
       - name: Fetch static ffmpeg
         working-directory: funscript-updater
@@ -246,6 +253,9 @@ jobs:
         run: |
           test -x dist/forge-cli/forge-cli || { echo "forge-cli not built"; exit 1; }
           ./dist/forge-cli/forge-cli list-characters --format json > /dev/null
+          # Exercises a YAML path (reads the vendored Edger event catalog);
+          # see the Windows job for why list-characters alone was not enough.
+          ./dist/forge-cli/forge-cli list-event-recipes > /dev/null
 
       - name: Fetch static ffmpeg (arm64)
         working-directory: funscript-updater
@@ -398,6 +408,9 @@ jobs:
         run: |
           test -x dist/forge-cli/forge-cli || { echo "forge-cli not built"; exit 1; }
           ./dist/forge-cli/forge-cli list-characters --format json > /dev/null
+          # Exercises a YAML path (reads the vendored Edger event catalog);
+          # see the Windows job for why list-characters alone was not enough.
+          ./dist/forge-cli/forge-cli list-event-recipes > /dev/null
 
       - name: Fetch static ffmpeg
         working-directory: funscript-updater
