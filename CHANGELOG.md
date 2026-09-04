@@ -2,6 +2,41 @@
 
 All notable changes to FunscriptForge are recorded here.
 
+## v0.2.14-alpha — 2026-09-04
+
+**macOS and Linux builds ship for the first time.** Previous releases were
+Windows-only, and the download page advertised macOS and Linux buttons that
+pointed at files the pipeline never produced.
+
+Version numbering also changes here: the patch number now climbs with each
+release and the middle number marks a minor release, so this follows v0.2.0
+directly rather than continuing the old 0.0.x line.
+
+### Added
+
+- macOS build (Apple Silicon) — `FunscriptForge-macos-arm64.dmg`, with an
+  arm64-native static ffmpeg and an `.icns` generated at build time from the
+  source PNG.
+- Linux build (x86-64) — `FunscriptForge-linux-x86_64.AppImage` and
+  `FunscriptForge-linux-amd64.deb`, built on Ubuntu 22.04 so the AppImage
+  inherits a glibc old enough to be portable.
+- `workflow_dispatch` on the release workflow, so a build path can be
+  exercised end to end without spending a version tag on it.
+
+### Fixed
+
+- The Discord invite compiled into the About dialog had expired. All six
+  references across the app and docs now point at the live invite.
+- Every FunscriptForge download link on funscriptforge.com returned 404 —
+  they pointed at zip/tarball names the pipeline stopped producing. The site
+  now links the real installers, and its system requirements no longer claim
+  macOS and Linux support that had not shipped.
+
+### Changed
+
+- The release publishes whatever platforms actually built. A failure in the
+  new macOS or Linux job no longer holds back a working Windows release.
+
 ## v0.2.0-alpha — 2026-08-10
 
 Two months of editing work on top of the first alpha. The headline is that

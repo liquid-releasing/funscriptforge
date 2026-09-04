@@ -15,6 +15,9 @@ on:
   push:
     tags:
       - "v*"
+  # Build-only dry run. Lets a new platform be exercised end to end without
+  # spending a version tag on it — the publish job is tag-gated below.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -168,9 +171,287 @@ jobs:
           if-no-files-found: error
           path: funscript-updater/dist-stable/*
 
+  build-macos:
+    name: Build — macOS (Apple Silicon)
+    runs-on: macos-14
+    timeout-minutes: 90
+    # First cut on this path. A brand-new build must not be able to sink a
+    # release whose Windows half is proven — the publish job ships whatever
+    # actually built.
+    continue-on-error: true
+
+    steps:
+      - name: Checkout funscriptforge
+        uses: actions/checkout@v4
+        with:
+          path: funscript-updater
+
+      - name: Checkout funscript-tools (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/funscript-tools
+          path: funscript-tools
+
+      - name: Checkout forge-ui-components (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/forge-ui-components
+          path: forge-ui-components
+
+      - name: Checkout videoflow (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/videoflow
+          path: videoflow
+
+      - name: Checkout forgemoment (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/forgemoment
+          path: forgemoment
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python deps + freeze forge-cli
+        working-directory: funscript-updater
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e ../videoflow
+          pip install -e ../forge-ui-components
+          pip install onnxruntime pyinstaller
+          pyinstaller forge-cli.spec --noconfirm --clean
+
+      - name: Verify forge-cli runs
+        working-directory: funscript-updater
+        run: |
+          test -x dist/forge-cli/forge-cli || { echo "forge-cli not built"; exit 1; }
+          ./dist/forge-cli/forge-cli list-characters --format json > /dev/null
+
+      - name: Fetch static ffmpeg (arm64)
+        working-directory: funscript-updater
+        run: |
+          # osxexperts publishes arm64-native STATIC builds of ffmpeg and
+          # ffprobe as separate zips. Static matters here: a Homebrew ffmpeg
+          # links dylibs that will not exist on the user machine.
+          mkdir -p ui/web/src-tauri/resources/ffmpeg
+          curl -fsSL -o ffmpeg.zip  https://www.osxexperts.net/ffmpeg711arm.zip
+          curl -fsSL -o ffprobe.zip https://www.osxexperts.net/ffprobe711arm.zip
+          unzip -o -j ffmpeg.zip  -d ui/web/src-tauri/resources/ffmpeg
+          unzip -o -j ffprobe.zip -d ui/web/src-tauri/resources/ffmpeg
+          chmod +x ui/web/src-tauri/resources/ffmpeg/ffmpeg
+          chmod +x ui/web/src-tauri/resources/ffmpeg/ffprobe
+          ui/web/src-tauri/resources/ffmpeg/ffmpeg  -hide_banner -version | head -1
+          ui/web/src-tauri/resources/ffmpeg/ffprobe -hide_banner -version | head -1
+          rm -f ffmpeg.zip ffprobe.zip
+
+      - name: Stage forge-cli into Tauri resources
+        working-directory: funscript-updater
+        run: |
+          mkdir -p ui/web/src-tauri/resources
+          mv dist/forge-cli ui/web/src-tauri/resources/forge-cli
+
+      - name: Generate macOS .icns
+        working-directory: funscript-updater/ui/web/src-tauri
+        run: |
+          # The repo carries icon.png + icon.ico only; the macOS bundler wants
+          # an .icns. Build it with the platform tools rather than committing a
+          # binary that would drift from the source PNG.
+          set -e
+          ICONSET=icons/icon.iconset
+          rm -rf "$ICONSET"
+          mkdir -p "$ICONSET"
+          for sz in 16 32 128 256 512; do
+            sips -z $sz $sz icons/icon.png --out "$ICONSET/icon_${sz}x${sz}.png" > /dev/null
+            sips -z $((sz*2)) $((sz*2)) icons/icon.png --out "$ICONSET/icon_${sz}x${sz}@2x.png" > /dev/null
+          done
+          iconutil -c icns "$ICONSET" -o icons/icon.icns
+          rm -rf "$ICONSET"
+          ls -la icons/icon.icns
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: funscript-updater/ui/web/src-tauri
+
+      - name: Install npm deps
+        working-directory: funscript-updater/ui/web
+        run: npm ci
+
+      - name: Install forgemoment deps
+        working-directory: forgemoment
+        run: npm ci
+
+      - name: Tauri build (with bundled-resources overlay)
+        working-directory: funscript-updater/ui/web
+        env:
+          CARGO_BUILD_JOBS: 2
+        run: npx tauri build --config src-tauri/tauri.release.conf.json --bundles dmg
+
+      - name: Rename to stable filenames
+        working-directory: funscript-updater
+        run: |
+          mkdir -p dist-stable
+          cp ui/web/src-tauri/target/release/bundle/dmg/*.dmg dist-stable/FunscriptForge-macos-arm64.dmg
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: funscriptforge-macos
+          if-no-files-found: error
+          path: funscript-updater/dist-stable/*
+
+  build-linux:
+    name: Build — Linux (x86-64)
+    # 22.04 rather than latest: an AppImage inherits the builder glibc, so
+    # building on the oldest supported runner is what makes it portable.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    continue-on-error: true
+
+    steps:
+      - name: Checkout funscriptforge
+        uses: actions/checkout@v4
+        with:
+          path: funscript-updater
+
+      - name: Checkout funscript-tools (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/funscript-tools
+          path: funscript-tools
+
+      - name: Checkout forge-ui-components (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/forge-ui-components
+          path: forge-ui-components
+
+      - name: Checkout videoflow (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/videoflow
+          path: videoflow
+
+      - name: Checkout forgemoment (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/forgemoment
+          path: forgemoment
+
+      - name: Install Tauri system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+            patchelf file build-essential curl wget libxdo-dev libssl-dev
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python deps + freeze forge-cli
+        working-directory: funscript-updater
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e ../videoflow
+          pip install -e ../forge-ui-components
+          pip install onnxruntime pyinstaller
+          pyinstaller forge-cli.spec --noconfirm --clean
+
+      - name: Verify forge-cli runs
+        working-directory: funscript-updater
+        run: |
+          test -x dist/forge-cli/forge-cli || { echo "forge-cli not built"; exit 1; }
+          ./dist/forge-cli/forge-cli list-characters --format json > /dev/null
+
+      - name: Fetch static ffmpeg
+        working-directory: funscript-updater
+        run: |
+          # johnvansickle static amd64: GPL (libx264 present, which the 720p
+          # chapter-clip downscale needs) and self-contained.
+          mkdir -p ui/web/src-tauri/resources/ffmpeg
+          curl -fsSL -o ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          mkdir -p ffmpeg_extract
+          tar -xJf ffmpeg.tar.xz -C ffmpeg_extract --strip-components=1
+          cp ffmpeg_extract/ffmpeg ffmpeg_extract/ffprobe ui/web/src-tauri/resources/ffmpeg/
+          chmod +x ui/web/src-tauri/resources/ffmpeg/ffmpeg
+          chmod +x ui/web/src-tauri/resources/ffmpeg/ffprobe
+          # GPL compliance: ship the build licence texts beside the binary.
+          cp ffmpeg_extract/GPLv3.txt  ui/web/src-tauri/resources/ffmpeg/ || true
+          cp ffmpeg_extract/readme.txt ui/web/src-tauri/resources/ffmpeg/ || true
+          ui/web/src-tauri/resources/ffmpeg/ffmpeg -hide_banner -version | head -1
+          rm -rf ffmpeg.tar.xz ffmpeg_extract
+
+      - name: Stage forge-cli into Tauri resources
+        working-directory: funscript-updater
+        run: |
+          mkdir -p ui/web/src-tauri/resources
+          mv dist/forge-cli ui/web/src-tauri/resources/forge-cli
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: funscript-updater/ui/web/src-tauri
+
+      - name: Install npm deps
+        working-directory: funscript-updater/ui/web
+        run: npm ci
+
+      - name: Install forgemoment deps
+        working-directory: forgemoment
+        run: npm ci
+
+      - name: Tauri build (with bundled-resources overlay)
+        working-directory: funscript-updater/ui/web
+        env:
+          CARGO_BUILD_JOBS: 2
+        run: npx tauri build --config src-tauri/tauri.release.conf.json --bundles appimage,deb
+
+      - name: Rename to stable filenames
+        working-directory: funscript-updater
+        run: |
+          mkdir -p dist-stable
+          BUNDLE=ui/web/src-tauri/target/release/bundle
+          cp "$BUNDLE"/appimage/*.AppImage dist-stable/FunscriptForge-linux-x86_64.AppImage
+          cp "$BUNDLE"/deb/*.deb dist-stable/FunscriptForge-linux-amd64.deb
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: funscriptforge-linux
+          if-no-files-found: error
+          path: funscript-updater/dist-stable/*
+
   release:
     name: Publish Release
-    needs: [build-windows]
+    needs: [build-windows, build-macos, build-linux]
+    # `always()` so a failing macOS or Linux build still publishes the
+    # platforms that succeeded, rather than holding the whole release
+    # hostage to the newest build path. Windows is still required: if it
+    # failed there is nothing worth publishing.
+    if: always() && needs.build-windows.result == 'success' && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
 
     steps:
@@ -178,6 +459,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts/
+
+      - name: Report what actually built
+        run: |
+          echo "windows: ${{ needs.build-windows.result }}"
+          echo "macos:   ${{ needs.build-macos.result }}"
+          echo "linux:   ${{ needs.build-linux.result }}"
+          find artifacts -type f -exec ls -lh {} +
 
       - name: Compute release name
         id: relname
@@ -196,9 +484,13 @@ jobs:
           prerelease: false
           generate_release_notes: true
           append_body: true
+          fail_on_unmatched_files: false
           files: |
             artifacts/funscriptforge-windows/FunscriptForge-Setup-windows.msi
             artifacts/funscriptforge-windows/FunscriptForge-Setup-windows.exe
+            artifacts/funscriptforge-macos/FunscriptForge-macos-arm64.dmg
+            artifacts/funscriptforge-linux/FunscriptForge-linux-x86_64.AppImage
+            artifacts/funscriptforge-linux/FunscriptForge-linux-amd64.deb
           body: |
             > ⚠️ **Alpha — under active development.** Expect rough edges.
 
@@ -206,12 +498,18 @@ jobs:
             e-stim, strokers, and multi-axis devices. Local desktop app.
 
             ## Downloads
-            - **Windows** — `FunscriptForge-Setup-windows.msi` (recommended) or
-              `FunscriptForge-Setup-windows.exe` (NSIS). The app bundles its own
-              Python backend + ffmpeg — no separate install needed. Unsigned, so
-              Windows SmartScreen may warn on first run (More info → Run anyway).
 
-            macOS / Linux builds are coming in a follow-up.
+            Every build bundles its own Python backend and ffmpeg — nothing
+            else to install. All builds are **unsigned**, so each OS asks once:
+
+            | Platform | File | First run |
+            | --- | --- | --- |
+            | Windows | `FunscriptForge-Setup-windows.msi` (recommended) or `-windows.exe` (NSIS) | SmartScreen → More info → Run anyway |
+            | macOS (Apple Silicon) | `FunscriptForge-macos-arm64.dmg` | Right-click the app → Open, or `xattr -dr com.apple.quarantine /Applications/FunscriptForge.app` |
+            | Linux (x86-64) | `FunscriptForge-linux-x86_64.AppImage` (portable) or `-linux-amd64.deb` | `chmod +x` the AppImage before running |
+
+            macOS builds are Apple Silicon only for now — Intel Macs are not
+            covered by this release.
 
       - name: Notify funscriptforge-web (best-effort)
         env:
