@@ -2,6 +2,30 @@
 
 All notable changes to FunscriptForge are recorded here.
 
+## v0.2.16-alpha — 2026-09-04
+
+Analysis-tab fixes, all found by dogfooding the v0.2.15-alpha installer.
+
+### Fixed
+
+- **The chain button was offered while analysis was still running.** The
+  footer showed a red ✓ "Accept and chain to Chapters" and the summary
+  "ready to chain" over panels that still read "Detecting chapters…". Red +
+  ✓ is the app's grammar for a completed step, so it is now withheld for
+  every incomplete analysis state, and the Analysis tab is gated outright
+  while the pipeline runs.
+- **Analysis progress vanished from the footer.** Long operations each set the
+  shared busy banner and cleared it with an unconditional reset in a `finally`,
+  which cleared whichever banner was current rather than their own. An open,
+  attach or import finishing after analysis started wiped the analysis banner
+  and its step list. The banner is now token-scoped, so one operation cannot
+  clear another's.
+- **A project that had not been analyzed offered no way to start.** With media
+  attached the state machine reports "loading" on the assumption the
+  auto-trigger is about to run; when it did not, the tab showed no banner, a
+  generic subtitle, and a single control labelled "Re-analyze". There is now
+  an explicit not-started banner with an **Analyze** button.
+
 ## v0.2.15-alpha — 2026-09-04
 
 Two defects found by dogfooding the shipped v0.2.14-alpha installer. Both were
