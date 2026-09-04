@@ -1670,12 +1670,14 @@ def _write_project_identity(target, ident: dict) -> None:
 # bundle keeps the flat machine layout (stations/<id>/) that import + the
 # assembler read; this human view is loose-mode only.
 _STATION_FOLDER = {
-    "estim3p": "E-Stim", "focstim": "FOC-Stim", "handy": "Handy", "tcode": "MultiFunPlayer",
+    "estim3p": "E-Stim", "focstim": "FOC-Stim", "focstim4p": "FOC-Stim 4-phase",
+    "handy": "Handy", "tcode": "MultiFunPlayer",
     "osr2": "OSR2", "sr6": "SR6", "lovense": "Lovense", "vacuglide": "Vacuglide",
 }
 _STATION_PURPOSE = {
     "estim3p": "E-stim channel set — load in restim or ForgePlayer.",
     "focstim": "E-stim channel set clamped for FOC-Stim (direct current control) — load in restim. Experimental: the device limits are unverified.",
+    "focstim4p": "FOC-Stim 4-phase: four per-electrode power channels (e1–e4) — load in restim with a 4-phase device. Experimental: unverified on hardware.",
     "handy": "Clamped stroke script tuned for The Handy.",
     "tcode": "Multi-axis set — point MultiFunPlayer or XTPlayer at this folder (it auto-detects the axes).",
     "osr2": "T-code multi-axis set for the OSR2.",
@@ -5653,6 +5655,29 @@ def _polish_generate_estim(
         acts = _passages_mod.scale_estim(name, acts, _passages)
         clamped, _ = polish.apply_pass(acts, station.id, knobs)
         out[name] = {"template": templates.get(name, {}), "actions": clamped}
+
+    # Four-phase devices take per-electrode powers, not a position. Convert
+    # AFTER clamping so the rate ceiling and the device_specs backstop still
+    # apply to the authored motion — clamping e1..e4 directly would be
+    # clamping the derived signal, which is not what the limits describe.
+    if getattr(station, "electrodes", False):
+        from forge import focstim as _focstim
+        _emit_progress("Forging FOC-Stim — mapping position to four electrodes…")
+        alpha = out.get("alpha", {}).get("actions") or []
+        beta = out.get("beta", {}).get("actions") or []
+        if not alpha and not beta:
+            raise ValueError(
+                "No alpha/beta position channels were generated, so there is "
+                "nothing to map onto the four electrodes."
+            )
+        tmpl = out.get("alpha", {}).get("template", {})
+        for ch, acts in _focstim.channels_from_alpha_beta(alpha, beta).items():
+            out[ch] = {"template": dict(tmpl), "actions": acts}
+        # Drop the position channels: a four-phase device reads none of them,
+        # and leaving `alpha` in place would have restim's auto-loader bind it
+        # to POSITION_ALPHA for a device that ignores it.
+        for ch in _focstim.POSITION_CHANNELS:
+            out.pop(ch, None)
     return out
 
 

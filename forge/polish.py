@@ -20,6 +20,7 @@ Station catalog (v1 = owned / user-testable hardware):
   ===========  ====================  ==============================  ============
   ``estim3p``  E-Stim 3-phase        ``foc3phase``                   9-channel set
   ``focstim``  FOC-Stim (direct)     ``foc3phase``                   9-channel set
+  ``focstim4p`` FOC-Stim 4-phase     ``foc4phase``                   ``e1``..``e4``
   ``handy``    The Handy (1-axis)    ``handy``                       ``.funscript``
   ``osr2``     OSR2 (TCode)          ``osr2``                        axis siblings
   ``sr6``      SR6 (TCode 6-axis)    ``sr6``                         axis siblings
@@ -73,6 +74,9 @@ class Station:
     default_knobs: dict = field(default_factory=dict)
     experimental: bool = False
     constraint_hint: str = ""
+    # True for stations whose device takes per-electrode powers (e1..e4)
+    # instead of an alpha/beta position. Branch on this, not on the id.
+    electrodes: bool = False
 
 
 # v1 catalog — only hardware we own and can verify. Post-beta rows
@@ -120,6 +124,23 @@ STATIONS: dict[str, Station] = {
         # ceiling is measured.
         experimental=True,
         constraint_hint="Rate-of-change ceiling · safety (limits unverified)",
+    ),
+    # FOC-Stim four-phase. Same generation path as the stations above — the
+    # difference is the wire format: the device takes four electrode powers
+    # rather than a position, so alpha/beta are transformed into e1..e4 via
+    # restim's own transform (see forge/focstim.py).
+    "focstim4p": Station(
+        id="focstim4p",
+        label="FOC-Stim",
+        sublabel="4-phase",
+        kind="estim",
+        device_keys=["foc4phase"],
+        axes=["L0"],
+        output_template="{stem}.focstim4.funscript",
+        default_knobs={"rateLimit": 0.65, "quietFloor": 0.06, "smoothing": 0.28, "latency": 15},
+        experimental=True,
+        electrodes=True,
+        constraint_hint="Four-electrode drive · safety (limits unverified)",
     ),
     "handy": Station(
         id="handy",
@@ -342,6 +363,7 @@ def lag_for_device(station_id: str) -> float:
         "vacuglide": 28, # Autoblow stroker — cloud-synced
         "estim3p": 6,    # near-instant
         "focstim": 4,    # direct current control — no audio path to settle
+        "focstim4p": 4,  # same hardware, four-electrode drive
         "shaker": 45,    # suspended mass on a spring — slowest to settle
     }.get(station_id, 30)
 

@@ -18,7 +18,7 @@ from pathlib import Path
 # tree uses these display names directly; the zip uses lowercase station slugs).
 _STATION_DEVICE = {
     "estim3p": "E-Stim", "estim": "E-Stim", "handy": "Handy", "lovense": "Lovense",
-    "focstim": "FOC-Stim",
+    "focstim": "FOC-Stim", "focstim4p": "FOC-Stim 4-phase",
     "osr2": "OSR2", "sr6": "SR6", "ossm": "Ossm", "vacuglide": "Vacuglide",
     "multifunplayer": "MultiFunPlayer",
 }
@@ -26,12 +26,13 @@ _STATION_DEVICE = {
 # Device folders we know how to surface, in a sensible review order. Any other
 # subfolder of <stem>.output that holds .funscript files is still picked up.
 _DEVICE_ORDER = [
-    "E-Stim", "FOC-Stim", "Handy", "Lovense", "MultiFunPlayer", "OSR2", "SR6",
+    "E-Stim", "FOC-Stim", "FOC-Stim 4-phase", "Handy", "Lovense",
+    "MultiFunPlayer", "OSR2", "SR6",
     "Ossm", "Vacuglide", "Edger",
 ]
 # Channel display order within a device (E-Stim). Unknown channels append after.
 _CHANNEL_ORDER = [
-    "alpha", "beta", "frequency", "pulse_frequency", "volume",
+    "alpha", "beta", "e1", "e2", "e3", "e4", "frequency", "pulse_frequency", "volume",
     "pulse_rise_time", "alpha-prostate", "beta-prostate", "volume-prostate",
 ]
 

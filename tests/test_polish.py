@@ -31,8 +31,8 @@ class TestStationCatalog(unittest.TestCase):
     def test_v1_stations_present(self):
         self.assertEqual(
             set(polish.STATIONS),
-            {"estim3p", "focstim", "handy", "ossm", "tcode", "lovense",
-             "vacuglide", "shaker"},
+            {"estim3p", "focstim", "focstim4p", "handy", "ossm", "tcode",
+             "lovense", "vacuglide", "shaker"},
         )
 
     def test_every_station_resolves_in_device_specs(self):
@@ -57,8 +57,19 @@ class TestStationCatalog(unittest.TestCase):
     # once a file from that station has actually been played on the hardware.
     UNVERIFIED_STATIONS = {
         "shaker",   # caps reasoned about a class of transducer, not measured
-        "focstim",  # device_specs foc3phase is "Confidence: LOW-MEDIUM"
+        "focstim",    # device_specs foc3phase is "Confidence: LOW-MEDIUM"
+        "focstim4p",  # foc4phase limits are inherited, not measured
     }
+
+    def test_only_four_phase_uses_electrode_drive(self):
+        """The electrode flag is what routes a station through the e1..e4
+        transform instead of writing alpha/beta. If it ever spread to a
+        station whose device expects a position, that station would export
+        channels its hardware cannot read."""
+        flagged = {sid for sid, st in polish.STATIONS.items() if st.electrodes}
+        self.assertEqual(flagged, {"focstim4p"})
+        for sid in flagged:
+            self.assertTrue(polish.is_estim_station(sid))
 
     def test_hardware_stations_are_not_experimental(self):
         # The stroker/e-stim stations are hardware we own and can verify

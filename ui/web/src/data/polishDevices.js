@@ -65,6 +65,35 @@ export const POLISH_DEVICES = [
     ],
   },
   {
+    // FOC-Stim four-phase. Same authored motion as the station above; what
+    // differs is the wire format — the device takes four per-electrode powers
+    // (e1..e4, 0..1) rather than an alpha/beta position, so the exported set
+    // carries .e1-.e4 instead of .alpha/.beta. The transform is restim's own
+    // (stim_math/transforms_4.py), not something invented here.
+    //
+    // Experimental until it has been played on hardware: device_specs stamps
+    // foc4phase "Confidence: LOW … limits assumed identical pending vendor
+    // data".
+    id: 'focstim4p',
+    label: 'FOC-Stim',
+    sublabel: '4-phase',
+    kind: 'estim',
+    deviceKeys: ['foc4phase'],
+    axes: ['L0'],
+    severity: 1.6,                        // beside the 3-phase FOC station
+    ember: '#6fb8ff',
+    glyph: 'estim',
+    experimental: true,
+    constraintHint: 'Four-electrode drive · safety (limits unverified)',
+    outputFile: '{stem}.focstim4.funscript',
+    knobs: [
+      { key: 'rateLimit',  label: 'Rate ceiling', min: 0.1, max: 1,   step: 0.05, unit: '/100ms', default: 0.65, help: 'Hard-clips the derivative for safety, applied to the authored motion before it is mapped onto the four electrodes.' },
+      { key: 'quietFloor', label: 'Quiet floor',  min: 0,   max: 0.3, step: 0.01, unit: '',       default: 0.06, help: "Minimum signal so the channel doesn't drop into a cold gap." },
+      { key: 'smoothing',  label: 'Smoothing',    min: 0,   max: 1,   step: 0.05, unit: '',       default: 0.28, help: 'Low-pass on the envelope.' },
+      { key: 'latency',    label: 'Lead-time',    min: -20, max: 80,  step: 5,    unit: 'ms',     default: 15,   help: 'Sensation onset is near-instant — small compensation.' },
+    ],
+  },
+  {
     id: 'handy',
     label: 'The Handy',
     sublabel: '1-axis stroker',
