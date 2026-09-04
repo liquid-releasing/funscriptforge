@@ -17,7 +17,15 @@ on:
       - "v*"
   # Build-only dry run. Lets a new platform be exercised end to end without
   # spending a version tag on it — the publish job is tag-gated below.
+  # `platforms` keeps a single-platform retry from rebuilding the other two;
+  # the Windows job alone is ~50 minutes of runner time.
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Which builds to run"
+        type: choice
+        default: all
+        options: [all, windows, macos, linux]
 
 permissions:
   contents: write
@@ -31,6 +39,10 @@ jobs:
   build-windows:
     name: Build — Windows
     runs-on: windows-latest
+    if: >-
+      github.event_name != 'workflow_dispatch'
+      || inputs.platforms == 'all'
+      || inputs.platforms == 'windows'
     # The prior cut died after ~53 min when the Tauri build starved the runner
     # for memory (solid-LZMA NSIS compression of the ~580 MB resource payload).
     # Fail fast on a hang rather than burning an hour.
@@ -174,6 +186,10 @@ jobs:
   build-macos:
     name: Build — macOS (Apple Silicon)
     runs-on: macos-14
+    if: >-
+      github.event_name != 'workflow_dispatch'
+      || inputs.platforms == 'all'
+      || inputs.platforms == 'macos'
     timeout-minutes: 90
     # First cut on this path. A brand-new build must not be able to sink a
     # release whose Windows half is proven — the publish job ships whatever
@@ -314,6 +330,10 @@ jobs:
 
   build-linux:
     name: Build — Linux (x86-64)
+    if: >-
+      github.event_name != 'workflow_dispatch'
+      || inputs.platforms == 'all'
+      || inputs.platforms == 'linux'
     # 22.04 rather than latest: an AppImage inherits the builder glibc, so
     # building on the oldest supported runner is what makes it portable.
     runs-on: ubuntu-22.04
@@ -355,7 +375,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-            patchelf file build-essential curl wget libxdo-dev libssl-dev
+            patchelf file build-essential curl wget libxdo-dev libssl-dev \
+            libfuse2
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -427,15 +448,24 @@ jobs:
         working-directory: funscript-updater/ui/web
         env:
           CARGO_BUILD_JOBS: 2
-        run: npx tauri build --config src-tauri/tauri.release.conf.json --bundles appimage,deb
+          # linuxdeploy and its appimage plugin are themselves AppImages, and
+          # an AppImage mounts itself through FUSE to run. Hosted runners have
+          # no FUSE device, so the first cut got as far as downloading the
+          # tool and died with "failed to run linuxdeploy". This tells the
+          # AppImage runtime to extract and exec instead of mounting.
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        # deb FIRST: it is the bundle that does not go through linuxdeploy, so
+        # a failure in the AppImage path still leaves an installable artifact.
+        run: npx tauri build --config src-tauri/tauri.release.conf.json --bundles deb,appimage
 
       - name: Rename to stable filenames
         working-directory: funscript-updater
         run: |
           mkdir -p dist-stable
           BUNDLE=ui/web/src-tauri/target/release/bundle
-          cp "$BUNDLE"/appimage/*.AppImage dist-stable/FunscriptForge-linux-x86_64.AppImage
           cp "$BUNDLE"/deb/*.deb dist-stable/FunscriptForge-linux-amd64.deb
+          cp "$BUNDLE"/appimage/*.AppImage dist-stable/FunscriptForge-linux-x86_64.AppImage || \
+            echo "::warning::AppImage not produced — shipping the .deb only"
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
