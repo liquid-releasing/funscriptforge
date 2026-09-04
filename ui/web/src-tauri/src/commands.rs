@@ -501,10 +501,37 @@ pub fn prewarm_backend() {
     let _ = cmd.spawn(); // fire and forget
 }
 
+// Windows gives every console child its own console window unless told
+// otherwise, and both backends are console programs (the bundled forge-cli.exe
+// is a PyInstaller freeze; the dev path is python.exe). Without this flag the
+// app flashes a black cmd window on every backend call — one per click, and
+// dozens during an analyze. Set it at the shared builders below rather than at
+// each call site, so a new backend call can't reintroduce the flash.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Suppress the console window for a tokio-spawned child. No-op off Windows.
+#[cfg(windows)]
+fn hide_console(cmd: &mut Command) {
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+#[cfg(not(windows))]
+fn hide_console(_cmd: &mut Command) {}
+
+/// Same, for a std::process child.
+#[cfg(windows)]
+fn hide_console_std(cmd: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+#[cfg(not(windows))]
+fn hide_console_std(_cmd: &mut std::process::Command) {}
+
 // Build a tokio Command for the resolved backend with `args` appended.
 fn cli_command(args: &[&str]) -> Command {
     let inv = cli_invocation();
     let mut cmd = Command::new(&inv.program);
+    hide_console(&mut cmd);
     cmd.args(&inv.prefix_args);
     for a in args {
         cmd.arg(a);
@@ -2994,6 +3021,9 @@ pub async fn open_in_forgeplayer(path: String) -> Result<(), String> {
             .to_string()
     })?;
     let mut cmd = std::process::Command::new(&py);
+    // python.exe is a console program; without this, handing off to ForgePlayer
+    // leaves a black console window sitting behind it for the whole session.
+    hide_console_std(&mut cmd);
     cmd.arg(&main_py);
     // Forward the bundle so ForgePlayer opens straight into it. Only when it's a
     // real existing path — a blank arg would otherwise read as a bogus target.
@@ -3259,7 +3289,9 @@ const FFMPEG_ENCODE_ARGS_4K_DOWNSCALE: &[&str] = &[
 async fn probe_video_dimensions(
     media_path: &str, ffmpeg_bin: &str,
 ) -> Option<(u32, u32)> {
-    let output = Command::new(ffmpeg_bin)
+    let mut cmd = Command::new(ffmpeg_bin);
+    hide_console(&mut cmd);
+    let output = cmd
         .args(["-hide_banner", "-loglevel", "info", "-i", media_path])
         .output()
         .await
@@ -3507,7 +3539,9 @@ pub async fn extract_chapter_clip(
     ff_args.extend_from_slice(encode_args);
     ff_args.push(&tmp_str);
 
-    let output = Command::new(&ffmpeg_bin)
+    let mut cmd = Command::new(&ffmpeg_bin);
+    hide_console(&mut cmd);
+    let output = cmd
         .args(&ff_args)
         .output()
         .await
