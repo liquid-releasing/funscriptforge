@@ -444,19 +444,37 @@ jobs:
         working-directory: forgemoment
         run: npm ci
 
-      - name: Tauri build (with bundled-resources overlay)
+      # Two separate bundle passes, because they have very different odds.
+      # The .deb is produced by Tauri itself and has built cleanly every run.
+      # The AppImage shells out to linuxdeploy, which has failed every run so
+      # far with a message Tauri swallows the detail of. Bundling them in one
+      # command meant the AppImage took the .deb down with it: the step
+      # exited 1, so the rename and upload never ran and Linux shipped
+      # nothing despite having a working package sitting on disk.
+      - name: Tauri build — deb
         working-directory: funscript-updater/ui/web
+        env:
+          CARGO_BUILD_JOBS: 2
+        run: npx tauri build --config src-tauri/tauri.release.conf.json --bundles deb
+
+      - name: Tauri build — AppImage
+        working-directory: funscript-updater/ui/web
+        # Known-flaky, and deliberately not allowed to fail the job.
+        continue-on-error: true
         env:
           CARGO_BUILD_JOBS: 2
           # linuxdeploy and its appimage plugin are themselves AppImages, and
           # an AppImage mounts itself through FUSE to run. Hosted runners have
-          # no FUSE device, so the first cut got as far as downloading the
-          # tool and died with "failed to run linuxdeploy". This tells the
-          # AppImage runtime to extract and exec instead of mounting.
+          # no FUSE device, so the first cut died with "failed to run
+          # linuxdeploy". This makes the runtime extract and exec instead.
           APPIMAGE_EXTRACT_AND_RUN: 1
-        # deb FIRST: it is the bundle that does not go through linuxdeploy, so
-        # a failure in the AppImage path still leaves an installable artifact.
-        run: npx tauri build --config src-tauri/tauri.release.conf.json --bundles deb,appimage
+          # linuxdeploy strips binaries by default and chokes on some; the
+          # payload here is a 360 MB PyInstaller freeze it has no business
+          # touching.
+          NO_STRIP: "true"
+        run: |
+          df -h / | tail -1
+          npx tauri build --config src-tauri/tauri.release.conf.json --bundles appimage
 
       - name: Rename to stable filenames
         working-directory: funscript-updater
