@@ -905,7 +905,10 @@ export default function App() {
   // Export tab registers its write action + completion so the footer can host
   // the "Export" primary and flip it to "Chain to Viewer" ✓ once it's written.
   const [exportReg, setExportReg] = useState(null);
-  const { analysisState: globalAnalysisState } = deriveAnalysisState({
+  const {
+    analysisState: globalAnalysisState,
+    analysisSummary: globalAnalysisSummary,
+  } = deriveAnalysisState({
     hasMedia: !!project?.mediaPath,
     analyzing: !!busy,
     pipelineError: false,
@@ -1038,6 +1041,14 @@ export default function App() {
     footerSummary = 'No funscript yet — generate one from this media to begin editing.';
   } else if (busy) {
     footerSummary = `${currentTabLabel} · in progress — chain can advance when complete`;
+  } else if (analysisPartial) {
+    // Analysis stopped short (sidecars on disk, something still missing).
+    // Saying "ready to chain" here is the same lie the red ✓ used to tell —
+    // name what's outstanding instead. Accept still finishes it and chains.
+    const missing = globalAnalysisSummary?.missing ?? [];
+    footerSummary = missing.length
+      ? `${currentTabLabel} · incomplete — still missing ${missing.join(', ')}`
+      : `${currentTabLabel} · analysis incomplete`;
   } else if (nextTab) {
     const nextLabel = TABS.find((t) => t.id === nextTab)?.label ?? nextTab;
     footerSummary = `${currentTabLabel} · ready to chain to ${nextLabel}`;
@@ -1538,13 +1549,20 @@ export default function App() {
           // Tentative (white, no ✓) while a gated chapter tab is being walked
           // OR while Export hasn't written yet (the "Export" verb precedes the
           // real red ✓ "Chain to Viewer"). Red + ✓ returns only on completion.
-          primaryTentative={chapterIncomplete || chapterNavPending || (tab === 'export' && !exportReg?.done)}
+          // Analysis that stopped short is the same shape as Export before it
+          // writes: the primary is a "finish the work" verb, not the terminal
+          // commit, so it must not wear red + ✓ while artifacts are still
+          // missing (reported 2026-09-04: the red chain button was offered on
+          // Analysis before analysis was complete).
+          primaryTentative={chapterIncomplete || chapterNavPending || analysisPartial
+            || (tab === 'export' && !exportReg?.done)}
           // Project is a CHOICE fork ("Generate new" vs "Edit this"), not an
           // accept — so no lead checkmark on entry; it's just a door, not an
           // endorsed default the user has completed. Likewise a gated chapter
           // tab mid-walk, or Export before it's written, is NOT done — the lead
           // ✓ would falsely read "all set".
           ready={!gateMsg && !appError && !busy && tab !== 'project' && !chapterIncomplete
+            && !analysisPartial
             && !(tab === 'export' && !exportReg?.done)
             && (Boolean(nextTab) || tab === 'export')}
         />
