@@ -1,6 +1,6 @@
 {
   "name": "funscriptforge-tauri",
-  "version": "0.2.14-alpha",
+  "version": "0.2.15-alpha",
   "description": "FunscriptForge — Tauri + React desktop app (web-deployable)",
   "private": true,
   "type": "module",

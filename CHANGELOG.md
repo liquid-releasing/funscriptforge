@@ -2,6 +2,38 @@
 
 All notable changes to FunscriptForge are recorded here.
 
+## v0.2.15-alpha — 2026-09-04
+
+Two defects found by dogfooding the shipped v0.2.14-alpha installer. Both were
+invisible in development — neither reproduces in a dev run, which is why they
+reached a release.
+
+### Fixed
+
+- **Export, Import, Events and Polish all failed in installed builds** with
+  `ModuleNotFoundError: No module named 'yaml'`. PyYAML was never declared in
+  `requirements.txt`. The development environment has it transitively, so dev
+  runs and locally-produced freezes worked, while every CI-built release froze
+  without it. `cli.py` reaches yaml from twelve places, so this covered the
+  whole back half of the pipeline — not just the Events save that reported it.
+- **A console window appeared on every click** that reached the backend.
+  Windows gives each console child process its own window unless asked not to,
+  and both backends are console programs. `CREATE_NO_WINDOW` was set on the
+  launch prewarm but missing from the shared builder behind every analyze,
+  generate, assess, export and preview. The two ffmpeg spawns and the
+  ForgePlayer hand-off are covered too.
+
+### Changed
+
+- The release workflow's forge-cli smoke test now also runs
+  `list-event-recipes`, which reads the vendored Edger catalog through PyYAML.
+  The previous check ran only `list-characters`, which touches no YAML — which
+  is how a freeze with no yaml module passed CI and shipped.
+- Linux builds install `libtbb12`, so the portable AppImage bundles. numba
+  ships a TBB backend whose library was absent from the runner; PyInstaller
+  warned and continued, but linuxdeploy treats an unresolvable dependency as
+  fatal and aborted the whole AppImage.
+
 ## v0.2.14-alpha — 2026-09-04
 
 **macOS and Linux builds ship for the first time.** Previous releases were
