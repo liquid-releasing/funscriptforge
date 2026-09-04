@@ -472,9 +472,12 @@ jobs:
           # payload here is a 360 MB PyInstaller freeze it has no business
           # touching.
           NO_STRIP: "true"
+          # linuxdeploy's own failure message is what we actually need; it
+          # logs to stderr and Tauri only forwards that under --verbose.
+          VERBOSE: "1"
         run: |
           df -h / | tail -1
-          npx tauri build --config src-tauri/tauri.release.conf.json --bundles appimage
+          npx tauri build --verbose --config src-tauri/tauri.release.conf.json --bundles appimage
 
       - name: Rename to stable filenames
         working-directory: funscript-updater
