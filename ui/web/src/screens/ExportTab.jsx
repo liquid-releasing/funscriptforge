@@ -24,6 +24,7 @@ import { Pill, Button, Icon, TrackStack } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { exportWrite, revealPath, polishRead, openInForgePlayer, isTauri, pickFolder } from '../api/forge.js';
 import { svgElementToPngDataUrl } from '../lib/laneSnapshot.js';
+import { POLISH_DEVICES } from '../data/polishDevices.js';
 
 // Width/height the hidden export lanes render at — wide enough that the
 // snapshot reads as a full-track overview (matches the player's lanes), not so
@@ -33,8 +34,12 @@ const PREVIEW_W = 1280;
 const PREVIEW_LANE_H = { funscript: 150, audio: 90, spectro: 90 };
 
 // The Polish stations that are mechanical strokers (ride under the Strokers
-// target). estim3p is the e-stim flagship and lives in its own target.
+// target). Everything of kind 'estim' rides under the E-stim target.
 const STROKER_STATIONS = ['handy', 'tcode', 'lovense', 'vacuglide'];
+// Derived from the station catalog, not hardcoded: this used to test
+// `=== 'estim3p'`, so stamping FOC-Stim and nothing else showed the E-stim
+// target as un-stamped even though the export included it.
+const ESTIM_STATIONS = POLISH_DEVICES.filter((d) => d.kind === 'estim').map((d) => d.id);
 
 // ──────────────────────────────────────────────────────────────
 // ExportTab
@@ -143,7 +148,10 @@ export default function ExportTab({
     hasChapters: (project?.chapterList?.length ?? project?.chapters ?? 0) > 0,
     stampedStations,
     stampedStrokers: stampedStations.filter((id) => STROKER_STATIONS.includes(id)),
-    estimStamped: stampedStations.includes('estim3p'),
+    estimStamped: stampedStations.some((id) => ESTIM_STATIONS.includes(id)),
+    // Which e-stim stations were actually stamped, so the file list names
+    // the folders that will really be written.
+    stampedEstim: stampedStations.filter((id) => ESTIM_STATIONS.includes(id)),
     stimWav: options.stimWav,
     stimMp3: options.stimMp3,
   }), [stem, hasMedia, project, stampedStations, options.stimWav, options.stimMp3]);
@@ -449,11 +457,15 @@ const TARGET_GROUPS = [
     derive(ctx) {
       const audio = [ctx.stimWav && 'audio/stim.wav', ctx.stimMp3 && 'audio/stim.mp3'].filter(Boolean);
       if (ctx.estimStamped) {
+        // A four-phase station writes e1–e4 instead of alpha/beta, so the
+        // channel count is not always 9 — don't claim a number per station.
+        const stamped = ctx.stampedEstim || [];
         return {
           state: 'ready',
-          hint: 'Polish-stamped 9-channel set. Authored events bake into the channels at generation.',
-          stat: [{ label: 'channels', value: 9 }, { label: 'audio', value: audio.length ? audio.length : 'opt-in' }],
-          files: ['stations/estim3p/  ×9', ...audio],
+          hint: 'Polish-stamped channel set. Authored events bake into the channels at generation.',
+          stat: [{ label: 'stations', value: stamped.length || 1 },
+                 { label: 'audio', value: audio.length ? audio.length : 'opt-in' }],
+          files: [...stamped.map((id) => `stations/${id}/`), ...audio],
         };
       }
       return {
