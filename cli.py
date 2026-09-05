@@ -2049,18 +2049,21 @@ def cmd_export(args):
         # channel funscripts remain the primary e-stim artifact.
         stim_formats = (["wav"] if args.stim_wav else []) + (["mp3"] if args.stim_mp3 else [])
         if inc_estim and stim_formats and duration_ms > 0:
-            # Whichever e-stim station actually produced channels. Hardcoding
-            # estim3p here meant a project that stamped only the FOC-Stim
-            # station rendered no stim audio at all, silently — the directory
-            # simply wasn't there. Prefer the flagship, fall back to any other
-            # e-stim station that has files.
-            est_dir = staging / "stations" / "estim3p"
-            if not est_dir.is_dir():
-                est_dir = next(
-                    (d for d in sorted((staging / "stations").glob("*"))
-                     if d.is_dir() and _polish_mod.is_estim_station(d.name)),
-                    est_dir,
-                )
+            # Only stations whose device is DRIVEN BY AUDIO get a stim render.
+            # restim consumes the alpha/beta pair as sound; FOC-Stim speaks its
+            # own protocol and reads the channel funscripts directly, so a stim
+            # mp3 rendered for it is a file its device can never use (reported
+            # 2026-09-05). An earlier fallback accepted any e-stim station,
+            # which produced exactly that for a FOC-Stim-only project.
+            #
+            # When nothing audio-driven is stamped there is simply no audio to
+            # make, and the pair loop below is skipped rather than reaching for
+            # alpha/beta files that belong to another device.
+            audio_dirs = [
+                d for d in sorted((staging / "stations").glob("*"))
+                if d.is_dir() and _polish_mod.uses_stim_audio(d.name)
+            ]
+            est_dir = audio_dirs[0] if audio_dirs else None
             adir = staging / "audio"
             # Each phase PAIR renders to its own stereo control signal. The
             # NORMAL set (alpha/beta) and the PROSTATE set (alpha-prostate/
@@ -2074,7 +2077,7 @@ def cmd_export(args):
                 ("stim-prostate", "estim-prostate", "prostate stim",
                  f"{stem}.alpha-prostate.funscript", f"{stem}.beta-prostate.funscript"),
             ]
-            for base, role, label, a_name, b_name in stim_pairs:
+            for base, role, label, a_name, b_name in (stim_pairs if est_dir else []):
                 a, b = est_dir / a_name, est_dir / b_name
                 if not (a.exists() and b.exists()):
                     continue

@@ -77,6 +77,12 @@ class Station:
     # True for stations whose device takes per-electrode powers (e1..e4)
     # instead of an alpha/beta position. Branch on this, not on the id.
     electrodes: bool = False
+    # True for stations whose device is driven by a STEREO AUDIO control
+    # signal (restim consumes the alpha/beta pair as sound). FOC-Stim speaks
+    # its own protocol and reads the channel funscripts directly, so rendering
+    # a stim WAV/mp3 for it produces a file the device cannot use and the user
+    # did not ask for (dogfood 2026-09-05). Branch on this, not on the id.
+    stim_audio: bool = False
 
 
 # v1 catalog — only hardware we own and can verify. Post-beta rows
@@ -90,6 +96,7 @@ STATIONS: dict[str, Station] = {
         device_keys=["foc3phase"],
         axes=["L0"],  # synthesised channel set, not TCode siblings
         output_template="{stem}.estim3.funscript",
+        stim_audio=True,
         default_knobs={"rateLimit": 0.55, "quietFloor": 0.06, "smoothing": 0.30, "latency": 20},
         constraint_hint="Rate-of-change ceiling · safety",
     ),
@@ -339,6 +346,24 @@ def first_order_lag(samples: list[dict], tau_ms: float) -> list[dict]:
 def shift_time(samples: list[dict], delta_ms: float) -> list[dict]:
     """Shift every sample in time (latency / lead-time compensation). Preview."""
     return [{"at": s["at"] + delta_ms, "pos": s["pos"]} for s in samples]
+
+
+def uses_stim_audio(station_id: str) -> bool:
+    """True for stations delivered as a stereo AUDIO control signal.
+
+    restim drives the hardware from sound: the alpha/beta pair is rendered to
+    a stereo WAV/mp3 and played out. FOC-Stim does not work that way -- it
+    speaks its own protocol over the wire and reads the channel funscripts
+    directly, so a stim mp3 rendered for it is a file its device can never
+    use. Exporting one anyway was wrong twice over: it wasted a slow render,
+    and it implied the format mattered to that device.
+
+    Kept separate from :func:`is_estim_station` because the two questions are
+    genuinely different -- every FOC-Stim station IS an e-stim station, and
+    none of them wants audio.
+    """
+    station = STATIONS.get(station_id)
+    return station is not None and station.stim_audio
 
 
 def is_estim_station(station_id: str) -> bool:

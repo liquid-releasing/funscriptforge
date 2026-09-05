@@ -27,6 +27,12 @@ export const POLISH_DEVICES = [
     constraintHint: 'Rate-of-change ceiling · safety',
     outputFile: '{stem}.estim3.funscript',
     flagship: true,
+    // restim is driven BY AUDIO -- it plays the alpha/beta pair out of the
+    // sound card as a stereo control signal. That is the only reason a stim
+    // WAV/mp3 exists. FOC-Stim speaks its own protocol and reads the channel
+    // funscripts directly, so it never wants one. Mirror of
+    // forge.polish.Station.stim_audio -- keep the two in step.
+    stimAudio: true,
     knobs: [
       { key: 'rateLimit',  label: 'Rate ceiling', min: 0.1, max: 1,    step: 0.05, unit: '/100ms', default: 0.55, help: 'Hard-clips the derivative for safety. Sharp transitions soften.' },
       { key: 'quietFloor', label: 'Quiet floor',  min: 0,   max: 0.3,  step: 0.01, unit: '',       default: 0.06, help: "Minimum signal so the channel doesn't drop into a cold gap." },

@@ -71,6 +71,30 @@ class TestStationCatalog(unittest.TestCase):
         for sid in flagged:
             self.assertTrue(polish.is_estim_station(sid))
 
+    def test_only_restim_is_driven_by_audio(self):
+        """Stim WAV/mp3 is a restim delivery mechanism, not an e-stim one.
+
+        restim plays the alpha/beta pair out as a stereo control signal.
+        FOC-Stim speaks its own protocol and reads the channel funscripts
+        directly, so rendering audio for it produces a file its device can
+        never use -- which the export did until this flag existed.
+        """
+        flagged = {sid for sid, st in polish.STATIONS.items() if st.stim_audio}
+        self.assertEqual(flagged, {"estim3p"})
+
+    def test_audio_capability_is_narrower_than_estim(self):
+        """Every audio-driven station is an e-stim station, but not the
+        reverse -- the two questions must not collapse back into one."""
+        for sid in polish.STATIONS:
+            if polish.uses_stim_audio(sid):
+                self.assertTrue(polish.is_estim_station(sid), sid)
+        # ...and at least one e-stim station must NOT want audio, or this
+        # distinction has quietly stopped being load-bearing.
+        self.assertTrue(any(
+            polish.is_estim_station(sid) and not polish.uses_stim_audio(sid)
+            for sid in polish.STATIONS
+        ))
+
     def test_hardware_stations_are_not_experimental(self):
         # The stroker/e-stim stations are hardware we own and can verify
         # end-to-end, so none of them may carry the experimental flag.

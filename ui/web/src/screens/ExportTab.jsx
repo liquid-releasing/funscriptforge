@@ -40,6 +40,11 @@ const STROKER_STATIONS = ['handy', 'tcode', 'lovense', 'vacuglide'];
 // `=== 'estim3p'`, so stamping FOC-Stim and nothing else showed the E-stim
 // target as un-stamped even though the export included it.
 const ESTIM_STATIONS = POLISH_DEVICES.filter((d) => d.kind === 'estim').map((d) => d.id);
+// Stations whose device is driven BY AUDIO. Only these produce a stim WAV/mp3
+// -- FOC-Stim reads its channel funscripts directly, so a stim render for it
+// is a file its hardware cannot use. The export skips it; the card must agree,
+// or it advertises files that never arrive (reported 2026-09-05).
+const AUDIO_STATIONS = POLISH_DEVICES.filter((d) => d.stimAudio).map((d) => d.id);
 
 // ──────────────────────────────────────────────────────────────
 // ExportTab
@@ -455,24 +460,30 @@ const TARGET_GROUPS = [
     color: '#c075ff',
     consumer: 'restim · ForgePlayer',
     derive(ctx) {
-      const audio = [ctx.stimWav && 'audio/stim.wav', ctx.stimMp3 && 'audio/stim.mp3'].filter(Boolean);
+      const requested = [ctx.stimWav && 'audio/stim.wav', ctx.stimMp3 && 'audio/stim.mp3'].filter(Boolean);
       if (ctx.estimStamped) {
+        // Stim audio is rendered only for an audio-driven station. Stamping
+        // FOC-Stim alone yields none, so don't count files that won't exist.
+        const audioDriven = (ctx.stampedEstim || []).some((id) => AUDIO_STATIONS.includes(id));
+        const audio = audioDriven ? requested : [];
         // A four-phase station writes e1–e4 instead of alpha/beta, so the
         // channel count is not always 9 — don't claim a number per station.
         const stamped = ctx.stampedEstim || [];
         return {
           state: 'ready',
-          hint: 'Polish-stamped channel set. Authored events bake into the channels at generation.',
+          hint: audioDriven
+            ? 'Polish-stamped channel set. Authored events bake into the channels at generation.'
+            : 'Polish-stamped channel set. FOC-Stim reads these channels directly — it uses no stim audio.',
           stat: [{ label: 'stations', value: stamped.length || 1 },
-                 { label: 'audio', value: audio.length ? audio.length : 'opt-in' }],
+                 { label: 'audio', value: audio.length ? audio.length : (audioDriven ? 'opt-in' : 'n/a') }],
           files: [...stamped.map((id) => `stations/${id}/`), ...audio],
         };
       }
       return {
         state: 'auto',
         hint: 'Auto-generated at export from your per-chapter Channels characters (skipped if none assigned). Stamp E-Stim in Polish to tune it.',
-        stat: [{ label: 'channels', value: '9 · auto' }, { label: 'audio', value: audio.length ? audio.length : 'opt-in' }],
-        files: ['stations/estim3p/  ×9', ...audio],
+        stat: [{ label: 'channels', value: '9 · auto' }, { label: 'audio', value: requested.length ? requested.length : 'opt-in' }],
+        files: ['stations/estim3p/  ×9', ...requested],
       };
     },
   },
