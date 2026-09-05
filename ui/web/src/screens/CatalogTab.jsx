@@ -11,13 +11,20 @@
 //        Right — selected transform's documentation
 //                (label · category · description · best-for tags · params table)
 //
-// Sandbox preview (canned-signal application of the transform) is skipped
-// in the skeleton — wiring lands with the per-transform CLI runner.
+//   3. Try it out — run the transform on a canned signal, before/after.
+//
+// The sandbox drives the REAL pipeline (transform-apply --preview, the same
+// call Phrases and Stanzas make) against a synthetic stroke train written to
+// temp by sandbox_funscript_path. That keeps the Catalog usable with no
+// project open, and a tryout can never touch the user's work.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pill, Icon, Button, TextInput } from 'forgemoment';
 import { BEHAVIOR_TAGS } from '../data/transforms.js';
 import { useTransformCatalog } from '../data/useTransformCatalog.js';
+import { useTransformPreview } from '../api/useTransformPreview.js';
+import { sandboxFunscriptPath } from '../api/forge.js';
+import FunscriptChart from '../components/FunscriptChart.jsx';
 
 const CATEGORY_META = {
   tone:       { label: 'Tones',                color: '#ff5470', icon: 'zap',
@@ -346,21 +353,199 @@ function RightPane({ transform }) {
         </>
       )}
 
-      <SectionLabel right={<span style={{ fontSize: 10, color: 'var(--text-dim)' }}>wiring-later</span>}>
-        Sandbox
-      </SectionLabel>
-      <div style={{
-        marginTop: 8, padding: 14, borderRadius: 8,
-        background: 'var(--surface)',
-        border: '1px dashed var(--border)',
-        fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55,
-      }}>
-        <Icon name="play" size={12} style={{ verticalAlign: '-2px', marginRight: 6 }} />
-        Sandbox preview — apply this transform to a canned phrase and see
-        the result chart — lands with the per-transform CLI runner
-        (<span className="mono">cli.py transform --preview</span>).
-      </div>
+      <Sandbox transform={transform} />
     </div>
+  );
+}
+
+// Try the selected transform on a canned signal, before/after.
+//
+// Everything here already existed — transform-apply --preview is what the
+// Phrases and Stanzas tabs use. The only thing the Catalog lacked was a
+// funscript to point at, since it has no project open. sandbox_funscript_path
+// supplies one (a synthetic stroke train written to temp) and hands its
+// actions back, so the BEFORE curve costs no extra round trip.
+//
+// A tryout can never touch the user's work: preview only reads, and it reads
+// the canned file.
+function Sandbox({ transform }) {
+  const [signal, setSignal] = useState(null);   // { path, actions, durationMs }
+  const [failed, setFailed] = useState(false);
+  const [params, setParams] = useState({});
+  // Shared zoom/pan across both charts. Comparing two curves drawn on
+  // different axes is worse than not comparing them at all.
+  const [view, setView] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    sandboxFunscriptPath()
+      .then((r) => { if (!cancelled) { if (r && r.path) setSignal(r); else setFailed(true); } })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Every transform starts from its own documented defaults. Carrying the
+  // previous transform's params across would preview settings the newly
+  // selected transform may not even define.
+  const defaults = useMemo(() => {
+    const out = {};
+    for (const p of transform.params || []) {
+      if (p.default != null) out[p.id] = p.default;
+    }
+    return out;
+  }, [transform.id]);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setParams(defaults); }, [defaults]);
+
+  const spans = useMemo(
+    () => (signal ? [{ start_ms: 0, end_ms: signal.durationMs }] : []),
+    [signal],
+  );
+  const { previewBySpanStart, previewLoading } = useTransformPreview({
+    funscriptPath: signal ? signal.path : null,
+    transformId: transform.id,
+    params,
+    spans,
+  });
+
+  const before = (signal && signal.actions) || [];
+  const after = previewBySpanStart.get(0) || null;
+  const dur = (signal && signal.durationMs) || 1;
+
+  // Several transforms are neutral at their defaults by design — passthrough,
+  // nudge at 0ms, Hero Beat with every beat at 100. Saying so is kinder than
+  // letting two identical charts read as a broken preview.
+  const unchanged = !!after && after.length === before.length
+    && after.every((a, i) => a.at === before[i].at && a.pos === before[i].pos);
+
+  if (failed) {
+    return (
+      <>
+        <SectionLabel>Try it out</SectionLabel>
+        <div style={{
+          marginTop: 8, padding: 14, borderRadius: 8, background: 'var(--surface)',
+          border: '1px dashed var(--border)', fontSize: 12, color: 'var(--text-dim)',
+        }}>
+          The sandbox needs the desktop app — it runs the real transform pipeline.
+        </div>
+      </>
+    );
+  }
+
+  const hasParams = (transform.params || []).length > 0;
+
+  return (
+    <>
+      <SectionLabel right={
+        <span className="mono" style={{ fontSize: 10, color: 'var(--text-dim)' }}>
+          {previewLoading ? 'updating…' : 'canned signal · your project is untouched'}
+        </span>
+      }>
+        Try it out
+      </SectionLabel>
+
+      <div style={{
+        marginTop: 8, marginBottom: 24, padding: 14, borderRadius: 8,
+        background: 'var(--surface)', border: '1px solid var(--border)',
+      }}>
+        {hasParams && (
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 14, marginBottom: 16,
+          }}>
+            {(transform.params || []).map((p) => (
+              <ParamSlider
+                key={p.id}
+                param={p}
+                value={params[p.id] != null ? params[p.id] : p.default}
+                onChange={(v) => setParams((prev) => ({ ...prev, [p.id]: v }))}
+              />
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div>
+            <ChartLabel>Before</ChartLabel>
+            <div style={{ height: 120 }}>
+              <FunscriptChart
+                actions={before} totalMs={dur} height={120}
+                view={view} onViewChange={setView} bare
+              />
+            </div>
+          </div>
+          <div>
+            <ChartLabel right={unchanged ? 'no change at these settings' : null}>
+              After
+            </ChartLabel>
+            <div style={{ height: 120, opacity: previewLoading ? 0.55 : 1 }}>
+              <FunscriptChart
+                actions={after || before} totalMs={dur} height={120}
+                view={view} onViewChange={setView} bare
+              />
+            </div>
+          </div>
+        </div>
+
+        {hasParams && (
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button variant="ghost" onClick={() => setParams(defaults)}>
+              Reset to defaults
+            </Button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function ChartLabel({ children, right }) {
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+      fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+      textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4,
+    }}>
+      <span>{children}</span>
+      {right && (
+        <span style={{
+          textTransform: 'none', letterSpacing: 0, fontWeight: 400,
+          fontSize: 10.5, color: 'var(--text-dim)',
+        }}>{right}</span>
+      )}
+    </div>
+  );
+}
+
+function ParamSlider({ param, value, onChange }) {
+  const numeric = param.min != null && param.max != null;
+  return (
+    <label style={{ display: 'block', fontSize: 11.5 }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        marginBottom: 4,
+      }}>
+        <span style={{ fontWeight: 600 }}>{param.label || param.id}</span>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>
+          {value}{param.unit || ''}
+        </span>
+      </div>
+      {numeric ? (
+        <input
+          type="range"
+          min={param.min} max={param.max} step={param.step != null ? param.step : 0.01}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          style={{ width: '100%' }}
+        />
+      ) : (
+        <TextInput value={String(value == null ? '' : value)} onChange={(e) => onChange(e.target.value)} />
+      )}
+      {param.hint && (
+        <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginTop: 3, lineHeight: 1.4 }}>
+          {param.hint}
+        </div>
+      )}
+    </label>
   );
 }
 

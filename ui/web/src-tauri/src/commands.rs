@@ -2164,6 +2164,72 @@ pub async fn list_transforms() -> Result<serde_json::Value, String> {
 /// {transform, params, spans:[{start_ms,end_ms,actions:[{at,pos}]}]}.
 /// Writes nothing — drives the before/after charts. Spans + params are
 /// passed as inline JSON (small payloads) so no temp files are needed.
+/// Path to the Catalog tab's canned "try it out" signal, written to temp on
+/// demand.
+///
+/// The Catalog is a reference browser with no project open, but the whole
+/// preview pipeline (`transform-apply --preview`) takes a funscript PATH. So
+/// the sandbox needs a real file that is not the user's work.
+///
+/// Synthesised here rather than shipped as a bundled resource on purpose:
+/// tauri.release.conf.json bundles exactly forge-cli and ffmpeg, and each
+/// resource also has to be copied by three CI jobs. A fixture that is pure
+/// arithmetic is not worth that risk, and this way dev and packaged builds
+/// resolve identically.
+///
+/// The signal is four zones so a tryout shows a transform against varied
+/// content rather than one flat stroke train: steady, a fast burst, an
+/// off-centre passage, then a swelling finish.
+#[tauri::command]
+pub async fn sandbox_funscript_path() -> Result<serde_json::Value, String> {
+    let mut path = std::env::temp_dir();
+    path.push("ff_catalog_sandbox.funscript");
+
+    let mut actions: Vec<serde_json::Value> = Vec::new();
+    // (start_ms, end_ms, bpm, centre, amplitude, swell)
+    let zones: [(f64, f64, f64, f64, f64, bool); 4] = [
+        (0.0, 7000.0, 110.0, 50.0, 45.0, false),
+        (7200.0, 12000.0, 230.0, 50.0, 28.0, false),
+        (12200.0, 18000.0, 110.0, 72.0, 22.0, false),
+        (18200.0, 24000.0, 110.0, 50.0, 45.0, true),
+    ];
+    for (t0, t1, bpm, centre, amp, swell) in zones {
+        let half = 60_000.0 / bpm / 2.0;
+        let mut t = t0;
+        let mut up = true;
+        while t <= t1 {
+            let a = if swell {
+                amp * (0.6 + 0.4 * (((t - t0) / (t1 - t0)) * std::f64::consts::PI).sin())
+            } else {
+                amp
+            };
+            let pos = (centre + if up { a } else { -a }).round().clamp(0.0, 100.0);
+            actions.push(serde_json::json!({ "at": t.round() as i64, "pos": pos as i64 }));
+            up = !up;
+            t += half;
+        }
+    }
+
+    let doc = serde_json::json!({ "version": "1.0", "actions": actions });
+    let body = serde_json::to_string(&doc).map_err(|e| format!("serialize sandbox: {}", e))?;
+    tokio::fs::write(&path, body)
+        .await
+        .map_err(|e| format!("write sandbox signal: {}", e))?;
+    // The actions ride back with the path so the caller can draw the BEFORE
+    // curve without a second round trip (or an identity-transform preview
+    // standing in for one).
+    let duration_ms = actions
+        .last()
+        .and_then(|a| a.get("at"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    Ok(serde_json::json!({
+        "path": path.to_string_lossy().into_owned(),
+        "actions": actions,
+        "durationMs": duration_ms,
+    }))
+}
+
 #[tauri::command]
 pub async fn transform_preview(
     funscript_path: String,

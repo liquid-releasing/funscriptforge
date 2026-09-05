@@ -56,6 +56,7 @@ pub fn run() {
             commands::read_stanzas,
             commands::list_characters,
             commands::list_transforms,
+            commands::sandbox_funscript_path,
             commands::transform_preview,
             commands::transform_apply,
             commands::transform_apply_actions,

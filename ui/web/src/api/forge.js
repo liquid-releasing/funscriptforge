@@ -465,6 +465,15 @@ export function listTransforms() {
   return call('list_transforms', undefined, () => Promise.resolve({}));
 }
 
+/** Path to the Catalog sandbox's canned signal — a short synthetic stroke
+ *  train written to temp on demand. The preview pipeline needs a funscript
+ *  PATH, and the Catalog has no project open, so the tryout runs against
+ *  this instead of the user's work. Never written to by a transform:
+ *  transform_preview only reads. */
+export function sandboxFunscriptPath() {
+  return call('sandbox_funscript_path', undefined, () => Promise.resolve(null));
+}
+
 /** Preview one transform over `spans` (a list of {start_ms,end_ms}).
  *  Returns {transform, params, spans:[{start_ms,end_ms,actions:[{at,pos}]}]}
  *  — actions are the transformed result per span (structural transforms
