@@ -116,4 +116,4 @@ hit too, it will be added to this page. You're helping the next person by asking
 
 ---
 
-← [Back to: Install FunscriptForge](../01-getting-started/install.md)
+← [Back to: Install FunscriptForge](../getting-started/install.md)

@@ -118,4 +118,4 @@ hit too, it will be added to this page. You're helping the next person by asking
 
 ---
 
-← [Back to: Phrase Editor](../03-improve-your-script/apply-a-transform.md)
+← [Back to: Phrase Editor](../guide/phrase-editor.md)
