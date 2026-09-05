@@ -27,7 +27,7 @@ Each curve has a **Start** lever next to its presets. It raises where the arc *b
 
 Reach for it when a preset like **Grow to rails** starts too timid: you want the full reach, just *sooner*, without the long shallow lead-in. Drag Start up and the curve begins higher; the number shows the resulting starting height.
 
-> **Why it's "Start," not a "% strength" knob.** An earlier version blended the curve toward its *average*, which muddied a strong shape toward the middle — not what anyone actually wants. "Where does it begin, and it always reaches the rail" is the control you're really after, and it can never accidentally cap your reach. (It's the same model the [Channels → Passages](multiaxis.md) arc uses, one altitude up.)
+> **Why it's "Start," not a "% strength" knob.** An earlier version blended the curve toward its *average*, which muddied a strong shape toward the middle — not what anyone actually wants. "Where does it begin, and it always reaches the rail" is the control you're really after, and it can never accidentally cap your reach. (It's the same model the Channels → Passages arc uses, one altitude up.)
 
 ---
 
@@ -55,7 +55,7 @@ In short: **the music's energy decides *when* and *how busy* the strokes are —
 
 The generator follows the *pulse*, not just the bass drum — so a soft, beatless intro still gets gentle strokes that build as the real beat arrives, the way a hand scripter would. It will **not invent motion the audio doesn't justify**: if a long stretch has genuinely nothing to lock onto, the diagnosis flags it as **dead air** rather than papering over it with filler.
 
-Those gaps are where *you* come in. The honest fix for dead air isn't a louder algorithm — it's a human watching the video. Drop [events](stim.md) on what you see, and continue editing in the rest of FunscriptForge.
+Those gaps are where *you* come in. The honest fix for dead air isn't a louder algorithm — it's a human watching the video. Drop events on what you see, and continue editing in the rest of FunscriptForge.
 
 ---
 
@@ -110,7 +110,7 @@ The generated draft lives in a hidden cache next to your media — your original
 
 ## Related
 
-- [Concepts](00-overview/concepts.md) — phrases, behavioral tags, the shared vocabulary
+- [Concepts](../concepts.md) — phrases, behavioral tags, the shared vocabulary
 - [Tone](tone.md) — reshape the feel of a script you already have
 - [Transforms](transforms.md) — targeted repairs (fill the rails, add an arc, tame a wall)
 - [Phrase Editor](phrase-editor.md) — fine-tune individual sections

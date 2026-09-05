@@ -231,8 +231,8 @@ Two waveform modes match two device families:
 
 ## Related
 
-- Stim tab — choose a character preset; channel files reuse your preset at Export time
-- Device tab — see the device limits and device-aware corrections that the Export options apply
+- Channels tab — assign a Character per chapter; the e-stim channel set is generated from these
+- Polish tab — per-device stations and their limits; skipping it accepts the defaults for every station
 - [Phrase Editor →](phrase-editor.md) — fix individual phrases
 - [Pattern Editor →](pattern-editor.md) — fix all phrases of a given type
 - [Transforms →](transforms.md) — what every transform does

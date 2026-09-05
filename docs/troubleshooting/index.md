@@ -52,7 +52,7 @@ Export button does nothing, output file wrong, changes not in export, device won
 
 Ask the help assistant — describe your problem the way you'd say it out loud:
 
-[Ask the help assistant →](https://funscriptforge.com/help)
+[Open an issue →](https://github.com/liquid-releasing/funscriptforge/issues)
 
 If it turns out to be a question others hit too, it will be added to the right guide above.
 

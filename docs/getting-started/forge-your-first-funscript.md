@@ -1,147 +1,157 @@
 # Forge Your First Funscript
 
-Load a script, pick your device and tone, and export an improved funscript. Four tabs, five minutes.
+This walks the whole path once, start to finish, so you know what the app is
+asking of you and why. Ten minutes, most of it waiting on analysis.
 
 ---
 
 ## Before you start
 
-- FunscriptForge is installed and open in your browser ([Install](install.md))
-- You have a `.funscript` file on your computer
+You need **one funscript and the video or audio it was made for**, sitting in
+the same folder with matching names (`scene.funscript` next to `scene.mp4`).
+
+No material of your own? Open the **Project** tab and choose **Load sample** —
+you can walk every step below on the built-in *Big Buck Bunny* project.
+
+!!! info "Your originals are never modified"
+    FunscriptForge writes alongside your files, never over them. Edits go to a
+    separate `<name>.work.funscript`; everything else lands in a hidden
+    `.<name>.forge/` folder or in `<name>.output/`.
 
 ---
 
-## Step 1 — Create a project
+## The shape of it
 
-Open the **Project** tab (it's selected by default).
-
-- **Desktop app**: click **Browse** next to the funscript path field and pick your `.funscript` from disk. A demo file is preloaded so you can try the pipeline right away.
-- **Browser mode**: drag and drop your `.funscript` onto the upload area.
-
-You'll see:
-
-- A **waveform chart** showing the full motion structure
-- A **stats row**: duration, action count, average speed, position range
-
-![Project tab with funscript loaded](../guide/media/screenshots/01-project-loaded.png)
-*Drop your funscript and see its motion structure instantly.*
-
-**Export location** is auto-filled based on your filename. Change it if you want.
-
-**Media** (optional) — expand to add your matching video, alternate audio, or captions. FunscriptForge uses these for beat detection and synchronized playback during editing.
-
-Click **Accept**. FunscriptForge analyzes your funscript:
+The tabs run left to right, and that order *is* the workflow. Each tab ends
+with a red **Accept and chain to…** button in the footer — that is the app's
+one consistent gesture for "this step is done, take me to the next".
 
 ```
-Saved to my-scene.forge
-Beat data: 142 beats, ~128 BPM
-Funscript: 12 phrases, 8 patterns, ~115 BPM
-Assessment saved
+Library → Project → Generate → Analysis → Chapters → Phrases → Stanzas
+        → Events → Channels → Polish → Export → Viewer
 ```
 
-When it finishes, move to the **Device** tab.
+You do not have to visit all of them. The short path is **Project → Analysis →
+Channels → Export**, and the rest are there when you want them.
 
 ---
 
-## Step 2 — Pick your devices
+## Step 1 — Open your project
 
-On the **Device** tab, check the devices you own:
+**Library** scans folders you point it at and shows what it found, pairing each
+script with its media. Click a card to open it.
 
-- **Mechanical**: The Handy, OSR2/SR6, Intiface (generic)
-- **Estim**: Legacy 2b/312, Stereostim, FOC-Stim, NeoStim
-
-![Device tab with limits table](../guide/media/screenshots/02-device-limits.png)
-*Check your device. FunscriptForge shows its limits and applies a safety backstop.*
-
-FunscriptForge shows a **device limits table** and a **side-by-side preview** (original vs. device-aware). The **Groove** slider adds natural timing variation — 0.35 matches expert hand-scripted scripts.
-
-Click **Accept**. Your funscript is now device-safe.
+Or use **Open** in the title bar and pick a file directly — a `.funscript`, or a
+bare video if you have no script yet.
 
 ---
 
-## Step 3 — Choose a tone
+## Step 2 — Generate, if you have no funscript yet
 
-On the **Tone** tab, pick how your output should feel. Six tones from softest to most intense:
+Opening a **video with no funscript** lands you on Project with one door:
+**Generate new funscript**. Generate builds a script from the media by shaping
+two macro curves — Range (how far each stroke travels) and Pace (how busy it
+is).
 
-| Tone | What it does |
-| ------ | ------------- |
-| **Tender** | Slow, shallow, intimate |
-| **Build** | Intensity ramps up over time |
-| **Tease** | Rises then pulls back |
-| **Edge** | Sustained high intensity |
-| **Climax** | Maximum everything |
-| **Dominant** | Fast, wide, relentless |
-
-![Tone tab with suggestion bubbles](../guide/media/screenshots/05-tone-cards.png)
-*FunscriptForge suggests two tones. Pick one, or browse all six.*
-
-FunscriptForge suggests a **Best match** and a **Most variety** tone based on your funscript's motion profile. Click a card to read its description, then click **Select**.
-
-Adjust the **Impact** slider if the tone is too strong. The before/after preview updates live.
-
-Click **Accept**.
+If you already have a funscript, skip this. Project offers **Edit this
+funscript** for exactly that, and it writes nothing.
 
 ---
 
-## Step 4 — Export
+## Step 3 — Let Analysis run
 
-On the **Export** tab, you'll see:
+Analysis is where the app learns the shape of your scene: chapters, beats,
+energy, and structure. It starts on its own and streams its progress in the
+footer.
 
-- **Export preview chart** — your funscript with all changes applied
-- **Export options** — blend seams, final smooth, heatmap, audio WAV (if estim selected)
-- **Completed transforms** — what you changed (tone in this case)
-- **Recommended transforms** — auto-suggestions for individual phrases
+**Let it finish.** The chain button stays grey and reads *"chain can advance
+when complete"* until it does — everything downstream reads what Analysis
+writes.
 
-For your first export, accept the defaults. Click **Export All**.
+---
 
-![Export tab options](../guide/media/screenshots/12-export-options.png)
-*Export writes device-specific files to your output folder.*
+## Step 4 — Review the structure (optional)
 
-FunscriptForge writes a self-contained folder:
+**Chapters**, **Phrases** and **Stanzas** let you check and adjust what Analysis
+found — chapter boundaries, repeated shapes, rhythm-aligned spans. **Events**
+is where you mark specific moments you want the output to react to.
 
-```text
-{output_folder}/
-  myscript.funscript            <- base funscript
-  myscript.heatmap.png          <- velocity heatmap
-  mechanical/
-    myscript.funscript          <- device-safe for Handy / OSR / Intiface
-  estim/                        <- only if estim devices selected
-    myscript.alpha.funscript
-    myscript.beta.funscript
-    myscript.legacy.wav         <- ready-to-play audio
-    ...
-```
+All optional on a first pass. Skipping them keeps what Analysis detected.
 
-Click **Open folder** to see your files. Load the mechanical funscript in your player. Done.
+---
+
+## Step 5 — Assign Characters
+
+**This is the one step people miss, and it matters.**
+
+On **Channels**, give each chapter a Character. A Character decides how
+electrical stimulation moves and builds — the difference between a scene that
+holds steady and one that escalates.
+
+The e-stim channel set is generated *from* these. **With no Character assigned,
+your export contains no e-stim files at all** — silently, because there is
+nothing to report. If you only care about strokers, you can skip this; if you
+want e-stim, you cannot.
+
+---
+
+## Step 6 — Polish, or skip it
+
+**Polish** renders your one edited script into device-ready files, one station
+per piece of hardware — E-Stim, both FOC-Stim variants, The Handy, OSSM,
+OSR2/SR6, Lovense, Vacuglide, Bass Shaker.
+
+**Skipping is a real option.** It means *accepting the defaults*, and you still
+get every device. Stamp a station when you want to tune it, or when you want to
+be certain what a particular device is getting.
+
+See [Polish →](../guide/polish.md) for what each station does.
+
+---
+
+## Step 7 — Export
+
+Choose what to include and write it out. You get a `<name>.output/` folder
+organised one folder per device, with a `README.txt` that lists what was
+actually written — and optionally a `.forge` bundle, which is the re-openable
+snapshot of the whole project.
+
+See [Export →](../guide/export.md).
+
+---
+
+## Step 8 — Play it
+
+**Viewer** shows the finished result. To feel it, open the export in
+**ForgePlayer**, or load the e-stim channels in restim.
 
 ---
 
 ## What just happened
 
-In four tabs you:
-
-1. **Loaded** your funscript and ran structural analysis (phrases, patterns, BPM, behavioral tags)
-2. **Applied device awareness** — velocity capping, groove, safety backstop
-3. **Chose a tone** — shaped the entire funscript's dynamics with one selection
-4. **Exported** device-specific files ready for your player
-
-That's the core workflow. For most funscripts, this is all you need.
+You took one funscript, let the app find the structure inside it, said how it
+should feel, and rendered that into a set of files for each device you own —
+without editing a single stroke by hand, and without touching your original.
 
 ---
 
 ## Going deeper
 
-| I want to... | Go to... |
-| --- | --- |
-| Edit individual phrases | [Phrase Editor](../guide/phrase-editor.md) |
-| Batch-fix all phrases of a type | [Pattern Editor](../guide/pattern-editor.md) |
-| Learn every transform | [Transforms](../guide/transforms.md) |
-| Generate estim channels | [Stim tab](../guide/stim.md) |
-| Add multi-axis motion | [Multi-axis](../guide/multiaxis.md) |
-| Understand the vocabulary | [Glossary](../reference/glossary.md) |
+| You want to… | Go to |
+|---|---|
+| Understand the vocabulary | [Concepts](../concepts.md) |
+| Reshape motion with transforms | [Transforms](../guide/transforms.md) — try one first in the **Catalog** tab |
+| Work on one phrase at a time | [Phrase editor](../guide/phrase-editor.md) |
+| Tune a specific device | [Polish](../guide/polish.md) |
+| Bring in an older script or channel set | [Forging legacy scripts](../guide/forging-legacy-scripts.md) |
 
 ---
 
 ## Troubleshooting
 
-Something unexpected? [Troubleshoot loading a script](../troubleshooting/loading-a-script.md)
+| Symptom | Page |
+|---|---|
+| The app will not start | [Installation](../troubleshooting/install.md) |
+| A script will not load | [Loading a script](../troubleshooting/loading-a-script.md) |
+| Export produced nothing, or the wrong thing | [Export](../troubleshooting/export.md) |
+| Video will not play | [Media player](../troubleshooting/media-player.md) |

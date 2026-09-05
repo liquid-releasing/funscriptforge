@@ -60,7 +60,7 @@ The header shows how many transforms are in the chain: **"Baseline (3 accepted)"
 
 ## Device awareness
 
-Device awareness is applied globally on the **Device tab** before you reach the Phrase Editor. All transforms in the Phrase Editor work on the already device-aware baseline — you don't need to think about device limits here. Every creative change you make is guaranteed to work on your selected devices.
+Device limits are applied later, per device, on the **Polish** tab — each station clamps the finished motion to what that hardware can actually do. So you can shape freely here without thinking about limits: nothing you author in the Phrase Editor can exceed a device, because Polish is what renders for it.
 
 ---
 
@@ -95,7 +95,7 @@ To apply the same transform to all phrases that share a behavioral tag, use the 
 
 ## Media player (optional)
 
-If you have loaded a media file (audio or video) in the sidebar, a player column appears to the right of the charts. It plays only the current phrase — automatically looping within the phrase boundaries so you can hear or see what you are editing in context.
+If the project has media attached, a player column appears to the right of the charts. It plays only the current phrase — automatically looping within the phrase boundaries so you can hear or see what you are editing in context.
 
 <!-- SCREENSHOT: Phrase Editor with the media player column visible. The player shows a waveform or video thumbnail. Caption: "With a media file loaded, the player restricts playback to the current phrase so you can edit in context." -->
 

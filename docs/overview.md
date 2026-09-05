@@ -103,7 +103,7 @@ Load the `.device.funscript` into any compatible player:
 
 ### Electrostim devices
 
-FunscriptForge prepares your funscript for estim playback. The Stim tab generates channel funscripts (alpha, beta, frequency, volume) and the Export tab can render stereo WAV audio files for audio-based devices.
+FunscriptForge prepares your funscript for estim playback. The Channels tab assigns a Character to each chapter, Polish renders the channel set for each e-stim station, and Export can additionally render stereo audio for restim, which is driven by sound.
 
 For playback, use **[Restim](https://github.com/diglet48/restim)** by diglet48 or **[CHPlayer](https://github.com/CHPlayer)** — open-source estim players that load the exported channel funscripts and drive your device in real time.
 

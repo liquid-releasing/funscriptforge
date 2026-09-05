@@ -3,7 +3,7 @@
 Find your situation below. Each question is written the way you might actually think it —
 not the way a manual would phrase it.
 
-If your question isn't here, ask the help assistant at [funscriptforge.com/help](https://funscriptforge.com/help)
+If your question isn't here, [open an issue](https://github.com/liquid-releasing/funscriptforge/issues)
 and if it turns out to be a common one, it will show up on this page.
 
 ---
@@ -111,7 +111,7 @@ different reference points (see [sync issue](#the-video-plays-but-its-out-of-syn
 
 ## My question isn't here
 
-[Ask the help assistant →](https://funscriptforge.com/help)
+[Open an issue →](https://github.com/liquid-releasing/funscriptforge/issues)
 
 Type your question the way you'd naturally ask it. If it's a question others are likely to
 hit too, it will be added to this page. You're helping the next person by asking.

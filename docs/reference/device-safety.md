@@ -1,6 +1,17 @@
 # Device Awareness
 
-FunscriptForge ensures your funscript works within your target device's physical limits — and improves its *feel* regardless of device. Device awareness is applied once, globally, on the **Device tab** — before any creative decisions.
+FunscriptForge ensures your funscript works within your target device's
+physical limits — and improves its *feel* regardless of device.
+
+**Where this happens: the Polish tab.** Device awareness used to be a single
+global pass applied up front, before any creative decisions. It is now applied
+**per device, at the end**: each Polish station clamps the finished motion to
+what that particular hardware can do, so a Handy file and an OSSM file are each
+correct for their own device rather than both being limited by whichever is
+tightest.
+
+You can therefore shape freely in the editing tabs without thinking about
+limits — Polish is what renders for a device, and it is what enforces them.
 
 ---
 
@@ -46,20 +57,28 @@ Limits are stored in `forge/device_specs.json` and are community-refinable. See 
 
 ### Combined limits
 
-When multiple devices are selected, the tightest constraint wins per parameter. The limits table on the Device tab shows which device is the bottleneck for each parameter.
+`combined_limits()` still exists for the case where one output has to satisfy
+several devices at once: the tightest constraint wins per parameter. Per-station
+Polish is the normal path, and it avoids that compromise entirely — each station
+is clamped only by its own device.
 
 ---
 
 ## How it works
 
-1. **Select your devices** on the Device tab
-2. FunscriptForge computes the **combined limits** — the most restrictive device wins
-3. A **limits table** shows the constraints and which device is the bottleneck
-4. **Groove** adds timing variation to monotone sections (adjustable via slider)
-5. **Speed clamp** caps actions that exceed the combined max speed
-6. A **side-by-side preview** shows Original vs Device Aware
-7. A **post-fix verification** shows how many actions were clamped, with a warning if the ratio is high
-8. **Accept** applies the fix — or, if you unchecked clamping, saves the original as-is
+1. You author freely — Analysis, Chapters, Phrases, Events, Channels. No
+   device limits apply yet, because nothing has been rendered for a device.
+2. **Polish** shows one station per device. Each carries that device's limits
+   from `forge/device_specs.json`.
+3. Stamping a station clamps the motion to that device and writes its files.
+   The bench preview shows the effect before you commit.
+4. **Skipping Polish accepts the defaults** — every station is still generated,
+   each clamped for its own device.
+5. **Export** collects the stamped or generated files, one folder per device.
+
+**Groove** is no longer a step here. Timing variation is a parameter of the
+**Tame** transform, which you apply where you are editing rather than globally
+up front.
 
 ---
 
@@ -67,12 +86,13 @@ When multiple devices are selected, the tightest constraint wins per parameter. 
 
 Everything downstream works on the device-aware baseline:
 
-- **Tone tab** — shapes feel within device limits
-- **Phrase editor** — creative transforms
-- **Stim tab** — estim channel generation from the device-aware funscript
-- **Export tab** — writes the final files to mechanical/ and estim/ subfolders
+- **Phrases / Stanzas / Events** — creative transforms, no device limits applied
+- **Channels** — assign a Character per chapter; the e-stim set is generated from these
+- **Polish** — per-device stations; this is where limits are enforced
+- **Export** — writes the final files, one folder per device
 
-The user doesn't have to think about device limits after the Device tab — the constraint is baked in at the start.
+The user does not have to think about device limits while editing, because the
+constraint is applied at the point a file is actually rendered for a device.
 
 ---
 

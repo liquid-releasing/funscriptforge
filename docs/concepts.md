@@ -4,6 +4,18 @@ How FunscriptForge thinks about motion — and what those words mean in the app.
 
 ---
 
+## Funscript
+
+A `.funscript` file is a list of timed instructions for a haptic device. Each
+one says: *at this moment, move to this position.* Position runs from 0
+(bottom) to 100 (top), and the device follows the list in sync with the media.
+
+A funscript with 10,000 actions is just 10,000 of those `{timestamp, position}`
+pairs. Everything below is structure FunscriptForge finds *inside* that list —
+none of it is stored in the file.
+
+---
+
 ## The hierarchy
 
 FunscriptForge builds a five-level hierarchy from your funscript automatically. You only ever interact with the top level (**phrases**) — everything below is computed for you.
@@ -130,3 +142,14 @@ FunscriptForge produces device-specific output organized into folders:
 **Estim** (`estim/`) — channel funscripts (alpha, beta, frequency, volume, pulse_frequency, pulse_rise) for electrostim routing. If audio-capable devices are selected (legacy 2b/312 or stereostim Tingler/EstimHero/ZC95), stereo WAV files are also rendered.
 
 See [Export →](guide/export.md) for the full folder layout and [Device Safety →](reference/device-safety.md) for velocity limits.
+
+---
+
+## What FunscriptForge does, and does not, do
+
+**It does** read an existing funscript and find structure in it, reshape that
+motion, generate a funscript from media when you do not have one, and render
+device-ready files for each piece of hardware you own.
+
+**It does not** drive your device. FunscriptForge produces files; playing them
+is ForgePlayer's job, or restim's, or your player of choice.

@@ -1,33 +1,40 @@
 # Install FunscriptForge
 
-FunscriptForge is a standalone app — no Python, no dependencies, no installer. Download, extract, and run.
+FunscriptForge is a desktop app. Download an installer, run it, and it opens in
+its own window — there is no server to start, no browser tab, and no Python to
+install.
 
 ---
 
 ## System requirements
 
-| | Minimum | Recommended |
-|---|---|---|
-| **OS** | Windows 10, macOS 10.15, Ubuntu 24.04 (x86-64) | Windows 11, macOS 14, Ubuntu 24.04 |
-| **RAM** | 4 GB | 8 GB |
-| **Display** | 1366×768 | 1920×1080 or higher |
-| **Browser** | Chrome, Edge, Firefox, Safari | Chrome or Edge |
+| | |
+|---|---|
+| **Windows** | Windows 10 or 11 (64-bit). WebView2 is included with Windows 11 and current Windows 10; the installer adds it if missing. |
+| **macOS** | Apple Silicon (M1 or later). There is no Intel build yet. |
+| **Linux** | x86-64, with a desktop environment. `.deb` for Debian/Ubuntu, `.AppImage` elsewhere. |
+| **Disk** | ~1 GB installed. FunscriptForge bundles its own ffmpeg, so you do not need to install one. |
 
-Python is **not required**. FunscriptForge bundles everything it needs.
+Everything the app needs is inside the installer. You do not need Python,
+ffmpeg, or any command-line tools.
 
 ---
 
 ## Download
 
-Go to the [Releases page](https://github.com/liquid-releasing/funscriptforge/releases) and download the file for your OS:
+Downloads are on the **[funscriptforge.com](https://funscriptforge.com)** front
+page, or directly from the
+[releases page](https://github.com/liquid-releasing/funscriptforge-releases/releases).
 
 | OS | File |
 |---|---|
-| Windows 10 / 11 | `FunscriptForge-windows.zip` |
-| macOS | `FunscriptForge-macos.zip` |
-| Linux (x86-64) | `FunscriptForge-linux.tar.gz` |
+| Windows 10 / 11 | `FunscriptForge-Setup-windows.exe` (or `.msi` for managed installs) |
+| macOS (Apple Silicon) | `FunscriptForge-macos-arm64.dmg` |
+| Debian / Ubuntu | `FunscriptForge-linux-amd64.deb` |
+| Other Linux | `FunscriptForge-linux-x86_64.AppImage` |
 
-<!-- SCREENSHOT: GitHub Releases page showing the three download assets highlighted. Caption: "Download the file for your operating system from the Releases page." -->
+The installers are large (~250–350 MB) because the app ships its own ffmpeg and
+analysis toolchain rather than asking you to install them.
 
 ---
 
@@ -35,22 +42,25 @@ Go to the [Releases page](https://github.com/liquid-releasing/funscriptforge/rel
 
 === "Windows"
 
-    1. Right-click `FunscriptForge-windows.zip` → **Extract All…**
-    2. Choose a folder — Desktop, Documents, or `C:\Program Files\FunscriptForge\`
-    3. Double-click **FunscriptForge.exe** inside the extracted folder
+    1. Run **`FunscriptForge-Setup-windows.exe`**
+    2. Windows SmartScreen may warn that the publisher is unknown — the app is
+       not code-signed yet. Choose **More info → Run anyway** if you are happy
+       to proceed.
+    3. Launch **FunscriptForge** from the Start menu
 
-    A terminal window may flash briefly — that is normal. Your browser opens automatically.
+    Prefer `.msi` if you are deploying through management tooling; the `.exe`
+    is the normal choice.
 
-    **Uninstall:** Delete the folder.
+    **Uninstall:** Settings → Apps → FunscriptForge → Uninstall.
 
 === "macOS"
 
-    1. Double-click `FunscriptForge-macos.zip` to extract
-    2. Drag **FunscriptForge.app** to your Applications folder
+    1. Open **`FunscriptForge-macos-arm64.dmg`**
+    2. Drag **FunscriptForge** to your Applications folder
 
     **First launch only:** macOS blocks unsigned apps by default.
 
-    - Right-click (or Control-click) **FunscriptForge.app** → **Open**
+    - Right-click (or Control-click) **FunscriptForge** → **Open**
     - Click **Open** in the security dialog
 
     After this one-time approval you can double-click normally.
@@ -60,68 +70,70 @@ Go to the [Releases page](https://github.com/liquid-releasing/funscriptforge/rel
         ```bash
         xattr -cr /Applications/FunscriptForge.app
         ```
-        Then try launching again. This removes the quarantine flag macOS applies to downloaded apps.
+        Then try launching again. This clears the quarantine flag macOS applies
+        to downloaded apps.
 
     **Uninstall:** Drag to Trash.
 
 === "Linux"
 
+    **Debian / Ubuntu:**
     ```bash
-    tar -xzf FunscriptForge-linux.tar.gz
-    cd FunscriptForge
-    ./FunscriptForge
+    sudo apt install ./FunscriptForge-linux-amd64.deb
     ```
 
-    If your browser does not open automatically, go to `http://localhost:6789`.
-
-    **WSL2 on Windows 11:** Same process. `xdg-open` routes to your Windows default browser automatically.
-
-    **Missing ffmpeg:** The media player requires ffprobe. Install it with:
+    **Anything else:**
     ```bash
-    sudo apt install ffmpeg
+    chmod +x FunscriptForge-linux-x86_64.AppImage
+    ./FunscriptForge-linux-x86_64.AppImage
     ```
 
-    **Uninstall:** Delete the folder.
+    The app uses WebKitGTK. On a minimal system you may need:
+    ```bash
+    sudo apt install libwebkit2gtk-4.1-0
+    ```
+
+    **Uninstall:** `sudo apt remove funscriptforge`, or delete the AppImage.
 
 ---
 
 ## Confirm it worked
 
-Within 5–10 seconds your browser should open to `http://localhost:6789` showing the FunscriptForge interface — a sidebar on the left and a chart area on the right.
+The app opens in its own window with a row of tabs across the top — **Library**,
+**Project**, **Generate**, **Analysis**, and the rest of the chain through to
+**Export**. The version is shown in the title bar.
 
-<!-- SCREENSHOT: The app open in browser, empty state — sidebar visible with file path input, main area showing "No funscript loaded" or blank chart. Caption: "FunscriptForge running in your browser. The sidebar is on the left; the chart area fills the rest." -->
-
-If you see this, you are done.
-
-!!! tip "Bookmark it"
-    `http://localhost:6789` is always the address. Bookmark it for quick access after the first launch.
+If you see that, you are done.
 
 ---
 
 ## Try it immediately — no funscript needed
 
-FunscriptForge ships with two example funscripts based on Big Buck Bunny (9:56), a free
-open-source film by the Blender Foundation. They appear in the sidebar dropdown marked
-with 📋 — no path to paste, no file to find.
+You do not need your own material to look around. On the **Project** tab's empty
+state, choose **Load sample** to open a synthetic *Big Buck Bunny* project
+(9:55) and see the full app with real structure in it.
+
+Two example funscripts also ship in the `demo/` folder next to the app:
 
 | File | What it shows |
 | --- | --- |
-| 📋 `big_buck_bunny.raw.funscript` | A deliberately broken script — every behavioral tag category represented across 16 phrases. |
-| 📋 `big_buck_bunny.forged.funscript` | The same script after forging — each issue corrected. |
-
-Select either one from the sidebar to load it instantly and see the full app in action.
+| `big_buck_bunny.raw.funscript` | A deliberately rough script — every behavioral tag category represented. |
+| `big_buck_bunny.forged.funscript` | The same script after forging — each issue corrected. |
 
 !!! tip "Want the video too?"
     Download Big Buck Bunny from the
     [Blender Foundation](https://download.blender.org/demo/movies/BBB/) or
-    [Internet Archive](https://archive.org/details/BigBuckBunny_124) and place it
-    in the `demo/` folder next to the funscripts. The media player detects it automatically.
+    [Internet Archive](https://archive.org/details/BigBuckBunny_124) and put it
+    beside the funscripts. FunscriptForge pairs media with a script by name.
 
 ---
 
-## Keeping it running
+## A note on alpha builds
 
-FunscriptForge runs in the background as long as the launcher window is open. Close the terminal or launcher to shut it down.
+FunscriptForge is pre-release software. Releases are marked *alpha*, ship
+without code signing, and change quickly. It never modifies your original
+files — everything it produces is written alongside them — but treat your
+source scripts as the copy that matters.
 
 ---
 

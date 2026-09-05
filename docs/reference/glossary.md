@@ -118,7 +118,7 @@ An external tool (by Lucifie) that generates estim channel funscripts from a pri
 A behavioral tag. Assigned to phrases with a very small amplitude span (< 20) centered around the midpoint — micro-motion that is barely perceptible.
 
 **Groove**
-A device-aware setting on the Device tab that adds natural timing variation to each cycle. Range: 0.0 (mechanical — every cycle identical) to 0.50 (loose, unpredictable). 0.35 matches expert hand-scripted scripts. Applied during device export.
+A parameter of the **Tame** transform that adds natural timing variation to each cycle. Range: 0.0 (mechanical — every cycle identical) to 0.50 (loose, unpredictable). 0.35 matches expert hand-scripted scripts. It was once a global setting applied before editing; it is a transform parameter now, so you choose where it lands.
 
 ---
 
@@ -228,7 +228,7 @@ Dividing a phrase at a cycle boundary into two sub-phrases, each with its own tr
 A pulse-based estim device class including the Tingler, EstimHero, and ZC95. Uses pulse train waveforms with cosine envelope. FunscriptForge renders a `{stem}.stereostim.wav` file for these devices.
 
 **Stim character (preset)**
-A creative preset on the Stim tab that controls how funscript-tools generates estim channels. Five built-in characters: Gentle, Reactive, Scene Builder, Unpredictable, and Balanced. Each produces a different electrode movement pattern.
+A creative preset assigned per chapter on the **Channels** tab, controlling how the e-stim channel set is generated. Six characters: Gentle, Reactive, Scene Builder, Unpredictable, Balanced, and Scene Closer — the reverse of Scene Builder, easing a scene down over its final minute. Each produces a different electrode movement pattern. Assigning one is required: with no Character, the export contains no e-stim files.
 
 **Stingy**
 A behavioral tag. Assigned to phrases with full amplitude span, high velocity, and high BPM — intense, demanding, no variation.
@@ -241,7 +241,7 @@ A behavioral tag. Assigned to phrases with full amplitude span, high velocity, a
 The naming convention for multi-axis funscript files. L0 = stroke, L1 = surge, L2 = sway, R0 = twist, R1 = roll, R2 = pitch. T-Code players (MultiFunPlayer, XTP) auto-discover files by the `.axis.funscript` naming pattern.
 
 **Tone**
-One of six emotional presets that shape the overall feel of your output. Applied globally on the Tone tab. The six tones: Tender, Build, Tease, Edge, Climax, Dominant. Each changes how transforms are suggested and applied without altering the underlying phrase structure.
+One of six emotional presets that shape the overall feel of your output: Tender, Build, Tease, Edge, Climax, Dominant. Tones are **transforms** — one of the three families in the picker — so you apply them where you are editing rather than once, globally. Each shapes feel without altering the underlying phrase structure.
 
 **Transform**
 An operation applied to a phrase that changes how it feels — stroke depth, velocity profile, centering, smoothing, rhythm, or tempo. Behaviors preserve action timestamps; structurals may change them. 17 built-in transforms are available, plus 7 tones.

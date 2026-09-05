@@ -1,8 +1,15 @@
 # Tone
 
-The Tone tab is the easy button. Pick a mood, and FunscriptForge shapes your entire funscript to match — without touching the underlying structure.
+Tones are the easy button. Pick a mood, and FunscriptForge shapes the motion
+to match — without touching the underlying structure.
 
-For most users, this is the most important tab. Choose a tone, accept, export. Done.
+A tone is a **transform**, one of the three families in the picker alongside
+Behaviors and Structurals. Apply one wherever you are editing — across a whole
+script, or to selected phrases — and try it first in the **Catalog** tab, which
+shows before and after on a canned signal.
+
+(Tone used to be a tab of its own, applied globally before any other editing.
+It is a transform now, so you choose where it lands.)
 
 ---
 
@@ -41,7 +48,7 @@ Nothing changes until you click **Accept** at the bottom of the tab.
 
 ## Tone suggestions
 
-When you first open the Tone tab, FunscriptForge analyzes your funscript and suggests two tones:
+FunscriptForge analyzes your funscript and suggests two tones:
 
 - **Best match** — the tone closest to your funscript's existing character. Enhances what's already there.
 - **Most variety** — the tone farthest from your funscript's character. Adds contrast and dynamics your script doesn't have.
@@ -86,7 +93,7 @@ Sliders default to values that work well for most scripts. Adjust them if you wa
 
 Below the sliders, a side-by-side chart shows:
 
-- **Before** — the funscript after the Device tab (or the original if you skipped Device)
+- **Before** — the funscript as it stands now, including any edits already applied
 - **After** — the funscript with the selected tone applied
 
 The preview updates live as you change the tone or adjust sliders.
@@ -98,21 +105,22 @@ The preview updates live as you change the tone or adjust sliders.
 
 ## Device awareness
 
-Tone transforms are **re-clamped to your device limits** after application. If you selected devices on the Device tab, the tone output stays within those safe limits. You don't need to worry about a tone pushing velocity past what your hardware can handle.
+Tones cannot push your hardware past its limits. Device limits are applied
+later, per device, on the **Polish** tab — each station clamps the finished
+motion to what that device can actually do. So a tone shapes feel freely, and
+Polish is what guarantees the rendered file is safe for the hardware it targets.
 
 ---
 
 ## Workflow
 
-1. Open the Tone tab (requires Project Accept first)
-2. Read the suggestion bubbles or browse all six cards
-3. Click a card's info button to read its description
-4. Click **Select** on the tone you want
-5. Adjust the **Impact** slider and per-tone sliders if needed
-6. Review the Before/After preview
-7. Click **Accept** to apply the tone globally
+1. Browse the tones in the **Catalog** tab and try one on the canned signal
+2. Adjust **Impact** and any per-tone sliders, and watch the before/after
+3. Apply it where you want it — across the script, or to selected phrases in
+   **Phrases** / **Stanzas**
+4. Review the before/after for the spans you selected, then Apply
 
-After Accept, move to Phrases (for per-phrase editing) or skip straight to Export.
+Impact is the same control everywhere: 0 = no change, 1 = the full tone.
 
 ---
 
@@ -134,7 +142,7 @@ After Accept, move to Phrases (for per-phrase editing) or skip straight to Expor
 
 ## Related
 
-- [Concepts](00-overview/concepts.md) — what phrases and behavioral tags are
+- [Concepts](../concepts.md) — what phrases and behavioral tags are
 - [Phrase Editor](phrase-editor.md) — fine-tune individual phrases after applying a tone
 - [Export](export.md) — export with the tone applied
 - [Glossary](../reference/glossary.md) — full term definitions
