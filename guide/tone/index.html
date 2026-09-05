@@ -1467,8 +1467,14 @@
 
 
 <h1 id="tone">Tone<a class="headerlink" href="#tone" title="Permanent link">&para;</a></h1>
-<p>The Tone tab is the easy button. Pick a mood, and FunscriptForge shapes your entire funscript to match — without touching the underlying structure.</p>
-<p>For most users, this is the most important tab. Choose a tone, accept, export. Done.</p>
+<p>Tones are the easy button. Pick a mood, and FunscriptForge shapes the motion
+to match — without touching the underlying structure.</p>
+<p>A tone is a <strong>transform</strong>, one of the three families in the picker alongside
+Behaviors and Structurals. Apply one wherever you are editing — across a whole
+script, or to selected phrases — and try it first in the <strong>Catalog</strong> tab, which
+shows before and after on a canned signal.</p>
+<p>(Tone used to be a tab of its own, applied globally before any other editing.
+It is a transform now, so you choose where it lands.)</p>
 <hr />
 <h2 id="the-six-expressive-tones">The six expressive tones<a class="headerlink" href="#the-six-expressive-tones" title="Permanent link">&para;</a></h2>
 <p>Six expressive tones, ordered from softest to most intense — each changes how transforms are applied globally. A seventh card, <strong><a href="#tame">Tame</a></strong>, is a <em>corrective</em> rather than a mood (covered below).</p>
@@ -1529,7 +1535,7 @@
 <p>Nothing changes until you click <strong>Accept</strong> at the bottom of the tab.</p>
 <hr />
 <h2 id="tone-suggestions">Tone suggestions<a class="headerlink" href="#tone-suggestions" title="Permanent link">&para;</a></h2>
-<p>When you first open the Tone tab, FunscriptForge analyzes your funscript and suggests two tones:</p>
+<p>FunscriptForge analyzes your funscript and suggests two tones:</p>
 <ul>
 <li><strong>Best match</strong> — the tone closest to your funscript's existing character. Enhances what's already there.</li>
 <li><strong>Most variety</strong> — the tone farthest from your funscript's character. Adds contrast and dynamics your script doesn't have.</li>
@@ -1588,7 +1594,7 @@
 <h2 id="before-after-preview">Before / After preview<a class="headerlink" href="#before-after-preview" title="Permanent link">&para;</a></h2>
 <p>Below the sliders, a side-by-side chart shows:</p>
 <ul>
-<li><strong>Before</strong> — the funscript after the Device tab (or the original if you skipped Device)</li>
+<li><strong>Before</strong> — the funscript as it stands now, including any edits already applied</li>
 <li><strong>After</strong> — the funscript with the selected tone applied</li>
 </ul>
 <p>The preview updates live as you change the tone or adjust sliders.</p>
@@ -1596,19 +1602,20 @@
 <em>The preview updates live as you select a tone and adjust sliders.</em></p>
 <hr />
 <h2 id="device-awareness">Device awareness<a class="headerlink" href="#device-awareness" title="Permanent link">&para;</a></h2>
-<p>Tone transforms are <strong>re-clamped to your device limits</strong> after application. If you selected devices on the Device tab, the tone output stays within those safe limits. You don't need to worry about a tone pushing velocity past what your hardware can handle.</p>
+<p>Tones cannot push your hardware past its limits. Device limits are applied
+later, per device, on the <strong>Polish</strong> tab — each station clamps the finished
+motion to what that device can actually do. So a tone shapes feel freely, and
+Polish is what guarantees the rendered file is safe for the hardware it targets.</p>
 <hr />
 <h2 id="workflow">Workflow<a class="headerlink" href="#workflow" title="Permanent link">&para;</a></h2>
 <ol>
-<li>Open the Tone tab (requires Project Accept first)</li>
-<li>Read the suggestion bubbles or browse all six cards</li>
-<li>Click a card's info button to read its description</li>
-<li>Click <strong>Select</strong> on the tone you want</li>
-<li>Adjust the <strong>Impact</strong> slider and per-tone sliders if needed</li>
-<li>Review the Before/After preview</li>
-<li>Click <strong>Accept</strong> to apply the tone globally</li>
+<li>Browse the tones in the <strong>Catalog</strong> tab and try one on the canned signal</li>
+<li>Adjust <strong>Impact</strong> and any per-tone sliders, and watch the before/after</li>
+<li>Apply it where you want it — across the script, or to selected phrases in
+   <strong>Phrases</strong> / <strong>Stanzas</strong></li>
+<li>Review the before/after for the spans you selected, then Apply</li>
 </ol>
-<p>After Accept, move to Phrases (for per-phrase editing) or skip straight to Export.</p>
+<p>Impact is the same control everywhere: 0 = no change, 1 = the full tone.</p>
 <hr />
 <h2 id="tame">Tame<a class="headerlink" href="#tame" title="Permanent link">&para;</a></h2>
 <p><strong>Tame</strong> is the seventh tone card — but it's a <em>corrective</em>, not a mood. Where the six expressive tones reshape the feel of your script, Tame does one gentle thing: it <strong>humanizes</strong> a relentless wall of fast strokes so it reads as device-aware and less mechanical. It keeps every beat and never reshapes amplitude — already-comfortable content passes through untouched.</p>
@@ -1636,7 +1643,7 @@
 <hr />
 <h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../00-overview/concepts/">Concepts</a> — what phrases and behavioral tags are</li>
+<li><a href="../../concepts/">Concepts</a> — what phrases and behavioral tags are</li>
 <li><a href="../phrase-editor/">Phrase Editor</a> — fine-tune individual phrases after applying a tone</li>
 <li><a href="../export/">Export</a> — export with the tone applied</li>
 <li><a href="../../reference/glossary/">Glossary</a> — full term definitions</li>

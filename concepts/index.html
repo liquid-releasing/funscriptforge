@@ -641,6 +641,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#funscript" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Funscript
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-hierarchy" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -744,6 +755,17 @@
     <span class="md-ellipsis">
       
         Export outputs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-funscriptforge-does-and-does-not-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What FunscriptForge does, and does not, do
       
     </span>
   </a>
@@ -1500,6 +1522,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#funscript" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Funscript
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-hierarchy" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1609,6 +1642,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#what-funscriptforge-does-and-does-not-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What FunscriptForge does, and does not, do
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1631,6 +1675,14 @@
 
 <h1 id="concepts">Concepts<a class="headerlink" href="#concepts" title="Permanent link">&para;</a></h1>
 <p>How FunscriptForge thinks about motion — and what those words mean in the app.</p>
+<hr />
+<h2 id="funscript">Funscript<a class="headerlink" href="#funscript" title="Permanent link">&para;</a></h2>
+<p>A <code>.funscript</code> file is a list of timed instructions for a haptic device. Each
+one says: <em>at this moment, move to this position.</em> Position runs from 0
+(bottom) to 100 (top), and the device follows the list in sync with the media.</p>
+<p>A funscript with 10,000 actions is just 10,000 of those <code>{timestamp, position}</code>
+pairs. Everything below is structure FunscriptForge finds <em>inside</em> that list —
+none of it is stored in the file.</p>
 <hr />
 <h2 id="the-hierarchy">The hierarchy<a class="headerlink" href="#the-hierarchy" title="Permanent link">&para;</a></h2>
 <p>FunscriptForge builds a five-level hierarchy from your funscript automatically. You only ever interact with the top level (<strong>phrases</strong>) — everything below is computed for you.</p>
@@ -1737,6 +1789,13 @@
 <p><strong>Mechanical</strong> (<code>mechanical/</code>) — a single velocity-capped funscript for Handy, OSR2, SR6, and Intiface devices. Multi-axis files (roll, pitch, twist, surge, sway) are included if you assigned position styles.</p>
 <p><strong>Estim</strong> (<code>estim/</code>) — channel funscripts (alpha, beta, frequency, volume, pulse_frequency, pulse_rise) for electrostim routing. If audio-capable devices are selected (legacy 2b/312 or stereostim Tingler/EstimHero/ZC95), stereo WAV files are also rendered.</p>
 <p>See <a href="../guide/export/">Export →</a> for the full folder layout and <a href="../reference/device-safety/">Device Safety →</a> for velocity limits.</p>
+<hr />
+<h2 id="what-funscriptforge-does-and-does-not-do">What FunscriptForge does, and does not, do<a class="headerlink" href="#what-funscriptforge-does-and-does-not-do" title="Permanent link">&para;</a></h2>
+<p><strong>It does</strong> read an existing funscript and find structure in it, reshape that
+motion, generate a funscript from media when you do not have one, and render
+device-ready files for each piece of hardware you own.</p>
+<p><strong>It does not</strong> drive your device. FunscriptForge produces files; playing them
+is ForgePlayer's job, or restim's, or your player of choice.</p>
 
 
 

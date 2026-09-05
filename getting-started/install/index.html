@@ -636,10 +636,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#keeping-it-running" class="md-nav__link">
+  <a href="#a-note-on-alpha-builds" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Keeping it running
+        A note on alpha builds
       
     </span>
   </a>
@@ -1536,10 +1536,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#keeping-it-running" class="md-nav__link">
+  <a href="#a-note-on-alpha-builds" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Keeping it running
+        A note on alpha builds
       
     </span>
   </a>
@@ -1589,44 +1589,44 @@
 
 
 <h1 id="install-funscriptforge">Install FunscriptForge<a class="headerlink" href="#install-funscriptforge" title="Permanent link">&para;</a></h1>
-<p>FunscriptForge is a standalone app — no Python, no dependencies, no installer. Download, extract, and run.</p>
+<p>FunscriptForge is a desktop app. Download an installer, run it, and it opens in
+its own window — there is no server to start, no browser tab, and no Python to
+install.</p>
 <hr />
 <h2 id="system-requirements">System requirements<a class="headerlink" href="#system-requirements" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th></th>
-<th>Minimum</th>
-<th>Recommended</th>
+<th></th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>OS</strong></td>
-<td>Windows 10, macOS 10.15, Ubuntu 24.04 (x86-64)</td>
-<td>Windows 11, macOS 14, Ubuntu 24.04</td>
+<td><strong>Windows</strong></td>
+<td>Windows 10 or 11 (64-bit). WebView2 is included with Windows 11 and current Windows 10; the installer adds it if missing.</td>
 </tr>
 <tr>
-<td><strong>RAM</strong></td>
-<td>4 GB</td>
-<td>8 GB</td>
+<td><strong>macOS</strong></td>
+<td>Apple Silicon (M1 or later). There is no Intel build yet.</td>
 </tr>
 <tr>
-<td><strong>Display</strong></td>
-<td>1366×768</td>
-<td>1920×1080 or higher</td>
+<td><strong>Linux</strong></td>
+<td>x86-64, with a desktop environment. <code>.deb</code> for Debian/Ubuntu, <code>.AppImage</code> elsewhere.</td>
 </tr>
 <tr>
-<td><strong>Browser</strong></td>
-<td>Chrome, Edge, Firefox, Safari</td>
-<td>Chrome or Edge</td>
+<td><strong>Disk</strong></td>
+<td>~1 GB installed. FunscriptForge bundles its own ffmpeg, so you do not need to install one.</td>
 </tr>
 </tbody>
 </table>
-<p>Python is <strong>not required</strong>. FunscriptForge bundles everything it needs.</p>
+<p>Everything the app needs is inside the installer. You do not need Python,
+ffmpeg, or any command-line tools.</p>
 <hr />
 <h2 id="download">Download<a class="headerlink" href="#download" title="Permanent link">&para;</a></h2>
-<p>Go to the <a href="https://github.com/liquid-releasing/funscriptforge/releases">Releases page</a> and download the file for your OS:</p>
+<p>Downloads are on the <strong><a href="https://funscriptforge.com">funscriptforge.com</a></strong> front
+page, or directly from the
+<a href="https://github.com/liquid-releasing/funscriptforge-releases/releases">releases page</a>.</p>
 <table>
 <thead>
 <tr>
@@ -1637,41 +1637,48 @@
 <tbody>
 <tr>
 <td>Windows 10 / 11</td>
-<td><code>FunscriptForge-windows.zip</code></td>
+<td><code>FunscriptForge-Setup-windows.exe</code> (or <code>.msi</code> for managed installs)</td>
 </tr>
 <tr>
-<td>macOS</td>
-<td><code>FunscriptForge-macos.zip</code></td>
+<td>macOS (Apple Silicon)</td>
+<td><code>FunscriptForge-macos-arm64.dmg</code></td>
 </tr>
 <tr>
-<td>Linux (x86-64)</td>
-<td><code>FunscriptForge-linux.tar.gz</code></td>
+<td>Debian / Ubuntu</td>
+<td><code>FunscriptForge-linux-amd64.deb</code></td>
+</tr>
+<tr>
+<td>Other Linux</td>
+<td><code>FunscriptForge-linux-x86_64.AppImage</code></td>
 </tr>
 </tbody>
 </table>
-<!-- SCREENSHOT: GitHub Releases page showing the three download assets highlighted. Caption: "Download the file for your operating system from the Releases page." -->
-
+<p>The installers are large (~250–350 MB) because the app ships its own ffmpeg and
+analysis toolchain rather than asking you to install them.</p>
 <hr />
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Windows</label><label for="__tabbed_1_2">macOS</label><label for="__tabbed_1_3">Linux</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <ol>
-<li>Right-click <code>FunscriptForge-windows.zip</code> → <strong>Extract All…</strong></li>
-<li>Choose a folder — Desktop, Documents, or <code>C:\Program Files\FunscriptForge\</code></li>
-<li>Double-click <strong>FunscriptForge.exe</strong> inside the extracted folder</li>
+<li>Run <strong><code>FunscriptForge-Setup-windows.exe</code></strong></li>
+<li>Windows SmartScreen may warn that the publisher is unknown — the app is
+   not code-signed yet. Choose <strong>More info → Run anyway</strong> if you are happy
+   to proceed.</li>
+<li>Launch <strong>FunscriptForge</strong> from the Start menu</li>
 </ol>
-<p>A terminal window may flash briefly — that is normal. Your browser opens automatically.</p>
-<p><strong>Uninstall:</strong> Delete the folder.</p>
+<p>Prefer <code>.msi</code> if you are deploying through management tooling; the <code>.exe</code>
+is the normal choice.</p>
+<p><strong>Uninstall:</strong> Settings → Apps → FunscriptForge → Uninstall.</p>
 </div>
 <div class="tabbed-block">
 <ol>
-<li>Double-click <code>FunscriptForge-macos.zip</code> to extract</li>
-<li>Drag <strong>FunscriptForge.app</strong> to your Applications folder</li>
+<li>Open <strong><code>FunscriptForge-macos-arm64.dmg</code></strong></li>
+<li>Drag <strong>FunscriptForge</strong> to your Applications folder</li>
 </ol>
 <p><strong>First launch only:</strong> macOS blocks unsigned apps by default.</p>
 <ul>
-<li>Right-click (or Control-click) <strong>FunscriptForge.app</strong> → <strong>Open</strong></li>
+<li>Right-click (or Control-click) <strong>FunscriptForge</strong> → <strong>Open</strong></li>
 <li>Click <strong>Open</strong> in the security dialog</li>
 </ul>
 <p>After this one-time approval you can double-click normally.</p>
@@ -1680,39 +1687,38 @@
 <p>Open Terminal and run:
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>xattr<span class="w"> </span>-cr<span class="w"> </span>/Applications/FunscriptForge.app
 </code></pre></div>
-Then try launching again. This removes the quarantine flag macOS applies to downloaded apps.</p>
+Then try launching again. This clears the quarantine flag macOS applies
+to downloaded apps.</p>
 </details>
 <p><strong>Uninstall:</strong> Drag to Trash.</p>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>tar<span class="w"> </span>-xzf<span class="w"> </span>FunscriptForge-linux.tar.gz
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">cd</span><span class="w"> </span>FunscriptForge
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>./FunscriptForge
-</code></pre></div>
-<p>If your browser does not open automatically, go to <code>http://localhost:6789</code>.</p>
-<p><strong>WSL2 on Windows 11:</strong> Same process. <code>xdg-open</code> routes to your Windows default browser automatically.</p>
-<p><strong>Missing ffmpeg:</strong> The media player requires ffprobe. Install it with:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>ffmpeg
+<p><strong>Debian / Ubuntu:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>./FunscriptForge-linux-amd64.deb
 </code></pre></div></p>
-<p><strong>Uninstall:</strong> Delete the folder.</p>
+<p><strong>Anything else:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>chmod<span class="w"> </span>+x<span class="w"> </span>FunscriptForge-linux-x86_64.AppImage
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>./FunscriptForge-linux-x86_64.AppImage
+</code></pre></div></p>
+<p>The app uses WebKitGTK. On a minimal system you may need:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>libwebkit2gtk-4.1-0
+</code></pre></div></p>
+<p><strong>Uninstall:</strong> <code>sudo apt remove funscriptforge</code>, or delete the AppImage.</p>
 </div>
 </div>
 </div>
 <hr />
 <h2 id="confirm-it-worked">Confirm it worked<a class="headerlink" href="#confirm-it-worked" title="Permanent link">&para;</a></h2>
-<p>Within 5–10 seconds your browser should open to <code>http://localhost:6789</code> showing the FunscriptForge interface — a sidebar on the left and a chart area on the right.</p>
-<!-- SCREENSHOT: The app open in browser, empty state — sidebar visible with file path input, main area showing "No funscript loaded" or blank chart. Caption: "FunscriptForge running in your browser. The sidebar is on the left; the chart area fills the rest." -->
-
-<p>If you see this, you are done.</p>
-<div class="admonition tip">
-<p class="admonition-title">Bookmark it</p>
-<p><code>http://localhost:6789</code> is always the address. Bookmark it for quick access after the first launch.</p>
-</div>
+<p>The app opens in its own window with a row of tabs across the top — <strong>Library</strong>,
+<strong>Project</strong>, <strong>Generate</strong>, <strong>Analysis</strong>, and the rest of the chain through to
+<strong>Export</strong>. The version is shown in the title bar.</p>
+<p>If you see that, you are done.</p>
 <hr />
 <h2 id="try-it-immediately-no-funscript-needed">Try it immediately — no funscript needed<a class="headerlink" href="#try-it-immediately-no-funscript-needed" title="Permanent link">&para;</a></h2>
-<p>FunscriptForge ships with two example funscripts based on Big Buck Bunny (9:56), a free
-open-source film by the Blender Foundation. They appear in the sidebar dropdown marked
-with 📋 — no path to paste, no file to find.</p>
+<p>You do not need your own material to look around. On the <strong>Project</strong> tab's empty
+state, choose <strong>Load sample</strong> to open a synthetic <em>Big Buck Bunny</em> project
+(9:55) and see the full app with real structure in it.</p>
+<p>Two example funscripts also ship in the <code>demo/</code> folder next to the app:</p>
 <table>
 <thead>
 <tr>
@@ -1722,26 +1728,28 @@ with 📋 — no path to paste, no file to find.</p>
 </thead>
 <tbody>
 <tr>
-<td>📋 <code>big_buck_bunny.raw.funscript</code></td>
-<td>A deliberately broken script — every behavioral tag category represented across 16 phrases.</td>
+<td><code>big_buck_bunny.raw.funscript</code></td>
+<td>A deliberately rough script — every behavioral tag category represented.</td>
 </tr>
 <tr>
-<td>📋 <code>big_buck_bunny.forged.funscript</code></td>
+<td><code>big_buck_bunny.forged.funscript</code></td>
 <td>The same script after forging — each issue corrected.</td>
 </tr>
 </tbody>
 </table>
-<p>Select either one from the sidebar to load it instantly and see the full app in action.</p>
 <div class="admonition tip">
 <p class="admonition-title">Want the video too?</p>
 <p>Download Big Buck Bunny from the
 <a href="https://download.blender.org/demo/movies/BBB/">Blender Foundation</a> or
-<a href="https://archive.org/details/BigBuckBunny_124">Internet Archive</a> and place it
-in the <code>demo/</code> folder next to the funscripts. The media player detects it automatically.</p>
+<a href="https://archive.org/details/BigBuckBunny_124">Internet Archive</a> and put it
+beside the funscripts. FunscriptForge pairs media with a script by name.</p>
 </div>
 <hr />
-<h2 id="keeping-it-running">Keeping it running<a class="headerlink" href="#keeping-it-running" title="Permanent link">&para;</a></h2>
-<p>FunscriptForge runs in the background as long as the launcher window is open. Close the terminal or launcher to shut it down.</p>
+<h2 id="a-note-on-alpha-builds">A note on alpha builds<a class="headerlink" href="#a-note-on-alpha-builds" title="Permanent link">&para;</a></h2>
+<p>FunscriptForge is pre-release software. Releases are marked <em>alpha</em>, ship
+without code signing, and change quickly. It never modifies your original
+files — everything it produces is written alongside them — but treat your
+source scripts as the copy that matters.</p>
 <hr />
 <h2 id="something-not-working">Something not working?<a class="headerlink" href="#something-not-working" title="Permanent link">&para;</a></h2>
 <p><a href="../../troubleshooting/install/">Troubleshoot installation →</a></p>

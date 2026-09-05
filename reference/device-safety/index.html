@@ -1657,7 +1657,16 @@
 
 
 <h1 id="device-awareness">Device Awareness<a class="headerlink" href="#device-awareness" title="Permanent link">&para;</a></h1>
-<p>FunscriptForge ensures your funscript works within your target device's physical limits — and improves its <em>feel</em> regardless of device. Device awareness is applied once, globally, on the <strong>Device tab</strong> — before any creative decisions.</p>
+<p>FunscriptForge ensures your funscript works within your target device's
+physical limits — and improves its <em>feel</em> regardless of device.</p>
+<p><strong>Where this happens: the Polish tab.</strong> Device awareness used to be a single
+global pass applied up front, before any creative decisions. It is now applied
+<strong>per device, at the end</strong>: each Polish station clamps the finished motion to
+what that particular hardware can do, so a Handy file and an OSSM file are each
+correct for their own device rather than both being limited by whichever is
+tightest.</p>
+<p>You can therefore shape freely in the editing tabs without thinking about
+limits — Polish is what renders for a device, and it is what enforces them.</p>
 <hr />
 <h2 id="two-things-not-one">Two things, not one<a class="headerlink" href="#two-things-not-one" title="Permanent link">&para;</a></h2>
 <p>Device awareness does two distinct operations. They're independent and serve different purposes:</p>
@@ -1703,29 +1712,37 @@
 <h2 id="device-limits">Device limits<a class="headerlink" href="#device-limits" title="Permanent link">&para;</a></h2>
 <p>Limits are stored in <code>forge/device_specs.json</code> and are community-refinable. See <a href="../device-limits/">Device Limits →</a> for the full table with sources and confidence levels.</p>
 <h3 id="combined-limits">Combined limits<a class="headerlink" href="#combined-limits" title="Permanent link">&para;</a></h3>
-<p>When multiple devices are selected, the tightest constraint wins per parameter. The limits table on the Device tab shows which device is the bottleneck for each parameter.</p>
+<p><code>combined_limits()</code> still exists for the case where one output has to satisfy
+several devices at once: the tightest constraint wins per parameter. Per-station
+Polish is the normal path, and it avoids that compromise entirely — each station
+is clamped only by its own device.</p>
 <hr />
 <h2 id="how-it-works">How it works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
 <ol>
-<li><strong>Select your devices</strong> on the Device tab</li>
-<li>FunscriptForge computes the <strong>combined limits</strong> — the most restrictive device wins</li>
-<li>A <strong>limits table</strong> shows the constraints and which device is the bottleneck</li>
-<li><strong>Groove</strong> adds timing variation to monotone sections (adjustable via slider)</li>
-<li><strong>Speed clamp</strong> caps actions that exceed the combined max speed</li>
-<li>A <strong>side-by-side preview</strong> shows Original vs Device Aware</li>
-<li>A <strong>post-fix verification</strong> shows how many actions were clamped, with a warning if the ratio is high</li>
-<li><strong>Accept</strong> applies the fix — or, if you unchecked clamping, saves the original as-is</li>
+<li>You author freely — Analysis, Chapters, Phrases, Events, Channels. No
+   device limits apply yet, because nothing has been rendered for a device.</li>
+<li><strong>Polish</strong> shows one station per device. Each carries that device's limits
+   from <code>forge/device_specs.json</code>.</li>
+<li>Stamping a station clamps the motion to that device and writes its files.
+   The bench preview shows the effect before you commit.</li>
+<li><strong>Skipping Polish accepts the defaults</strong> — every station is still generated,
+   each clamped for its own device.</li>
+<li><strong>Export</strong> collects the stamped or generated files, one folder per device.</li>
 </ol>
+<p><strong>Groove</strong> is no longer a step here. Timing variation is a parameter of the
+<strong>Tame</strong> transform, which you apply where you are editing rather than globally
+up front.</p>
 <hr />
 <h2 id="after-device-awareness">After device awareness<a class="headerlink" href="#after-device-awareness" title="Permanent link">&para;</a></h2>
 <p>Everything downstream works on the device-aware baseline:</p>
 <ul>
-<li><strong>Tone tab</strong> — shapes feel within device limits</li>
-<li><strong>Phrase editor</strong> — creative transforms</li>
-<li><strong>Stim tab</strong> — estim channel generation from the device-aware funscript</li>
-<li><strong>Export tab</strong> — writes the final files to mechanical/ and estim/ subfolders</li>
+<li><strong>Phrases / Stanzas / Events</strong> — creative transforms, no device limits applied</li>
+<li><strong>Channels</strong> — assign a Character per chapter; the e-stim set is generated from these</li>
+<li><strong>Polish</strong> — per-device stations; this is where limits are enforced</li>
+<li><strong>Export</strong> — writes the final files, one folder per device</li>
 </ul>
-<p>The user doesn't have to think about device limits after the Device tab — the constraint is baked in at the start.</p>
+<p>The user does not have to think about device limits while editing, because the
+constraint is applied at the point a file is actually rendered for a device.</p>
 <hr />
 <h2 id="vocabulary">Vocabulary<a class="headerlink" href="#vocabulary" title="Permanent link">&para;</a></h2>
 <p>FunscriptForge uses "device aware" and "awareness" — never "device safe". We consider device limits; we don't guarantee safety.</p>
