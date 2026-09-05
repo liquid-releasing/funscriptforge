@@ -48,12 +48,27 @@ class TestCliAssess(unittest.TestCase):
         self.assertIn("meta", data)
 
     def test_assess_default_output_path(self):
+        """The assessment is a SIDECAR, so it belongs in the project's .forge
+        folder alongside chapters / peaks / phrases.
+
+        It used to land beside the source as `<stem>_assessment.json`. This
+        test still asserted that flat location long after the layout moved,
+        so it failed for a change the code documents as deliberate. Asserting
+        BOTH halves -- in the forge dir, and not scattered next to the source
+        -- means it now catches a regression in either direction.
+        """
+        from videoflow.sidecar import forge_dir
         import shutil
         fixture_copy = os.path.join(self.tmp, "sample.funscript")
         shutil.copy(FIXTURE, fixture_copy)
         rc, _, _ = run("assess", fixture_copy)
         self.assertEqual(rc, 0)
-        self.assertTrue(os.path.exists(os.path.join(self.tmp, "sample_assessment.json")))
+        sidecar = forge_dir(fixture_copy) / "sample.assessment.json"
+        self.assertTrue(sidecar.exists(), f"expected sidecar at {sidecar}")
+        self.assertFalse(
+            os.path.exists(os.path.join(self.tmp, "sample_assessment.json")),
+            "assessment must not be scattered next to the source",
+        )
 
     def test_assess_prints_summary(self):
         out = os.path.join(self.tmp, "a.json")
@@ -640,10 +655,23 @@ class TestCliAudioPeaks(unittest.TestCase):
         self.assertFalse(data["from_sidecar"])
 
     def test_audio_peaks_writes_sidecar(self):
+        """Peaks land in the project's .forge folder, not beside the media.
+
+        Same stale expectation as test_assess_default_output_path: this
+        asserted `<stem>.audio.json` next to the wav, which is where it went
+        before the .forge sidecar layout.
+        """
+        from pathlib import Path
+        from videoflow.sidecar import forge_dir
         rc, _, stderr = run("audio-peaks", self.wav_path)
         self.assertEqual(rc, 0, f"stderr: {stderr}")
-        sidecar = self.wav_path.replace(".wav", ".audio.json")
-        self.assertTrue(os.path.exists(sidecar))
+        stem = Path(self.wav_path).stem
+        sidecar = forge_dir(self.wav_path) / f"{stem}.audio.json"
+        self.assertTrue(sidecar.exists(), f"expected sidecar at {sidecar}")
+        self.assertFalse(
+            os.path.exists(self.wav_path.replace(".wav", ".audio.json")),
+            "peaks must not be scattered next to the media",
+        )
         with open(sidecar) as f:
             data = json.load(f)
         self.assertEqual(data["version"], "1.0")
