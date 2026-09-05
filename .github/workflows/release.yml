@@ -463,8 +463,37 @@ jobs:
         run: |
           # johnvansickle static amd64: GPL (libx264 present, which the 720p
           # chapter-clip downscale needs) and self-contained.
+          #
+          # Retried AND verified, because on 2026-09-05 this step failed with
+          # "xz: File format not recognized" -- and curl had EXITED ZERO. `-f`
+          # only fails on an HTTP error status, and the host answered 200 with
+          # a body that was not the tarball, so a bad download reached tar and
+          # the error surfaced one step away from its real cause.
+          #
+          # Checking the magic bytes puts an accurate message on the step that
+          # actually failed, and the retry covers the transient case -- which
+          # is what this was: the same URL served a valid archive minutes later.
           mkdir -p ui/web/src-tauri/resources/ffmpeg
-          curl -fsSL -o ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          url=https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          ok=
+          for attempt in 1 2 3; do
+            rm -f ffmpeg.tar.xz
+            curl -fsSL --retry 3 --retry-delay 5 --retry-connrefused -o ffmpeg.tar.xz "$url" || true
+            # xz magic number is FD 37 7A 58 5A 00
+            magic=$(head -c 6 ffmpeg.tar.xz 2>/dev/null | od -An -tx1 | tr -d ' \n')
+            if [ "$magic" = "fd377a585a00" ]; then
+              echo "ffmpeg archive verified as xz on attempt $attempt"
+              ok=1
+              break
+            fi
+            echo "::warning::attempt $attempt did not return an xz archive (magic=$magic, $(wc -c < ffmpeg.tar.xz 2>/dev/null || echo 0) bytes); retrying"
+            sleep 15
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::$url did not serve a valid xz archive after 3 attempts. curl exits 0 when the host answers 200 with a non-archive body, so this is an upstream/CDN problem rather than a build error. First bytes follow:"
+            head -c 200 ffmpeg.tar.xz | od -c | head -5 || true
+            exit 1
+          fi
           mkdir -p ffmpeg_extract
           tar -xJf ffmpeg.tar.xz -C ffmpeg_extract --strip-components=1
           cp ffmpeg_extract/ffmpeg ffmpeg_extract/ffprobe ui/web/src-tauri/resources/ffmpeg/
