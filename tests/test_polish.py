@@ -95,6 +95,43 @@ class TestStationCatalog(unittest.TestCase):
             for sid in polish.STATIONS
         ))
 
+    def test_auto_generated_experimental_stations_use_a_verified_ceiling(self):
+        """Skipping Polish must not apply an UNVERIFIED limit silently.
+
+        Skipping the tab accepts every station's defaults, which is how a
+        user who never opened Polish still gets FOC-Stim files. But FOC-Stim
+        ships a higher rate ceiling than the flagship and says "limits
+        unverified" in its own constraint hint -- reasonable to opt INTO on
+        hardware you are deliberately testing, wrong to inherit by not
+        visiting a tab. cli._auto_knobs caps it at the proven ceiling.
+
+        Stamping the station deliberately is unaffected: that path passes the
+        station's own defaults.
+        """
+        try:
+            import cli
+        except Exception:  # noqa: BLE001 - matches this file's other guards
+            self.skipTest("cli.py app deps not installed in this interpreter")
+
+        verified = polish.STATIONS["estim3p"].default_knobs["rateLimit"]
+        for sid in ("focstim", "focstim4p"):
+            with self.subTest(station=sid):
+                station = polish.STATIONS[sid]
+                self.assertTrue(station.experimental, sid)
+                self.assertGreater(
+                    station.default_knobs["rateLimit"], verified,
+                    "this test is meaningless if the station no longer ships "
+                    "a higher ceiling than the flagship",
+                )
+                knobs = cli._auto_knobs(station)
+                self.assertIsNotNone(knobs, f"{sid} must be capped")
+                self.assertEqual(knobs["rateLimit"], verified)
+
+        # A verified station is left entirely alone -- no override, so the
+        # generators keep using their own defaults rather than a copy.
+        self.assertIsNone(cli._auto_knobs(polish.STATIONS["estim3p"]))
+        self.assertIsNone(cli._auto_knobs(polish.STATIONS["handy"]))
+
     def test_hardware_stations_are_not_experimental(self):
         # The stroker/e-stim stations are hardware we own and can verify
         # end-to-end, so none of them may carry the experimental flag.

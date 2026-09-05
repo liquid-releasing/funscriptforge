@@ -29,6 +29,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Button, Icon, fmtTime, fmtTimeShort, TrackStack, MediaViewer, ChapterRibbon, CaptureBar } from 'forgemoment';
 import { EVENT_DEVICES } from '../data/events.js';
+import { createCoalescedWriter } from '../lib/coalescedWriter.js';
 import {
   readFeelEvents, saveFeelEvents, listEventRecipes,
   edgerExport, edgerImport, pickEventsYmlFile,
@@ -166,58 +167,42 @@ export default function EventsTab({
   // The debounce is only safe because every path that reads the file back
   // flushes first (Export / Preview / Import below), and unmount flushes too.
   // A pending write that never lands is the same bug as a failed one.
-  const pendingRef = useRef(null);      // events awaiting a write, or null
-  const persistTimerRef = useRef(null);
+  // The failure handler is read through a ref so the writer below can be
+  // built exactly once. Rebuilding it would discard a queued write.
+  const onSaveErrorRef = useRef(setAppError);
+  useEffect(() => { onSaveErrorRef.current = setAppError; }, [setAppError]);
 
-  const writeNow = useCallback((path, nextEvents) => (
-    saveFeelEvents(path, nextEvents).catch((e) => {
-      console.error('save .feel.yml failed', e);
-      const detail = String(e?.message ?? e);
-      setAppError(
-        /not enough space on the disk|os error 112/i.test(detail)
-          ? 'Events could not be saved — the drive is full. Free some space, then reopen this project to check which events survived.'
-          : `Events could not be saved: ${detail}`,
-      );
-    })
-  ), [setAppError]);
+  // A ref, not useMemo: React may discard a useMemo cache at will, and here
+  // that would silently drop whatever write was owed.
+  const writerRef = useRef(null);
+  if (writerRef.current === null) {
+    writerRef.current = createCoalescedWriter(({ path, events: nextEvents }) => (
+      saveFeelEvents(path, nextEvents).catch((e) => {
+        console.error('save .feel.yml failed', e);
+        const detail = String(e?.message ?? e);
+        onSaveErrorRef.current(
+          /not enough space on the disk|os error 112/i.test(detail)
+            ? 'Events could not be saved — the drive is full. Free some space, then reopen this project to check which events survived.'
+            : `Events could not be saved: ${detail}`,
+        );
+      })
+    ), 600);
+  }
+  const writer = writerRef.current;
 
   // Write anything outstanding right now, and await it. Call before reading
   // the file back, so Export/Preview/Import can never see a stale sidecar.
-  const flushPersist = useCallback(() => {
-    if (persistTimerRef.current) {
-      clearTimeout(persistTimerRef.current);
-      persistTimerRef.current = null;
-    }
-    const pending = pendingRef.current;
-    pendingRef.current = null;
-    if (!pending) return Promise.resolve();
-    return writeNow(pending.path, pending.events);
-  }, [writeNow]);
+  const flushPersist = useCallback(() => writer.flush(), [writer]);
 
   const persist = (nextEvents) => {
     const path = project?.path;
     if (!path) return;
-    pendingRef.current = { path, events: nextEvents };
-    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
-    persistTimerRef.current = setTimeout(() => {
-      persistTimerRef.current = null;
-      const pending = pendingRef.current;
-      pendingRef.current = null;
-      if (pending) writeNow(pending.path, pending.events);
-    }, 600);
+    writer.schedule({ path, events: nextEvents });
   };
 
   // Never leave a debounced write unwritten. Leaving the tab mid-burst would
   // otherwise drop the last events the user entered.
-  useEffect(() => () => {
-    if (persistTimerRef.current) {
-      clearTimeout(persistTimerRef.current);
-      persistTimerRef.current = null;
-    }
-    const pending = pendingRef.current;
-    pendingRef.current = null;
-    if (pending) writeNow(pending.path, pending.events);
-  }, [writeNow]);
+  useEffect(() => () => { writer.flush(); }, [writer]);
 
   // Effect catalog — the 32 Edger events, backend-sourced (list-event-recipes).
   // Fetched once; a synthetic "Normal" baseline is prepended for chaining.

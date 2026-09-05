@@ -216,6 +216,55 @@ class TestExportCLI(unittest.TestCase):
         self.assertFalse(derived, names)
         self.assertTrue(any(n.startswith("stations/handy/") for n in names), names)
 
+    def test_skipping_polish_generates_every_estim_station(self):
+        """Skipping Polish means accepting its defaults -- for EVERY station.
+
+        The export's fallback used to name estim3p and tcode specifically, so
+        a user who never opened the Polish tab silently got no FOC-Stim files
+        at all (user, 2026-09-05: "it should generate all of the devices, even
+        experimental ones"). Nothing else pins that; the two tests this change
+        touched only assert what must NOT appear.
+        """
+        if not self._assign_character():
+            self.skipTest("no stim characters available")
+        out = os.path.join(self.tmp, "allstations.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+        for sid in ("estim3p", "focstim", "focstim4p"):
+            self.assertTrue(
+                any(n.startswith(f"stations/{sid}/") for n in names),
+                f"{sid} was not generated: {names}",
+            )
+
+    def test_four_phase_exports_electrodes_not_positions(self):
+        """Four-phase hardware wants a power per electrode, not a position.
+
+        focstim4p writes e1..e4 and drops alpha/beta -- position channels are
+        meaningless to a four-electrode driver, and shipping them would look
+        like a usable file that the device cannot read.
+        """
+        if not self._assign_character():
+            self.skipTest("no stim characters available")
+        out = os.path.join(self.tmp, "fourphase.forge")
+        r = _run("export", self.main, "--mode", "forge", "--out", out)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+        four = [n for n in names if n.startswith("stations/focstim4p/")]
+        self.assertTrue(four, f"no four-phase station: {names}")
+        for ch in ("e1", "e2", "e3", "e4"):
+            self.assertTrue(
+                any(n.endswith(f".{ch}.funscript") for n in four),
+                f"{ch} missing from four-phase: {four}",
+            )
+        for pos in ("alpha", "beta", "alpha-prostate", "beta-prostate"):
+            self.assertFalse(
+                any(n.endswith(f".{pos}.funscript") for n in four),
+                f"four-phase must not write {pos}: {four}",
+            )
+
     def test_export_default_arc_when_chapters_but_skipped_channels(self):
         # Analyzed project (chapters.json present) but Channels skipped (NO
         # characters.json): export auto-generates e-stim + multi-axis from the
