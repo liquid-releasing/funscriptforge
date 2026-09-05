@@ -2,6 +2,42 @@
 
 All notable changes to FunscriptForge are recorded here.
 
+## v0.4.18-alpha — 2026-09-05
+
+The event-entry lag, and the documentation to match everything v0.3.17 added.
+
+### Fixed
+
+- **Entering an event was slow, and it got worse the faster you worked.** Every
+  edit writes its sidecar through the CLI, and each call spent about a second
+  loading libraries it never used — `matplotlib` for a command that draws
+  nothing, and `scipy` reached by importing a *path helper*. Both are lazy now:
+  a call went from ~1500 ms to ~520 ms. Writes are also coalesced, so authoring
+  a run of chained events no longer starts one process per event. Everything
+  the app does through the CLI is faster as a result, not just Events.
+- **Output folders were named after internal ids.** Two devices landed in
+  folders called "Ossm" and "Shaker" instead of OSSM and Bass Shaker.
+
+### Changed
+
+- **The guide and architecture docs now describe what ships.** Export's
+  folder-layout and channel sections still described a "Stim tab" and an
+  `estim/` folder that have not existed for a long time; they are rewritten
+  against the code. The e-stim architecture doc had no idea FOC-Stim existed.
+  Transforms documents the Catalog's *Try it out* panel.
+
+### Internal
+
+- 37 tests across two repos had been failing for a while. None was a bug —
+  every one asserted a layout or vocabulary the code had deliberately moved on
+  from. They now derive paths from the module instead of hardcoding them, so
+  they track the rule rather than a frozen copy of it. Both suites are green:
+  1107 here, 567 in videoflow.
+- New guards on the things that would otherwise regress silently: that the CLI
+  does not load plotting or signal-processing libraries, that skipping Polish
+  really does generate FOC-Stim, and that the coalesced write cannot lose the
+  last edit.
+
 ## v0.3.17-alpha — 2026-09-05
 
 FOC-Stim support, and the fixes from dogfooding the v0.2.16-alpha installer.
