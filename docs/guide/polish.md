@@ -15,32 +15,38 @@ the settings you used, so a later export ships exactly what you approved.
 
 ## Can I skip Polish?
 
-Yes — but read this first, because "skip" does not mean "no device files".
+Yes. **Skipping Polish means accepting its defaults** — you get device files
+for every station, generated at each one's default settings, without having to
+walk the tab.
 
-If you export without stamping anything, FunscriptForge still generates two
-stations for you, using their default settings:
+You do not have to work out which devices you lose by skipping. That was the
+whole reason for the rule: the alternative is an Export tab that has to
+explain, device by device, what is and is not in your bundle.
 
-- **E-Stim (3-phase)** — the full e-stim channel set
-- **T-Code / SR6** — the multi-axis stroker file
+Three things are still worth knowing:
 
-Every other station — including **both FOC-Stim stations** — is only produced
-if you stamp it in Polish. Skipping Polish therefore means **no FOC-Stim files
-in your export at all.**
+- **Defaults are defaults.** If you adjusted a station's knobs and walked away
+  without stamping, those adjustments are not used. Stamping is what records
+  them.
+- **Some stations need data you may not have.** The e-stim channel set is built
+  from the **character** assigned to each chapter, and the T-Code axis set from
+  each chapter's **Mechanical style**. Without those, the export produces no
+  files for them — silently, because there is nothing to report. Stations that
+  need only the motion track (the per-device stroker clamps, the shaker
+  envelope) are always generated.
+- **Experimental stations are generated conservatively.** Writing a file is not
+  the same as driving hardware — you still load it and set your own limits — so
+  an experimental station is included rather than silently dropped. But it does
+  not get to apply an *unverified* rate ceiling to someone who never opened the
+  tab: FOC-Stim auto-generates at the proven **0.55** ceiling instead of its own
+  0.65. Stamp it deliberately and you get 0.65.
 
-That is deliberate. The two auto-generated stations are hardware we have
-verified end to end; the FOC-Stim stations are still marked experimental, and
-generating output for untested hardware without being asked is the wrong
-default.
+One artifact is deliberately left out of the automatic pass: the Bass Shaker's
+LFE `.wav`. It is a full-length audio render, and every other audio file in the
+bundle is an explicit opt-in. Stamp Bass Shaker if you want it.
 
-Two more things worth knowing about skipping:
-
-- The auto-generated pass uses **default knobs**. It does not use anything you
-  adjusted and then walked away from without stamping.
-- The e-stim pass needs a **character assigned** to your chapters. Without one
-  it produces nothing, silently — there is no error, just no e-stim files.
-
-If you only care about one device, stamping that one station is faster than
-skipping, and it is the only way to know what you are shipping.
+Stamping is still worth doing when you care about a specific device — it is the
+only way to tune a station and to know exactly what you are shipping.
 
 ---
 
