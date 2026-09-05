@@ -88,6 +88,17 @@ def _targets(version: str, include_web: bool):
             version,
         ),
         (
+            # Cargo.lock records the crate's OWN version. Missing it leaves
+            # the lockfile disagreeing with Cargo.toml, which cargo silently
+            # rewrites mid-build -- a dirty tree in CI and a diff nobody
+            # authored. Anchored on the package NAME so a dependency that
+            # happens to sit at the same version is never touched.
+            REPO / "ui/web/src-tauri/Cargo.lock",
+            re.compile(r'(?s)(name = "funscriptforge".{1,2}version = ")([^"]+)(")'),
+            lambda v: rf'\g<1>{v}\g<3>',
+            version,
+        ),
+        (
             REPO / "ui/web/src-tauri/tauri.conf.json",
             re.compile(r'("version"\s*:\s*")([^"]+)(")'),
             lambda v: rf'\g<1>{v}\g<3>',

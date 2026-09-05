@@ -1,6 +1,6 @@
 [package]
 name = "funscriptforge"
-version = "0.2.16-alpha"
+version = "0.3.17-alpha"
 description = "FunscriptForge — Tauri desktop shell"
 authors = ["Liquid Releasing"]
 edition = "2021"

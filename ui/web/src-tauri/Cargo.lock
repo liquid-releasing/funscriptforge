@@ -826,7 +826,7 @@ dependencies = [
 
 [[package]]
 name = "funscriptforge"
-version = "0.2.16-alpha"
+version = "0.3.17-alpha"
 dependencies = [
  "serde",
  "serde_json",

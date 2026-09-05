@@ -2,6 +2,46 @@
 
 All notable changes to FunscriptForge are recorded here.
 
+## v0.3.17-alpha — 2026-09-05
+
+FOC-Stim support, and the fixes from dogfooding the v0.2.16-alpha installer.
+
+### Added
+
+- **FOC-Stim, as two Polish stations.** "FOC-Stim · Direct current control"
+  drives the three-phase device from the same channel set as E-Stim, and
+  "FOC-Stim · 4-phase" exports four per-electrode channels (`.e1`–`.e4`)
+  instead of alpha/beta positions. Both appear in Polish between E-Stim and
+  Handy, both export into the `.forge` bundle, and both are listed in the
+  Viewer. The position→electrode transform is ported from restim
+  (`stim_math/transforms_4.py`, MIT) and verified against it.
+  **Both are marked experimental: neither has been run on hardware yet.**
+- **`scripts/bump_version.py`** — one command sets the version in all five
+  places it is written down (package.json, Cargo.toml, Cargo.lock,
+  tauri.conf.json, and the website's download note), knows tauri.conf.json
+  must stay numeric for the MSI bundler, and has a `--check` mode.
+
+### Fixed
+
+- **The version note on funscriptforge.com lagged the release.** The download
+  buttons point at `releases/latest`, so the site served v0.2.16 binaries
+  under a v0.2.15 label. The dispatch that was supposed to update it had no
+  listener on the receiving repo.
+- **Test builds were indistinguishable from releases.** A build-only dispatch
+  produced binaries reporting the same version as the last tag, so an
+  installed build could not be identified — and was not, costing a round of
+  "this feature is missing" against a build that never contained it. Dispatch
+  builds now stamp the short SHA into the displayed version and mark the
+  installer filename `-TEST-<sha>`.
+- **"Generate new funscript" never went red.** The footer treated incomplete
+  analysis as a chain-blocker on every tab, including Project and Generate,
+  which run *before* analysis exists — so their primary button stayed white
+  and tentative even when the step was ready. The gate now applies only from
+  Analysis onward.
+- **Opening media kept the previous project on screen.** Title, media, and
+  funscript from the last project stayed visible for the whole probe, because
+  the media path seeded no placeholder the way the funscript path does.
+
 ## v0.2.16-alpha — 2026-09-04
 
 Analysis-tab fixes, all found by dogfooding the v0.2.15-alpha installer.
