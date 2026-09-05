@@ -148,7 +148,17 @@ from pattern_catalog.transformer import FunscriptTransformer
 from user_customization.config import CustomizerConfig
 from user_customization.customizer import WindowCustomizer
 from utils import ms_to_timestamp
-from visualizations.motion import HAS_MATPLOTLIB, MotionVisualizer
+# visualizations.motion is imported LAZILY, inside cmd_visualize.
+#
+# It pulls in matplotlib.pyplot, which measured 407ms of cli.py's 529ms
+# import -- paid by EVERY invocation, including the ones that never draw
+# anything. The Events tab writes .feel.yml through `feel-write` on each
+# edit, so that cost landed on every event a user entered, and the whole
+# call was ~1.5s for a few ms of actual YAML work (dogfood 2026-09-05:
+# "the lag in being able to edit after entering an event persists").
+#
+# Only cmd_visualize needs these two symbols, so nothing else should wait
+# for a plotting library to load.
 
 
 # ------------------------------------------------------------------
@@ -463,6 +473,7 @@ def cmd_customize(args):
 
 @_cli_command
 def cmd_visualize(args):
+    from visualizations.motion import HAS_MATPLOTLIB, MotionVisualizer
     if not HAS_MATPLOTLIB:
         print("Error: matplotlib is not installed. Run: pip install matplotlib")
         sys.exit(1)

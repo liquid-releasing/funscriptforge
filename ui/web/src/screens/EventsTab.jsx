@@ -156,9 +156,20 @@ export default function EventsTab({
   // authoring into a session that was no longer reaching disk. Until this call
   // lands, the events exist ONLY in component state — that's worth interrupting
   // for, and the message says what to DO, not what threw.
-  const persist = (nextEvents) => {
-    const path = project?.path;
-    if (!path) return;
+  //
+  // COALESCED. Each save spawns a CLI process, and chaining events is the
+  // designed workflow — the end of one carries forward as the begin of the
+  // next — so authoring a run of events used to spawn one process per event
+  // and the tab went sluggish behind them (dogfood 2026-09-05). A short
+  // debounce collapses a burst into a single write.
+  //
+  // The debounce is only safe because every path that reads the file back
+  // flushes first (Export / Preview / Import below), and unmount flushes too.
+  // A pending write that never lands is the same bug as a failed one.
+  const pendingRef = useRef(null);      // events awaiting a write, or null
+  const persistTimerRef = useRef(null);
+
+  const writeNow = useCallback((path, nextEvents) => (
     saveFeelEvents(path, nextEvents).catch((e) => {
       console.error('save .feel.yml failed', e);
       const detail = String(e?.message ?? e);
@@ -167,8 +178,46 @@ export default function EventsTab({
           ? 'Events could not be saved — the drive is full. Free some space, then reopen this project to check which events survived.'
           : `Events could not be saved: ${detail}`,
       );
-    });
+    })
+  ), [setAppError]);
+
+  // Write anything outstanding right now, and await it. Call before reading
+  // the file back, so Export/Preview/Import can never see a stale sidecar.
+  const flushPersist = useCallback(() => {
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    if (!pending) return Promise.resolve();
+    return writeNow(pending.path, pending.events);
+  }, [writeNow]);
+
+  const persist = (nextEvents) => {
+    const path = project?.path;
+    if (!path) return;
+    pendingRef.current = { path, events: nextEvents };
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
+      const pending = pendingRef.current;
+      pendingRef.current = null;
+      if (pending) writeNow(pending.path, pending.events);
+    }, 600);
   };
+
+  // Never leave a debounced write unwritten. Leaving the tab mid-burst would
+  // otherwise drop the last events the user entered.
+  useEffect(() => () => {
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    if (pending) writeNow(pending.path, pending.events);
+  }, [writeNow]);
 
   // Effect catalog — the 32 Edger events, backend-sourced (list-event-recipes).
   // Fetched once; a synthetic "Normal" baseline is prepended for chaining.
@@ -510,6 +559,7 @@ export default function EventsTab({
     if (!project?.path) return;
     setIoBusy(true);
     try {
+      await flushPersist();   // never export a stale sidecar
       const res = await edgerExport(project.path, { write: true });
       let text = `Exported ${res.count} event${res.count === 1 ? '' : 's'} → ${res.path || 'events.yml'}`;
       if (res.skipped?.length) text += ` · skipped ${res.skipped.length} baseline`;
@@ -523,6 +573,7 @@ export default function EventsTab({
     if (!project?.path) return;
     setIoBusy(true);
     try {
+      await flushPersist();   // preview must reflect what is on screen
       const res = await edgerExport(project.path, { write: false });
       setPreviewYaml(res?.yaml ?? 'events: []\n');
     } catch (e) {
@@ -540,6 +591,7 @@ export default function EventsTab({
     }
     setIoBusy(true);
     try {
+      await flushPersist();   // land queued edits before replacing them
       const res = await edgerImport(picked);
       const imported = (res?.events ?? []).map((e) => ({
         ...e,
