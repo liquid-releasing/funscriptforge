@@ -443,8 +443,16 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
             row. Dropped to buy back ~128px for a seventh station: it was pure
             ornament — the per-card → arrows already read as a conveyor, and the
             tab chain above states the source. */}
+        {/* minmax(0, 1fr), NOT 1fr: a bare `1fr` is minmax(AUTO, 1fr), so a
+            column can never shrink below its content's min-content width. With
+            seven stations that never bound; adding the two FOC-Stim ones took
+            it to nine, and the long sublabels ("Direct current control",
+            "1-axis stepper machine") held their columns wide enough to push
+            Bass Shaker off the right edge (dogfood 2026-09-05). The 0 minimum
+            lets every column take an equal share and the text ellipsize. */}
         <div style={{
-          display: 'grid', gridTemplateColumns: `repeat(${POLISH_DEVICES.length}, 1fr)`,
+          display: 'grid',
+          gridTemplateColumns: `repeat(${POLISH_DEVICES.length}, minmax(0, 1fr))`,
           alignItems: 'stretch', gap: 0, background: '#12151e', border: '1px solid #2d3148',
           borderRadius: 12, padding: 10,
         }}>
@@ -473,7 +481,13 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
                     <div style={{ fontSize: 11.5, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {d.label}{d.experimental && <span style={{ color: '#ffb547', fontSize: 9, marginLeft: 4 }}>exp</span>}
                     </div>
-                    <div style={{ fontSize: 9.5, color: '#6b7390', lineHeight: 1.2 }}>{d.sublabel}</div>
+                    <div
+                      title={d.sublabel}
+                      style={{
+                        fontSize: 9.5, color: '#6b7390', lineHeight: 1.2,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}
+                    >{d.sublabel}</div>
                   </div>
                   {st === 'accepted' && (
                     <span style={{ width: 16, height: 16, borderRadius: 8, display: 'grid', placeItems: 'center', background: 'rgba(62,213,152,0.18)', color: '#3ed598', fontSize: 10, fontWeight: 800 }}>✓</span>
