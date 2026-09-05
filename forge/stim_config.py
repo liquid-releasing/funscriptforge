@@ -177,11 +177,22 @@ VIRTUAL_CHARACTERS: dict[str, dict] = {
         "base": "Scene Builder",       # Edger preset to generate from
         "envelope": "descending",      # scale volume 1.0 → floor across the span
         "envelope_floor": 0.2,         # intensity at the end of the span (0..1)
-        # Fraction of the span held at FULL intensity before the taper starts.
-        # 0.75 = the wind-down happens in the closing quarter. Tapering from the
-        # very first beat made the chapter read as already-ending the moment it
-        # began; a closer should hold the scene and then let it go (user, 2026-08-16).
-        "envelope_hold": 0.75,
+        # How long the wind-down LASTS, in absolute time. Closing a scene is
+        # a perceptual event of roughly constant duration -- it should not
+        # stretch just because the chapter is long. As a fraction (the old
+        # envelope_hold: 0.75) a 10-minute chapter tapered for 2.5 minutes and
+        # a 30-minute one for 7.5, which read as winding down for the entire
+        # back half (user, 2026-09-05).
+        "envelope_taper_ms": 60_000,
+        # ...but never more than this share of a SHORT chapter, or a 90-second
+        # chapter would be two-thirds wind-down and the "hold, then release"
+        # shape would be lost.
+        "envelope_taper_max_fraction": 0.34,
+        # NOTE: no "envelope_hold" here on purpose. envelope_taper_ms takes
+        # precedence when both are present, so carrying both would invite
+        # someone to set the fraction and have it silently ignored. The
+        # envelope_hold path below still exists for specs that define it
+        # INSTEAD of a taper.
     },
 }
 
@@ -378,12 +389,15 @@ def apply_virtual_envelope(
 ) -> list[dict]:
     """Apply a virtual character's post-process to one channel's actions.
 
-    ``descending``: hold the volume channels at full for the first
-    ``envelope_hold`` of the span, then taper linearly to ``envelope_floor`` at
-    ``window_hi`` — the unbuild. With the default hold of 0.75 the wind-down
-    lives entirely in the closing quarter, which is what "closing a scene"
-    means: the scene runs at strength and then releases, rather than fading
-    from its first beat. A hold of 0.0 restores the original full-span taper.
+    ``descending``: hold the volume channels at full, then taper linearly to
+    ``envelope_floor`` at ``window_hi`` — the unbuild. The scene runs at
+    strength and then releases, rather than fading from its first beat.
+
+    The taper length is ``envelope_taper_ms`` of ABSOLUTE time, capped at
+    ``envelope_taper_max_fraction`` of the span so a short chapter still holds
+    before it releases. A spec without ``envelope_taper_ms`` falls back to the
+    older ``envelope_hold`` fraction.
+
     Non-volume channels and non-descending specs pass through unchanged.
     """
     if not spec or spec.get("envelope") != "descending":
@@ -391,11 +405,19 @@ def apply_virtual_envelope(
     if channel_name not in _VOLUME_CHANNELS:
         return actions
     floor = float(spec.get("envelope_floor", 0.2))
+    span = max(1, window_hi - window_lo)
+    # envelope_taper_ms WINS over envelope_hold when both are given.
+    taper_ms = spec.get("envelope_taper_ms")
+    if taper_ms:
+        # Absolute taper, capped so a short chapter is not mostly wind-down.
+        cap = float(spec.get("envelope_taper_max_fraction", 0.34))
+        taper = min(float(taper_ms), span * cap)
+        hold = 1.0 - (taper / span)
+    else:
+        hold = float(spec.get("envelope_hold", 0.0))
     # Clamped below 1.0: a hold of exactly 1.0 would leave no room to taper in
     # and make the closer a no-op that silently stops closing anything.
-    hold = float(spec.get("envelope_hold", 0.0))
     hold = 0.0 if hold < 0.0 else (0.99 if hold > 0.99 else hold)
-    span = max(1, window_hi - window_lo)
     out: list[dict] = []
     for a in actions:
         frac = (a["at"] - window_lo) / span

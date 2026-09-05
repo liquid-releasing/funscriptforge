@@ -76,7 +76,11 @@ class TestDescendingEnvelope(unittest.TestCase):
 
     def test_full_until_the_hold_point_then_drops(self):
         out = apply_virtual_envelope("volume", self._flat(0, 1000, 10), 0, 1000, _SPEC)
-        hold = _SPEC["envelope_hold"]
+        # The taper is an absolute duration, capped on a short span -- 1000ms
+        # here, so the cap is what applies.
+        taper = min(_SPEC["envelope_taper_ms"],
+                    1000 * _SPEC["envelope_taper_max_fraction"])
+        hold = 1.0 - taper / 1000
         at_hold = {a["at"]: a["pos"] for a in out}
         # Everything up to the hold point is untouched...
         for t in range(0, int(1000 * hold) + 1, 10):
@@ -85,11 +89,44 @@ class TestDescendingEnvelope(unittest.TestCase):
         self.assertLess(at_hold[1000], 80)
 
     def test_hold_zero_restores_the_full_span_taper(self):
-        spec = dict(_SPEC, envelope_hold=0.0)
+        # The legacy fraction path, for a spec that defines envelope_hold
+        # INSTEAD of a taper. envelope_taper_ms wins wherever both appear, so
+        # it has to be absent for this to be the behaviour under test.
+        spec = {k: v for k, v in _SPEC.items() if k != "envelope_taper_ms"}
+        spec["envelope_hold"] = 0.0
         out = apply_virtual_envelope("volume", self._flat(0, 1000), 0, 1000, spec)
         floor = spec["envelope_floor"]
         mid = out[len(out) // 2]
         self.assertEqual(mid["pos"], round(80 * (1.0 - (1.0 - floor) * 0.5)))
+
+    def test_taper_is_a_fixed_DURATION_not_a_share_of_the_span(self):
+        """A 30-minute chapter must not wind down for seven minutes.
+
+        As a fraction (the old envelope_hold: 0.75) the taper grew with the
+        chapter, so a long one read as winding down through its entire back
+        half. Closing a scene is a perceptual event of roughly constant
+        length, so the taper is absolute -- and identical across spans long
+        enough for the cap not to bite.
+        """
+        def taper_len(span_ms):
+            acts = self._flat(0, span_ms, 1000)
+            out = apply_virtual_envelope("volume", acts, 0, span_ms, _SPEC)
+            first_drop = next(a["at"] for a in out if a["pos"] < 80)
+            return span_ms - first_drop
+
+        ten_min = taper_len(600_000)
+        thirty_min = taper_len(1_800_000)
+        self.assertEqual(ten_min, thirty_min)
+        # ~the configured minute, not a quarter of the chapter.
+        self.assertLessEqual(abs(ten_min - _SPEC["envelope_taper_ms"]), 2000)
+        self.assertLess(thirty_min, 1_800_000 * 0.10)
+
+    def test_short_chapter_still_holds_before_it_releases(self):
+        """The cap keeps the shape when a minute would swallow the chapter."""
+        span = 90_000
+        out = apply_virtual_envelope("volume", self._flat(0, span, 1000), 0, span, _SPEC)
+        first_drop = next(a["at"] for a in out if a["pos"] < 80)
+        self.assertGreater(first_drop, span * 0.5, "a short chapter must still hold first")
 
     def test_hold_of_one_still_closes(self):
         # Clamped below 1.0 — otherwise the closer would silently stop closing.
