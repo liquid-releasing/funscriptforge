@@ -166,6 +166,20 @@ jobs:
         working-directory: forgemoment
         run: npm ci
 
+      - name: Stamp dev version (dispatch builds only)
+        # A build-only dispatch used to produce binaries whose version string
+        # was byte-identical to the last release, so a tester could not tell
+        # which one they had installed -- and on 2026-09-05 could not, costing
+        # a round of "the feature is missing" on a build that never had it.
+        # This stamps package.json (the file appVersion.js reads) so the title
+        # bar and About dialog say e.g. "0.3.17-alpha+dev.446dd7c".
+        # tauri.conf.json is deliberately untouched: the MSI bundler rejects a
+        # non-numeric pre-release identifier.
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: funscript-updater
+        shell: bash
+        run: python scripts/bump_version.py --dev-stamp "${GITHUB_SHA:0:7}"
+
       - name: Tauri build (with bundled-resources overlay)
         working-directory: funscript-updater/ui/web
         # Cap codegen parallelism so concurrent rustc processes don't peak the
@@ -179,9 +193,18 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist-stable
+          # A dispatch build is a TEST build: mark the filename so a downloaded
+          # installer is self-describing before it is even run. Tag builds keep
+          # the stable names that the publish job and the website's
+          # releases/latest/download/ links depend on.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MARK="-TEST-${GITHUB_SHA:0:7}"
+          else
+            MARK=""
+          fi
           BUNDLE="ui/web/src-tauri/target/release/bundle"
-          cp "$BUNDLE"/msi/*.msi   dist-stable/FunscriptForge-Setup-windows.msi
-          cp "$BUNDLE"/nsis/*.exe  dist-stable/FunscriptForge-Setup-windows.exe
+          cp "$BUNDLE"/msi/*.msi   "dist-stable/FunscriptForge${MARK}-Setup-windows.msi"
+          cp "$BUNDLE"/nsis/*.exe  "dist-stable/FunscriptForge${MARK}-Setup-windows.exe"
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -319,6 +342,20 @@ jobs:
         working-directory: forgemoment
         run: npm ci
 
+      - name: Stamp dev version (dispatch builds only)
+        # A build-only dispatch used to produce binaries whose version string
+        # was byte-identical to the last release, so a tester could not tell
+        # which one they had installed -- and on 2026-09-05 could not, costing
+        # a round of "the feature is missing" on a build that never had it.
+        # This stamps package.json (the file appVersion.js reads) so the title
+        # bar and About dialog say e.g. "0.3.17-alpha+dev.446dd7c".
+        # tauri.conf.json is deliberately untouched: the MSI bundler rejects a
+        # non-numeric pre-release identifier.
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: funscript-updater
+        shell: bash
+        run: python scripts/bump_version.py --dev-stamp "${GITHUB_SHA:0:7}"
+
       - name: Tauri build (with bundled-resources overlay)
         working-directory: funscript-updater/ui/web
         env:
@@ -329,7 +366,16 @@ jobs:
         working-directory: funscript-updater
         run: |
           mkdir -p dist-stable
-          cp ui/web/src-tauri/target/release/bundle/dmg/*.dmg dist-stable/FunscriptForge-macos-arm64.dmg
+          # A dispatch build is a TEST build: mark the filename so a downloaded
+          # installer is self-describing before it is even run. Tag builds keep
+          # the stable names that the publish job and the website's
+          # releases/latest/download/ links depend on.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MARK="-TEST-${GITHUB_SHA:0:7}"
+          else
+            MARK=""
+          fi
+          cp ui/web/src-tauri/target/release/bundle/dmg/*.dmg "dist-stable/FunscriptForge${MARK}-macos-arm64.dmg"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
@@ -464,6 +510,20 @@ jobs:
       # command meant the AppImage took the .deb down with it: the step
       # exited 1, so the rename and upload never ran and Linux shipped
       # nothing despite having a working package sitting on disk.
+      - name: Stamp dev version (dispatch builds only)
+        # A build-only dispatch used to produce binaries whose version string
+        # was byte-identical to the last release, so a tester could not tell
+        # which one they had installed -- and on 2026-09-05 could not, costing
+        # a round of "the feature is missing" on a build that never had it.
+        # This stamps package.json (the file appVersion.js reads) so the title
+        # bar and About dialog say e.g. "0.3.17-alpha+dev.446dd7c".
+        # tauri.conf.json is deliberately untouched: the MSI bundler rejects a
+        # non-numeric pre-release identifier.
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: funscript-updater
+        shell: bash
+        run: python scripts/bump_version.py --dev-stamp "${GITHUB_SHA:0:7}"
+
       - name: Tauri build — deb
         working-directory: funscript-updater/ui/web
         env:
@@ -496,9 +556,18 @@ jobs:
         working-directory: funscript-updater
         run: |
           mkdir -p dist-stable
+          # A dispatch build is a TEST build: mark the filename so a downloaded
+          # installer is self-describing before it is even run. Tag builds keep
+          # the stable names that the publish job and the website's
+          # releases/latest/download/ links depend on.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            MARK="-TEST-${GITHUB_SHA:0:7}"
+          else
+            MARK=""
+          fi
           BUNDLE=ui/web/src-tauri/target/release/bundle
-          cp "$BUNDLE"/deb/*.deb dist-stable/FunscriptForge-linux-amd64.deb
-          cp "$BUNDLE"/appimage/*.AppImage dist-stable/FunscriptForge-linux-x86_64.AppImage || \
+          cp "$BUNDLE"/deb/*.deb "dist-stable/FunscriptForge${MARK}-linux-amd64.deb"
+          cp "$BUNDLE"/appimage/*.AppImage "dist-stable/FunscriptForge${MARK}-linux-x86_64.AppImage" || \
             echo "::warning::AppImage not produced — shipping the .deb only"
 
       - name: Upload Linux artifact

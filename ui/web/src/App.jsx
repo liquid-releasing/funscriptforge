@@ -24,6 +24,7 @@ import {
   analyzerVersionStale,
 } from './api/forge.js';
 import { deriveAnalysisState } from './lib/analysisState.js';
+import { analysisBlocksChain } from './lib/chainGate.js';
 import { applyBusyUpdate } from './lib/busyOwner.js';
 import { probeMediaCached } from './hooks/useChapterClip.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
@@ -639,6 +640,28 @@ export default function App() {
     const filename = mediaPath.split(/[\\/]/).pop() || 'media';
     const stem = filename.replace(/\.[^.]+$/, '');
     setAppError(null);
+    // Seed a pending placeholder BEFORE the probe, exactly as handleOpenScript
+    // does. Without it the PREVIOUS project's title, media, and funscript stay
+    // on screen for the whole probe, and the new project only appears once the
+    // source media has loaded (dogfood 2026-09-05). Clearing first also drops
+    // the stale funscript, which a video-only project must never inherit.
+    //
+    // mediaKind is guessed from the extension so the header does not flicker
+    // between audio and video shapes; probeMedia's real verdict overwrites it
+    // a moment later. `_pending` keeps ProjectTab on the skeleton, and its
+    // `isVideoOnly` is gated on `!isQuiet`, so the placeholder is not mistaken
+    // for a loaded video-only project.
+    const isAudioExt = /\.(mp3|wav|flac|ogg|m4a|aac)$/i.test(mediaPath);
+    setOpenedProject({
+      id: `pending:${mediaPath}`,
+      path: null,
+      mediaPath,
+      mediaKind: isAudioExt ? 'audio' : 'video',
+      title: stem,
+      duration: '—',
+      _videoOnly: true,
+      _pending: true,
+    });
     const _busy = beginBusy({ message: `Opening ${filename}…` });
     setTab('project');
     try {
@@ -965,6 +988,13 @@ export default function App() {
   // analyzes by design (tabGate deliberately leaves it editable), so treating
   // its permanent 'empty' as incomplete would strand every chain forever.
   const analysisIncomplete = !!project?.mediaPath && globalAnalysisState !== 'complete';
+  // Project and Generate sit UPSTREAM of Analysis, so "analysis isn't complete"
+  // is their NORMAL state, not a reason to hold the chain back. Applying the
+  // gate there left "Generate new funscript" and the post-generate primary
+  // permanently white/tentative -- the step was ready and the footer would not
+  // say so (dogfood 2026-09-05). The gate exists for Analysis and everything
+  // downstream, where missing artifacts really do make "ready to chain" a lie.
+  const chainHeldByAnalysis = analysisBlocksChain(analysisIncomplete, tab);
 
   // Finish an interrupted analyze — re-run with --resume so videoflow skips
   // every stage already on disk and only builds the missing chapter clips.
@@ -1147,7 +1177,14 @@ export default function App() {
       footerSummary = 'Generate a funscript from the media.';
     }
   } else if (tab === 'generate' && !gateMsg && !busy) {
-    footerPrimaryLabel = 'Continue with this funscript';
+    // Once a draft exists this step IS an accept-and-chain, so it gets the
+    // same verb as every other tab's commit. The softer "Continue with this
+    // funscript" stays for the pre-draft state, where there is nothing to
+    // accept yet (dogfood 2026-09-05).
+    const draftReady = Array.isArray(genActions) && genActions.length > 0;
+    footerPrimaryLabel = draftReady
+      ? 'Accept and continue to Analysis'
+      : 'Continue with this funscript';
     footerOnPrimary = async () => {
       const hasDraft = Array.isArray(genActions) && genActions.length;
       // Adopt is awaited because a video-only project PROMOTES the draft to
@@ -1616,7 +1653,7 @@ export default function App() {
           // commit, so it must not wear red + ✓ while artifacts are still
           // missing (reported 2026-09-04: the red chain button was offered on
           // Analysis before analysis was complete).
-          primaryTentative={chapterIncomplete || chapterNavPending || analysisIncomplete
+          primaryTentative={chapterIncomplete || chapterNavPending || chainHeldByAnalysis
             || (tab === 'export' && !exportReg?.done)}
           // Project is a CHOICE fork ("Generate new" vs "Edit this"), not an
           // accept — so no lead checkmark on entry; it's just a door, not an
@@ -1624,7 +1661,7 @@ export default function App() {
           // tab mid-walk, or Export before it's written, is NOT done — the lead
           // ✓ would falsely read "all set".
           ready={!gateMsg && !appError && !busy && tab !== 'project' && !chapterIncomplete
-            && !analysisIncomplete
+            && !chainHeldByAnalysis
             && !(tab === 'export' && !exportReg?.done)
             && (Boolean(nextTab) || tab === 'export')}
         />
