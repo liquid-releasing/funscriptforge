@@ -558,6 +558,13 @@ function ProjectCard({ project, onClick, onReveal }) {
       onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
     >
       {/* Thumbnail — placeholder for v1; resolver lands in a later pass */}
+      {/* overflow + an ABSOLUTE cover below: `height: 100%` on a flex child
+          resolves against this box's aspect-ratio-derived height, which some
+          engines treat as auto -- the image then lays out at its intrinsic
+          size and pushes the card past 16/9. A PORTRAIT source made that
+          visible: one vertical video stretched its whole grid row, because
+          grid rows size to their tallest item (dogfood 2026-09-05). Taking
+          the image out of flow means it can never resize its container. */}
       <div style={{
         aspectRatio: '16/9',
         background: 'var(--bg)',
@@ -565,6 +572,7 @@ function ProjectCard({ project, onClick, onReveal }) {
         color: 'var(--text-dim)',
         borderBottom: '1px solid var(--border)',
         position: 'relative',
+        overflow: 'hidden',
       }}>
         {/* toMediaUrl, not a hand-built asset:// string: on Windows a raw path
             interpolates as `asset://localhost/D:\dir\thumb.jpg`, whose
@@ -583,7 +591,15 @@ function ProjectCard({ project, onClick, onReveal }) {
                    console.warn('library cover failed to load', thumbUrl, project.thumbPath);
                    setThumbFailed(true);
                  }}
-                 style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                 // `contain`, not `cover`: the library is a launcher, so the
+                 // cover has to be recognisable. Cropping a vertical video to
+                 // a 16/9 band throws away most of the frame. Letterboxing
+                 // shows all of it against the card ground; a 16/9 cover fills
+                 // the box either way, so only odd aspects change.
+                 style={{
+                   position: 'absolute', inset: 0,
+                   width: '100%', height: '100%', objectFit: 'contain',
+                 }} />
           : <Icon name={project.kind === 'audio' ? 'music' : 'film'} size={32} />}
         {/* Edit / open-project button — top-right overlay on the thumb.
             The whole card opens the project too; this pencil is the explicit
