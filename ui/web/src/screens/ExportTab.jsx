@@ -129,6 +129,16 @@ export default function ExportTab({
     () => Object.entries(polishPasses).filter(([, p]) => p?.accepted).map(([id]) => id),
     [polishPasses],
   );
+  // How many device files each stamped station actually wrote, straight from
+  // polish-read (which counts them on disk). Lets the cards name what a
+  // station contributes instead of showing a bare folder.
+  const stationFileCounts = useMemo(() => {
+    const out = {};
+    for (const [id, p] of Object.entries(polishPasses)) {
+      if (p?.accepted) out[id] = Number(p.files) || 0;
+    }
+    return out;
+  }, [polishPasses]);
 
   const [writing, setWriting] = useState(false);
   // One write per selected shape → an array of results. `primary` is the one we
@@ -157,9 +167,10 @@ export default function ExportTab({
     // Which e-stim stations were actually stamped, so the file list names
     // the folders that will really be written.
     stampedEstim: stampedStations.filter((id) => ESTIM_STATIONS.includes(id)),
+    stationFileCounts,
     stimWav: options.stimWav,
     stimMp3: options.stimMp3,
-  }), [stem, hasMedia, project, stampedStations, options.stimWav, options.stimMp3]);
+  }), [stem, hasMedia, project, stampedStations, stationFileCounts, options.stimWav, options.stimMp3]);
 
   const targets = useMemo(() => TARGET_GROUPS.map((t) => ({ ...t, ...t.derive(ctx) })), [ctx]);
   // Which target groups are checked ("what's in the bundle"). Default = all in.
@@ -476,7 +487,18 @@ const TARGET_GROUPS = [
             : 'Polish-stamped channel set. FOC-Stim reads these channels directly — it uses no stim audio.',
           stat: [{ label: 'stations', value: stamped.length || 1 },
                  { label: 'audio', value: audio.length ? audio.length : (audioDriven ? 'opt-in' : 'n/a') }],
-          files: [...stamped.map((id) => `stations/${id}/`), ...audio],
+          // Name each station and how many files it wrote. The card used to
+          // list bare folders, so a user who stamped FOC-Stim could not see
+          // that the E-stim target covered it (asked for 2026-09-05).
+          files: [
+            ...stamped.map((id) => {
+              const dev = POLISH_DEVICES.find((d) => d.id === id);
+              const name = dev ? `${dev.label} · ${dev.sublabel}` : id;
+              const n = ctx.stationFileCounts?.[id];
+              return `stations/${id}/  ${name}${n ? `  ×${n}` : ''}`;
+            }),
+            ...audio,
+          ],
         };
       }
       return {

@@ -129,7 +129,22 @@ class TestExportCLI(unittest.TestCase):
             names = z.namelist()
         self.assertIn("motion.funscript", names)
         self.assertIn("manifest.ffmeta", names)
-        self.assertFalse(any(n.startswith("stations/") for n in names), names)
+        # Skipping Polish means ACCEPTING ITS DEFAULTS, so stations that need
+        # only the motion track -- the per-device stroker clamps and the
+        # shaker envelope -- are generated here. Changed deliberately
+        # 2026-09-05: naming two stations meant a skipped Polish tab silently
+        # shipped no FOC-Stim and no shaker at all.
+        #
+        # The invariant that still matters: nothing DERIVED from data this
+        # project does not have. e-stim needs a per-chapter character and
+        # TCode needs a Mechanical style, so neither may appear for a bare
+        # funscript -- that is what this test protects.
+        derived = [n for n in names if n.startswith((
+            "stations/estim3p/", "stations/focstim/", "stations/focstim4p/",
+            "stations/tcode/",
+        ))]
+        self.assertFalse(derived, names)
+        self.assertTrue(any(n.startswith("stations/handy/") for n in names), names)
 
     def test_finalize_flags_accepted(self):
         # --blend-seams/--final-smooth shouldn't error and still produce motion.
@@ -184,7 +199,22 @@ class TestExportCLI(unittest.TestCase):
         with zipfile.ZipFile(out) as z:
             names = z.namelist()
         self.assertIn("motion.funscript", names)
-        self.assertFalse(any(n.startswith("stations/") for n in names), names)
+        # Skipping Polish means ACCEPTING ITS DEFAULTS, so stations that need
+        # only the motion track -- the per-device stroker clamps and the
+        # shaker envelope -- are generated here. Changed deliberately
+        # 2026-09-05: naming two stations meant a skipped Polish tab silently
+        # shipped no FOC-Stim and no shaker at all.
+        #
+        # The invariant that still matters: nothing DERIVED from data this
+        # project does not have. e-stim needs a per-chapter character and
+        # TCode needs a Mechanical style, so neither may appear for a bare
+        # funscript -- that is what this test protects.
+        derived = [n for n in names if n.startswith((
+            "stations/estim3p/", "stations/focstim/", "stations/focstim4p/",
+            "stations/tcode/",
+        ))]
+        self.assertFalse(derived, names)
+        self.assertTrue(any(n.startswith("stations/handy/") for n in names), names)
 
     def test_export_default_arc_when_chapters_but_skipped_channels(self):
         # Analyzed project (chapters.json present) but Channels skipped (NO

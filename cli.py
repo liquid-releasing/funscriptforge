@@ -1935,34 +1935,28 @@ def cmd_export(args):
             if names:
                 stations_meta[sid] = {"files": names, "generated": True}
 
-        if inc_estim and "estim3p" not in stations_meta:
-            _emit_progress("Export — generating e-stim channels (no stamped pass)…")
-            try:
-                chans = _polish_generate_estim(
-                    src, None, _polish_mod.STATIONS["estim3p"],
-                    match_chapter_volume=args.match_chapter_volume,
-                )
-            except ValueError:
-                chans = {}            # no character assigned / tools missing — nothing to do
-            if chans:
-                _emit_generated_station("estim3p", {
-                    f"{stem}.{name}.funscript": (payload["template"], payload["actions"])
-                    for name, payload in chans.items()
-                })
-
-        if inc_strokers and "tcode" not in stations_meta:
-            _emit_progress("Export — generating T-Code axes (no stamped pass)…")
-            try:
-                axes = _polish_generate_tcode(src, None, _polish_mod.STATIONS["tcode"])
-            except ValueError:
-                axes = {}
-            # Emit only when a Mechanical style produced real secondary axes;
-            # an L0-only result would just duplicate motion.funscript.
-            if len(axes) > 1:
-                _emit_generated_station("tcode", {
-                    (f"{stem}.funscript" if axis == "L0" else f"{stem}.{axis}.funscript"): (data, acts)
-                    for axis, acts in axes.items()
-                })
+        # SKIPPING POLISH MEANS ACCEPTING ITS DEFAULTS -- for every station,
+        # not a chosen two. This used to name estim3p and tcode explicitly, so
+        # a user who skipped Polish got no FOC-Stim and no shaker files at all,
+        # silently. The alternative to generating everything is an Export tab
+        # that has to explain, per device, what is and is not in the bundle;
+        # accepting the defaults is simpler to reason about and simpler to
+        # trust (user, 2026-09-05).
+        #
+        # Generating a file is not the same as driving hardware -- the user
+        # still loads it and sets their own limits -- so an experimental
+        # station is safe to include. The risk lives in the KNOBS, which is
+        # why _auto_knobs below refuses an unverified ceiling.
+        for sid, station in _polish_mod.STATIONS.items():
+            if sid in stations_meta or not _station_included(sid):
+                continue
+            files = _auto_station_files(
+                src, station, data, actions, stem,
+                match_chapter_volume=args.match_chapter_volume,
+                emit_progress=_emit_progress,
+            )
+            if files:
+                _emit_generated_station(sid, files)
 
         # 3 + 4. Forge metadata — events.yml + authoring sidecars (chapters /
         # phrases / characters). The re-editable project data: pack only when the
@@ -5403,6 +5397,106 @@ def _polish_source_hash(target) -> str:
     return h.hexdigest()[:16]
 
 
+def _auto_knobs(station):
+    """Knobs for a station the user never opened in Polish.
+
+    Station defaults, with one refusal: an EXPERIMENTAL station does not get
+    to apply an UNVERIFIED rate ceiling to someone who never saw the tab.
+    FOC-Stim ships 0.65 against the flagship's proven 0.55 and says as much in
+    its own constraint hint ("limits unverified"). That is a sensible thing to
+    opt INTO on hardware you are deliberately testing, and the wrong thing to
+    inherit silently by skipping a tab.
+
+    Returns None when nothing needs overriding, so the generators keep using
+    their own defaults rather than a copy that can drift from them.
+    """
+    from forge import polish as _polish_mod
+    if not station.experimental:
+        return None
+    ceiling = station.default_knobs.get("rateLimit")
+    if ceiling is None:
+        return None
+    verified = [
+        st.default_knobs["rateLimit"]
+        for st in _polish_mod.STATIONS.values()
+        if not st.experimental and st.kind == station.kind
+        and st.default_knobs.get("rateLimit") is not None
+    ]
+    if not verified or ceiling <= min(verified):
+        return None
+    knobs = dict(station.default_knobs)
+    knobs["rateLimit"] = min(verified)
+    return knobs
+
+
+def _auto_station_files(src, station, data, actions, stem, *,
+                        match_chapter_volume=False, emit_progress=None):
+    """Device files for a station the user did not stamp, at default settings.
+
+    Skipping Polish means accepting its defaults, so the export generates
+    every station rather than a hardcoded two. This dispatches on station KIND
+    and calls the SAME generators `polish apply` uses -- deliberately not a
+    second implementation, which would drift the moment either side changed.
+
+    Returns {filename: (template_doc, actions)}, or {} when the station has
+    nothing to contribute (no character assigned, no secondary axes, too
+    little motion).
+    """
+    from forge import polish as _polish_mod
+    knobs = _auto_knobs(station)
+
+    def _note(msg):
+        if emit_progress:
+            emit_progress(msg)
+
+    if station.kind == "estim":
+        _note(f"Export - generating {station.label} channels (no stamped pass)...")
+        try:
+            chans = _polish_generate_estim(
+                src, knobs, station, match_chapter_volume=match_chapter_volume,
+            )
+        except ValueError:
+            return {}      # no character assigned / tools missing
+        return {
+            f"{stem}.{name}.funscript": (payload["template"], payload["actions"])
+            for name, payload in chans.items()
+        }
+
+    if station.kind == "stroker-tcode":
+        _note("Export - generating T-Code axes (no stamped pass)...")
+        try:
+            axes = _polish_generate_tcode(src, knobs, station)
+        except ValueError:
+            return {}
+        # An L0-only result would just duplicate motion.funscript.
+        if len(axes) <= 1:
+            return {}
+        return {
+            (f"{stem}.funscript" if axis == "L0" else f"{stem}.{axis}.funscript"): (data, acts)
+            for axis, acts in axes.items()
+        }
+
+    if station.kind == "shaker":
+        _note("Export - deriving the shaker envelope (no stamped pass)...")
+        from forge import shaker as shaker_mod
+        knob = dict(station.default_knobs)
+        knob.update(knobs or {})
+        env = shaker_mod.envelope_from_actions(
+            actions, smoothing=float(knob.get("smoothing", 0.55)),
+        )
+        if not env:
+            return {}
+        # The LFE .wav that STAMPING also writes is left out on purpose: it is
+        # a full-length audio render, and every other audio artifact in the
+        # bundle is an explicit opt-in (--stim-wav / --stim-mp3). The envelope
+        # is the part a script-driven bridge actually needs.
+        return {station.output_template.format(stem=stem): (data, env)}
+
+    # Single-axis stroker: the device-specific clamp of the main track.
+    clamped, _stats = _polish_mod.apply_pass(actions, station.id, knobs)
+    return {station.output_template.format(stem=stem): (data, clamped)}
+
+
 def _write_funscript_like(path: Path, source_data: dict, actions: list) -> None:
     """Write `actions` into a copy of `source_data` (preserving metadata)."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -6137,11 +6231,27 @@ def cmd_polish_read(args):
         sys.exit(1)
     if not isinstance(doc, dict):
         doc = {}
+    passes = doc.get("passes") or {}
+    # Annotate each pass with how many device files it actually WROTE. The
+    # stamp record itself carries only {accepted, accepted_at, knobs}, so the
+    # Export tab had no way to say what a station contributes and fell back to
+    # a bare folder name. Counting the real files on disk beats guessing a
+    # channel count that differs per station -- four-phase writes e1..e4 where
+    # the others write alpha/beta (asked for 2026-09-05).
+    if isinstance(passes, dict):
+        for sid, entry in passes.items():
+            if not isinstance(entry, dict):
+                continue
+            try:
+                sdir = _polish_out_dir(args.input, sid)
+                entry["files"] = len(list(sdir.glob("*.funscript"))) if sdir.is_dir() else 0
+            except OSError:
+                entry["files"] = 0
     print(json.dumps({
         "version": doc.get("version", 1),
         "schema": doc.get("schema", "polish/v1"),
         "current_hash": current,
-        "passes": doc.get("passes") or {},
+        "passes": passes,
     }))
 
 
