@@ -614,7 +614,18 @@ jobs:
           token: ${{ secrets.RELEASES_PAT }}
           name: ${{ steps.relname.outputs.name }}
           tag_name: ${{ github.ref_name }}
-          prerelease: false
+          # Published as a PRERELEASE, deliberately. GitHub excludes
+          # prereleases from releases/latest, and funscriptforge-web's download
+          # buttons point at releases/latest/download/ -- so a normal release
+          # would put new binaries in front of every visitor the moment CI
+          # finishes, under whatever version the site's note still claims.
+          # That mismatch shipped once already (the site advertised v0.2.15
+          # while serving v0.2.16 binaries).
+          #
+          # Promoting is one deliberate step once a build has been dogfooded:
+          #   gh release edit <tag> --repo liquid-releasing/funscriptforge-releases --prerelease=false --latest
+          # and then bump the site with scripts/bump_version.py.
+          prerelease: true
           generate_release_notes: true
           append_body: true
           fail_on_unmatched_files: false

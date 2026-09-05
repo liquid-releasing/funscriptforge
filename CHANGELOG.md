@@ -16,6 +16,18 @@ FOC-Stim support, and the fixes from dogfooding the v0.2.16-alpha installer.
   Viewer. The position→electrode transform is ported from restim
   (`stim_math/transforms_4.py`, MIT) and verified against it.
   **Both are marked experimental: neither has been run on hardware yet.**
+- **Try a transform before you use it.** The Catalog tab's long-stubbed
+  sandbox is real: pick any transform, move its sliders, and see before/after
+  on a canned 24-second signal (steady strokes, a fast burst, an off-centre
+  passage, a swelling finish). It drives the same preview pipeline the Phrases
+  and Stanzas tabs use, against a synthetic signal — your project is never
+  touched. Transforms that are neutral at their defaults say so instead of
+  showing two identical curves.
+- **Skipping Polish now means accepting its defaults.** Every station is
+  generated, not a hardcoded two — so skipping the tab no longer silently
+  drops FOC-Stim and the shaker. Experimental stations are generated
+  conservatively: FOC-Stim auto-generates at the proven 0.55 rate ceiling
+  rather than its own unverified 0.65 (stamp it deliberately for 0.65).
 - **`scripts/bump_version.py`** — one command sets the version in all five
   places it is written down (package.json, Cargo.toml, Cargo.lock,
   tauri.conf.json, and the website's download note), knows tauri.conf.json
@@ -41,6 +53,23 @@ FOC-Stim support, and the fixes from dogfooding the v0.2.16-alpha installer.
 - **Opening media kept the previous project on screen.** Title, media, and
   funscript from the last project stayed visible for the whole probe, because
   the media path seeded no placeholder the way the funscript path does.
+- **Stim audio was rendered for devices that cannot play it.** The stereo
+  WAV/mp3 is how restim is driven — FOC-Stim speaks its own protocol and reads
+  the channel funscripts directly. Stamping only FOC-Stim rendered a stim mp3
+  its hardware can never use; now no audio is rendered for it, and the Export
+  card says so rather than promising files that never arrive.
+- **Scene Closer wound down for a quarter of the scene.** The taper was a
+  fraction of the span, so a 30-minute chapter faded for seven and a half
+  minutes. It is now about a minute of absolute time regardless of chapter
+  length, capped on short chapters so it still holds before releasing.
+- **A vertical video stretched the whole library row.** The cover is no longer
+  able to resize its own 16/9 box, and covers letterbox instead of cropping —
+  a portrait thumbnail keeps its whole frame.
+- **The Polish conveyor pushed Bass Shaker off the edge** once FOC-Stim took
+  it to nine stations. The columns can now share the row evenly.
+- **The Export card could not show what a station contributes.** It now names
+  each stamped e-stim station with its real file count, so a stamped FOC-Stim
+  is visibly covered by the E-stim target.
 
 ## v0.2.16-alpha — 2026-09-04
 
