@@ -1684,6 +1684,9 @@ _STATION_FOLDER = {
     "estim3p": "E-Stim", "focstim": "FOC-Stim", "focstim4p": "FOC-Stim 4-phase",
     "handy": "Handy", "tcode": "MultiFunPlayer",
     "osr2": "OSR2", "sr6": "SR6", "lovense": "Lovense", "vacuglide": "Vacuglide",
+    # Without these two the fallback title-cases the id, so the folders came
+    # out as "Ossm" and "Shaker" -- neither is what the device is called.
+    "ossm": "OSSM", "shaker": "Bass Shaker",
 }
 _STATION_PURPOSE = {
     "estim3p": "E-stim channel set — load in restim or ForgePlayer.",

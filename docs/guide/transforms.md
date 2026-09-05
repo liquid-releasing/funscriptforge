@@ -27,6 +27,30 @@ If a section is genuinely **too fast to feel meaningful**, reach for **Halve Tem
 
 ---
 
+## Try one before you use it
+
+You do not have to guess from a description, and you do not have to experiment
+on your own project.
+
+Open the **Catalog** tab, pick any transform, and its **Try it out** panel
+shows *before* and *after* on a short canned signal — a 24-second stroke train
+with a steady passage, a fast burst, an off-centre section and a swelling
+finish, so you can see how the transform behaves against varied content rather
+than one flat pattern. Every parameter is a live slider; move one and both
+charts update.
+
+It runs the same engine the Phrases and Stanzas tabs use, so what you see is
+what Apply will do. It reads a synthetic signal, never your work, so nothing
+you do there can change your project.
+
+A few transforms are **neutral at their defaults** by design — Passthrough,
+Nudge at 0 ms, Recenter aimed at the centre the signal already sits on, and
+Hero Beat / Short Beats with every beat at 100. The After chart says *"no
+change at these settings"* rather than leaving two identical curves looking
+like a broken preview. Move a slider and they act.
+
+---
+
 ## Behaviors
 
 Beat-preserving shape edits. They keep every action's timestamp and only change position values, so they're safe to chain.

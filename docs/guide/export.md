@@ -107,62 +107,70 @@ Click **Export All** and FunscriptForge writes a self-contained folder you can d
 
 ### Folder layout
 
-For a project named `myscript` with one mechanical device and at least one estim device selected:
+The output folder is organised **one folder per device**, with a generated
+`README.txt` listing what was actually written — so it never describes files
+that are not there.
+
+For a project named `myscript`:
 
 ```text
-{output_folder}/
-  myscript.funscript            ← top-level base funscript
-  myscript.heatmap.png          ← color-coded velocity heatmap
-  myscript.mp4                  ← copied media + audio + captions
-  myscript.forgetmpl            ← reusable workflow template
-  mechanical/
-    myscript.funscript          ← single 1D funscript for Handy / OSR / Intiface
-  estim/
-    myscript.funscript          ← main funscript (some restim modes use it)
-    myscript.alpha.funscript
-    myscript.beta.funscript
-    myscript.frequency.funscript
-    myscript.volume.funscript
-    myscript.pulse_frequency.funscript
-    myscript.pulse_rise.funscript
-    myscript.alpha_prostate.funscript
-    myscript.beta_prostate.funscript
-    myscript.volume_prostate.funscript
-    myscript.legacy.wav         ← stereo audio for 2b/312 (if legacy selected)
-    myscript.stereostim.wav     ← stereo audio for Tingler/ZC95 (if stereostim selected)
-    myscript.prostate.legacy.wav        ← prostate audio (if prostate channels exist)
-    myscript.prostate.stereostim.wav    ← prostate audio (if prostate channels exist)
+{output_folder}/myscript.output/
+  myscript.funscript      ← universal stroke script; works with most 1-axis players
+  README.txt              ← plain-English "grab this for your device"
+  manifest.ffmeta         ← what produced this, and from what
+  E-Stim/                 ← the e-stim channel set — restim or ForgePlayer
+  FOC-Stim/               ← same channels, clamped for FOC-Stim
+  FOC-Stim 4-phase/       ← four per-electrode channels (e1–e4)
+  Handy/                  ← clamped stroke script
+  OSSM/                   ← clamped stroke script
+  MultiFunPlayer/         ← multi-axis set; point MultiFunPlayer at this folder
+  Lovense/  Vacuglide/    ← clamped stroke scripts
+  Bass Shaker/            ← low-frequency intensity envelope
+  Edger/                  ← myscript.events.yml
+  Preview/                ← waveform + frame thumbnails
 ```
 
-If you only check **Mechanical**, only `mechanical/` is created and funscript-tools is not run — fast export.
+Only folders with files in them are created, and each is described in
+`README.txt`.
 
-If you only check **Estim** boxes, `mechanical/` is omitted.
+Choosing a different export folder still writes into a `myscript.output`
+sub-folder inside it — an export never scatters loose files across a folder you
+picked, or over your originals.
 
-If you check **neither**, the **Export All** button is disabled.
+### Stim audio is for E-Stim only
 
-### How estim channels are produced
+`stim.wav` / `stim.mp3` are **opt-in** export options, and they are produced
+only for **E-Stim**.
 
-The first source that exists wins:
+restim is driven *by sound*: it plays the alpha/beta pair out of your sound
+card, which is the only reason a stim audio file exists at all. FOC-Stim speaks
+its own protocol and reads the channel funscripts directly, so nothing would
+play a stim track for it. Stamp only FOC-Stim and no audio is rendered — the
+Export card reports `audio: n/a` rather than promising files that never arrive.
 
-1. **Stim Accept files** — if you clicked **Accept** on the Stim tab with a character preset, those generated channel files are moved into `estim/` as-is. Fast.
-2. **Stim preset configured** — if a preset is set on the Stim tab but Accept was not clicked, Export runs the funscript-tools pipeline against the base funscript using your preset.
-3. **No Stim preset** — Export calls funscript-tools with its default config (Edger's out-of-the-box settings). You skip the Stim tab entirely and still get the full set of channel files.
+### How device files are produced
 
-You will see a status panel showing each file as it is written:
+Two paths, and the only difference is whether you visited Polish:
 
-```text
-✅ myscript.funscript (top-level base)
-✅ myscript.heatmap.png
-✅ Copied myscript.mp4
-✅ mechanical/myscript.funscript
-✅ estim/myscript.funscript
-⏳ Generating estim channels (funscript-tools defaults)…
-✅ estim/myscript.alpha.funscript (12.3 KB)
-✅ estim/myscript.beta.funscript (11.8 KB)
-…
-```
+1. **You stamped a station in Polish** — those files are used as authored, with
+   the settings you approved.
+2. **You skipped Polish** — every station is generated at its **default**
+   settings. Skipping means *accepting the defaults*, not *getting nothing*:
+   you still get E-Stim, both FOC-Stim stations, the strokers and the shaker.
 
-If `funscript-tools` is not installed alongside FunscriptForge, the channel step is skipped with a warning and the rest of the export still completes.
+Experimental stations are generated **conservatively**. FOC-Stim ships a higher
+rate ceiling than the flagship and labels it *unverified*; auto-generation caps
+it at the proven ceiling, so an unverified limit never reaches someone who did
+not choose it. Stamp the station deliberately and you get its own default.
+
+**Two stations need data you may not have.** The e-stim channel set is built
+from the **Character** assigned to each chapter, and the multi-axis set from
+each chapter's **Mechanical style**. Without those, no files are produced for
+them — silently, because there is nothing to report. If an export has no e-stim
+files, that is almost always why: assign Characters on the Channels tab.
+
+Stations needing only the motion track — the per-device stroker clamps and the
+shaker envelope — are always generated.
 
 ### Open folder
 

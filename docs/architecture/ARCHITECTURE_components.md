@@ -77,6 +77,35 @@ For shared **React** UI, add it to the sibling forgemoment library and import it
 3. Add tests in `tests/test_<name>.py`
 4. Expose it through a `cli.py` subcommand so the React UI can call it via the Rust bridge
 
+## Extracting a rule out of a screen (`ui/web/src/lib/`)
+
+**vitest never renders a screen component.** `App.jsx` and the `screens/*.jsx`
+tabs are not mounted by any test, so a rule written inline in one of them is
+effectively unguarded — and three separate bugs shipped that way before this
+pattern existed.
+
+So when a screen grows a *decision* (as opposed to layout), it moves into
+`ui/web/src/lib/` as a pure function with tests, and the screen calls it:
+
+| Module | The decision it owns | The bug that put it there |
+|---|---|---|
+| `busyOwner.js` | who may clear the shared footer busy banner | any producer's `finally` cleared whatever banner was current, so a late-resolving tab wiped the analysis progress mid-pipeline |
+| `chainGate.js` | whether an incomplete analysis blocks the chain **on this tab** | the gate applied to Project and Generate, which run *before* analysis, leaving their primary permanently white |
+| `analysisState.js` | partial / complete / loading, and when clips are optional | a single-chapter or direct-play project has zero clips by design and was perpetually "partial" |
+| `coalescedWriter.js` | debouncing a write without ever losing the last one | one CLI process per authored event; chaining events is the designed workflow, so bursts were the normal case |
+
+The test is the point, not the file move. `coalescedWriter` is the clearest
+case: it is the only recent change that can **lose user data**, so its tests
+pin the properties that would do it — the last payload wins, `flush()` resolves
+so callers can await it before reading the file back, a fired timer is not
+re-sent, and an empty list still reaches disk rather than being mistaken for
+"nothing queued".
+
+Two consumer obligations come with a coalesced write, and neither is
+enforceable by the module: **every path that reads the file back must flush
+first**, and **unmount must flush**. A pending write that never lands is the
+same bug as a failed one.
+
 ## State Contract
 
 Core components are pure and stateless:

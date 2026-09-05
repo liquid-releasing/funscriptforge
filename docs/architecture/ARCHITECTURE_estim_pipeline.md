@@ -58,7 +58,74 @@ funscript-tools produces 10 output files from one input. Three matter for most c
 | `beta.funscript` | Up-down electrode position | Where — up/down |
 | `pulse_frequency.funscript` | Pulse rate / intensity tracking | Intensity |
 
-The remaining channels (pulse_width, pulse_rise, E1-E4, prostate) are texture for specialist hardware.
+The remaining channels (pulse_rise, prostate) are texture for specialist
+hardware. `pulse_width` is produced by upstream but **FunscriptForge does not
+generate it** — see the gap noted at the end of this section.
+
+The generated set is nine files: `alpha`, `beta`, `alpha-prostate`,
+`beta-prostate`, `volume`, `volume-prostate`, `frequency`, `pulse_frequency`,
+`pulse_rise_time`. `--mode 2d` narrows that to `alpha`/`beta` only.
+
+---
+
+## The Three E-Stim Stations
+
+"E-stim" is not one target. Three Polish stations emit the channel set, and
+they differ in **how the signal reaches the hardware** — which decides what
+files an export has to produce.
+
+| Station | Reaches the device via | Writes |
+|---|---|---|
+| `estim3p` — E-Stim · 3-phase | a stereo **audio** signal | position channels + `stim.wav` / `stim.mp3` |
+| `focstim` — FOC-Stim · Direct current control | the device's **own protocol** | position channels |
+| `focstim4p` — FOC-Stim · 4-phase | the device's **own protocol** | four per-electrode channels |
+
+Both FOC-Stim stations are flagged `experimental` and have **not been verified
+on hardware**.
+
+### Branch on capability, never on id
+
+`Station` carries two capability flags, and every consumer asks the catalog
+rather than testing an id:
+
+- **`stim_audio`** (true only for `estim3p`) — restim is driven *by sound*: it
+  plays the alpha/beta pair out of the sound card. FOC-Stim speaks its own
+  protocol and reads the channel funscripts directly, so a stim mp3 rendered
+  for it is a file its hardware can never use. The export picks its audio
+  source with `polish.uses_stim_audio()`; a FOC-Stim-only project renders no
+  stim audio at all.
+- **`electrodes`** (true only for `focstim4p`) — four-phase hardware wants a
+  **power per electrode**, not a 2-D position. That station writes `e1`–`e4`
+  and *drops* `alpha`/`beta` and the prostate position pair, which would be
+  meaningless to a four-electrode driver.
+
+This matters because it was learned the hard way: `sid == "estim3p"` appeared
+in six places in `cli.py` and again in the Export UI, silently capping the app
+at one e-stim station. `polish.is_estim_station()` (kind-based) and the two
+flags above replaced all of them.
+
+### Position → electrode conversion
+
+`forge/focstim.py` ports restim's `stim_math/transforms_4.py` (MIT, © 2023
+diglet48) and is verified identical to upstream across the authoring square.
+Two properties are load-bearing:
+
+- The input is **normalised into the unit ball first.** The transform reaches
+  **1.303** at the corners of the alpha/beta square, so skipping this clamps a
+  corner to full scale on every electrode.
+- Conversion happens **after** rate clamping, so the ceiling applies to the
+  authored motion rather than the derived signal.
+
+Calibration (`AXIS_CALIBRATION_4_*`) is a **device setting, never script
+content**, and is not written into any file.
+
+### Known gap: `pulse_width`
+
+Upstream emits a `pulse_width` channel; FunscriptForge never generates one (it
+exists here only as an internal audio-synthesis parameter). A legacy restim set
+forged through FunscriptForge therefore *gains* `beta-prostate` and *loses*
+`pulse_width`. This is recorded, not resolved — see
+`docs/guide/forging-legacy-scripts.md`.
 
 ---
 

@@ -179,6 +179,16 @@ runs across every tab:
   `primaryTentative`); the red ✓ chain returns only once the tab's completion
   predicate is satisfied. Export's `Export` button is white until the write
   succeeds, then flips to red ✓ `Chain to Viewer`.
+- **The analysis gate applies from Analysis onward, not everywhere.** An
+  incomplete analysis makes the chain tentative on Analysis and every tab
+  downstream of it — chaining forward would promise artifacts that do not
+  exist, which is the lie the red ✓ used to tell. But **Project and Generate
+  run *before* analysis**, where incomplete analysis is the normal state, not a
+  fault. Applying the gate there left their primary permanently white:
+  "Generate new funscript" never went red even with media attached, and the
+  post-generate primary stayed quiet when it was genuinely ready. The rule
+  lives in `ui/web/src/lib/chainGate.js` (`analysisBlocksChain`) **with tests**
+  — vitest never renders `App`, so a rule left inline there is unguarded.
 - **Per-tab completion gates.** A chapter-scoped tab reports
   `{ complete, considered, total }`; until `complete`, the footer shows the
   walk and the chain stays tentative.
