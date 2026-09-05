@@ -1381,6 +1381,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-three-e-stim-stations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Three E-Stim Stations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Three E-Stim Stations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#branch-on-capability-never-on-id" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Branch on capability, never on id
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#position-electrode-conversion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Position → electrode conversion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#known-gap-pulse_width" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known gap: pulse_width
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-adapter-boundary" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1566,7 +1616,83 @@
 </tr>
 </tbody>
 </table>
-<p>The remaining channels (pulse_width, pulse_rise, E1-E4, prostate) are texture for specialist hardware.</p>
+<p>The remaining channels (pulse_rise, prostate) are texture for specialist
+hardware. <code>pulse_width</code> is produced by upstream but <strong>FunscriptForge does not
+generate it</strong> — see the gap noted at the end of this section.</p>
+<p>The generated set is nine files: <code>alpha</code>, <code>beta</code>, <code>alpha-prostate</code>,
+<code>beta-prostate</code>, <code>volume</code>, <code>volume-prostate</code>, <code>frequency</code>, <code>pulse_frequency</code>,
+<code>pulse_rise_time</code>. <code>--mode 2d</code> narrows that to <code>alpha</code>/<code>beta</code> only.</p>
+<hr />
+<h2 id="the-three-e-stim-stations">The Three E-Stim Stations<a class="headerlink" href="#the-three-e-stim-stations" title="Permanent link">&para;</a></h2>
+<p>"E-stim" is not one target. Three Polish stations emit the channel set, and
+they differ in <strong>how the signal reaches the hardware</strong> — which decides what
+files an export has to produce.</p>
+<table>
+<thead>
+<tr>
+<th>Station</th>
+<th>Reaches the device via</th>
+<th>Writes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>estim3p</code> — E-Stim · 3-phase</td>
+<td>a stereo <strong>audio</strong> signal</td>
+<td>position channels + <code>stim.wav</code> / <code>stim.mp3</code></td>
+</tr>
+<tr>
+<td><code>focstim</code> — FOC-Stim · Direct current control</td>
+<td>the device's <strong>own protocol</strong></td>
+<td>position channels</td>
+</tr>
+<tr>
+<td><code>focstim4p</code> — FOC-Stim · 4-phase</td>
+<td>the device's <strong>own protocol</strong></td>
+<td>four per-electrode channels</td>
+</tr>
+</tbody>
+</table>
+<p>Both FOC-Stim stations are flagged <code>experimental</code> and have <strong>not been verified
+on hardware</strong>.</p>
+<h3 id="branch-on-capability-never-on-id">Branch on capability, never on id<a class="headerlink" href="#branch-on-capability-never-on-id" title="Permanent link">&para;</a></h3>
+<p><code>Station</code> carries two capability flags, and every consumer asks the catalog
+rather than testing an id:</p>
+<ul>
+<li><strong><code>stim_audio</code></strong> (true only for <code>estim3p</code>) — restim is driven <em>by sound</em>: it
+  plays the alpha/beta pair out of the sound card. FOC-Stim speaks its own
+  protocol and reads the channel funscripts directly, so a stim mp3 rendered
+  for it is a file its hardware can never use. The export picks its audio
+  source with <code>polish.uses_stim_audio()</code>; a FOC-Stim-only project renders no
+  stim audio at all.</li>
+<li><strong><code>electrodes</code></strong> (true only for <code>focstim4p</code>) — four-phase hardware wants a
+  <strong>power per electrode</strong>, not a 2-D position. That station writes <code>e1</code>–<code>e4</code>
+  and <em>drops</em> <code>alpha</code>/<code>beta</code> and the prostate position pair, which would be
+  meaningless to a four-electrode driver.</li>
+</ul>
+<p>This matters because it was learned the hard way: <code>sid == "estim3p"</code> appeared
+in six places in <code>cli.py</code> and again in the Export UI, silently capping the app
+at one e-stim station. <code>polish.is_estim_station()</code> (kind-based) and the two
+flags above replaced all of them.</p>
+<h3 id="position-electrode-conversion">Position → electrode conversion<a class="headerlink" href="#position-electrode-conversion" title="Permanent link">&para;</a></h3>
+<p><code>forge/focstim.py</code> ports restim's <code>stim_math/transforms_4.py</code> (MIT, © 2023
+diglet48) and is verified identical to upstream across the authoring square.
+Two properties are load-bearing:</p>
+<ul>
+<li>The input is <strong>normalised into the unit ball first.</strong> The transform reaches
+  <strong>1.303</strong> at the corners of the alpha/beta square, so skipping this clamps a
+  corner to full scale on every electrode.</li>
+<li>Conversion happens <strong>after</strong> rate clamping, so the ceiling applies to the
+  authored motion rather than the derived signal.</li>
+</ul>
+<p>Calibration (<code>AXIS_CALIBRATION_4_*</code>) is a <strong>device setting, never script
+content</strong>, and is not written into any file.</p>
+<h3 id="known-gap-pulse_width">Known gap: <code>pulse_width</code><a class="headerlink" href="#known-gap-pulse_width" title="Permanent link">&para;</a></h3>
+<p>Upstream emits a <code>pulse_width</code> channel; FunscriptForge never generates one (it
+exists here only as an internal audio-synthesis parameter). A legacy restim set
+forged through FunscriptForge therefore <em>gains</em> <code>beta-prostate</code> and <em>loses</em>
+<code>pulse_width</code>. This is recorded, not resolved — see
+<code>docs/guide/forging-legacy-scripts.md</code>.</p>
 <hr />
 <h2 id="the-adapter-boundary">The Adapter Boundary<a class="headerlink" href="#the-adapter-boundary" title="Permanent link">&para;</a></h2>
 <p>The front-end imports ONLY from <code>cli.py</code>. Zero upstream imports. This is the adapter boundary.</p>

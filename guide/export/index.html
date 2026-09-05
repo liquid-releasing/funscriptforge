@@ -982,10 +982,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#how-estim-channels-are-produced" class="md-nav__link">
+  <a href="#stim-audio-is-for-e-stim-only" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How estim channels are produced
+        Stim audio is for E-Stim only
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-device-files-are-produced" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How device files are produced
       
     </span>
   </a>
@@ -1698,10 +1709,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#how-estim-channels-are-produced" class="md-nav__link">
+  <a href="#stim-audio-is-for-e-stim-only" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How estim channels are produced
+        Stim audio is for E-Stim only
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-device-files-are-produced" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How device files are produced
       
     </span>
   </a>
@@ -1955,74 +1977,80 @@
 <h2 id="export-to-folder">Export to folder<a class="headerlink" href="#export-to-folder" title="Permanent link">&para;</a></h2>
 <p>Click <strong>Export All</strong> and FunscriptForge writes a self-contained folder you can drop into your media player.</p>
 <h3 id="folder-layout">Folder layout<a class="headerlink" href="#folder-layout" title="Permanent link">&para;</a></h3>
-<p>For a project named <code>myscript</code> with one mechanical device and at least one estim device selected:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>{output_folder}/
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  myscript.funscript            ← top-level base funscript
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  myscript.heatmap.png          ← color-coded velocity heatmap
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>  myscript.mp4                  ← copied media + audio + captions
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>  myscript.forgetmpl            ← reusable workflow template
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>  mechanical/
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    myscript.funscript          ← single 1D funscript for Handy / OSR / Intiface
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>  estim/
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    myscript.funscript          ← main funscript (some restim modes use it)
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    myscript.alpha.funscript
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    myscript.beta.funscript
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    myscript.frequency.funscript
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    myscript.volume.funscript
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    myscript.pulse_frequency.funscript
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    myscript.pulse_rise.funscript
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    myscript.alpha_prostate.funscript
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    myscript.beta_prostate.funscript
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    myscript.volume_prostate.funscript
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    myscript.legacy.wav         ← stereo audio for 2b/312 (if legacy selected)
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    myscript.stereostim.wav     ← stereo audio for Tingler/ZC95 (if stereostim selected)
-<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    myscript.prostate.legacy.wav        ← prostate audio (if prostate channels exist)
-<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>    myscript.prostate.stereostim.wav    ← prostate audio (if prostate channels exist)
+<p>The output folder is organised <strong>one folder per device</strong>, with a generated
+<code>README.txt</code> listing what was actually written — so it never describes files
+that are not there.</p>
+<p>For a project named <code>myscript</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>{output_folder}/myscript.output/
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  myscript.funscript      ← universal stroke script; works with most 1-axis players
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  README.txt              ← plain-English "grab this for your device"
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>  manifest.ffmeta         ← what produced this, and from what
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>  E-Stim/                 ← the e-stim channel set — restim or ForgePlayer
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>  FOC-Stim/               ← same channels, clamped for FOC-Stim
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>  FOC-Stim 4-phase/       ← four per-electrode channels (e1–e4)
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>  Handy/                  ← clamped stroke script
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>  OSSM/                   ← clamped stroke script
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>  MultiFunPlayer/         ← multi-axis set; point MultiFunPlayer at this folder
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>  Lovense/  Vacuglide/    ← clamped stroke scripts
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>  Bass Shaker/            ← low-frequency intensity envelope
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>  Edger/                  ← myscript.events.yml
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>  Preview/                ← waveform + frame thumbnails
 </code></pre></div>
-<p>If you only check <strong>Mechanical</strong>, only <code>mechanical/</code> is created and funscript-tools is not run — fast export.</p>
-<p>If you only check <strong>Estim</strong> boxes, <code>mechanical/</code> is omitted.</p>
-<p>If you check <strong>neither</strong>, the <strong>Export All</strong> button is disabled.</p>
-<h3 id="how-estim-channels-are-produced">How estim channels are produced<a class="headerlink" href="#how-estim-channels-are-produced" title="Permanent link">&para;</a></h3>
-<p>The first source that exists wins:</p>
+<p>Only folders with files in them are created, and each is described in
+<code>README.txt</code>.</p>
+<p>Choosing a different export folder still writes into a <code>myscript.output</code>
+sub-folder inside it — an export never scatters loose files across a folder you
+picked, or over your originals.</p>
+<h3 id="stim-audio-is-for-e-stim-only">Stim audio is for E-Stim only<a class="headerlink" href="#stim-audio-is-for-e-stim-only" title="Permanent link">&para;</a></h3>
+<p><code>stim.wav</code> / <code>stim.mp3</code> are <strong>opt-in</strong> export options, and they are produced
+only for <strong>E-Stim</strong>.</p>
+<p>restim is driven <em>by sound</em>: it plays the alpha/beta pair out of your sound
+card, which is the only reason a stim audio file exists at all. FOC-Stim speaks
+its own protocol and reads the channel funscripts directly, so nothing would
+play a stim track for it. Stamp only FOC-Stim and no audio is rendered — the
+Export card reports <code>audio: n/a</code> rather than promising files that never arrive.</p>
+<h3 id="how-device-files-are-produced">How device files are produced<a class="headerlink" href="#how-device-files-are-produced" title="Permanent link">&para;</a></h3>
+<p>Two paths, and the only difference is whether you visited Polish:</p>
 <ol>
-<li><strong>Stim Accept files</strong> — if you clicked <strong>Accept</strong> on the Stim tab with a character preset, those generated channel files are moved into <code>estim/</code> as-is. Fast.</li>
-<li><strong>Stim preset configured</strong> — if a preset is set on the Stim tab but Accept was not clicked, Export runs the funscript-tools pipeline against the base funscript using your preset.</li>
-<li><strong>No Stim preset</strong> — Export calls funscript-tools with its default config (Edger's out-of-the-box settings). You skip the Stim tab entirely and still get the full set of channel files.</li>
+<li><strong>You stamped a station in Polish</strong> — those files are used as authored, with
+   the settings you approved.</li>
+<li><strong>You skipped Polish</strong> — every station is generated at its <strong>default</strong>
+   settings. Skipping means <em>accepting the defaults</em>, not <em>getting nothing</em>:
+   you still get E-Stim, both FOC-Stim stations, the strokers and the shaker.</li>
 </ol>
-<p>You will see a status panel showing each file as it is written:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>✅ myscript.funscript (top-level base)
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>✅ myscript.heatmap.png
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>✅ Copied myscript.mp4
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>✅ mechanical/myscript.funscript
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>✅ estim/myscript.funscript
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>⏳ Generating estim channels (funscript-tools defaults)…
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>✅ estim/myscript.alpha.funscript (12.3 KB)
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>✅ estim/myscript.beta.funscript (11.8 KB)
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>…
-</code></pre></div>
-<p>If <code>funscript-tools</code> is not installed alongside FunscriptForge, the channel step is skipped with a warning and the rest of the export still completes.</p>
+<p>Experimental stations are generated <strong>conservatively</strong>. FOC-Stim ships a higher
+rate ceiling than the flagship and labels it <em>unverified</em>; auto-generation caps
+it at the proven ceiling, so an unverified limit never reaches someone who did
+not choose it. Stamp the station deliberately and you get its own default.</p>
+<p><strong>Two stations need data you may not have.</strong> The e-stim channel set is built
+from the <strong>Character</strong> assigned to each chapter, and the multi-axis set from
+each chapter's <strong>Mechanical style</strong>. Without those, no files are produced for
+them — silently, because there is nothing to report. If an export has no e-stim
+files, that is almost always why: assign Characters on the Channels tab.</p>
+<p>Stations needing only the motion track — the per-device stroker clamps and the
+shaker envelope — are always generated.</p>
 <h3 id="open-folder">Open folder<a class="headerlink" href="#open-folder" title="Permanent link">&para;</a></h3>
 <p>Once Export All completes, <strong>Open folder</strong> opens the output folder in your OS file manager.</p>
 <hr />
 <h2 id="the-forge-log">The forge log<a class="headerlink" href="#the-forge-log" title="Permanent link">&para;</a></h2>
 <p>The main funscript includes a <code>_forge_log</code> key in its JSON metadata recording every transform that was applied:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">"_forge_log"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0.1.0"</span><span class="p">,</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">"exported_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-04-11T10:23:45"</span><span class="p">,</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"myscript.funscript"</span><span class="p">,</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">"transforms"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="p">{</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">      </span><span class="nt">"phrase_index"</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">      </span><span class="nt">"at_ms"</span><span class="p">:</span><span class="w"> </span><span class="mi">84300</span><span class="p">,</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">      </span><span class="nt">"transform"</span><span class="p">:</span><span class="w"> </span><span class="s2">"amplitude_scale"</span><span class="p">,</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">      </span><span class="nt">"params"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"scale"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.4</span><span class="p">},</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">      </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"phrase_editor"</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">  </span><span class="p">],</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">  </span><span class="nt">"blend_seams"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">  </span><span class="nt">"final_smooth"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">  </span><span class="nt">"clamp_count"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">"_forge_log"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0.1.0"</span><span class="p">,</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">"exported_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-04-11T10:23:45"</span><span class="p">,</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"myscript.funscript"</span><span class="p">,</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">"transforms"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">      </span><span class="nt">"phrase_index"</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">      </span><span class="nt">"at_ms"</span><span class="p">:</span><span class="w"> </span><span class="mi">84300</span><span class="p">,</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">      </span><span class="nt">"transform"</span><span class="p">:</span><span class="w"> </span><span class="s2">"amplitude_scale"</span><span class="p">,</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">      </span><span class="nt">"params"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"scale"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.4</span><span class="p">},</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">      </span><span class="nt">"source"</span><span class="p">:</span><span class="w"> </span><span class="s2">"phrase_editor"</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">  </span><span class="p">],</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">  </span><span class="nt">"blend_seams"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">  </span><span class="nt">"final_smooth"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">  </span><span class="nt">"clamp_count"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="p">}</span>
 </code></pre></div>
 <p>This log travels with the file so you always know what was done to it.</p>
 <hr />

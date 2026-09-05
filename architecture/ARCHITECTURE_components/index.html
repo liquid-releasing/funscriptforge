@@ -1409,6 +1409,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#extracting-a-rule-out-of-a-screen-uiwebsrclib" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extracting a rule out of a screen (ui/web/src/lib/)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#state-contract" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1516,6 +1527,54 @@ in turn calls <code>videoflow.audio.analyze_beats()</code>. The cache is full <c
 <li>Add tests in <code>tests/test_&lt;name&gt;.py</code></li>
 <li>Expose it through a <code>cli.py</code> subcommand so the React UI can call it via the Rust bridge</li>
 </ol>
+<h2 id="extracting-a-rule-out-of-a-screen-uiwebsrclib">Extracting a rule out of a screen (<code>ui/web/src/lib/</code>)<a class="headerlink" href="#extracting-a-rule-out-of-a-screen-uiwebsrclib" title="Permanent link">&para;</a></h2>
+<p><strong>vitest never renders a screen component.</strong> <code>App.jsx</code> and the <code>screens/*.jsx</code>
+tabs are not mounted by any test, so a rule written inline in one of them is
+effectively unguarded — and three separate bugs shipped that way before this
+pattern existed.</p>
+<p>So when a screen grows a <em>decision</em> (as opposed to layout), it moves into
+<code>ui/web/src/lib/</code> as a pure function with tests, and the screen calls it:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>The decision it owns</th>
+<th>The bug that put it there</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>busyOwner.js</code></td>
+<td>who may clear the shared footer busy banner</td>
+<td>any producer's <code>finally</code> cleared whatever banner was current, so a late-resolving tab wiped the analysis progress mid-pipeline</td>
+</tr>
+<tr>
+<td><code>chainGate.js</code></td>
+<td>whether an incomplete analysis blocks the chain <strong>on this tab</strong></td>
+<td>the gate applied to Project and Generate, which run <em>before</em> analysis, leaving their primary permanently white</td>
+</tr>
+<tr>
+<td><code>analysisState.js</code></td>
+<td>partial / complete / loading, and when clips are optional</td>
+<td>a single-chapter or direct-play project has zero clips by design and was perpetually "partial"</td>
+</tr>
+<tr>
+<td><code>coalescedWriter.js</code></td>
+<td>debouncing a write without ever losing the last one</td>
+<td>one CLI process per authored event; chaining events is the designed workflow, so bursts were the normal case</td>
+</tr>
+</tbody>
+</table>
+<p>The test is the point, not the file move. <code>coalescedWriter</code> is the clearest
+case: it is the only recent change that can <strong>lose user data</strong>, so its tests
+pin the properties that would do it — the last payload wins, <code>flush()</code> resolves
+so callers can await it before reading the file back, a fired timer is not
+re-sent, and an empty list still reaches disk rather than being mistaken for
+"nothing queued".</p>
+<p>Two consumer obligations come with a coalesced write, and neither is
+enforceable by the module: <strong>every path that reads the file back must flush
+first</strong>, and <strong>unmount must flush</strong>. A pending write that never lands is the
+same bug as a failed one.</p>
 <h2 id="state-contract">State Contract<a class="headerlink" href="#state-contract" title="Permanent link">&para;</a></h2>
 <p>Core components are pure and stateless:
 - The caller builds a plain data object (e.g., <code>ProjectStatus</code>, <code>FilePickerConfig</code>)
