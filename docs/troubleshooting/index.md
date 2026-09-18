@@ -62,4 +62,4 @@ If it turns out to be a question others hit too, it will be added to the right g
 
 Join the community Discord where other users and the FunscriptForge team can help:
 
-[FunscriptForge Discord →](https://discord.gg/UHdJFhEZF)
+[FunscriptForge Discord →](https://discord.gg/Eytatcx8Jm)
