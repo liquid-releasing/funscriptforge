@@ -1636,7 +1636,13 @@ pub async fn load_audio_peaks(
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoadedAudioSpectrogram {
+    /// Rounded frame spacing. Display only -- see `hop_us`.
     pub hop_ms: u32,
+    /// Exact frame spacing in MICROseconds. 512 samples at 22050 Hz is
+    /// 23219.95us, and calling it 23ms compressed the timeline by 0.948%
+    /// (-34s over an hour). Map frames to time with this. `None` on a
+    /// sidecar written before videoflow 1.2.
+    pub hop_us: Option<u64>,
     pub n_mels: u32,
     pub n_frames: u32,
     pub duration_ms: u64,
@@ -1654,6 +1660,11 @@ pub struct LoadedAudioSpectrogram {
 struct DiskAudioSpectrogram {
     #[serde(default = "default_hop_ms")]
     hop_ms: u32,
+    // Absent on pre-1.2 sidecars, so Option rather than a default -- the
+    // frontend needs to know the difference between "exact spacing is
+    // 23220us" and "this file predates the field".
+    #[serde(default)]
+    hop_us: Option<u64>,
     #[serde(default)]
     n_mels: u32,
     #[serde(default)]
@@ -1689,6 +1700,7 @@ pub async fn load_audio_spectrogram(
         .map_err(|e| format!("could not parse spectrogram sidecar at {}: {}", sp, e))?;
     Ok(Some(LoadedAudioSpectrogram {
         hop_ms: parsed.hop_ms,
+        hop_us: parsed.hop_us,
         n_mels: parsed.n_mels,
         n_frames: parsed.n_frames,
         duration_ms: parsed.duration_ms,
