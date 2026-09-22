@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(git checkout improve_assessment)",
-      "Bash(python -m pytest tests/ -x -q)"
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(timeout 8 python api.py)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(tasklist)",
+      "Bash(xargs echo \"procs:\")",
+      "Bash(node -e ' *)",
+      "Bash(npm test *)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_chapter_volume_match.py -q)"
     ]
   }
 }

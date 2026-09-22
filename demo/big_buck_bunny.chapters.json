@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "auto_generated": true,
+  "generated_by": {
+    "tool": "videoflow.structural",
+    "tool_version": "0.0.5a0",
+    "generated_at": "2026-05-07T22:34:56Z",
+    "target_minutes": 5.5
+  },
+  "chapters": [
+    {
+      "at_ms": 0,
+      "name": "",
+      "intent": "",
+      "end_ms": 246201,
+      "content_type": "music",
+      "confidence": 0.825,
+      "evidence": [
+        "rms_variance",
+        "spectral_flux"
+      ]
+    },
+    {
+      "at_ms": 246201,
+      "name": "",
+      "intent": "",
+      "end_ms": 596480,
+      "content_type": "music",
+      "confidence": 0.825,
+      "evidence": [
+        "rms_variance",
+        "spectral_flux"
+      ]
+    }
+  ]
+}

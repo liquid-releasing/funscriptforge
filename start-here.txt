@@ -1,0 +1,5 @@
+Tomorrow's pickup is clean:
+
+project_phrases_pickup.md — fully rewritten with the real architectural picture: editing-phrase detector (.phrases.json with rich metrics) is the target, NOT videoflow's stanza detector. Refit = splitter + chapter_id + straddling diagnostic. Detector code candidates listed for tomorrow's search.
+project_victoriaoaks_mashup_ground_truth.md — VictoriaOaks as mashup, ground-truth seams at forgeassembler/test_media/victoriaoats. Benchmark dataset.
+project_stanza_rename_pending.md — videoflow detector is the stanza one. Rename + downbeat fix as v1.x. Don't touch the algorithm — "stanzas are perfect."

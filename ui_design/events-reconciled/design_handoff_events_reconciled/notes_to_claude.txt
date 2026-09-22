@@ -1,0 +1,19 @@
+let's do events next. C:\Users\bruce\Projects\_lqr\funscriptforge\ui_design\events-reconciled\design_handoff_events_reconciled I have rebuilt the ui a couple times. let's discuss before starting. i have a couple updates to the ui. 
+
+1. we can use the funscript viewer we built with forgemoments. the background shows the events that we build by chapter.
+The funscripts and muted. future backgrounds can be the audio sound visualization, also muted. probably not the spectogram, and maybe thumbnails.
+
+2. the visualizer has two additions. one is the speed changer, 2x 1x, half speed, quarter speed.
+The visualizer in the html does not have the buttons in the right order.
+should be previous chapter, fast back, back one second, behind one framd, play, forward one frame, forward 1 second, fast forward, next capter
+tjr size of the numberrs should ber the same as the phrase and stanza viewer
+
+3. on the left bar to select the event, the top (and default) should be normal. 
+normal isn't exported. but it lets the user do back to back selections without skipping.
+
+4. the side panels can be taller. 
+
+5. the description should include what the event actually produces. i think edger created a desciption, that can go underneath the accept button
+that showed what was actually sent to the yml file. 
+
+6. the icon in tje events panel should represent the shape of what is sent to the yml file.

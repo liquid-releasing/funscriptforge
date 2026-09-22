@@ -297,3 +297,31 @@ docs/_drafts/
 
 # Demo funscripts at repo root level (canonical copies are in demo/examples/)
 demo/*.funscript
+
+# Generated analysis output — the step1/phrase experiment harness writes
+# self-contained HTML viewers and stdout dumps next to its scripts. The
+# SCRIPTS are worth keeping; their output is regenerable and runs to
+# megabytes per run.
+internal/step1_test/*.html
+internal/step1_test/*.stdout.json
+internal/step1_test/wired_vo.json
+
+# Design handoffs ship a bundled single-file HTML alongside the readable
+# source + README. The bundle is build output (~1.8MB each).
+ui_design/**/*.standalone.html
+ui_design/**/FunscriptForge App (standalone).html
+
+# Archived originals of test material — regenerable from the source media.
+test_funscript/*.original.zip
+
+# Local test corpora — tens of GB of source media. NOT ignored until
+# 2026-09-22, which meant a `git add -A` in this repo would try to stage
+# ~40GB. Keep new ones under test_funscript/ and add them here.
+test_funscript/GTJ-173/
+test_funscript/with_chapters/
+
+# `.<stem>.forge/` working directories are regenerable caches — the .forge
+# FILE is the source of truth, never the folder. They appear anywhere media
+# is analysed, including demo/ and tests/fixtures/.
+.*.forge/
+**/.forge/

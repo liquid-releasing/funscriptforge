@@ -648,7 +648,12 @@ class TestCliAudioPeaks(unittest.TestCase):
         )
         self.assertEqual(rc, 0, f"stderr: {stderr}")
         data = json.loads(stdout)
-        self.assertEqual(data["version"], "1.0")
+        # Track videoflow's constant rather than a literal: the sidecar
+        # version moves whenever its format does (1.1 = exact hop boundaries,
+        # see videoflow tests/test_sidecar_hop_drift.py), and a hardcoded
+        # string here just fails the build in a different repo.
+        from videoflow.audio_peaks import SIDECAR_VERSION
+        self.assertEqual(data["version"], SIDECAR_VERSION)
         self.assertEqual(data["hop_ms"], 10)
         self.assertGreater(data["peak_count"], 0)
         self.assertEqual(len(data["peaks"]), data["peak_count"])
@@ -674,7 +679,12 @@ class TestCliAudioPeaks(unittest.TestCase):
         )
         with open(sidecar) as f:
             data = json.load(f)
-        self.assertEqual(data["version"], "1.0")
+        # Track videoflow's constant rather than a literal: the sidecar
+        # version moves whenever its format does (1.1 = exact hop boundaries,
+        # see videoflow tests/test_sidecar_hop_drift.py), and a hardcoded
+        # string here just fails the build in a different repo.
+        from videoflow.audio_peaks import SIDECAR_VERSION
+        self.assertEqual(data["version"], SIDECAR_VERSION)
         self.assertGreater(data["peak_count"], 0)
 
     def test_audio_peaks_cached_sidecar_reused(self):

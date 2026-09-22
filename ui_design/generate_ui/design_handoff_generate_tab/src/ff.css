@@ -1,0 +1,147 @@
+/* FunscriptForge — runnable prototype. Forge dark palette + chrome.
+   Tokens transcribed from the design system README (marketing tokens are
+   source of truth: --bg #0e1117, --surface #1a1d27, --accent #ff4b4b…). */
+
+:root {
+  color-scheme: dark;
+
+  --bg: #0e1117;
+  --surface: #1a1d27;
+  --surface-2: #12151e;
+  --surface-3: #232735;
+  --border: #2d3148;
+  --border-strong: #3a3f5c;
+
+  --text: #fafafa;
+  --text-muted: #9ba3c4;
+  --text-soft: #b8bfd8;
+  --text-dim: #6b7390;
+
+  --accent: #ff4b4b;
+  --accent-2: #ff7b7b;
+  --accent-warm: #ff8c42;
+
+  --success: #3ed598;
+  --warn: #ffb547;
+  --danger: #ff5470;
+  --info: #4dabf7;
+
+  --r-1: 4px; --r-2: 6px; --r-3: 8px; --r-4: 10px; --r-5: 12px; --r-pill: 999px;
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px;
+
+  --elev-1: 0 2px 6px rgba(0,0,0,0.4);
+  --elev-2: 0 6px 20px rgba(0,0,0,0.4);
+  --elev-3: 0 12px 40px rgba(0,0,0,0.55);
+  --glow-accent: 0 0 0 3px rgba(255,75,75,0.25);
+
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emph: cubic-bezier(0.3, 0, 0, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+button { font-family: inherit; }
+
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--surface-3); border-radius: 999px;
+  border: 3px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* ── App shell ───────────────────────────────────────────── */
+.ff-app { display: flex; flex-direction: column; height: 100vh; }
+
+.ff-topbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 16px; height: 52px; flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.ff-tabstrip {
+  display: flex; align-items: stretch; gap: 2px;
+  padding: 0 10px; flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  overflow-x: auto;
+}
+.ff-tabstrip::-webkit-scrollbar { height: 0; }
+
+.ff-tab {
+  position: relative;
+  background: transparent; border: 0;
+  color: var(--text-dim);
+  padding: 0 14px; height: 42px;
+  font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: color .15s var(--ease-standard);
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.ff-tab:hover { color: var(--text-soft); }
+.ff-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.ff-tab.is-new { color: var(--accent-warm); }
+.ff-tab.is-new.active { color: var(--accent-warm); border-bottom-color: var(--accent-warm); }
+.ff-tab .tab-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent-warm);
+}
+
+.ff-tab-sep { width: 1px; align-self: center; height: 22px; background: var(--border); margin: 0 8px; flex-shrink: 0; }
+
+.ff-main { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+
+/* footer accept bar */
+.ff-acceptbar {
+  flex-shrink: 0; border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 10px 16px;
+  display: flex; align-items: center; gap: 14px;
+}
+.ff-statusbar {
+  flex-shrink: 0; border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 5px 16px; height: 28px;
+  display: flex; align-items: center; gap: 16px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+}
+
+/* generic helpers */
+.eyebrow {
+  font-size: 11px; font-weight: 700; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-4); padding: var(--s-5);
+}
+.hairline { height: 1px; background: var(--border); border: 0; margin: 0; }
+
+input, select, textarea { font-family: inherit; }
+select option { background: var(--surface-2); color: var(--text); }
+
+.fade-in { animation: ff-fade .2s var(--ease-standard); }
+@media (prefers-reduced-motion: no-preference) {
+  .fade-in { animation: ff-fade .22s var(--ease-standard); }
+}
+@keyframes ff-fade { from { transform: translateY(5px); } to { transform: none; } }
