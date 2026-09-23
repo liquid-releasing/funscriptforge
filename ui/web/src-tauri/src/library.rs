@@ -136,36 +136,90 @@ pub fn library_config_path(app: AppHandle) -> Result<String, String> {
 
 // ── Native operations ──────────────────────────────────────────────────
 
-/// Reveal a path in the platform's native file explorer (Explorer on
-/// Windows with the file selected, Finder on macOS, xdg-open the parent
-/// on Linux since there's no portable "select" semantic there).
+/// The exact text Explorer needs appended to its command line.
+///
+/// Pure, and deliberately NOT `#[cfg(windows)]`, because the whole bug lived in
+/// this string and a rule worth testing should be tested on every platform that
+/// builds the app -- not only on the one where it happens to run.
+///
+///   file:       /select,"C:\dir\file.funscript"
+///   directory:  "C:\dir"
+///
+/// Callers pass it to `raw_arg`, which appends it verbatim. Quoting the path
+/// but NOT the `/select,` switch is the rule std's normal quoting cannot
+/// express, and getting it wrong makes Explorer open the user's Documents
+/// folder without any error at all.
+fn explorer_raw_arg(path: &str, is_dir: bool) -> String {
+    let native = path.replace('/', "\\");
+    if is_dir {
+        format!("\"{}\"", native)
+    } else {
+        format!("/select,\"{}\"", native)
+    }
+}
+
+/// Reveal a path in the platform's native file explorer: a FILE is selected
+/// inside its parent, a DIRECTORY is opened. The single implementation for the
+/// whole app -- `commands::reveal_path` delegates here rather than keeping a
+/// second copy (they had drifted, and both copies were broken).
+///
+/// Best effort: Explorer returns a non-zero exit even on success, so nothing
+/// waits on the child or checks its status.
 #[tauri::command]
 pub fn library_reveal_in_explorer(path: String) -> Result<(), String> {
+    let is_dir = std::path::Path::new(&path).is_dir();
+
     #[cfg(target_os = "windows")]
     {
-        // `explorer /select,"path"` highlights the file inside its parent.
-        // No quoting around path is needed because we pass it as a single arg.
-        std::process::Command::new("explorer")
-            .arg(format!("/select,{}", path))
-            .spawn()
-            .map_err(|e| format!("explorer: {}", e))?;
+        use std::os::windows::process::CommandExt;
+
+        // Explorer does NOT parse its command line the way argv-based programs
+        // do, and getting it wrong fails SILENTLY -- it opens the user's
+        // Documents folder instead of erroring, so it reads as "the button goes
+        // to the wrong place" rather than as a bug (dogfood 2026-09-23).
+        //
+        // Two rules:
+        //   1. `/select,` and the path are ONE argument, and only the PATH may
+        //      be quoted: `/select,"C:\dir\file"`. Passing them as two args
+        //      loses the path entirely; letting Rust quote the whole argument
+        //      -- which std does automatically as soon as it contains a space
+        //      -- produces `"/select,C:\dir\file"`, which Explorer cannot
+        //      read. That second case is why this worked for every test path
+        //      without a space in it and failed on a real project
+        //      ("D:\hovixag935\hovixag935 - bikinis vs Baylee.funscript").
+        //   2. Separators must be BACKSLASHES. A forward slash sends Explorer
+        //      to the default folder just as quietly.
+        //
+        // `raw_arg` appends the string to the command line verbatim, bypassing
+        // std's quoting, which is the only way to express rule 1. Embedding the
+        // path in a raw command line is safe here because a Windows path cannot
+        // contain a double quote.
+        let mut cmd = std::process::Command::new("explorer");
+        cmd.raw_arg(explorer_raw_arg(&path, is_dir));
+        cmd.spawn().map_err(|e| format!("explorer: {}", e))?;
         return Ok(());
     }
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
-            .args(["-R", &path])
-            .spawn()
-            .map_err(|e| format!("open -R: {}", e))?;
+        // `open` takes a normal argv, so std's quoting is correct here.
+        let mut cmd = std::process::Command::new("open");
+        if is_dir { cmd.arg(&path); } else { cmd.args(["-R", &path]); }
+        cmd.spawn().map_err(|e| format!("open: {}", e))?;
         return Ok(());
     }
     #[cfg(target_os = "linux")]
     {
-        let parent = std::path::Path::new(&path)
-            .parent()
-            .ok_or_else(|| "no parent dir".to_string())?;
+        // No portable "select" semantic, so a file reveals its parent.
+        let target = if is_dir {
+            std::path::PathBuf::from(&path)
+        } else {
+            std::path::Path::new(&path)
+                .parent()
+                .ok_or_else(|| "no parent dir".to_string())?
+                .to_path_buf()
+        };
         std::process::Command::new("xdg-open")
-            .arg(parent)
+            .arg(target)
             .spawn()
             .map_err(|e| format!("xdg-open: {}", e))?;
         Ok(())
@@ -185,4 +239,68 @@ pub async fn library_pick_folder(app: AppHandle) -> Result<Option<String>, Strin
         let _ = tx.send(s);
     });
     rx.await.map_err(|_| "folder picker cancelled internally".to_string())
+}
+#[cfg(test)]
+mod tests {
+    use super::explorer_raw_arg;
+
+    // The reveal button in the Library card and on the `.forge` folder row both
+    // opened C:\Users\<user>\Documents instead of the project, for every
+    // project whose path contains a space -- which is most of them. Reported
+    // during release dogfood, 2026-09-23, on
+    // "D:\hovixag935\hovixag935 - bikinis vs Baylee.funscript".
+    //
+    // It failed silently: Explorer does not error on a command line it cannot
+    // parse, it just opens the default folder. And it worked for every path
+    // WITHOUT a space, which is why it shipped.
+
+    const SPACED: &str = r"D:\hovixag935\hovixag935 - bikinis vs Baylee.funscript";
+
+    #[test]
+    fn a_file_is_selected_with_only_the_path_quoted() {
+        // THE regression. std quotes an argument as soon as it contains a
+        // space, which produced `"/select,D:\...\a b.funscript"` -- the switch
+        // swallowed inside the quotes, which Explorer cannot read.
+        assert_eq!(
+            explorer_raw_arg(SPACED, false),
+            r#"/select,"D:\hovixag935\hovixag935 - bikinis vs Baylee.funscript""#,
+        );
+    }
+
+    #[test]
+    fn the_switch_is_never_inside_the_quotes() {
+        let arg = explorer_raw_arg(SPACED, false);
+        assert!(arg.starts_with("/select,\""), "switch must precede the quote: {arg}");
+        assert!(arg.ends_with('"'), "path must be closed: {arg}");
+    }
+
+    #[test]
+    fn a_directory_is_opened_rather_than_selected() {
+        // `/select` on a directory opens its PARENT with the folder
+        // highlighted, which is not what "open the forge folder" means.
+        assert_eq!(
+            explorer_raw_arg(r"D:\hovixag935\.scene.forge", true),
+            r#""D:\hovixag935\.scene.forge""#,
+        );
+    }
+
+    #[test]
+    fn forward_slashes_become_backslashes() {
+        // Paths reach Rust from JS, which is happy with either. Explorer is
+        // not: a forward slash sends it to the default folder just as quietly
+        // as bad quoting does.
+        assert_eq!(
+            explorer_raw_arg("D:/hovixag935/scene.funscript", false),
+            r#"/select,"D:\hovixag935\scene.funscript""#,
+        );
+    }
+
+    #[test]
+    fn a_path_without_spaces_still_works() {
+        // The case that always worked and hid the bug -- it must keep working.
+        assert_eq!(
+            explorer_raw_arg(r"D:\media\scene.funscript", false),
+            r#"/select,"D:\media\scene.funscript""#,
+        );
+    }
 }

@@ -2980,20 +2980,16 @@ pub fn get_launch_bundle() -> Option<String> {
         .and_then(|mut g| g.take())
 }
 
-/// Reveal a path in the OS file manager (selects the file on Windows). Best
-/// effort — Explorer returns a non-zero exit even on success, so we don't
-/// check status.
+/// Reveal a path in the OS file manager. Delegates to the library command so
+/// there is exactly one implementation.
+///
+/// This used to be a second copy, and it was worse than the one it duplicated:
+/// it passed `/select,` and the path as TWO arguments (Explorer drops the path
+/// and opens Documents), and it was not behind any `#[cfg]`, so macOS and Linux
+/// ran `explorer` and silently did nothing at all.
 #[tauri::command]
 pub async fn reveal_path(path: String) -> Result<(), String> {
-    let p = Path::new(&path);
-    let mut cmd = std::process::Command::new("explorer");
-    if p.is_file() {
-        cmd.arg("/select,").arg(&path);
-    } else {
-        cmd.arg(&path);
-    }
-    let _ = cmd.spawn().map_err(|e| format!("reveal {}: {}", path, e))?;
-    Ok(())
+    crate::library::library_reveal_in_explorer(path)
 }
 
 /// Open an external URL in the user's default browser. The About dialog's links
