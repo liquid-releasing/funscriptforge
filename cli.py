@@ -4655,11 +4655,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_exp.add_argument(
         "--match-chapter-volume", action="store_true",
         help=(
-            "Match e-stim volume across chapter seams. Channels are generated one "
-            "chapter at a time and Edger's ramp restarts from 0, so every boundary "
-            "drops; this lifts each chapter to the previous one's ending level and "
-            "eases back to its own curve. Scene Builder / Scene Closer chapters are "
-            "left alone."
+            "Repair e-stim volume across chapter seams. Generation no longer puts "
+            "a step there -- each chapter is processed with overlap and shares one "
+            "track-level volume ramp -- so this is for channels built by an older "
+            "version, or joined somewhere else. It lifts each chapter to the "
+            "previous one's ending level and eases back to its own curve. Scene "
+            "Builder / Scene Closer chapters are left alone."
         ),
     )
     p_exp.add_argument("--stim-wav", action="store_true", help="Render audio/stim.wav from the e-stim channels (opt-in).")
@@ -5685,7 +5686,19 @@ def _polish_generate_estim(
     templates = {}  # channel -> first-seen doc minus actions
     tmp = Path(tempfile.mkdtemp(prefix="ff_polish_estim_"))
     try:
-        from forge.stim_config import resolve_character, apply_virtual_envelope
+        from forge.stim_config import (
+            DEFAULT_RAMP_PERCENT_PER_HOUR, apply_virtual_envelope, pad_window,
+            resolve_character, slice_ramp, track_volume_ramp, trim_to_window,
+        )
+        # ONE volume ramp across the whole scene, sliced per chapter, instead of
+        # upstream building a fresh 0 -> peak -> 0 envelope inside every chapter.
+        # See "Continuous generation across chapters" in forge/stim_config.py.
+        # Built on first use, because its rate comes from the character config
+        # and a scene has exactly one arc: chapters can carry different
+        # characters, but "15% per hour" describes the whole track, so the
+        # first assigned chapter's rate is the scene's rate.
+        full_ramp = None
+        track_lo, track_hi = int(pairs[0][0]), int(pairs[-1][0])
         nwin = len(windows)
         for idx, (lo, hi, cid, params) in enumerate(windows):
             # Per-chapter progress — the whole-track forge runs the full Restim
@@ -5706,7 +5719,12 @@ def _polish_generate_estim(
                 continue
             wlo = lo if lo is not None else pairs[0][0]
             whi = hi if hi is not None else pairs[-1][0]
-            win = [(t, p) for t, p in pairs if wlo <= t <= whi]
+            # Process a PADDED slice and keep only the chapter. Upstream's
+            # speed (5s window), acceleration (3s) and alpha/beta passes are all
+            # degenerate at the first and last samples they are given, so the
+            # transient lands in the padding and is thrown away with it.
+            plo, phi = pad_window(wlo, whi, track_lo, track_hi)
+            win = [(t, p) for t, p in pairs if plo <= t <= phi]
             if len(win) < 2:
                 continue
             wdir = tmp / f"w{idx}"
@@ -5716,6 +5734,20 @@ def _polish_generate_estim(
                 "actions": [{"at": int(t), "pos": int(round(p))} for t, p in win],
             }), encoding="utf-8")
             config = build_config(label, params, output_dir=str(wdir))
+            # The processor reads <stem>.ramp.funscript from beside its input
+            # when one exists (processor.py, ramp_exists) and skips building its
+            # own. Handing it this chapter's share of the track ramp is what
+            # gives the scene one arc instead of one per chapter.
+            if full_ramp is None:
+                full_ramp = track_volume_ramp(
+                    [t for t, _ in pairs],
+                    ramp_percent_per_hour=float(config.get("volume", {}).get(
+                        "ramp_percent_per_hour", DEFAULT_RAMP_PERCENT_PER_HOUR)),
+                )
+            ramp_slice = slice_ramp(full_ramp, plo, phi)
+            if ramp_slice:
+                (wdir / f"{stem}.ramp.funscript").write_text(
+                    json.dumps({"actions": ramp_slice}), encoding="utf-8")
             # process() logs to stdout; keep our stdout JSON-clean.
             with contextlib.redirect_stdout(sys.stderr):
                 result = process(str(in_path), config, None)
@@ -5727,6 +5759,10 @@ def _polish_generate_estim(
                     continue
                 cd = json.loads(cpth.read_text(encoding="utf-8"))
                 acts = [{"at": a["at"], "pos": a["pos"]} for a in cd.get("actions", [])]
+                # Drop the padding. Half-open so chapters tile without
+                # duplicating a sample at each boundary; the chapter that
+                # reaches the end of the track keeps its last sample.
+                acts = trim_to_window(acts, wlo, whi, include_hi=whi >= track_hi)
                 acts = apply_virtual_envelope(suf, acts, wlo, whi, virtual)
                 raw.setdefault(suf, []).extend(acts)
                 if suf not in templates:
@@ -5737,11 +5773,14 @@ def _polish_generate_estim(
     if not raw:
         raise ValueError("No e-stim to generate — assign a character to at least one chapter in the Channels tab first.")
 
-    # Repair the volume step at each chapter seam, as close to its source as
-    # possible: it is an artifact of generating one window at a time (Edger's
-    # ramp restarts from 0 every chapter), and everything downstream — authored
-    # events, the Passages contour — is deliberate. Chapters assigned Scene
-    # Builder / Scene Closer are left alone; their ramp IS the intent.
+    # Belt and braces. The step this repairs is no longer generated: chapters
+    # are processed with overlap and share one track-level volume ramp (see
+    # "Continuous generation across chapters" in forge/stim_config.py). Kept
+    # because it is also the repair for channels that reach here from an older
+    # build or from a bundle joined elsewhere, and because everything else
+    # downstream — authored events, the Passages contour — is deliberate and
+    # must not be flattened. Chapters assigned Scene Builder / Scene Closer are
+    # left alone; their ramp IS the intent.
     if match_chapter_volume:
         _emit_progress("Forging E-Stim — matching volume across chapters…")
         from forge.stim_config import match_chapter_seams
@@ -5815,8 +5854,10 @@ def _polish_preview_estim_channels(funscript_path: str, start_ms: int, end_ms: i
     if not AVAILABLE:
         raise ValueError("funscript-tools not available — cannot preview e-stim channels")
 
-    from forge.stim_config import (apply_virtual_envelope, merged_presets,
-                                   resolve_character)
+    from forge.stim_config import (DEFAULT_RAMP_PERCENT_PER_HOUR,
+                                   apply_virtual_envelope, merged_presets,
+                                   pad_window, resolve_character, slice_ramp,
+                                   track_volume_ramp, trim_to_window)
     presets, _ = merged_presets()
     slug_to_label = {_slug_character(lbl): lbl for lbl in presets}
 
@@ -5857,6 +5898,12 @@ def _polish_preview_estim_channels(funscript_path: str, start_ms: int, end_ms: i
         windows.append((pairs[0][0], pairs[-1][0], assign.get("characterId"), assign.get("params") or {}))
 
     raw = {}
+    # The same continuity treatment as _polish_generate_estim, so what the
+    # Polish preview shows is what Stamp writes. Generating plain per-chapter
+    # slices here drew a fade at every boundary that the export did not have --
+    # a preview that disagrees with the artifact reads as a bug in the artifact.
+    full_ramp = None
+    track_lo, track_hi = int(pairs[0][0]), int(pairs[-1][0])
     tmp = Path(tempfile.mkdtemp(prefix="ff_polish_prev_"))
     try:
         for idx, (lo, hi, cid, params) in enumerate(windows):
@@ -5871,7 +5918,8 @@ def _polish_preview_estim_channels(funscript_path: str, start_ms: int, end_ms: i
                 slug_to_label.get(cid) or slug_to_label.get(_slug_character(cid)))
             if not label:
                 continue
-            win = [(t, p) for t, p in pairs if wlo <= t <= whi]
+            plo, phi = pad_window(wlo, whi, track_lo, track_hi)
+            win = [(t, p) for t, p in pairs if plo <= t <= phi]
             if len(win) < 2:
                 continue
             wdir = tmp / f"w{idx}"
@@ -5881,6 +5929,16 @@ def _polish_preview_estim_channels(funscript_path: str, start_ms: int, end_ms: i
                 "actions": [{"at": int(t), "pos": int(round(p))} for t, p in win],
             }), encoding="utf-8")
             config = build_config(label, params, output_dir=str(wdir))
+            if full_ramp is None:
+                full_ramp = track_volume_ramp(
+                    [t for t, _ in pairs],
+                    ramp_percent_per_hour=float(config.get("volume", {}).get(
+                        "ramp_percent_per_hour", DEFAULT_RAMP_PERCENT_PER_HOUR)),
+                )
+            ramp_slice = slice_ramp(full_ramp, plo, phi)
+            if ramp_slice:
+                (wdir / f"{stem}.ramp.funscript").write_text(
+                    json.dumps({"actions": ramp_slice}), encoding="utf-8")
             with contextlib.redirect_stdout(sys.stderr):
                 result = process(str(in_path), config, None)
             if not result.get("success"):
@@ -5891,6 +5949,7 @@ def _polish_preview_estim_channels(funscript_path: str, start_ms: int, end_ms: i
                     continue
                 cd = json.loads(cpth.read_text(encoding="utf-8"))
                 acts = [{"at": a["at"], "pos": a["pos"]} for a in cd.get("actions", [])]
+                acts = trim_to_window(acts, wlo, whi, include_hi=whi >= track_hi)
                 acts = apply_virtual_envelope(suf, acts, wlo, whi, virtual)
                 raw.setdefault(suf, []).extend(acts)
     finally:

@@ -299,11 +299,20 @@ def match_chapter_seams(
 ) -> list[dict]:
     """Hold the volume plateau across INTERNAL chapter boundaries.
 
-    Channels are generated one chapter at a time and concatenated. Each
-    generated chapter fades in at its start and back out at its end, so every
-    internal boundary is a V-notch: the level dives to the floor and climbs
-    straight back. (Measured on a real 34-minute export: a plateau of 97 with
-    1-2s dips to 6 at all six internal seams.)
+    ⚠ This is now a REPAIR FOR OLD OUTPUT, not part of the normal path.
+    Generation stopped producing the notch in 2026-09: chapters are processed
+    with overlap and share one track-level volume ramp, so there is nothing to
+    lift (see "Continuous generation across chapters" below). It still runs on
+    channels that were built by an earlier version, or joined somewhere other
+    than here. On already-continuous channels it is close to a no-op, but not
+    free: it REPLACES a 12-second window at each boundary with a straight line,
+    so it does flatten whatever real movement was there.
+
+    What it repaired: channels were generated one chapter at a time and
+    concatenated, and each generated chapter faded in at its start and back out
+    at its end, so every internal boundary was a V-notch -- the level dived to
+    the floor and climbed straight back. (Measured on a real 34-minute export:
+    a plateau of 97 with 1-2s dips to 6 at all six internal seams.)
 
     The repair spans the seam rather than one side of it. Both sides dive, so
     reading the outgoing chapter's last sample as a target level just measures
@@ -427,4 +436,174 @@ def apply_virtual_envelope(
         else:
             factor = 1.0 - (1.0 - floor) * ((frac - hold) / (1.0 - hold))
         out.append({"at": a["at"], "pos": int(round(a["pos"] * factor))})
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Continuous generation across chapters
+# ---------------------------------------------------------------------------
+#
+# E-stim channels are generated one chapter at a time: the motion funscript is
+# sliced per chapter and funscript-tools' process() runs on each slice as if it
+# were a whole scene. Two artifacts fall out of that, and they are what
+# match_chapter_seams was written to paper over.
+#
+# 1. EVERY CLIP OPENS AND CLOSES AT ZERO. Upstream's make_volume_ramp emits a
+#    4-point envelope whose values are the literals [0, start, 1.0, 0] -- not a
+#    tunable, a literal. volume_ramp_combine_ratio is 20, so the volume channel
+#    is 95% that ramp; frequency and (inverted) pulse_rise_time come from it
+#    too. Twelve chapters concatenated is twelve "0 -> ... -> 0" envelopes glued
+#    end to end. Measured on a real 60-minute scene: volume 6-11 out of 100 at
+#    all eleven internal boundaries, 224s under 20, motion at zero at each one.
+#
+# 2. CLIP EDGES ARE TRANSIENTS. convert_to_speed (5s window), the acceleration
+#    pass (3s) and generate_alpha_beta_from_main all behave degenerately at the
+#    first and last samples they are given, so the phase channels settle at
+#    every chapter start.
+#
+# Neither is a decision anyone made, and a chapter boundary carries no meaning
+# for a listener -- chapters are work units for the editor, and we do not detect
+# scene changes. Fades should be authored (Scene Builder / Scene Closer,
+# Passages, Events), never emergent.
+#
+# The helpers below remove both artifacts at the source instead of repairing
+# them afterwards:
+#
+#   pad_window()         widen each slice into its neighbours, then throw the
+#                        padding away -- the clip-edge transients land in the
+#                        discarded part. Fixes every channel at once, with no
+#                        per-channel policy.
+#   track_volume_ramp()  compute ONE ramp across the whole track and hand each
+#                        chapter the slice of it that covers that chapter, via
+#                        the <stem>.ramp.funscript sidecar the processor already
+#                        looks for (processor.py's ramp_exists). The ramp then
+#                        spans the scene, which is what ramp_percent_per_hour
+#                        always meant.
+
+# How far each chapter slice reaches into its neighbours before processing. The
+# padding is discarded afterwards, so this only has to outlast the longest
+# window any upstream stage uses: speed_window_size is 5s, accel_window_size 3s,
+# and the volume ramp's own fade-in is 10s. 15s clears all three. Paid for in
+# generation time (each chapter is up to 30s of extra audio to process) and in
+# nothing else.
+ESTIM_OVERLAP_MS = 15_000
+
+# Upstream's default, mirrored here so the track-level ramp matches what a
+# single whole-track process() run would have produced.
+DEFAULT_RAMP_PERCENT_PER_HOUR = 15.0
+
+
+def pad_window(lo_ms: int, hi_ms: int, lo_bound: int, hi_bound: int,
+               *, overlap_ms: int = ESTIM_OVERLAP_MS) -> tuple[int, int]:
+    """Widen ``[lo_ms, hi_ms]`` by ``overlap_ms`` without leaving the track.
+
+    ``lo_bound`` / ``hi_bound`` are the first and last action times of the whole
+    funscript. The track's own start and end are NOT padded: the scene should
+    still open from silence and close, and there is nothing outside them to read
+    anyway.
+    """
+    lo = max(int(lo_bound), int(lo_ms) - int(overlap_ms))
+    hi = min(int(hi_bound), int(hi_ms) + int(overlap_ms))
+    return lo, hi
+
+
+def trim_to_window(actions: list[dict], lo_ms: int, hi_ms: int,
+                   *, include_hi: bool = False) -> list[dict]:
+    """Keep only the actions inside ``[lo_ms, hi_ms)`` -- the padding goes.
+
+    Half-open by default so consecutive chapters tile without duplicating a
+    sample at the boundary; the LAST window passes ``include_hi=True`` so the
+    final sample of the track survives.
+    """
+    if include_hi:
+        return [a for a in actions if lo_ms <= a["at"] <= hi_ms]
+    return [a for a in actions if lo_ms <= a["at"] < hi_ms]
+
+
+def track_volume_ramp(
+    times_ms,
+    *,
+    ramp_percent_per_hour: float = DEFAULT_RAMP_PERCENT_PER_HOUR,
+) -> list[dict]:
+    """The volume ramp for the WHOLE track, in funscript form.
+
+    A faithful port of funscript-tools' ``make_volume_ramp`` -- same four key
+    points, same values -- except computed once over every action instead of
+    once per chapter slice::
+
+        at[0]   -> 0      the scene opens from silence
+        +10s    -> start  where the ramp begins (1.0 minus its total rise)
+        at[-2]  -> 100    the peak
+        at[-1]  -> 0      the scene closes
+
+    ``start`` is ``1.0 - ramp_percent_per_hour/100 * hours``, so a 15%/hour ramp
+    over a one-hour scene opens at 85 and climbs to 100 across the hour. Run per
+    chapter, that same arithmetic gave a five-minute chapter a 1.25% rise
+    crammed in behind a 10-second fade-in from zero: the rise was meaningless
+    and the fade-in was the whole artifact.
+
+    Mirrors one upstream quirk deliberately -- ``make_volume_ramp`` computes an
+    interpolated value for the 10-second point and then does not use it,
+    emitting ``start_ramp_value`` there instead. Matching upstream matters more
+    than tidying it, so anyone comparing against a stock Edger run sees the same
+    shape.
+
+    Returns ``[]`` when there are too few actions to define a ramp, which is the
+    signal to let upstream generate its own.
+    """
+    times = [int(t) for t in times_ms]
+    if len(times) < 4:
+        return []
+    start, peak, end = times[0], times[-2], times[-1]
+    if peak <= start:
+        return []
+    hours = (peak - start) / 3_600_000.0
+    start_value = max(0.0, 1.0 - (ramp_percent_per_hour / 100.0) * hours)
+    second = start + 10_000
+    head = [{"at": start, "pos": 0.0}]
+    # A track shorter than the fade-in would put the 10s knot past the peak and
+    # hand np.interp a non-monotonic x. Drop it then; a straight 0 -> peak ramp
+    # is the right degenerate shape.
+    if second < peak:
+        head.append({"at": second, "pos": start_value * 100.0})
+    return head + [{"at": peak, "pos": 100.0}, {"at": end, "pos": 0.0}]
+
+
+def slice_ramp(ramp: list[dict], lo_ms: int, hi_ms: int) -> list[dict]:
+    """The portion of a track-level ramp covering ``[lo_ms, hi_ms]``.
+
+    Endpoints are interpolated so the slice starts and ends at exactly the level
+    the track ramp has there. That continuity across slices is the entire point,
+    so it must not be left to whichever knot happens to fall nearby.
+
+    Positions stay floats. This is a private handoff to upstream's
+    ``Funscript.from_file``, which reads ``float(action['pos']) * 0.01``, and
+    rounding each slice's endpoints to whole percent would reintroduce a small
+    step at every seam -- the thing being fixed.
+    """
+    if not ramp:
+        return []
+
+    def level_at(t: int) -> float:
+        if t <= ramp[0]["at"]:
+            return float(ramp[0]["pos"])
+        if t >= ramp[-1]["at"]:
+            return float(ramp[-1]["pos"])
+        for i in range(1, len(ramp)):
+            a, b = ramp[i - 1], ramp[i]
+            if a["at"] <= t <= b["at"]:
+                span = b["at"] - a["at"]
+                if span <= 0:
+                    return float(b["pos"])
+                frac = (t - a["at"]) / span
+                return float(a["pos"]) + (float(b["pos"]) - float(a["pos"])) * frac
+        return float(ramp[-1]["pos"])
+
+    lo, hi = int(lo_ms), int(hi_ms)
+    if hi <= lo:
+        return []
+    out = [{"at": lo, "pos": round(level_at(lo), 3)}]
+    out += [{"at": int(p["at"]), "pos": round(float(p["pos"]), 3)}
+            for p in ramp if lo < p["at"] < hi]
+    out.append({"at": hi, "pos": round(level_at(hi), 3)})
     return out
