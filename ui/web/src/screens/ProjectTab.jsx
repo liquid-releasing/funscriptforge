@@ -26,6 +26,12 @@ import {
 import { pickProjectFile, classifyProjectFile, importForgeBundle, pickForgeBundle, contactSheet } from '../api/forge.js';
 import { loadProjectFiles, revealInExplorer } from '../api/library.js';
 import { generatePreviewActions, parseDurationToMs } from '../lib/funscriptPreview.js';
+import {
+  basename,
+  projectDirname,
+  isRevealablePath,
+  ellipsizePath,
+} from '../lib/projectPaths.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 
@@ -590,6 +596,14 @@ function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, on
       )}
 
       <SectionLabel>Files in this project</SectionLabel>
+
+      {/* The folder every row below is relative to. Before this row the tab
+          showed bare filenames with subtitles reading "same folder" and
+          never named the folder — the user's dogfood report was that there
+          was no way to find the project's path from this tab. Full path in
+          `title`, so truncation costs nothing. */}
+      <ProjectFolderRow dirPath={projectFiles?.dirPath ?? projectDirname(project)} />
+
       <div
         style={{
           background: 'var(--surface)',
@@ -610,6 +624,7 @@ function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, on
                 name={m.name}
                 sub={`${m.kind} · same folder · auto-detected`}
                 tag="media"
+                revealPath={m.path}
               />
             ))
           ) : (
@@ -627,6 +642,7 @@ function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, on
             name={basename(project.mediaPath)}
             sub={`${project.mediaKind} · same folder · auto-detected`}
             tag="media"
+            revealPath={project.mediaPath}
           />
         ) : (
           <FileRow
@@ -644,6 +660,7 @@ function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, on
             ?? (project.path ? basename(project.path) : `${project.title}.funscript`)}
           sub="source funscript · imported as-is"
           tag="source"
+          revealPath={projectFiles?.funscript?.path ?? project.path}
         />
 
         {/* Detected sidecars — chapters.json / beats.json / etc. live next
@@ -655,6 +672,7 @@ function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, on
             name={s.name}
             sub={sidecarLabel(s.kind)}
             tag={sidecarTag(s.kind)}
+            revealPath={s.path}
           />
         ))}
 
@@ -710,23 +728,72 @@ function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, on
 // DeviceCard moved to DeviceTab.jsx (2026-05-17) — the device picker now
 // lives where it belongs.
 
-function basename(p) {
-  if (!p) return '';
-  const parts = String(p).split(/[/\\]/);
-  return parts[parts.length - 1] || String(p);
-}
+// `basename` / `projectDirname` moved to ../lib/projectPaths.js when the
+// folder row landed — they now have tests and two callers.
 
-// Derive the project's folder from its funscript path. Skips synthetic
-// `sample://` projects and anything without a path.
-function projectDirname(project) {
-  const path = typeof project === 'object' ? project?.path : null;
-  if (!path || String(path).startsWith('sample://')) return undefined;
-  const idx = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
-  return idx > 0 ? path.slice(0, idx) : undefined;
+// The project's folder, shown once above the file list so every "same
+// folder" subtitle below has a referent. Renders nothing for the bundled
+// sample (no folder on disk) or before the readdir lands — an empty or
+// half-built path row is worse than no row.
+function ProjectFolderRow({ dirPath }) {
+  if (!isRevealablePath(dirPath)) return null;
+  const onReveal = () =>
+    revealInExplorer(dirPath).catch((e) => console.warn('reveal failed', e));
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+        fontSize: 11,
+        color: 'var(--text-dim)',
+        minWidth: 0,
+      }}
+    >
+      <Icon name="folder" size={12} />
+      {/* Full path in `title` — the truncated label is for layout, the
+          tooltip is the thing the user came for. `user-select: text` so it
+          can be copied straight out of the row. */}
+      <span
+        title={dirPath}
+        style={{
+          fontFamily: 'var(--font-mono)',
+          userSelect: 'text',
+          cursor: 'text',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {ellipsizePath(dirPath)}
+      </span>
+      <button
+        onClick={onReveal}
+        title="Open this folder in Explorer"
+        style={{
+          background: 'transparent',
+          border: '1px solid var(--border)',
+          color: 'var(--text-dim)',
+          borderRadius: 4,
+          cursor: 'pointer',
+          padding: '2px 5px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <Icon name="external-link" size={11} />
+      </button>
+    </div>
+  );
 }
 
 function FileRow({ icon, name, sub, tag, disabled, revealPath }) {
-  const onReveal = revealPath
+  // Guard on isRevealablePath, not on truthiness: the bundled sample's
+  // `sample://…` path is truthy but has no folder, and handing it to the
+  // shell is how reveal ends up in the user's Documents (c9015e2).
+  const onReveal = isRevealablePath(revealPath)
     ? () => revealInExplorer(revealPath).catch((e) => console.warn('reveal failed', e))
     : null;
   return (
