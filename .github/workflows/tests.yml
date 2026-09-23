@@ -1,0 +1,167 @@
+name: Tests
+
+# Runs the three suites this repo actually has. Until 2026-09-23 none of them
+# ran in CI at all -- `release.yml` builds and packages, `docs.yml` publishes,
+# and ~1400 tests across Python, JavaScript and Rust were only ever green
+# because someone ran them by hand before pushing.
+#
+# Layout mirrors release.yml deliberately: the main repo checks out to
+# `funscript-updater` (its legacy directory name) and the shared repos check
+# out beside it, because several code paths resolve siblings by relative path
+# -- `forge/funscript_tools.py::_ensure_cli` looks for `../funscript-tools`,
+# and the frontend imports `forgemoment` via `file:../../../forgemoment`.
+#
+# WARNING carried over from release.yml: a sibling checkout with no `ref:`
+# takes that repo's DEFAULT branch. A green run here says this commit works
+# against the siblings' main, not against whatever is checked out locally.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch makes the first run's answer irrelevant.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"
+  NODE_VERSION: "20"
+
+jobs:
+  python:
+    name: Python — pytest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout funscriptforge
+        uses: actions/checkout@v4
+        with:
+          path: funscript-updater
+
+      # Needed by tests/test_estim_chapter_continuity.py, which runs a REAL
+      # generation through funscript-tools rather than mocking the engine.
+      - name: Checkout funscript-tools (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/funscript-tools
+          path: funscript-tools
+
+      - name: Checkout forge-ui-components (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/forge-ui-components
+          path: forge-ui-components
+
+      - name: Checkout videoflow (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/videoflow
+          path: videoflow
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            funscript-updater/requirements.txt
+            funscript-updater/requirements-dev.txt
+
+      - name: Install Python deps
+        working-directory: funscript-updater
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -e ../videoflow
+          pip install -e ../forge-ui-components
+
+      # Guards against the exact mistake made while writing this workflow:
+      # running the suite on an interpreter missing matplotlib and
+      # forge_ui_components produced 3 "failures" and 2 collection errors that
+      # were purely environmental. A missing dep must fail LOUDLY here rather
+      # than quietly as a handful of confusing test failures later.
+      - name: Verify the test environment before trusting the results
+        working-directory: funscript-updater
+        run: |
+          python - <<'PY'
+          import importlib.util, sys
+          missing = [m for m in ("matplotlib", "librosa", "soundfile", "yaml",
+                                 "forge_ui_components", "videoflow")
+                     if not importlib.util.find_spec(m)]
+          if missing:
+              sys.exit("missing importable modules: " + ", ".join(missing))
+          print("environment OK")
+          PY
+
+      - name: pytest
+        working-directory: funscript-updater
+        run: python -m pytest tests/ -q
+
+  frontend:
+    name: JS + Rust — vitest, cargo test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout funscriptforge
+        uses: actions/checkout@v4
+        with:
+          path: funscript-updater
+
+      # The frontend imports `forgemoment` by bare specifier; package.json
+      # links it as `file:../../../forgemoment` and vite.config aliases it to
+      # that source tree. It only has to exist as a sibling.
+      - name: Checkout forgemoment (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: liquid-releasing/forgemoment
+          path: forgemoment
+
+      - name: Install Tauri system deps
+        # `cargo test` compiles the crate, which links against webkit2gtk even
+        # for a --lib test run. Same list release.yml's Linux job installs.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+            patchelf file build-essential curl wget libxdo-dev libssl-dev
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install forgemoment deps
+        working-directory: forgemoment
+        run: npm ci
+
+      - name: Install npm deps
+        working-directory: funscript-updater/ui/web
+        run: npm ci
+
+      - name: vitest
+        working-directory: funscript-updater/ui/web
+        run: npx vitest run
+
+      # The Rust crate's build script requires the frontend dist to exist, so
+      # build it before compiling the tests. This doubles as a check that the
+      # bundle still builds -- a broken import is not something vitest catches,
+      # because it only loads the modules its tests import.
+      - name: Build the frontend (also produces dist/ for tauri-build)
+        working-directory: funscript-updater/ui/web
+        run: npx vite build
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: funscript-updater/ui/web/src-tauri
+
+      - name: cargo test
+        working-directory: funscript-updater/ui/web/src-tauri
+        run: cargo test --lib
