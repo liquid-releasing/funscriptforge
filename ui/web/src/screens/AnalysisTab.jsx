@@ -61,6 +61,8 @@ import {
   wipeForgeDir,
 } from '../api/forge.js';
 import { deriveAnalysisState } from '../lib/analysisState.js';
+import { progressChannel, OPS, parseProgressLine } from '../lib/progressChannels.js';
+import { applyStageEvent } from '../lib/progressStages.js';
 import { probeMediaCached } from '../hooks/useChapterClip.js';
 
 // FunscriptForge's Analysis tab uses the full default category list.
@@ -69,6 +71,11 @@ import { probeMediaCached } from '../hooks/useChapterClip.js';
 // overview. Deep per-phrase editing still happens on the dedicated
 // PhrasesTab; the sub-tab here is read-only orientation.
 const FF_ANALYSIS_CATEGORIES = ANALYSIS_CATEGORIES;
+
+// The operations whose progress belongs to this tab: the videoflow chapter
+// pipeline, the standalone audio-peaks pass, and `assess` (phrases). Any
+// other command's stages are none of this tab's business.
+const ANALYSIS_OPS = [OPS.ANALYZE, OPS.AUDIO, OPS.PHRASES];
 
 export default function AnalysisTab({
   project,
@@ -230,27 +237,30 @@ export default function AnalysisTab({
   // refresh so the corresponding panel lights up mid-pipeline rather
   // than waiting for the whole pipeline to resolve. Progressive
   // reveal — the panels fill in as their data lands on disk.
+  // Scoped to the operations this tab actually owns. It used to listen on
+  // the global `ff:progress`, which carried EVERY command's stages — so a
+  // generate running in another tab could set a stage `running` here whose
+  // `done` belonged to a different run and never arrived, leaving the tab
+  // showing a stage that never completed ("I'm stuck in assessing phrases,
+  // which was not completed when analysis happened").
   useEffect(() => {
     if (!isTauri()) return undefined;
-    let unlisten = null;
+    let unlistens = [];
     let cancelled = false;
     (async () => {
       const { listen } = await import('@tauri-apps/api/event');
-      const off = await listen('ff:progress', (event) => {
-        const raw = String(event?.payload ?? '');
-        const stripped = raw.startsWith('progress: ')
-          ? raw.slice('progress: '.length) : raw;
-        const parts = stripped.split('::');
-        const kind = parts[0];
-        const depth = parseInt(parts[1] || '0', 10);
-        const leaf = parts[2];
+      const onProgress = (event) => {
+        const parsed = parseProgressLine(event?.payload);
+        if (!parsed) return;
+        const { kind, depth, leaf } = parsed;
         // Depth 1 = outer command wrapper; depth 3+ = sub-stages.
         // Depth 2 = the stages we map to panels.
         if (!leaf || depth !== 2) return;
-        if (kind === 'start') {
-          setStages((prev) => ({ ...prev, [leaf]: 'running' }));
-        } else if (kind === 'done') {
-          setStages((prev) => ({ ...prev, [leaf]: 'done' }));
+        // The map itself is folded by applyStageEvent (lib/progressStages.js)
+        // so the start/done rule is tested directly; the side effects below
+        // stay here because they need this component's loaders.
+        setStages((prev) => applyStageEvent(prev, parsed));
+        if (kind === 'done') {
           // Audio sidecars are independent files written each stage —
           // we can refresh as soon as each lands. (refreshAudioSidecars
           // reloads all three in parallel; redundant calls are cheap
@@ -314,13 +324,20 @@ export default function AnalysisTab({
               .catch(() => { /* non-fatal — leave phrases null */ });
           }
         }
-      });
-      if (cancelled) off();
-      else unlisten = off;
+      };
+      // One listener per owned op. Resolve them together, then honour a
+      // cleanup that landed while they were in flight — otherwise an
+      // unmount during the await leaks a live listener.
+      const offs = await Promise.all(
+        ANALYSIS_OPS.map((op) => listen(progressChannel(op), onProgress)),
+      );
+      if (cancelled) offs.forEach((off) => off());
+      else unlistens = offs;
     })();
     return () => {
       cancelled = true;
-      if (unlisten) unlisten();
+      unlistens.forEach((off) => { try { off(); } catch { /* already gone */ } });
+      unlistens = [];
     };
   }, [refreshAudioSidecars, project?.path, onChaptersChange]);
 

@@ -23,6 +23,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Button, Icon, TrackStack } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import { exportWrite, revealPath, polishRead, openInForgePlayer, isTauri, pickFolder } from '../api/forge.js';
+import { progressChannel, OPS, parseProgressLine } from '../lib/progressChannels.js';
 import { svgElementToPngDataUrl } from '../lib/laneSnapshot.js';
 import { POLISH_DEVICES } from '../data/polishDevices.js';
 
@@ -241,17 +242,19 @@ export default function ExportTab({
     if (!canWrite || !modes.length) return;
     setWriting(true); setWriteError(null); setResults(null);
     setBusy({ message: `Export — packaging ${modes.map(shapeLabel).join(' + ')}…` });
-    // Export streams per-step progress over `ff:progress` (motion → stations →
-    // thumbnails → audio → packaging). Pipe each line into the footer so a slow
-    // export (unstamped-station generation, stim-audio render) visibly advances.
+    // Export streams per-step progress over its OWN channel (motion → stations
+    // → thumbnails → audio → packaging). Pipe each line into the footer so a
+    // slow export (unstamped-station generation, stim-audio render) visibly
+    // advances. Scoped to `ff:progress:export` so a concurrent analyze can no
+    // longer write into this footer — that is what the old
+    // `!line.includes('::')` filter was standing in for.
     let offProgress = null;
     try {
       if (isTauri()) {
         const { listen } = await import('@tauri-apps/api/event');
-        offProgress = await listen('ff:progress', (event) => {
-          const raw = String(event?.payload ?? '');
-          const line = raw.startsWith('progress: ') ? raw.slice('progress: '.length) : raw;
-          if (line && !line.includes('::')) setBusy({ message: line });
+        offProgress = await listen(progressChannel(OPS.EXPORT), (event) => {
+          const p = parseProgressLine(event?.payload);
+          if (p && !p.structured) setBusy({ message: p.line });
         });
       }
     } catch { /* listener is best-effort; the export still runs */ }

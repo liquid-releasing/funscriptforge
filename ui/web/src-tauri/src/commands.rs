@@ -690,15 +690,47 @@ async fn run_cli_superseding(key: &str, args: &[&str]) -> Result<String, String>
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// The global progress channel. Every streaming command emits here, and
+/// App.jsx's always-mounted listener drives the busy footer from it.
+pub(crate) const PROGRESS_EVENT: &str = "ff:progress";
+
+/// Per-operation progress channel.
+///
+/// `ff:progress` is one global event name with no job identity, so a tab
+/// listening to it hears EVERY operation. That is how a generate's stages
+/// used to land in the Analysis tab's stage list and leave a stage running
+/// that would never receive its own `done` — the dogfood report "I'm stuck
+/// in assessing phrases, which was not completed when analysis happened".
+///
+/// Each command now also emits to `ff:progress:<op>`, so a tab can subscribe
+/// to the operations it actually owns. The payload format is unchanged on
+/// both channels, so nothing downstream has to re-parse.
+pub(crate) fn scoped_progress_event(op: &str) -> String {
+    format!("{}:{}", PROGRESS_EVENT, op)
+}
+
+/// Every channel one operation's progress lines are emitted on.
+///
+/// The emit loop iterates this rather than naming channels inline, so the
+/// set is testable without an AppHandle. Dropping the scoped channel means
+/// editing this function, and `progress_event_tests` fails.
+pub(crate) fn progress_targets(op: &str) -> Vec<String> {
+    vec![PROGRESS_EVENT.to_string(), scoped_progress_event(op)]
+}
+
 // Streaming variant of run_cli. Spawns the CLI with VIDEOFLOW_PROGRESS_FILE
 // set to a unique temp path, and runs a parallel polling task that tails
 // the file, emitting each new `progress: <label>` line as a Tauri event
 // for the React side to consume. Long-running commands (auto-chapter,
 // assess) wire through this so the AcceptBar footer can show live stage
 // updates. Returns stdout exactly like run_cli once the process exits.
+//
+// `op` names the operation ("analyze", "generate", "polish", …). Lines are
+// emitted twice: once on the global `ff:progress` channel and once on this
+// operation's own `ff:progress:<op>`. See `scoped_progress_event`.
 async fn run_cli_with_progress(
     app: &AppHandle,
-    event_name: &str,
+    op: &str,
     args: &[&str],
 ) -> Result<String, String> {
     // Unique temp file for this run. PID + microseconds = unique enough
@@ -721,7 +753,7 @@ async fn run_cli_with_progress(
     // cancel catches lines that landed between the last tick and exit.
     let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
     let app_for_task = app.clone();
-    let event_name_owned = event_name.to_string();
+    let targets = progress_targets(op);
     let temp_path_for_task = temp_path.clone();
     let polling = tokio::spawn(async move {
         let mut offset: usize = 0;
@@ -732,7 +764,12 @@ async fn run_cli_with_progress(
                     for line in new_text.lines() {
                         let line = line.trim();
                         if !line.is_empty() {
-                            let _ = app_for_task.emit(&event_name_owned, line.to_string());
+                            // Global channel (app-wide busy footer) plus this
+                            // operation's own channel, so a tab can subscribe
+                            // to only the work it owns.
+                            for target in &targets {
+                                let _ = app_for_task.emit(target.as_str(), line.to_string());
+                            }
                         }
                     }
                     *offset = data.len();
@@ -1059,7 +1096,7 @@ pub async fn analyze_chapters_with_videoflow(
     if resume.unwrap_or(false) {
         args.push("--resume");
     }
-    let stdout = run_cli_with_progress(&app, "ff:progress", &args).await?;
+    let stdout = run_cli_with_progress(&app, "analyze", &args).await?;
 
     let parsed: CliChaptersAuto = serde_json::from_str(&stdout)
         .map_err(|e| format!("could not parse cli.py auto-chapter output: {}", e))?;
@@ -1157,7 +1194,7 @@ pub async fn generate_funscript(
     }
 
     let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let stdout = run_cli_with_progress(&app, "ff:progress", &arg_refs).await?;
+    let stdout = run_cli_with_progress(&app, "generate", &arg_refs).await?;
 
     serde_json::from_str(&stdout)
         .map_err(|e| format!("could not parse cli.py generate output: {}", e))
@@ -1302,7 +1339,7 @@ pub async fn analyze_audio_peaks(
     // analyze_chapters_with_videoflow and analyze_phrases. Skipped events
     // on sidecar cache hit (decode is bypassed entirely) — the consumer
     // sees a brief busy banner with no steps, then the result lands.
-    let stdout = run_cli_with_progress(&app, "ff:progress", &args).await?;
+    let stdout = run_cli_with_progress(&app, "audio", &args).await?;
     let parsed: CliAudioPeaks = serde_json::from_str(&stdout)
         .map_err(|e| format!("could not parse cli.py audio-peaks output: {}", e))?;
 
@@ -1879,7 +1916,7 @@ pub async fn analyze_phrases(
     // sidecar that bucket logic depends on doesn't exist.
     let stdout = run_cli_with_progress(
         &app,
-        "ff:progress",
+        "phrases",
         &[
             "assess",
             &funscript_path,
@@ -2737,7 +2774,7 @@ pub async fn polish_apply(
     // per-chapter status ("Forging E-Stim — chapter 3 of 13…") to the footer;
     // the whole-track forge is ~2s/chapter serially and otherwise reads as a
     // hang on a static line (user flagged 2026-06-08).
-    let out = run_cli_with_progress(&app, "ff:progress", &argv).await?;
+    let out = run_cli_with_progress(&app, "polish", &argv).await?;
     serde_json::from_str(&out).map_err(|e| format!("parse polish apply: {}", e))
 }
 
@@ -2920,7 +2957,7 @@ pub async fn export_write(
     // Stream per-step progress (motion → stations → thumbnails → audio →
     // packaging) to the footer; export can be slow when it generates unstamped
     // stations or renders stim audio, and used to sit on a static "Writing…".
-    let out = run_cli_with_progress(&app, "ff:progress", &argv).await;
+    let out = run_cli_with_progress(&app, "export", &argv).await;
     for p in &preview_tmps {
         let _ = tokio::fs::remove_file(p).await;
     }
@@ -2948,7 +2985,7 @@ pub async fn import_forge_bundle(
         args.push(d);
     }
     let argv: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let out = run_cli_with_progress(&app, "ff:progress", &argv).await?;
+    let out = run_cli_with_progress(&app, "import", &argv).await?;
     serde_json::from_str(&out).map_err(|e| format!("parse import result: {}", e))
 }
 
@@ -3866,5 +3903,75 @@ mod phrases_sidecar_tests {
         let parsed: DiskPhrasesSidecar =
             serde_json::from_str(raw).expect("string chapter_id must parse");
         assert_eq!(parsed.slices[0].chapter_id.as_str(), Some("ch_1"));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Progress channel naming.
+//
+// `ff:progress` carried no job identity: 7 emitting commands, one event
+// name, and every subscribed tab heard all of them. A generate's stages
+// landed in the Analysis tab's stage map and left a stage `running` that
+// would never get its matching `done`, because the `done` belonged to a
+// different operation. Scoping each run to `ff:progress:<op>` is what lets
+// a tab hear only its own work. These pin the naming both sides depend on
+// — the Rust emitter and the JS `progressChannel()` must agree exactly.
+#[cfg(test)]
+mod progress_event_tests {
+    use super::{scoped_progress_event, PROGRESS_EVENT};
+
+    #[test]
+    fn global_channel_name_is_unchanged() {
+        // App.jsx's always-mounted footer listener still uses this name;
+        // renaming it silently kills the busy banner.
+        assert_eq!(PROGRESS_EVENT, "ff:progress");
+    }
+
+    #[test]
+    fn scopes_by_operation() {
+        assert_eq!(scoped_progress_event("analyze"), "ff:progress:analyze");
+        assert_eq!(scoped_progress_event("generate"), "ff:progress:generate");
+        assert_eq!(scoped_progress_event("phrases"), "ff:progress:phrases");
+    }
+
+    #[test]
+    fn scoped_channel_is_never_the_global_one() {
+        // The whole point is that a scoped subscriber does NOT hear other
+        // operations. If these ever collided, every tab would be back to
+        // hearing everything with no visible symptom until dogfood.
+        for op in ["analyze", "generate", "audio", "phrases", "polish", "export", "import"] {
+            assert_ne!(scoped_progress_event(op), PROGRESS_EVENT);
+        }
+    }
+
+    #[test]
+    fn every_line_goes_to_both_the_global_and_the_scoped_channel() {
+        // The emit loop iterates progress_targets. If someone drops the
+        // scoped emit, the busy footer still works and NOTHING else would
+        // catch it until dogfood — this is that catch.
+        let t = super::progress_targets("analyze");
+        assert_eq!(t, vec!["ff:progress".to_string(), "ff:progress:analyze".to_string()]);
+    }
+
+    #[test]
+    fn the_global_channel_is_never_dropped() {
+        // App.jsx's footer listener depends on the global channel carrying
+        // every operation; scoping must not have made it selective.
+        for op in ["analyze", "generate", "audio", "phrases", "polish", "export", "import"] {
+            assert!(
+                super::progress_targets(op).contains(&PROGRESS_EVENT.to_string()),
+                "op {op} stopped reaching the global busy footer",
+            );
+        }
+    }
+
+    #[test]
+    fn every_operation_gets_a_distinct_channel() {
+        let ops = ["analyze", "generate", "audio", "phrases", "polish", "export", "import"];
+        let mut names: Vec<String> = ops.iter().map(|o| scoped_progress_event(o)).collect();
+        names.sort();
+        let before = names.len();
+        names.dedup();
+        assert_eq!(names.len(), before, "two operations share a progress channel");
     }
 }

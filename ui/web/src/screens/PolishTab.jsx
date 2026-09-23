@@ -11,6 +11,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { polishApply, polishChannels, polishRead, polishWrite, isTauri } from '../api/forge.js';
+import { progressChannel, OPS, parseProgressLine } from '../lib/progressChannels.js';
 import { POLISH_DEVICES, outputFilesFor } from '../data/polishDevices.js';
 import { previewPass, resolveKnobs, actionsToDense, engineClamp, computeStats } from '../data/polishEngine.js';
 import {
@@ -233,20 +234,24 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
         ? `Forging ${d.label} — generating the multi-axis TCode set…`
         : `Forging ${d.label} — clamping the whole track…`;
     setBusy({ message: forgingMsg });
-    // The forge streams per-chapter progress over the `ff:progress` Tauri
-    // event (run_cli_with_progress). Pipe each line straight into the footer
-    // message so a 13-chapter / ~30s forge advances ("…chapter 7 of 13…")
-    // instead of sitting on one static line (user: "does not return").
+    // The forge streams per-chapter progress over this op's OWN channel
+    // (run_cli_with_progress(&app, "polish", ...)). Pipe each line straight
+    // into the footer message so a 13-chapter / ~30s forge advances
+    // ("…chapter 7 of 13…") instead of sitting on one static line
+    // (user: "does not return").
+    //
+    // This used to listen on the global `ff:progress` and drop anything
+    // containing `::` — a guess at "that structured line belongs to the
+    // analyzer, not to me." Scoping the channel makes it a fact instead of a
+    // guess; we still render only unstructured lines, because those are the
+    // human-readable ones the footer wants.
     let offProgress = null;
     try {
       if (isTauri()) {
         const { listen } = await import('@tauri-apps/api/event');
-        offProgress = await listen('ff:progress', (event) => {
-          const raw = String(event?.payload ?? '');
-          const line = raw.startsWith('progress: ') ? raw.slice('progress: '.length) : raw;
-          // Only our own simple Polish lines (not the analyzer's `a::b::c`
-          // structured lines, which may still be flowing from another tab).
-          if (line && !line.includes('::')) setBusy({ message: line });
+        offProgress = await listen(progressChannel(OPS.POLISH), (event) => {
+          const p = parseProgressLine(event?.payload);
+          if (p && !p.structured) setBusy({ message: p.line });
         });
       }
     } catch { /* listener is best-effort; the forge still runs */ }
