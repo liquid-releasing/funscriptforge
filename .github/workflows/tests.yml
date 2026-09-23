@@ -61,6 +61,17 @@ jobs:
           repository: liquid-releasing/videoflow
           path: videoflow
 
+      # The shipped app ALWAYS has ffmpeg -- release.yml bundles a static build
+      # into the Tauri resources -- so tests are entitled to assume it. Without
+      # it the mp3 encode falls back to WAV ("beat mp3 requested but ffmpeg
+      # missing -- kept WAV", cli.py:1248) and the bundle-contents assertions
+      # fail for a reason that has nothing to do with the code under test.
+      # Found by this workflow's first run.
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -94,6 +105,9 @@ jobs:
                      if not importlib.util.find_spec(m)]
           if missing:
               sys.exit("missing importable modules: " + ", ".join(missing))
+          import shutil
+          if not shutil.which("ffmpeg"):
+              sys.exit("ffmpeg not on PATH -- mp3 encodes silently fall back to WAV")
           print("environment OK")
           PY
 
