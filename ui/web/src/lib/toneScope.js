@@ -59,9 +59,19 @@ export const SCOPE_DEFAULTS = Object.freeze({
   // "Ignore sub-second dips; they are texture, not quiet passages." The
   // interleaving is WANTED — it is what the user called the texture.
   minRegionMs: 1500,
-  // Blend over each edge. Long enough to be inaudible as a switch, short
-  // enough that a 1.5 s region still reaches meaningful weight.
-  rampMs: 400,
+  // Blend over each edge.
+  //
+  // ★ The binding constraint is the STROKE SPACING, not taste. The ramp is
+  // only ever sampled at action timestamps, so a ramp shorter than a couple of
+  // stroke intervals is invisible — measured at the real file's 255 ms
+  // spacing, ramps of 255/400/500/600/1000 ms give a worst-case step of
+  // 9/6/5/4/3 position units at the region edge. Below ~2 intervals the ramp
+  // aliases away entirely and a 255 ms ramp is WORSE than no ramp at all.
+  //
+  // 600 ms is ~2.4 strokes at that spacing, and stays under the 750 ms ceiling
+  // imposed by 2*rampMs <= minRegionMs (asserted in the tests) so that even
+  // the shortest selectable region can still reach full strength.
+  rampMs: 600,
 });
 
 // ---------------------------------------------------------------------------

@@ -22,7 +22,7 @@
 // `project.toneSuggestion`, else 'build'.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pill, Icon, MediaViewer, Slider, ChapterRibbon } from 'forgemoment';
+import { Pill, Icon, MediaViewer, Slider, Segmented, ChapterRibbon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import {
   createChaptersSidecar,
@@ -36,6 +36,8 @@ import {
   readMarkers,
   saveMarkers,
 } from '../api/forge.js';
+import { SCOPE } from '../lib/toneScope.js';
+import { applyTone } from '../lib/toneCurve.js';
 import { useTransformPreview } from '../api/useTransformPreview.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 import { chapterDisplayLabel, splitAt, joinAt } from '../lib/chapterOps.js';
@@ -164,6 +166,14 @@ function intentToToneId(intent) {
   return hit?.id ?? null;
 }
 
+// Label fragment for the After panel, so a scoped preview says so rather
+// than looking like a weak version of the unscoped one.
+function scopeSuffix(scope) {
+  if (scope === SCOPE.QUIET) return ' · quiet parts only';
+  if (scope === SCOPE.LOUD) return ' · loud parts only';
+  return '';
+}
+
 function defaultToneParams() {
   const out = {};
   TONES.forEach((t) => {
@@ -171,7 +181,9 @@ function defaultToneParams() {
     // as "tone-flavored toward source" rather than "tone fully applied."
     // Users escalate by dragging up; the half-mix matches how most
     // pickers land in practice (start moderate, push if you like it).
-    out[t.id] = { impact: 0.5 };
+    // scope defaults to EVERYWHERE, which yields a weight of 1 for every
+    // action -- byte-identical to the behaviour before Tone Scope existed.
+    out[t.id] = { impact: 0.5, scope: SCOPE.EVERYWHERE };
     t.params.forEach((p) => { out[t.id][p.id] = p.def; });
   });
   return out;
@@ -223,65 +235,8 @@ function seedAccepted(chapters, chapterEdits) {
   return set;
 }
 
-// Apply a tone to a chapter's slice of actions. JS preview only — the
-// canonical transform will move to `python cli.py tone`. Curve shapes mirror
-// the prototype (ui_design/.../tab-Chapters.jsx::applyToneCurve) so the
-// before/after preview reads the same here.
-function applyTone(actions, chapterStart, chapterEnd, tone, params) {
-  if (!actions || actions.length === 0) return [];
-  const slice = actions.filter((a) => a.at >= chapterStart && a.at <= chapterEnd);
-  if (slice.length === 0) return [];
-  // 'none' / Untoned — passthrough, no transform. Lets the user Accept
-  // a chapter without committing to a tone.
-  if (tone.id === 'none') return slice.map((a) => ({ at: a.at, pos: a.pos }));
-  // 'tame' is applied via the backend transform on Accept (cycle-drop +
-  // humanize); its real before/after comes from useTransformPreview, not
-  // this JS path. Passthrough here so any merge that happens to encounter
-  // a tame'd chapter doesn't throw — it just leaves the slice untouched.
-  if (tone.id === 'tame') return slice.map((a) => ({ at: a.at, pos: a.pos }));
-  const dur = Math.max(1, chapterEnd - chapterStart);
-  const impact = params.impact ?? 1;
-  const clamp = (v) => Math.max(0, Math.min(100, v));
-
-  return slice.map((a, i, arr) => {
-    const t = (a.at - chapterStart) / dur; // 0..1 progress through chapter
-    let v = a.pos;
-    if (tone.id === 'tender') {
-      const prev = arr[Math.max(0, i - 2)].pos;
-      const next = arr[Math.min(arr.length - 1, i + 2)].pos;
-      const smoothed = (prev + v * 2 + next) / 4;
-      const ceilingPull = (params.ceiling - 110) / 70;
-      v = smoothed - (smoothed - 50) * (0.25 - ceilingPull * 0.1);
-      v = v - (v - 50) * params.softness * 0.35;
-    } else if (tone.id === 'build') {
-      const ramp = t ** (1 - params.ramp * 0.7 + 0.3);
-      const cap = 100 - params.headroom;
-      v = 50 + (v - 50) * (0.4 + ramp * 0.85);
-      if (v > cap) v = cap;
-    } else if (tone.id === 'tease') {
-      const before = t < params.release;
-      v = before
-        ? 50 + (v - 50) * (1 - params.withhold * 0.7)
-        : 50 + (v - 50) * (1 + params.withhold * 0.5);
-    } else if (tone.id === 'edge') {
-      const inHold = t < params.drop;
-      v = inHold
-        ? 70 + (v - 50) * (1 - params.hold * 0.55)
-        : v - (v - 50) * 0.35;
-    } else if (tone.id === 'climax') {
-      v = 50 + (v - 50) * (1 + params.contrast * 0.85);
-      const sgn = v >= 50 ? 1 : -1;
-      v += sgn * (params.density - 1) * 8;
-    } else if (tone.id === 'dominant') {
-      v = v - (v - 50) * params.recenter * 0.5;
-      const beat = Math.sin(t * Math.PI * 18) * params.rhythm * 14;
-      v = 50 + (v - 50) * (1 + params.rhythm * 0.3) + beat * 0.4;
-    }
-    // Mix toned curve toward original by impact (0 = original, 1 = full tone)
-    const mixed = a.pos + (v - a.pos) * impact;
-    return { at: a.at, pos: Math.round(clamp(mixed)) };
-  });
-}
+// applyTone moved to ../lib/toneCurve.js when Tone Scope landed — it is
+// pure, and it now has tests.
 
 function fmtTimeShort(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -1616,13 +1571,49 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                     its strength lives entirely in Max BPM + Groove — so it
                     skips Impact and shows just its two backend params. */}
                 {tone.id !== 'tame' && (
-                  <Slider
-                    label="Impact — how much of this tone to apply"
-                    value={toneParams.impact ?? 0.5}
-                    min={0} max={1} step={0.01}
-                    valueLabel={(toneParams.impact ?? 0.5).toFixed(2)}
-                    onChange={(v) => setParam('impact', v)}
-                  />
+                  <>
+                    <Slider
+                      label="Impact — how much of this tone to apply"
+                      value={toneParams.impact ?? 0.5}
+                      min={0} max={1} step={0.01}
+                      valueLabel={(toneParams.impact ?? 0.5).toFixed(2)}
+                      onChange={(v) => setParam('impact', v)}
+                    />
+                    {/* Tone Scope — WHERE the tone applies, as opposed to how
+                        much of it. A scope rather than a second slider, so it
+                        composes with every tone and reads "tone down the loud
+                        parts" as naturally as "lift the quiet ones".
+                        Regions are chosen by absolute stroke depth, never by
+                        the chart's colour — see lib/toneScope.js. */}
+                    <div style={{ marginTop: 14 }}>
+                      <div style={{
+                        fontSize: 11, color: 'var(--text-dim)',
+                        marginBottom: 6, fontWeight: 600,
+                      }}>
+                        Apply to — which parts of this chapter
+                      </div>
+                      <Segmented
+                        options={[
+                          { value: SCOPE.EVERYWHERE, label: 'Everywhere' },
+                          { value: SCOPE.QUIET, label: 'Only the quiet parts' },
+                          { value: SCOPE.LOUD, label: 'Only the loud parts' },
+                        ]}
+                        value={toneParams.scope ?? SCOPE.EVERYWHERE}
+                        onChange={(v) => setParam('scope', v)}
+                      />
+                      {/* The design doc is explicit that this must be stated:
+                          a tone rewrites the SHARED motion funscript, which the
+                          Handy, OSSM and FOC-Stim all play. Unstated, the first
+                          person who scopes a tone and then plays on a Handy
+                          files it as a bug. */}
+                      <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginTop: 6 }}>
+                        {(toneParams.scope ?? SCOPE.EVERYWHERE) === SCOPE.EVERYWHERE
+                          ? 'The whole chapter. Changes the motion every device plays.'
+                          : 'Selected by stroke depth, blended in at the edges. '
+                            + 'Changes the motion every device plays.'}
+                      </div>
+                    </div>
+                  </>
                 )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginTop: 14 }}>
                   {tone.params.map((p) => {
@@ -1664,6 +1655,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                     : tone.id === 'tame'
                       ? `Tame · Max BPM ${toneParams.max_bpm ?? 360}${tameLoading ? ' · updating…' : ''}`
                       : `${tone.label} · impact ${Math.round((toneParams.impact ?? 0.5) * 100)}%`
+                        + scopeSuffix(toneParams.scope)
                 }
                 accent={tone.color}
               >
