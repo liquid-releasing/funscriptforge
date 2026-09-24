@@ -12,6 +12,7 @@ import ChannelStack from './ChannelStack.jsx';
 import { viewerLoad } from '../api/forge.js';
 import { analyzeChannels, livelinessInWindow, posAt } from '../lib/forgeStats.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
+import { resolveMonitorFunscript } from '../lib/monitorChannel.js';
 
 // Intensity arc: prefer the felt `volume` channel; else a normalized velocity
 // envelope of the device's primary channel. Returns [{ at, v:0..1 }].
@@ -90,12 +91,18 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
     return () => { live = false; };
   }, [loadKey, device, monitorChannelName]);
 
-  // Fall back to the decimated center-lane actions until the full-res fetch lands.
-  const monitorFunscript = useMemo(() => {
-    if (monitorActions.length) return { actions: monitorActions };
-    const ch = channels.find((c) => c.name === monitorChannelName) || channels[0];
-    return { actions: ch?.actions || [] };
-  }, [monitorActions, channels, monitorChannelName]);
+  // Fall back to the decimated center-lane actions until the full-res fetch
+  // lands — but only ever for the SAME channel. The previous shape ended in
+  // `|| channels[0]`, so an unresolved name (device switch, or before
+  // `channels` reloaded) rendered a DIFFERENT channel's curve while the label
+  // still named the selected one. See lib/monitorChannel.js.
+  const monitorResolved = useMemo(
+    () => resolveMonitorFunscript(monitorActions, channels, monitorChannelName),
+    [monitorActions, channels, monitorChannelName],
+  );
+  const monitorFunscript = useMemo(
+    () => ({ actions: monitorResolved.actions }), [monitorResolved],
+  );
 
   // The 16k audio is fine for the full-timeline lane (it re-bins to pixel
   // width) but blocky in the monitor's ~12s window. Fetch a high-res envelope
