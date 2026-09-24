@@ -542,13 +542,42 @@ class TestTheGeneratorIsActuallyWiredUp(unittest.TestCase):
         self.assertLess(self._at(acts, 0), 50)
         self.assertLess(self._at(acts, TRACK_HI), 50)
 
-    def test_the_ramp_climbs_across_the_whole_scene(self):
+    def test_the_ramp_is_one_arc_and_never_resets(self):
         """What moving it to track level was FOR. Per chapter it reset three
-        times; now one arc spans the track."""
+        times; now one arc spans the track.
+
+        ★ This used to compare volume at 50s against 550s and assert the
+        later was higher. That passed only because of a bug in
+        `forge.polish.dense_to_actions`, which kept local extrema ONLY and so
+        discarded every point inside a flat run -- making a saturated plateau
+        interpolate as though it were still climbing. With plateau shoulders
+        preserved, the real ramp is ~97 by 20s and creeps to 99, so both
+        samples read 99 and the old assertion failed. The premise was the
+        artifact, not the ramp.
+
+        The property that actually distinguishes one track-level arc from
+        three per-chapter ramps is that the interior never RESETS: a
+        per-chapter ramp sawtooths down at each boundary. So assert against
+        the running maximum instead of against a second sample, which holds
+        whether or not the arc has saturated.
+        """
         acts = self._actions("volume")
-        early = self._at(acts, 50_000)
-        late = self._at(acts, 550_000)
-        self.assertGreater(late, early)
+        # Skip the authored open and close (covered by
+        # test_the_scene_still_opens_and_closes) and walk the body.
+        peak = 0.0
+        worst_drop, worst_at = 0.0, None
+        for t in range(20_000, TRACK_HI - 20_000, 1_000):
+            v = self._at(acts, t)
+            peak = max(peak, v)
+            if peak - v > worst_drop:
+                worst_drop, worst_at = peak - v, t
+        # A per-chapter ramp dropped to 6-11 out of 100 at each seam, so a
+        # real reset is a ~90-point fall. 12 leaves room for the preset's own
+        # modulation without admitting anything that reads as a reset.
+        self.assertLess(
+            worst_drop, 12.0,
+            f"volume fell {worst_drop:.0f} below its running peak at {worst_at}ms "
+            f"— that is a ramp reset, not modulation")
 
     def test_pulse_rise_time_does_not_spike_at_a_boundary(self):
         """It is built from the INVERTED ramp, so a per-chapter ramp made it

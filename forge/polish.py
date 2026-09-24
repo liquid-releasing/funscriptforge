@@ -418,15 +418,45 @@ def actions_to_dense(actions: list[dict], sr_ms: int = 10) -> list[dict]:
 
 
 def dense_to_actions(samples: list[dict]) -> list[dict]:
-    """Sparsify dense samples to local extrema (rounded int positions)."""
+    """Sparsify dense samples to the points that define the shape.
+
+    Keeps a sample wherever the SLOPE CHANGES -- which covers local extrema
+    (rise then fall) and, critically, the ends of flat plateaus.
+
+    ★ This used to keep local extrema only::
+
+        if (b > a and b >= c) or (b < a and b <= c):
+
+    On a plateau ``b == a``, so neither branch fires and EVERY point in the
+    flat run was discarded, including the last one before a drop. Players
+    interpolate linearly between stored points, so the drop then started at
+    the beginning of the plateau instead of at its end.
+
+    Measured on a real project: a 2.5-second `stop` event at 45.3s left
+    stored samples of (10.21s, 89) then (45.80s, 6) -- nothing in between --
+    so the device played a **35-second fade** starting at 10s. The user's
+    long-standing report, "it goes blank for an undetermined amount of time
+    where you can hear the beat and nothing is happening", is this: the
+    duration was determined by how long the preceding plateau happened to be.
+
+    It bites hardest on volume, frequency and pulse_rise_time, which are
+    mostly flat plateaus, and it smears the leading edge of every event.
+    """
     if not samples:
         return []
     if len(samples) <= 2:
         return [{"at": _round_half_up(s["at"]), "pos": _round_half_up(s["pos"])} for s in samples]
+
+    def _sign(x: float) -> int:
+        return (x > 0) - (x < 0)
+
     out = [{"at": _round_half_up(samples[0]["at"]), "pos": _round_half_up(samples[0]["pos"])}]
     for i in range(1, len(samples) - 1):
         a, b, c = samples[i - 1]["pos"], samples[i]["pos"], samples[i + 1]["pos"]
-        if (b > a and b >= c) or (b < a and b <= c):
+        # Slope change: extremum (+1 -> -1), plateau end (0 -> +/-1) or
+        # plateau start (+/-1 -> 0). A straight run keeps neither endpoint,
+        # which is the point of sparsifying.
+        if _sign(b - a) != _sign(c - b):
             out.append({"at": _round_half_up(samples[i]["at"]), "pos": _round_half_up(b)})
     out.append({"at": _round_half_up(samples[-1]["at"]), "pos": _round_half_up(samples[-1]["pos"])})
     return out

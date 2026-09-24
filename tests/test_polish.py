@@ -478,3 +478,98 @@ class TestPolishCLI(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSparsifyKeepsPlateauShoulders(unittest.TestCase):
+    """dense_to_actions must keep the last point of a flat run.
+
+    Players interpolate linearly between stored points. The old rule kept
+    local extrema only -- `(b > a and b >= c) or (b < a and b <= c)` -- and on
+    a plateau `b == a`, so every point in the flat run was dropped, including
+    the one immediately before a drop. The drop then began at the START of the
+    plateau instead of its end.
+
+    Measured on a real project before the fix: a 2.5s `stop` event at 45.3s
+    left stored samples (10.21s, 89) then (45.80s, 6) with nothing between, so
+    the device played a 35-second fade starting at 10s.
+    """
+
+    @staticmethod
+    def _dense(pairs):
+        return [{"at": at, "pos": pos} for at, pos in pairs]
+
+    def test_plateau_end_is_kept_before_a_drop(self):
+        from forge.polish import dense_to_actions
+        dense = self._dense([(i * 100, 90) for i in range(20)]
+                            + [(2000, 6), (2100, 6)]
+                            + [(2200 + i * 100, 90) for i in range(5)])
+        kept = {a["at"]: a["pos"] for a in dense_to_actions(dense)}
+        self.assertIn(1900, kept, "the last plateau sample before the drop was discarded")
+        self.assertEqual(kept[1900], 90)
+
+    def test_the_drop_stays_a_step_not_a_ramp(self):
+        from forge.polish import dense_to_actions
+        dense = self._dense([(i * 100, 90) for i in range(20)]
+                            + [(2000, 6), (2100, 6)]
+                            + [(2200 + i * 100, 90) for i in range(5)])
+        out = dense_to_actions(dense)
+        ats = [a["at"] for a in out]
+        # The sample immediately preceding the trough must be adjacent in
+        # time, or the player ramps across the whole plateau.
+        i = ats.index(2000)
+        self.assertLessEqual(2000 - ats[i - 1], 100)
+
+    def test_plateau_start_is_kept_after_a_rise(self):
+        from forge.polish import dense_to_actions
+        dense = self._dense([(0, 0), (100, 45), (200, 90)]
+                            + [(300 + i * 100, 90) for i in range(10)])
+        kept = {a["at"] for a in dense_to_actions(dense)}
+        self.assertIn(200, kept, "the point where the rise levels off was discarded")
+
+    def test_local_extrema_are_still_kept(self):
+        from forge.polish import dense_to_actions
+        dense = self._dense([(0, 10), (100, 90), (200, 10), (300, 90), (400, 10)])
+        kept = {a["at"]: a["pos"] for a in dense_to_actions(dense)}
+        for at in (100, 200, 300):
+            self.assertIn(at, kept)
+
+    def test_a_straight_run_is_still_sparsified(self):
+        # The whole point of the pass: collinear interior points are dropped.
+        from forge.polish import dense_to_actions
+        dense = self._dense([(i * 100, i * 5) for i in range(11)])
+        self.assertEqual(len(dense_to_actions(dense)), 2)
+
+    def test_a_constant_signal_keeps_only_its_endpoints(self):
+        from forge.polish import dense_to_actions
+        dense = self._dense([(i * 100, 50) for i in range(10)])
+        out = dense_to_actions(dense)
+        self.assertEqual([a["at"] for a in out], [0, 900])
+
+    def test_round_trip_preserves_the_plateau_when_interpolated(self):
+        """The property that actually matters: what the device plays."""
+        from forge.polish import dense_to_actions
+        dense = self._dense([(i * 100, 90) for i in range(20)]
+                            + [(2000, 6)]
+                            + [(2100 + i * 100, 90) for i in range(5)])
+        out = dense_to_actions(dense)
+
+        def value_at(t):
+            lo = max(i for i, a in enumerate(out) if a["at"] <= t)
+            if lo == len(out) - 1:
+                return out[lo]["pos"]
+            a, b = out[lo], out[lo + 1]
+            span = (b["at"] - a["at"]) or 1
+            return a["pos"] + (b["pos"] - a["pos"]) * (t - a["at"]) / span
+
+        # Mid-plateau must still read as the plateau, not as part of a fade.
+        self.assertEqual(value_at(1000), 90)
+        self.assertEqual(value_at(1800), 90)
+        self.assertEqual(value_at(2000), 6)
+
+    def test_empty_and_tiny_inputs(self):
+        from forge.polish import dense_to_actions
+        self.assertEqual(dense_to_actions([]), [])
+        one = self._dense([(0, 5)])
+        self.assertEqual(len(dense_to_actions(one)), 1)
+        two = self._dense([(0, 5), (100, 9)])
+        self.assertEqual(len(dense_to_actions(two)), 2)
