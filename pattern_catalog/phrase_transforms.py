@@ -556,9 +556,11 @@ class _BlendSeams(PhraseTransform):
     """Smooth sharp transitions where adjacent phrase transforms create abrupt jumps.
 
     Computes local velocity (|Δpos / Δt| in pos/ms) between consecutive actions.
-    Actions near high-velocity jumps receive a stronger LPF blend; low-velocity
-    regions are left almost unchanged.  Smoothing concentrates automatically at
-    the seams between differently-styled sections without disturbing normal strokes.
+    Velocities at or below ``max_velocity`` are left EXACTLY unchanged; above it
+    the LPF strength ramps from 0 to ``max_strength`` over the next
+    ``max_velocity`` of headroom. So smoothing concentrates at genuine seams
+    between differently-styled sections and normal strokes are untouched —
+    literally, not approximately.
 
     Uses a **bilateral** (forward + backward) LPF so the seam is softened
     symmetrically — approaching actions are blended, not just departing ones.
@@ -583,11 +585,30 @@ class _BlendSeams(PhraseTransform):
             velocities.append(dp / dt)
         velocities[0] = velocities[1] if len(actions) > 1 else 0.0
 
-        # Per-action blend strength: proportional to how far velocity exceeds threshold
-        strengths = [
-            min(1.0, v / max_vel) * max_strength if max_vel > 0 else 0.0
-            for v in velocities
-        ]
+        # Per-action blend strength.
+        #
+        # ★ This used to be `min(1.0, v / max_vel) * max_strength`, which has no
+        # threshold at all: strength rose proportionally from ZERO velocity, so
+        # every ordinary stroke was low-passed. Measured on a real 29-minute
+        # project (p98 velocity 377 u/s against the 500 u/s default), it drove
+        # median stroke depth from 76/64/86/84/88/88 per chapter down to a
+        # uniform 30 — not merely quieter, but with every chapter's dynamics
+        # erased. Export runs this pass ON BY DEFAULT, so authored dynamics
+        # (chapter tones especially) were being flattened on the way out.
+        #
+        # The name, the description, the docstring and this parameter's own
+        # help text all describe a SEAM-LOCAL operation that "leaves normal
+        # strokes untouched". Now it is one: strength is 0 at or below the
+        # threshold and ramps to full over the next `max_vel` above it, so only
+        # genuine discontinuities are blended. The bilateral LPF still carries
+        # the softening into the strokes either side of a seam.
+        if max_vel > 0:
+            strengths = [
+                min(1.0, (v - max_vel) / max_vel) * max_strength if v > max_vel else 0.0
+                for v in velocities
+            ]
+        else:
+            strengths = [0.0] * len(velocities)
 
         # Bilateral LPF: average forward and backward passes for symmetric blending
         positions = [a["pos"] for a in actions]
@@ -1563,7 +1584,7 @@ TRANSFORM_CATALOG: Dict[str, PhraseTransform] = {
                 "max_velocity": TransformParam(
                     label="Max velocity (pos/ms)", type="float", default=0.50,
                     min_val=0.05, max_val=2.0, step=0.05,
-                    help="Velocity threshold above which full blending is applied. Lower = catch more transitions.",
+                    help="Blending starts above this velocity and reaches full strength at twice it. At or below it, strokes are untouched. Lower = catch more transitions.",
                 ),
                 "max_strength": TransformParam(
                     label="Max blend strength", type="float", default=0.70,

@@ -765,6 +765,80 @@ class TestReadmeExamples(unittest.TestCase):
             self.assertLessEqual(a["pos"], 100)
 
     # ------------------------------------------------------------------
+    # blend_seams BEHAVIOUR (not just shape)
+    #
+    # The two tests above only checked length and range, which is how the
+    # following bug shipped and survived: `strengths` was
+    # `min(1.0, v / max_vel) * max_strength` -- proportional from ZERO
+    # velocity, with no threshold -- so every ordinary stroke got low-passed.
+    # Measured on a real 29-minute project it drove median stroke depth per
+    # chapter from 76/64/86/84/88/88 down to a uniform 30, erasing the
+    # dynamics between chapters. Export runs this pass on by default, so
+    # authored chapter tones were flattened on the way out.
+    # ------------------------------------------------------------------
+    def test_blend_seams_leaves_sub_threshold_strokes_bit_identical(self):
+        """The regression: ordinary strokes must come back EXACTLY unchanged."""
+        # 60 pos units over 100 ms = 0.6 pos/ms... too fast. Use 300 ms so the
+        # velocity (0.2 pos/ms) sits well under the 0.5 default.
+        actions = _timed_actions([20, 80] * 8, start_ms=0, step_ms=300)
+        before = [a["pos"] for a in actions]
+        result = TRANSFORM_CATALOG["blend_seams"].apply(actions, {})
+        self.assertEqual([a["pos"] for a in result], before)
+
+    def test_blend_seams_preserves_amplitude_differences_between_sections(self):
+        """Two sections of different depth must stay different.
+
+        This is the property export was destroying: a shallow section and a
+        deep one both collapsed to the same amplitude, so every chapter came
+        out feeling identical.
+        """
+        shallow = _timed_actions([40, 60] * 8, start_ms=0, step_ms=300)
+        deep = _timed_actions([5, 95] * 8, start_ms=5000, step_ms=300)
+        result = TRANSFORM_CATALOG["blend_seams"].apply(shallow + deep, {})
+        amp = lambda lo, hi: max(a["pos"] for a in result if lo <= a["at"] <= hi)                            - min(a["pos"] for a in result if lo <= a["at"] <= hi)
+        self.assertEqual(amp(0, 4999), 20)
+        self.assertEqual(amp(5000, 99999), 90)
+
+    def test_blend_seams_does_smooth_a_genuine_high_velocity_seam(self):
+        """It must still do its job, or the fix is just a disable switch."""
+        # A calm run, then a single enormous jump: 95 units in 20 ms = 4.75
+        # pos/ms, far above the 0.5 threshold.
+        actions = _timed_actions([50] * 6, start_ms=0, step_ms=300)
+        actions.append({"at": 1520, "pos": 0})
+        actions.append({"at": 1540, "pos": 95})
+        actions += _timed_actions([50] * 6, start_ms=1840, step_ms=300)
+        spike_before = 95
+        result = TRANSFORM_CATALOG["blend_seams"].apply(actions, {})
+        spike_after = next(a["pos"] for a in result if a["at"] == 1540)
+        self.assertLess(spike_after, spike_before,
+                        "a real high-velocity seam should still be blended")
+
+    def test_blend_seams_threshold_boundary_is_untouched(self):
+        """At exactly max_velocity the strength is 0 -- the ramp starts above."""
+        # 30 units over 60 ms = 0.5 pos/ms, exactly the default threshold.
+        actions = _timed_actions([35, 65] * 8, start_ms=0, step_ms=60)
+        before = [a["pos"] for a in actions]
+        result = TRANSFORM_CATALOG["blend_seams"].apply(
+            actions, {"max_velocity": 0.5, "max_strength": 0.7})
+        self.assertEqual([a["pos"] for a in result], before)
+
+    def test_blend_seams_max_strength_zero_is_a_no_op(self):
+        actions = _timed_actions([0, 100] * 8, start_ms=0, step_ms=20)
+        before = [a["pos"] for a in actions]
+        result = TRANSFORM_CATALOG["blend_seams"].apply(
+            actions, {"max_strength": 0.0})
+        self.assertEqual([a["pos"] for a in result], before)
+
+    def test_blend_seams_lower_threshold_catches_more(self):
+        """The documented knob direction: lower max_velocity = more blending."""
+        mk = lambda: _timed_actions([20, 80] * 8, start_ms=0, step_ms=300)
+        amp = lambda r: max(a["pos"] for a in r) - min(a["pos"] for a in r)
+        untouched = TRANSFORM_CATALOG["blend_seams"].apply(mk(), {"max_velocity": 0.5})
+        caught = TRANSFORM_CATALOG["blend_seams"].apply(mk(), {"max_velocity": 0.05})
+        self.assertEqual(amp(untouched), 60)
+        self.assertLess(amp(caught), 60)
+
+    # ------------------------------------------------------------------
     # final_smooth (README: via finalize command)
     # ------------------------------------------------------------------
     def test_readme_final_smooth_default_same_length(self):
