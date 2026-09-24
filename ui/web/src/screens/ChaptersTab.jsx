@@ -39,7 +39,7 @@ import {
   readMarkers,
   saveMarkers,
 } from '../api/forge.js';
-import { SCOPE } from '../lib/toneScope.js';
+import { SCOPE, summarizeScope, SCOPE_DEFAULTS } from '../lib/toneScope.js';
 import { applyTone } from '../lib/toneCurve.js';
 import {
   rebuildWorkingActions, nextBakeRecord, buildSelection,
@@ -736,6 +736,24 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     }
     return applyTone(originalActions, active.atMs, active.endMs, tone, toneParams);
   }, [tone, toneParams, originalActions, active.atMs, active.endMs, tamePreview, beforeSlice]);
+
+  // What the scope picked for THIS chapter — drives the ribbon and, more
+  // importantly, the "this will change nothing" warning. Computed from the
+  // same slice applyTone uses, so the two cannot disagree.
+  const scopeSummary = useMemo(() => {
+    const scope = toneParams.scope ?? SCOPE.EVERYWHERE;
+    if (tone.id === 'none' || tone.id === 'tame') {
+      return { scope: SCOPE.EVERYWHERE, regions: [], count: 0, coverage: 1, applies: true };
+    }
+    return summarizeScope(beforeSlice, {
+      scope,
+      chapterStartMs: active.atMs,
+      chapterEndMs: active.endMs,
+      thresholdDepth: toneParams.thresholdDepth ?? SCOPE_DEFAULTS.thresholdDepth,
+      windowMs: toneParams.windowMs ?? SCOPE_DEFAULTS.windowMs,
+      minRegionMs: toneParams.minRegionMs ?? SCOPE_DEFAULTS.minRegionMs,
+    });
+  }, [beforeSlice, toneParams, tone.id, active.atMs, active.endMs]);
 
   // Shared viewport for the Before/After preview charts. Pan or zoom one
   // and the other follows, so "compare what changed" reads the same time
@@ -1680,12 +1698,36 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                           Handy, OSSM and FOC-Stim all play. Unstated, the first
                           person who scopes a tone and then plays on a Handy
                           files it as a bug. */}
-                      <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginTop: 6 }}>
-                        {(toneParams.scope ?? SCOPE.EVERYWHERE) === SCOPE.EVERYWHERE
-                          ? 'The whole chapter. Changes the motion every device plays.'
-                          : 'Selected by stroke depth, blended in at the edges. '
-                            + 'Changes the motion every device plays.'}
-                      </div>
+                      {/* ★ Says what the scope actually MATCHED, not just what
+                          it means. A scope that selects nothing is otherwise a
+                          silent no-op: the After panel reads "Climax, quiet
+                          parts only" while the output is byte-identical to the
+                          input, and the only available conclusion is that the
+                          feature is broken. */}
+                      {(toneParams.scope ?? SCOPE.EVERYWHERE) === SCOPE.EVERYWHERE ? (
+                        <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginTop: 6 }}>
+                          The whole chapter. Changes the motion every device plays.
+                        </div>
+                      ) : scopeSummary.applies ? (
+                        <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginTop: 6 }}>
+                          {scopeSummary.count} region{scopeSummary.count === 1 ? '' : 's'}
+                          {' · '}{Math.round(scopeSummary.coverage * 100)}% of the chapter
+                          {' · '}blended in at the edges.
+                          {' '}Changes the motion every device plays.
+                        </div>
+                      ) : (
+                        <div style={{
+                          fontSize: 10.5, color: 'var(--warning, #f39c12)', marginTop: 6,
+                          display: 'flex', alignItems: 'center', gap: 5,
+                        }}>
+                          <Icon name="alert-circle" size={11} />
+                          <span>
+                            Nothing in this chapter matches — the tone will not be
+                            applied here. Try {(toneParams.scope ?? SCOPE.EVERYWHERE) === SCOPE.QUIET
+                              ? 'the loud parts' : 'the quiet parts'}, or Everywhere.
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -1730,6 +1772,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                       ? `Tame · Max BPM ${toneParams.max_bpm ?? 360}${tameLoading ? ' · updating…' : ''}`
                       : `${tone.label} · impact ${Math.round((toneParams.impact ?? 0.5) * 100)}%`
                         + scopeSuffix(toneParams.scope)
+                        + (scopeSummary.applies ? '' : ' · no match, not applied')
                 }
                 accent={tone.color}
               >
@@ -1742,6 +1785,17 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
                   axisOffsetMs={active.atMs}
                   bare
                 />
+                {/* Which parts of the chapter the tone actually reached. Only
+                    drawn for a scoped tone — for Everywhere it would be one
+                    solid bar saying nothing. */}
+                {scopeSummary.count > 0 && (
+                  <ScopeRibbon
+                    summary={scopeSummary}
+                    chapterStartMs={active.atMs}
+                    chapterEndMs={active.endMs}
+                    accent={tone.color}
+                  />
+                )}
               </BeforeAfterCol>
             </div>
           </div>
@@ -1801,6 +1855,46 @@ function SectionLabel({ children }) {
       fontSize: 10.5, fontWeight: 700, color: 'var(--text-dim)',
       textTransform: 'uppercase', letterSpacing: '0.08em',
     }}>{children}</div>
+  );
+}
+
+// What the scope selected, drawn to scale across the chapter.
+//
+// ★ Every other editing surface in the app shows you the span you picked.
+// This one computes the selection for you, so it has to show its work —
+// otherwise "why did nothing change?" and "why did THAT change?" are both
+// unanswerable. Design doc §7 raised this and it is the answer.
+//
+// Blocks are positioned by percentage of the chapter, so it lines up with the
+// chart above it without needing the chart's viewport.
+function ScopeRibbon({ summary, chapterStartMs, chapterEndMs, accent }) {
+  const span = Math.max(1, chapterEndMs - chapterStartMs);
+  return (
+    <div
+      style={{
+        position: 'relative', height: 8, borderRadius: 3,
+        background: 'var(--surface-2)', border: '1px solid var(--border)',
+        overflow: 'hidden', marginTop: 6,
+      }}
+      title={`${summary.count} region${summary.count === 1 ? '' : 's'} selected`}
+    >
+      {summary.regions.map((r) => {
+        const left = ((r.startMs - chapterStartMs) / span) * 100;
+        const width = ((r.endMs - r.startMs) / span) * 100;
+        return (
+          <div
+            key={`${r.startMs}-${r.endMs}`}
+            style={{
+              position: 'absolute', top: 0, bottom: 0,
+              left: `${Math.max(0, left)}%`,
+              width: `${Math.max(0.4, Math.min(100 - left, width))}%`,
+              background: accent ?? 'var(--accent)',
+              opacity: 0.75,
+            }}
+          />
+        );
+      })}
+    </div>
   );
 }
 

@@ -6,6 +6,7 @@ import {
   selectRegions,
   makeScopeWeight,
   scopeWeights,
+  summarizeScope,
 } from './toneScope.js';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -378,5 +379,63 @@ describe('SCOPE_DEFAULTS', () => {
     // If 2 * ramp exceeded minRegionMs, the shortest region the selector can
     // produce could never reach weight 1 — a silent, confusing cap.
     expect(2 * SCOPE_DEFAULTS.rampMs).toBeLessThanOrEqual(SCOPE_DEFAULTS.minRegionMs);
+  });
+});
+
+describe('summarizeScope', () => {
+  const opts = { ...SCOPE_DEFAULTS, chapterStartMs: 0, chapterEndMs: 12000 };
+
+  it('reports EVERYWHERE as full coverage with no regions to draw', () => {
+    const s = summarizeScope(passage(0, 12000, 40), { ...opts, scope: SCOPE.EVERYWHERE });
+    expect(s).toMatchObject({ count: 0, coverage: 1, applies: true });
+  });
+
+  it('counts the regions it selected', () => {
+    const acts = concat(
+      passage(0, 4000, 25), passage(4000, 4000, 95), passage(8000, 4000, 25),
+    );
+    const s = summarizeScope(acts, { ...opts, scope: SCOPE.QUIET });
+    expect(s.count).toBe(2);
+    expect(s.applies).toBe(true);
+    expect(s.coverage).toBeGreaterThan(0);
+    expect(s.coverage).toBeLessThan(1);
+  });
+
+  it('★ reports applies:false when the scope matches nothing', () => {
+    // The silent no-op. A chapter with no quiet passages selects zero
+    // regions, every weight is 0, and the output is identical to the input
+    // while the panel claims a tone is applied.
+    const loudThroughout = passage(0, 12000, 95);
+    const s = summarizeScope(loudThroughout, { ...opts, scope: SCOPE.QUIET });
+    expect(s.count).toBe(0);
+    expect(s.applies).toBe(false);
+    expect(s.coverage).toBe(0);
+  });
+
+  it('★ applies:false agrees with the transform doing nothing', () => {
+    // Pin the summary to the actual behaviour, so the UI cannot claim one
+    // thing while the weights do another.
+    const loudThroughout = passage(0, 12000, 95);
+    const s = summarizeScope(loudThroughout, { ...opts, scope: SCOPE.QUIET });
+    const w = scopeWeights(loudThroughout, { scope: SCOPE.QUIET, ...SCOPE_DEFAULTS });
+    expect(s.applies).toBe(w.some((x) => x > 0));
+  });
+
+  it('★ applies:true also agrees with the weights', () => {
+    const acts = concat(passage(0, 6000, 25), passage(6000, 6000, 95));
+    const s = summarizeScope(acts, { ...opts, scope: SCOPE.QUIET });
+    const w = scopeWeights(acts, { scope: SCOPE.QUIET, ...SCOPE_DEFAULTS });
+    expect(s.applies).toBe(w.some((x) => x > 0));
+  });
+
+  it('coverage never exceeds 1 even if regions overrun the chapter', () => {
+    const s = summarizeScope(passage(0, 12000, 25), { ...opts, chapterEndMs: 1000, scope: SCOPE.QUIET });
+    expect(s.coverage).toBeLessThanOrEqual(1);
+  });
+
+  it('handles an empty chapter without dividing by zero', () => {
+    const s = summarizeScope([], { ...opts, chapterEndMs: 0, scope: SCOPE.QUIET });
+    expect(s.coverage).toBe(0);
+    expect(s.applies).toBe(false);
   });
 });

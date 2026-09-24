@@ -280,3 +280,38 @@ export function scopeWeights(actions, options = {}) {
   const weightAt = makeScopeWeight(regions, { scope, rampMs: options.rampMs });
   return actions.map((a) => weightAt(a.at));
 }
+
+/**
+ * What the scope actually selected, for display.
+ *
+ * ★ This exists because the selection is COMPUTED, not authored. Every other
+ * editing surface in the app shows you the span you picked; this one decides
+ * for you, so it has to show its work. Without it, a scope that matches
+ * nothing is a silent no-op: the tone panel reads "Climax, quiet parts only"
+ * while the output is byte-identical to the input, and the only available
+ * conclusion is that the feature is broken.
+ *
+ * `applies` is the question the UI actually needs answered: will this tone
+ * change anything at all?
+ */
+export function summarizeScope(actions, {
+  scope = SCOPE.EVERYWHERE,
+  chapterStartMs = 0,
+  chapterEndMs = 0,
+  ...options
+} = {}) {
+  const spanMs = Math.max(0, chapterEndMs - chapterStartMs);
+  if (scope === SCOPE.EVERYWHERE) {
+    return { scope, regions: [], count: 0, coveredMs: spanMs, coverage: 1, applies: true };
+  }
+  const regions = selectRegions(actions, { scope, ...options });
+  const coveredMs = regions.reduce((sum, r) => sum + (r.endMs - r.startMs), 0);
+  return {
+    scope,
+    regions,
+    count: regions.length,
+    coveredMs,
+    coverage: spanMs > 0 ? Math.min(1, coveredMs / spanMs) : 0,
+    applies: regions.length > 0,
+  };
+}
