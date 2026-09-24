@@ -2170,17 +2170,36 @@ def cmd_export(args):
         if args.mode == "forge":
             _emit_progress("Export — packaging the .forge bundle…")
             out = Path(args.out) if args.out else (Path(src).parent / f"{stem}.forge")
-            out = _next_available_path(out)  # never clobber a prior snapshot
+            replace = getattr(args, "replace", False)
+            if not replace:
+                out = _next_available_path(out)  # never clobber a prior snapshot
             out.parent.mkdir(parents=True, exist_ok=True)
-            with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+            # Build beside the target and swap, so a failure part-way through an
+            # 85 MB zip cannot leave a truncated bundle where a valid one was.
+            tmp_out = out.with_name(out.name + ".part") if replace else out
+            with zipfile.ZipFile(tmp_out, "w", zipfile.ZIP_DEFLATED) as z:
                 for fp in sorted(staging.rglob("*")):
                     if fp.is_file():
                         z.write(fp, fp.relative_to(staging).as_posix())
+            if tmp_out != out:
+                os.replace(tmp_out, out)
             result_path = str(out)
         else:
             _emit_progress("Export — writing the output folder…")
             out = Path(args.out) if args.out else (Path(src).parent / f"{stem}.output")
-            out = _next_available_path(out)  # never clobber a prior snapshot
+            if not getattr(args, "replace", False):
+                out = _next_available_path(out)  # never clobber a prior snapshot
+            elif out.exists():
+                # --replace deletes a tree, and `--out` is user-supplied. Only
+                # ever replace something we recognise as one of our own export
+                # folders; refuse anything else rather than rmtree a directory
+                # the user pointed us at by mistake.
+                if not (out / "manifest.ffmeta").exists():
+                    raise ValueError(
+                        f"refusing to --replace {out}: not a FunscriptForge "
+                        f"export folder (no manifest.ffmeta). Remove it "
+                        f"yourself, or drop --replace to write a new one.")
+                shutil.rmtree(out, ignore_errors=True)
             _emit_loose_output(staging, out, stem, manifest)
             result_path = str(out)
 
@@ -4680,6 +4699,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--out", metavar="PATH",
         help="Output path (default: <dir>/<stem>.output/ for loose, <dir>/<stem>.forge for forge).",
     )
+    p_exp.add_argument(
+        "--replace", action="store_true",
+        help=(
+            "Overwrite the target instead of versioning up to ' (N)'. Default is "
+            "off: a user-initiated export is a new immutable snapshot. `refresh` "
+            "passes this, because re-rendering an existing bundle is an UPDATE of "
+            "that bundle -- if it versions up, the canonical <stem>.forge keeps "
+            "the stale output forever and every consumer that resolves that name "
+            "(the Open dialog, forgeassembler, a double-click) reads the old one."
+        ),
+    )
     p_exp.add_argument("--stem", metavar="STEM", help="Bundle stem (default: source stem).")
     p_exp.add_argument("--effective", metavar="PATH", help="Edited (work) funscript to pack as motion; the positional arg stays the original (for stem/sidecars/generation).")
     p_exp.add_argument("--media", metavar="PATH", help="Media file for hero + per-chapter frame thumbnails (optional).")
@@ -6575,6 +6605,39 @@ def _export_opts_from_manifest(manifest: dict, src: str) -> list:
     return argv
 
 
+def _restamp_polish_pipeline_version(src) -> str | None:
+    """Re-stamp `<stem>.polish.yml` with the current pipeline version.
+
+    The stamp means "the channel files these passes describe were produced by
+    this pipeline version". `cmd_polish_write` sets it when the UI stamps, but
+    `cmd_polish_apply` -- which is what actually RE-RENDERS the channel files,
+    and what `refresh` drives -- never touched it. So a full refresh left v3
+    channel files on disk under a polish.yml that still said 2, and
+    `project_status` went on reporting the project stale no matter how many
+    times the user refreshed. A staleness check the user cannot ever satisfy is
+    worse than none: it trains them to ignore it.
+
+    Only safe to call once every accepted station has been regenerated, which
+    is precisely what `refresh` (without --export-only) does. Returns the
+    version written, or None when there is no polish doc to stamp.
+    """
+    import yaml as _yaml
+    from forge.pipeline_version import OUTPUT_PIPELINE_VERSION
+    path = _polish_path(src)
+    if not path.exists():
+        return None
+    try:
+        doc = _yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, _yaml.YAMLError):
+        return None
+    if not isinstance(doc, dict):
+        return None
+    doc["pipeline_version"] = OUTPUT_PIPELINE_VERSION
+    path.write_text(_yaml.safe_dump(doc, sort_keys=False, allow_unicode=True),
+                    encoding="utf-8")
+    return OUTPUT_PIPELINE_VERSION
+
+
 @_cli_command
 def cmd_refresh(args):
     """Re-render outputs for one project or a whole library."""
@@ -6619,8 +6682,15 @@ def cmd_refresh(args):
                 # one clean record per project.
                 with contextlib.redirect_stdout(_io.StringIO()):
                     cmd_polish_apply(parser.parse_args(argv))
+            # Every accepted station has just been re-rendered, so the doc's
+            # stamp is now true. Without this the project reads stale forever.
+            _restamp_polish_pipeline_version(src)
 
-        argv = ["export", src, "--mode", "forge", "--effective", work]
+        # `--replace` is what makes this a refresh rather than another export:
+        # it updates the bundle in place instead of versioning up. Without it
+        # the canonical <stem>.forge kept the stale output and `--check` went on
+        # reporting the project stale after a successful refresh.
+        argv = ["export", src, "--mode", "forge", "--effective", work, "--replace"]
         # Inherit the flags that built the previous bundle, so a refresh
         # cannot quietly ship less than it replaced.
         prev = _read_bundle_manifest(_bundle_for(src))
@@ -6630,9 +6700,16 @@ def cmd_refresh(args):
             argv += ["--out", args.out]
         if args.media:                      # explicit --media wins
             argv += ["--media", args.media]
-        with contextlib.redirect_stdout(_io.StringIO()):
+        # Report the path export actually wrote, not the one we asked for.
+        buf = _io.StringIO()
+        with contextlib.redirect_stdout(buf):
             cmd_export(parser.parse_args(argv))
-        done.append({"stem": st["stem"], "bundle": str(_bundle_for(src)),
+        try:
+            written = json.loads(buf.getvalue()).get("path")
+        except (ValueError, AttributeError):
+            written = None
+        done.append({"stem": st["stem"],
+                     "bundle": written or str(_bundle_for(src)),
                      "stations": st["stations_stamped"],
                      "inherited_options": inherited})
 

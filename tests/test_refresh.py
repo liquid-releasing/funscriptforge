@@ -244,3 +244,167 @@ class TestExportOptionInheritance(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRefreshReplacesTheBundleItRefreshed(unittest.TestCase):
+    """★ The bug this class exists for.
+
+    Export's rule is "never clobber a prior snapshot" — a user-initiated
+    export versions up to `scene (1).forge`. `refresh` inherited that rule,
+    which made the update path useless in the worst possible way: it wrote
+    the freshly-rendered output to `scene (4).forge` and left the STALE
+    known-bad bundle sitting at `scene.forge`.
+
+    Measured on a real project (2026-09-24): after a successful refresh,
+    `scene.forge` still had per-chapter stroke depth 24/24/25/25/25/26 and
+    no pipeline stamp, while the good 76/64/86/84/88/88 output was in
+    `scene (4).forge`. Everything that resolves a project to `<stem>.forge`
+    — the Open dialog, a double-click, a forgeassembler upload — kept
+    reading the flattened one, and `refresh --check` reported the project
+    stale forever because it too reads `<stem>.forge`.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.base = Path(self.tmp) / "scene.forge"
+
+    def test_export_versions_up_by_default(self):
+        # The snapshot rule for a user-initiated export is unchanged.
+        self.base.write_text("old", encoding="utf-8")
+        self.assertEqual(
+            ffcli._next_available_path(self.base).name, "scene (1).forge")
+
+    def test_refresh_asks_export_to_replace(self):
+        # A refresh that versions up is not an update. Pin the flag at the
+        # call site: this is the single line that made the difference.
+        import inspect
+        src = inspect.getsource(ffcli.cmd_refresh)
+        self.assertIn('"--replace"', src,
+                      "cmd_refresh must pass --replace or it leaves the stale "
+                      "bundle at the canonical <stem>.forge path")
+
+    def test_replace_is_off_by_default_in_the_parser(self):
+        p = ffcli.build_parser()
+        args = p.parse_args(["export", "x.funscript"])
+        self.assertFalse(args.replace)
+        args = p.parse_args(["export", "x.funscript", "--replace"])
+        self.assertTrue(args.replace)
+
+    def test_refresh_reports_the_path_it_actually_wrote(self):
+        # It used to report `_bundle_for(src)` unconditionally — the path it
+        # asked for, not the one export chose. A caller (or a user reading
+        # the JSON) was told the bundle had been updated when it had not.
+        import inspect
+        src = inspect.getsource(ffcli.cmd_refresh)
+        self.assertIn('buf.getvalue()', src)
+
+
+class TestPolishStampFollowsTheChannelFiles(unittest.TestCase):
+    """★ A staleness check the user can never satisfy.
+
+    `polish.yml`'s `pipeline_version` means "the channel files these passes
+    describe were built by this version". Only `cmd_polish_write` (the UI's
+    Stamp button) set it. `cmd_polish_apply` — the thing that actually
+    re-renders the channel files, and what `refresh` drives — left it alone.
+
+    Measured 2026-09-24: a full refresh of a real project regenerated all 9
+    stations with the v3 pipeline and the bundle came out stamped 3, but
+    polish.yml still read 2, so `refresh --check` reported the project stale
+    immediately after refreshing it. A warning that never clears is a warning
+    the user learns to ignore.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.src = os.path.join(self.tmp, "scene.funscript")
+        with open(self.src, "w", encoding="utf-8") as f:
+            json.dump({"actions": [{"at": 0, "pos": 0}]}, f)
+        Path(ffcli._forge_dir_for(self.src)).mkdir(parents=True, exist_ok=True)
+
+    def _write_polish(self, version):
+        import yaml
+        doc = {"version": 1, "schema": "polish/v1",
+               "passes": {"estim3p": {"accepted": True, "knobs": {"gain": 1}}}}
+        if version is not None:
+            doc["pipeline_version"] = version
+        path = ffcli._polish_path(self.src)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(yaml.safe_dump(doc), encoding="utf-8")
+        return path
+
+    def test_restamp_updates_an_older_stamp(self):
+        self._write_polish("2")
+        self.assertEqual(ffcli._restamp_polish_pipeline_version(self.src),
+                         OUTPUT_PIPELINE_VERSION)
+        st = ffcli.project_status(self.src)
+        self.assertEqual(st["polish_pipeline_version"], OUTPUT_PIPELINE_VERSION)
+
+    def test_restamp_preserves_the_passes(self):
+        # The stamp must not be written by rebuilding the doc from scratch —
+        # the accepted stations and their knobs are the user's work.
+        self._write_polish("2")
+        ffcli._restamp_polish_pipeline_version(self.src)
+        import yaml
+        doc = yaml.safe_load(ffcli._polish_path(self.src).read_text(encoding="utf-8"))
+        self.assertTrue(doc["passes"]["estim3p"]["accepted"])
+        self.assertEqual(doc["passes"]["estim3p"]["knobs"], {"gain": 1})
+
+    def test_restamp_with_no_polish_doc_is_a_no_op(self):
+        self.assertIsNone(ffcli._restamp_polish_pipeline_version(self.src))
+
+    def test_restamp_survives_a_corrupt_polish_doc(self):
+        ffcli._polish_path(self.src).parent.mkdir(parents=True, exist_ok=True)
+        ffcli._polish_path(self.src).write_text("{[not yaml", encoding="utf-8")
+        self.assertIsNone(ffcli._restamp_polish_pipeline_version(self.src))
+
+    def test_refresh_restamps_only_when_it_regenerated_stations(self):
+        # --export-only does NOT re-render channel files, so it must NOT claim
+        # they are current. Stale there is the honest answer.
+        import inspect
+        src = inspect.getsource(ffcli.cmd_refresh)
+        body = src.split("if not args.export_only:", 1)
+        self.assertEqual(len(body), 2, "expected the export_only guard")
+        self.assertIn("_restamp_polish_pipeline_version", body[1])
+
+    def test_refresh_keeps_its_error_handling(self):
+        # Near-miss while fixing the stamp bug: a new helper was inserted
+        # directly above `def cmd_refresh`, between the `@_cli_command`
+        # decorator and the function it decorated. The decorator silently
+        # moved to the helper — which swallowed its return value — and
+        # cmd_refresh lost FileNotFoundError/ValueError handling. refresh
+        # walks a whole library and touches user files; a bad path there
+        # should print one line, not a traceback.
+        self.assertTrue(hasattr(ffcli.cmd_refresh, "__wrapped__"),
+                        "cmd_refresh must keep its @_cli_command decorator")
+        self.assertEqual(ffcli.cmd_refresh.__wrapped__.__name__, "cmd_refresh")
+
+
+class TestReplaceRefusesToDeleteWhatItDoesNotRecognise(unittest.TestCase):
+    """`--replace` deletes a tree and `--out` is user-supplied. The forge
+    branch overwrites a single file, which is bounded; the loose branch calls
+    rmtree, which is not. Only replace a folder carrying our own manifest."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.src = self.tmp / "scene.funscript"
+        self.src.write_text(json.dumps({"actions": [{"at": 0, "pos": 0}]}),
+                            encoding="utf-8")
+
+    def _run(self, out):
+        p = ffcli.build_parser()
+        args = p.parse_args(["export", str(self.src), "--mode", "loose",
+                             "--out", str(out), "--replace"])
+        # cmd_export is wrapped by @_cli_command, which turns ValueError into
+        # SystemExit(1) after printing one line. Call the undecorated function
+        # so the test sees the refusal itself.
+        return ffcli.cmd_export.__wrapped__(args)
+
+    def test_refuses_a_folder_that_is_not_ours(self):
+        victim = self.tmp / "my_documents"
+        victim.mkdir()
+        (victim / "important.txt").write_text("keep me", encoding="utf-8")
+        with self.assertRaises(ValueError) as cm:
+            self._run(victim)
+        self.assertIn("manifest.ffmeta", str(cm.exception))
+        self.assertTrue((victim / "important.txt").exists(),
+                        "a refused --replace must not have deleted anything")
