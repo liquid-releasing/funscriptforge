@@ -511,6 +511,42 @@ export function saveWorkingFunscript(funscriptPath, actions) {
   );
 }
 
+/** The PRISTINE source actions, ignoring `<stem>.work.funscript`.
+ *  `loadProject` deliberately prefers the work copy — that is the edited
+ *  state the user should see — but re-toning a chapter has to rebuild from
+ *  material that carries no tone, and setting a chapter back to Untoned has
+ *  to restore something. Browser mode has no disk: [] means "no undo
+ *  baseline", which the Chapters tab treats as "leave the work file alone". */
+export function loadOriginalActions(funscriptPath) {
+  return call(
+    'load_original_actions',
+    { funscriptPath },
+    () => Promise.resolve([]),
+  );
+}
+
+/** What is currently BAKED into the work funscript, per chapter:
+ *  `{ "<chapterId>": { tone, params } }`. Distinct from the chapter's `tone`
+ *  field in chapters.json, which is the user's LABEL — conflating the two is
+ *  what let tones compound on every reopen. Absent file = nothing baked. */
+export function toneBakeRead(funscriptPath) {
+  return call(
+    'tone_bake_read',
+    { funscriptPath },
+    () => Promise.resolve({ version: 1, chapters: {} }),
+  );
+}
+
+/** Persist the bake record. Always written in the same breath as the actions
+ *  it describes, so the record and the file cannot drift apart. */
+export function toneBakeWrite(funscriptPath, chapters) {
+  return call(
+    'tone_bake_write',
+    { funscriptPath, chapters },
+    () => Promise.resolve(null),
+  );
+}
+
 /** Revert to the original by deleting the working copy. The next
  *  load_project falls back to the pristine original. Returns {reverted}. */
 export function revertWorkingFunscript(funscriptPath) {

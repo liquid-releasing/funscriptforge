@@ -33,11 +33,17 @@ import {
   extractChapterClip,
   transformApplyActions,
   saveWorkingFunscript,
+  loadOriginalActions,
+  toneBakeRead,
+  toneBakeWrite,
   readMarkers,
   saveMarkers,
 } from '../api/forge.js';
 import { SCOPE } from '../lib/toneScope.js';
 import { applyTone } from '../lib/toneCurve.js';
+import {
+  rebuildWorkingActions, nextBakeRecord, buildSelection,
+} from '../lib/toneBake.js';
 import { useTransformPreview } from '../api/useTransformPreview.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 import { chapterDisplayLabel, splitAt, joinAt } from '../lib/chapterOps.js';
@@ -256,32 +262,29 @@ function fmtTimeShort(ms) {
 // with the same inputs returns equivalent output, so accept is
 // idempotent — re-accepting a chapter after tweaking its tone re-tones
 // from the original, never from previously-toned data.
-function mergeWorkingActions({ originalActions, chapters, acceptedIds, tones, params }) {
-  if (!Array.isArray(originalActions) || originalActions.length === 0) return [];
-  if (!Array.isArray(chapters) || chapters.length === 0) return originalActions;
-  const sorted = [...chapters].sort((a, b) => a.atMs - b.atMs);
-  const out = [];
-  let i = 0;
-  for (const ch of sorted) {
-    while (i < originalActions.length && originalActions[i].at < ch.atMs) {
-      out.push(originalActions[i]); i += 1;
-    }
-    const inRangeStart = i;
-    let j = inRangeStart;
-    while (j < originalActions.length && originalActions[j].at <= ch.endMs) j += 1;
-    if (acceptedIds.has(ch.id)) {
-      // `?? 'none'` — an unseeded chapter must read as Untoned passthrough,
-      // NOT findTone's 'build' fallback (which would darken the whole script).
-      const toneObj = findTone(tones[ch.id] ?? 'none');
-      const toneParamsObj = params[ch.id]?.[toneObj.id] ?? {};
-      out.push(...applyTone(originalActions, ch.atMs, ch.endMs, toneObj, toneParamsObj));
-    } else {
-      for (let k = inRangeStart; k < j; k += 1) out.push(originalActions[k]);
-    }
-    i = j;
-  }
-  while (i < originalActions.length) { out.push(originalActions[i]); i += 1; }
-  return out;
+// Rebuild the working actions after an accept.
+//
+// Replaces the old whole-track merge, which rebuilt EVERY accepted chapter
+// from a snapshot that was itself already toned on reopen. The rule now lives
+// in lib/toneBake.js: a chapter whose selection matches what is baked is left
+// exactly as it is, and only a chapter the user actually changed is rebuilt --
+// from the pristine source, at the new settings. Setting a chapter to Untoned
+// is just such a change, which is what gives per-chapter undo.
+function buildWorkingActions({
+  workActions, sourceActions, chapters, acceptedIds, tones, params, baked,
+}) {
+  const selection = buildSelection({ chapters, acceptedIds, tones, params, baked });
+  const { actions, rebuiltIds } = rebuildWorkingActions({
+    workActions,
+    sourceActions,
+    chapters,
+    selection,
+    baked,
+    // toneBake is told HOW to tone; it does not know about the tone catalog.
+    applyTone: (acts, startMs, endMs, toneId, toneParams) =>
+      applyTone(acts, startMs, endMs, findTone(toneId ?? 'none'), toneParams ?? {}),
+  });
+  return { actions, baked: nextBakeRecord(baked, selection, rebuiltIds) };
 }
 
 // Sentinel used when chapters is empty so the useMemo deps stay stable
@@ -301,11 +304,61 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // transform on top of itself. The `actions` reference above stays as
   // the displayed working set (gets patched on accept); `originalActions`
   // is the cold reference we tone from.
+  //
+  // ★ This is the PRISTINE file on disk, not `project.actions`. loadProject
+  // deliberately prefers `<stem>.work.funscript` when it exists, so on reopen
+  // `project.actions` is ALREADY TONED — seeding from it meant the "Untoned"
+  // preview showed toned data, and re-accepting toned it a second time
+  // (measured: depth 54 -> 70 -> 92 -> 100). The original is never modified on
+  // disk; Revert works by deleting the work copy.
   const [originalActions, setOriginalActions] = useState(() =>
     Array.isArray(project?.actions) ? project.actions : []
   );
+  // What is already baked into the work funscript, per chapter. Distinct from
+  // the chapter's `tone` label — see lib/toneBake.js.
+  const [bakedRecord, setBakedRecord] = useState({});
   useEffect(() => {
+    let cancelled = false;
+    // Fall back to project.actions when the pristine read is unavailable
+    // (browser mode, unreadable file): that is exactly the old behaviour, so
+    // a failure degrades to what shipped before rather than to nothing.
     setOriginalActions(Array.isArray(project?.actions) ? project.actions : []);
+    setBakedRecord({});
+    if (!project?.path) return undefined;
+    loadOriginalActions(project.path)
+      .then((acts) => {
+        if (!cancelled && Array.isArray(acts) && acts.length) setOriginalActions(acts);
+      })
+      .catch((err) => console.warn('ChaptersTab: pristine source read failed', err));
+    toneBakeRead(project.path)
+      .then((rec) => {
+        if (cancelled || !rec?.chapters) return;
+        setBakedRecord(rec.chapters);
+        // ★ Restore the params that were actually applied, over the seeded
+        // defaults. Without this the sliders read 0.5 while the file carries
+        // 0.2, so the very first accept after a reopen would see a spurious
+        // change and re-bake every chapter at the WRONG strength — the same
+        // user-visible symptom as the bug this whole change removes, just
+        // reached by a different route.
+        //
+        // This is why tone params are persisted at all. It is an
+        // implementation detail of getting re-tone and undo right, not a
+        // feature: there is nothing for the user to manage or understand.
+        setParamsByChapter((prev) => {
+          const next = { ...prev };
+          for (const [chId, entry] of Object.entries(rec.chapters)) {
+            const toneId = entry?.tone;
+            if (!toneId || toneId === 'none' || !entry?.params) continue;
+            next[chId] = {
+              ...(next[chId] ?? {}),
+              [toneId]: { ...(next[chId]?.[toneId] ?? {}), ...entry.params },
+            };
+          }
+          return next;
+        });
+      })
+      .catch((err) => console.warn('ChaptersTab: tone bake record read failed', err));
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.path]);
 
@@ -932,16 +985,44 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     const nextAccepted = new Set(acceptedChapterIds);
     nextAccepted.add(active.id);
     setAcceptedChapterIds(nextAccepted);
-    const merged = mergeWorkingActions({
-      originalActions,
-      chapters,
-      acceptedIds: nextAccepted,
-      tones: tonesByChapter,
-      params: paramsByChapter,
-    });
-    onActionsPatch?.(merged);
+    await applyAndPersist(nextAccepted);
     persistTones();
     advance();
+  };
+
+  // Bake, persist, and record — in that order, in one place.
+  //
+  // ★ Before this, accepting a tone only patched App's in-memory actions.
+  // Nothing wrote `<stem>.work.funscript`; the bake reached disk ONLY as a
+  // side effect of a downstream tab (Phrases/Stanzas) saving the shared
+  // actions later. Tone your chapters, close without visiting Phrases, and
+  // the work was gone — while the tone labels persisted, so the UI still
+  // claimed it had been applied.
+  //
+  // The bake record is written in the same breath as the actions it
+  // describes: if they ever disagreed, the next accept would either
+  // re-tone toned material or refuse to re-tone untoned material.
+  const applyAndPersist = async (acceptedIds, tones = tonesByChapter) => {
+    const { actions: next, baked } = buildWorkingActions({
+      workActions: actions,
+      sourceActions: originalActions,
+      chapters,
+      acceptedIds,
+      tones,
+      params: paramsByChapter,
+      baked: bakedRecord,
+    });
+    onActionsPatch?.(next);
+    setBakedRecord(baked);
+    if (project?.path) {
+      try {
+        await saveWorkingFunscript(project.path, next);
+        await toneBakeWrite(project.path, baked);
+      } catch (err) {
+        setAppError?.(`Could not save tone changes: ${err?.message ?? err}`);
+      }
+    }
+    return next;
   };
 
   // Persist a mutated chapter list and re-extract the affected clips with
@@ -1073,7 +1154,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // in-body accept scrolled out of view.)
   acceptRunRef.current = handleAcceptTone;
   // Commit ALL selected chapter tones at once — apply the toned shape to the
-  // working funscript (mergeWorkingActions) AND persist the whole tone map to
+  // working funscript (buildWorkingActions) AND persist the whole tone map to
   // the sidecar — WITHOUT advancing. Wired into the footer's PRIMARY "Accept
   // and chain to <next>" so leaving the Chapters tab actually accepts the
   // user's tone work. D15: the primary used to only navigate, silently dropping
@@ -1087,11 +1168,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       if (t && t !== 'none') allAccepted.add(c.id);
     });
     setAcceptedChapterIds(allAccepted);
-    const merged = mergeWorkingActions({
-      originalActions, chapters, acceptedIds: allAccepted,
-      tones: tonesByChapter, params: paramsByChapter,
-    });
-    onActionsPatch?.(merged);
+    await applyAndPersist(allAccepted);
     const sourcePath = project?.mediaPath ?? project?.path;
     if (sourcePath) {
       try { await writeChaptersSidecar(sourcePath, attachTones(chapters, tonesByChapter)); }
@@ -1100,18 +1177,15 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   };
   // One-click "trust the defaults" — mark EVERY chapter considered (untoned)
   // so the footer's "Accept and chain" unlocks without walking each chapter.
-  // Preserves any tones already picked (mergeWorkingActions applies the tone
+  // Preserves any tones already picked (buildWorkingActions applies the tone
   // for accepted chapters that have one; the rest pass through untoned). Lives
   // above the chapter bar so the footer stays uncluttered (user: "we can put
   // the button to accept all as untoned above the chapter bar").
   const acceptAllAsUntoned = () => {
     const all = new Set(chapters.map((c) => c.id));
     setAcceptedChapterIds(all);
-    const merged = mergeWorkingActions({
-      originalActions, chapters, acceptedIds: all,
-      tones: tonesByChapter, params: paramsByChapter,
-    });
-    onActionsPatch?.(merged);
+    applyAndPersist(all).catch((err) =>
+      console.warn('ChaptersTab: accept-all-untoned bake failed', err));
     const sourcePath = project?.mediaPath ?? project?.path;
     if (sourcePath) {
       writeChaptersSidecar(sourcePath, attachTones(chapters, tonesByChapter))

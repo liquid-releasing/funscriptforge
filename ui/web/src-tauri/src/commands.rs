@@ -3975,3 +3975,83 @@ mod progress_event_tests {
         assert_eq!(names.len(), before, "two operations share a progress channel");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Tone bake record
+//
+// The root cause of the tone-compounding bug: `<stem>.work.funscript` is a
+// flat destructive snapshot with no record of WHAT was baked into it. The
+// chapter's `tone` field in chapters.json was doing double duty -- the user's
+// intent, and evidence the tone had already been applied -- and those two
+// meanings conflict the moment the user changes their mind.
+//
+// This file separates them. chapters.json keeps `tone` as the label. This
+// record says what is ALREADY IN the work funscript, so the Chapters tab can
+// tell "you picked climax" apart from "climax is already applied".
+//
+// Shape: { "version": 1, "chapters": { "<chapterId>": { "tone": "climax",
+//          "params": { ... } } } }
+//
+// Deliberately OUR file rather than a new field in chapters.json: that schema
+// belongs to videoflow (another repo), and this is authoring state, not
+// analyzer output.
+
+fn tone_bake_path(funscript_path: &str) -> String {
+    forge_sidecar_path(funscript_path, ".tonebake.json")
+}
+
+/// Read the tone bake record. Returns an empty record when absent -- a
+/// project with no record has nothing baked, which is the correct reading
+/// for every project that predates this file.
+#[tauri::command]
+pub async fn tone_bake_read(funscript_path: String) -> Result<serde_json::Value, String> {
+    let path = tone_bake_path(&funscript_path);
+    match tokio::fs::read_to_string(&path).await {
+        Ok(raw) => Ok(serde_json::from_str(&raw)
+            .unwrap_or_else(|_| serde_json::json!({ "version": 1, "chapters": {} }))),
+        Err(_) => Ok(serde_json::json!({ "version": 1, "chapters": {} })),
+    }
+}
+
+/// Write the tone bake record. Called immediately after the toned actions are
+/// persisted, so the two never disagree.
+#[tauri::command]
+pub async fn tone_bake_write(
+    funscript_path: String,
+    chapters: serde_json::Value,
+) -> Result<(), String> {
+    let path = tone_bake_path(&funscript_path);
+    if let Some(parent) = Path::new(&path).parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("could not create forge dir: {}", e))?;
+    }
+    let payload = serde_json::json!({ "version": 1, "chapters": chapters });
+    let body = serde_json::to_string_pretty(&payload)
+        .map_err(|e| format!("could not serialize tone bake record: {}", e))?;
+    tokio::fs::write(&path, body)
+        .await
+        .map_err(|e| format!("could not write {}: {}", path, e))
+}
+
+/// The PRISTINE source actions, ignoring `<stem>.work.funscript`.
+///
+/// `load_project` deliberately prefers the work copy -- that is the edited
+/// state the user should see. But re-toning a chapter has to rebuild it from
+/// material that carries no tone, or the transform compounds on itself, and
+/// setting a chapter back to Untoned has to restore something. Both need the
+/// original, which is never modified on disk (Revert works by DELETING the
+/// work copy, not by rewriting anything).
+#[tauri::command]
+pub async fn load_original_actions(
+    funscript_path: String,
+) -> Result<Vec<FunscriptAction>, String> {
+    let raw = tokio::fs::read_to_string(&funscript_path)
+        .await
+        .map_err(|e| format!("Could not read {}: {}", &funscript_path, e))?;
+    let funscript: FunscriptFile = serde_json::from_str(&raw)
+        .map_err(|e| format!("Invalid funscript JSON in {}: {}", &funscript_path, e))?;
+    let mut actions = funscript.actions;
+    actions.sort_by_key(|a| a.at);
+    Ok(actions)
+}
