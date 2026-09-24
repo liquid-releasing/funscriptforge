@@ -34,10 +34,18 @@ Every bump asks users to re-render their library.
 
 # Bump with a PIPELINE_CHANGELOG entry. Mirrored in
 # ui/web/src/api/forge.js as OUTPUT_PIPELINE_VERSION.
-OUTPUT_PIPELINE_VERSION = "2"
+OUTPUT_PIPELINE_VERSION = "3"
 
 # version -> what changed, in the words a user needs to decide.
 PIPELINE_CHANGELOG: dict[str, str] = {
+    "3": (
+        "Events now last as long as you set them. A flat stretch before an "
+        "event was being discarded when the channel was saved, so players "
+        "slid gradually into the event from wherever the flat stretch began "
+        "— a 2-second pause could play as a 35-second fade, and volume "
+        "appeared to drop with nothing happening in the audio. Re-stamp your "
+        "device stations to pick this up; re-exporting alone is not enough."
+    ),
     "2": (
         "Exports no longer flatten the motion track. 'Blend seams' was "
         "smoothing every stroke instead of only the sharp transitions, which "
