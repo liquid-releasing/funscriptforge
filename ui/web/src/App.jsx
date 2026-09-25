@@ -25,6 +25,7 @@ import {
 } from './api/forge.js';
 import { deriveAnalysisState } from './lib/analysisState.js';
 import { outputsNeedWork } from './lib/openPrompt.js';
+import { chainArtifactFor, stemFromPath } from './lib/chainArtifact.js';
 import { analysisBlocksChain } from './lib/chainGate.js';
 import { applyBusyUpdate } from './lib/busyOwner.js';
 import { probeMediaCached } from './hooks/useChapterClip.js';
@@ -1184,9 +1185,12 @@ export default function App() {
   } else {
     footerSummary = `${currentTabLabel} · no downstream tab`;
   }
-  const chainFile = project?.path && nextTab
-    ? `${(project.title ?? 'project')}.${tab}.json`
-    : null;
+  // The file this tab actually writes. This used to be built from the TAB ID
+  // (`<title>.<tab>.json`), which was right by coincidence for Chapters and
+  // Phrases and wrong everywhere else -- Events advertised an `events.json`
+  // that nothing writes or reads. A footer that names a file must name the
+  // real one; tabs with no single sidecar name nothing.
+  const chainFile = nextTab ? chainArtifactFor(tab, stemFromPath(project?.path)) : null;
 
   // Per-tab footer fork. Most tabs are a single accept-and-chain; two tabs
   // offer a CHOICE the footer surfaces as primary (default, highlighted) +

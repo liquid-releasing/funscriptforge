@@ -63,6 +63,7 @@ import {
 import { deriveAnalysisState } from '../lib/analysisState.js';
 import { progressChannel, OPS, parseProgressLine } from '../lib/progressChannels.js';
 import { applyStageEvent } from '../lib/progressStages.js';
+import { withStallTimeout } from '../lib/stallWatchdog.js';
 import { probeMediaCached } from '../hooks/useChapterClip.js';
 
 // FunscriptForge's Analysis tab uses the full default category list.
@@ -137,6 +138,10 @@ export default function AnalysisTab({
   // forge.js also dedups at the entry point — this ref is belt-and-suspenders.
   const [analyzing, setAnalyzing] = useState(false);
   const analyzingRef = useRef(false);
+  // Liveness heartbeat for the stall watchdog: the wall-clock time of the
+  // LAST progress event of any depth. Sub-stage chatter counts -- the
+  // question is only whether the backend is still talking to us.
+  const lastProgressAtRef = useRef(0);
   // Whether the auto-trigger effect below has run and made its decision. Gates
   // the not-started banner so it can't flash before the pipeline starts.
   const [autoTriggerSettled, setAutoTriggerSettled] = useState(false);
@@ -183,6 +188,7 @@ export default function AnalysisTab({
     setPipelineError(null);
     setStages({}); // clear stale stage status from a previous run
     setAnalyzing(true);
+    lastProgressAtRef.current = Date.now();
     // Drive the global busy banner — App's ff:progress listener only
     // populates `busy.steps` while `busy` is set, so without this the
     // footer stays empty while the pipeline runs.
@@ -191,7 +197,17 @@ export default function AnalysisTab({
       steps: [],
     });
     try {
-      const newChapters = await analyzeChaptersWithVideoflow(project.path, 5.5, project.mediaPath, resume);
+      // ★ Guard against a call that never settles. Measured 2026-09-25: the
+      // analyze completed on disk and the Python process exited, but the
+      // Promise never resolved, so this function's `finally` never ran and the
+      // busy banner claimed "in progress" on every tab until the app was
+      // restarted. IPC delivery is not guaranteed; a dropped response callback
+      // produces no error to catch. The watchdog measures SILENCE, not elapsed
+      // time, so a legitimately slow stage cannot trip it.
+      const newChapters = await withStallTimeout(
+        analyzeChaptersWithVideoflow(project.path, 5.5, project.mediaPath, resume),
+        { getLastEventAt: () => lastProgressAtRef.current || null },
+      );
       // Lift the fresh chapter list back to App so other tabs (Chapters,
       // Patterns, Phrases) see it without a project reload. And refresh
       // audio sidecars so the panels that paint real data (next pass)
@@ -252,6 +268,10 @@ export default function AnalysisTab({
       const onProgress = (event) => {
         const parsed = parseProgressLine(event?.payload);
         if (!parsed) return;
+        // Heartbeat first, BEFORE the depth filter below: a depth-3 sub-stage
+        // is proof of life even though it maps to no panel. Filtering first
+        // would let a long stage of pure sub-stage chatter look like silence.
+        lastProgressAtRef.current = Date.now();
         const { kind, depth, leaf } = parsed;
         // Depth 1 = outer command wrapper; depth 3+ = sub-stages.
         // Depth 2 = the stages we map to panels.
