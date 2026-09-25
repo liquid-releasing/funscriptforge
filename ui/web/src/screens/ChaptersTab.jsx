@@ -560,6 +560,10 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
     lastProgressAtRef.current = Date.now();
     setBusy?.({
       message: 'Analyzing chapters…',
+      // Declares which backend op this label is waiting on, so the op's
+      // completion event releases this entry too. Our own clear runs in a
+      // `finally`, and a `finally` is exactly what a lost reply prevents.
+      waitingFor: OPS.ANALYZE,
       onCancel: () => {
         analyzeCancelledRef.current = true;
         setAnalyzing(false);

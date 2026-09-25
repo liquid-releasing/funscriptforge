@@ -17,7 +17,7 @@
 // A pending write that never lands is the same bug as a failed one, which is
 // why this lives in its own module with tests rather than inline in a screen —
 // vitest never renders those, so logic left there is unguarded. Same reason
-// busyOwner.js and chainGate.js exist.
+// busyRegistry.js and chainGate.js exist.
 
 /**
  * @param {(payload: any) => Promise<any>} write  performs the real write

@@ -27,8 +27,12 @@ import { deriveAnalysisState } from './lib/analysisState.js';
 import { chooseOpenPrompt, outputsNeedWork } from './lib/openPrompt.js';
 import { chainArtifactFor, stemFromPath } from './lib/chainArtifact.js';
 import { analysisBlocksChain } from './lib/chainGate.js';
-import { applyBusyUpdate, isBusyAbandoned } from './lib/busyOwner.js';
 import { DEFAULT_STALL_MS } from './lib/stallWatchdog.js';
+import {
+  emptyOps, registerOp, deregisterOp, updateOp, expireStaleOps, toBusy,
+  completeOp,
+} from './lib/busyRegistry.js';
+import { OPS, progressChannel } from './lib/progressChannels.js';
 import { withCompletionFallback } from './lib/completionFallback.js';
 import { probeMediaCached } from './hooks/useChapterClip.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
@@ -157,69 +161,39 @@ export default function App() {
   // surface that's always visible, so we don't have to hunt for the
   // right tab to attach an inline error to.
   const [appError, setAppError] = useState(null);
-  // App-level busy indicator surfaced in the footer (AcceptBar.busy).
-  // Shape: { message, fraction? } — fraction omitted = indeterminate.
-  // Long-running ops (load_project, classify-patterns, transform apply,
-  // export) drive this; a single surface beats N per-tab spinners.
-  const [busy, setBusy] = useState(null);
-  // Every long op sets busy and clears it in a `finally`. An unconditional
-  // setBusy(null) there clears whatever is CURRENT — not what that op set. So
-  // a slow open/attach/import finishing AFTER the Analysis pipeline started
-  // wiped the analysis progress banner, and the footer went back to claiming
-  // "ready to chain" while the pipeline was still running (dogfood
-  // 2026-09-04). Clear by token instead: an op only clears its own busy, and
-  // a busy set by a child tab (no token) is never clobbered from here.
+  // In-flight operations, as a SET. See lib/busyRegistry.js for why this is
+  // not one slot with one owner: a single slot could not survive a user who
+  // navigates while work runs, and every stuck-banner bug on 2026-09-25 came
+  // from that mismatch. Each operation touches only its own entry, so there
+  // is nothing to arbitrate and nothing to strand.
+  const [ops, setOps] = useState(emptyOps);
+  const busy = useMemo(() => toBusy(ops), [ops]);
+
+  // App's own long operations. The token is the registry key, so two
+  // overlapping App operations are two entries rather than one clobbering
+  // the other.
   const busyTokenRef = useRef(0);
   const beginBusy = useCallback((next) => {
     const token = ++busyTokenRef.current;
-    console.warn(`[ff-trace] busy SET by app#${token}:`, next?.message ?? '(no message)');
-    setBusy({ ...next, token, owner: 'app', startedAt: Date.now() });
+    const key = `app#${token}`;
+    setOps((prev) => registerOp(prev, key, { ...next, startedAt: Date.now() }));
     return token;
   }, []);
   const endBusy = useCallback((token) => {
-    setBusy((prev) => {
-      const keep = prev && prev.token !== token;
-      console.warn(`[ff-trace] busy CLEAR by app#${token} ->`,
-        keep ? `REFUSED (current token=${prev.token})` : 'cleared');
-      return keep ? prev : null;
-    });
+    setOps((prev) => deregisterOp(prev, `app#${token}`));
   }, []);
-  // Same hazard one level down. Child tabs each set and clear this banner
-  // directly, and a tab that has UNMOUNTED can still resolve a promise and
-  // run `.finally(() => setBusy(null))` — clearing a banner it no longer
-  // owns. That is how analysis progress vanished shortly after it started:
-  // the user arrives from Generate, analysis sets the banner, and Generate's
-  // outstanding work lands a moment later and wipes it (dogfood 2026-09-04:
-  // "skips into showing accept and chain ... no longer showing the
-  // progress"). Tag each child's banner with its owner; a clear from anyone
-  // else is ignored.
-  // Wall-clock of the last progress event on ANY channel — the liveness
-  // signal behind the abandoned-banner release below.
-  const lastProgressAtRef = useRef(0);
+
+  // Child tabs keep the `setBusy(next | null)` signature they already use;
+  // the owner name is simply the registry key. A tab that unmounts without
+  // clearing leaves one entry, which expires on its own and blocks nobody.
   const busySettersRef = useRef({});
   const busySetterFor = useCallback((owner) => {
     if (!busySettersRef.current[owner]) {
-      busySettersRef.current[owner] = (next) =>
-        setBusy((prev) => {
-          const out = applyBusyUpdate(
-            prev,
-            // Stamp when this banner went up, so the abandoned-banner release
-            // has a baseline even if no progress event ever arrives.
-            next == null ? next : { startedAt: Date.now(), ...next },
-            owner,
-          );
-          // [ff-trace] The busy banner's whole lifecycle. Three rounds of
-          // fixing a stuck banner were aimed by inference; this says outright
-          // who set it, who tried to clear it, and whether the clear was
-          // refused because someone else owns it.
-          if (next == null) {
-            console.warn(`[ff-trace] busy CLEAR by ${owner} ->`,
-              out === prev && prev ? `REFUSED (owner=${prev.owner})` : 'cleared');
-          } else {
-            console.warn(`[ff-trace] busy SET by ${owner}:`, next.message ?? '(no message)');
-          }
-          return out;
-        });
+      busySettersRef.current[owner] = (next) => setOps((prev) => (
+        next == null
+          ? deregisterOp(prev, owner)
+          : registerOp(prev, owner, { ...next, startedAt: Date.now() })
+      ));
     }
     return busySettersRef.current[owner];
   }, []);
@@ -239,11 +213,9 @@ export default function App() {
   useEffect(() => {
     if (!busy) return undefined;
     const id = setInterval(() => {
-      setBusy((prev) => (isBusyAbandoned(prev, {
-        lastProgressAt: lastProgressAtRef.current,
-        now: Date.now(),
-        stallMs: DEFAULT_STALL_MS,
-      }) ? null : prev));
+      setOps((prev) => expireStaleOps(prev, {
+        now: Date.now(), stallMs: DEFAULT_STALL_MS,
+      }));
     }, 10_000);
     return () => clearInterval(id);
   }, [busy]);
@@ -354,13 +326,25 @@ export default function App() {
     let cancelled = false;
     (async () => {
       const { listen } = await import('@tauri-apps/api/event');
-      const unlisten = await listen('ff:progress', (event) => {
+      // ★ One listener per OPERATION channel, not one on the global one.
+      //
+      // The global channel carries every command's stages with no job
+      // identity, so whatever was rendering painted them into whichever
+      // banner happened to be open — which is how a stuck `refresh` came to
+      // display "Analyzing…" and sent two rounds of debugging at the wrong
+      // call. Subscribing per operation makes attribution exact.
+      //
+      // Backend operations register themselves here and deregister on their
+      // own `end` event, so their banner entry never depends on an invoke
+      // reply arriving. That is the whole point: the reply is what goes
+      // missing, and the event stream is what does not.
+      const makeHandler = (op) => (event) => {
+        const opKey = `op:${op}`;
         const raw = String(event?.payload ?? '');
         const stripped = raw.startsWith('progress: ') ? raw.slice('progress: '.length) : raw;
         if (!stripped) return;
         // Liveness first: ANY progress line proves the backend is talking,
         // whatever its depth or which operation it belongs to.
-        lastProgressAtRef.current = Date.now();
         const parts = stripped.split('::');
         const kind = parts[0];
         // `end::0::<op>::<code>` — the command returned. Close any step still
@@ -372,17 +356,11 @@ export default function App() {
           // [ff-trace] console.WARN, not debug: DevTools hides debug behind
           // the Verbose filter, and this is the datum that says whether the
           // completion event crosses the bridge at all.
-          console.warn('[ff-trace] end event received', parts[2], parts[3]);
-          setBusy((prev) => {
-            if (!prev || !Array.isArray(prev.steps)) return prev;
-            if (!prev.steps.some((x) => x.status === 'running')) return prev;
-            return {
-              ...prev,
-              steps: prev.steps.map((x) =>
-                (x.status === 'running' ? { ...x, status: 'done' } : x)),
-              message: '',
-            };
-          });
+          // The command returned: this operation is over, whatever its
+          // invoke reply did or did not do. Also releases any tab entry that
+          // declared it was waiting on this op, whose own `finally` is the
+          // thing a lost reply prevents from running.
+          setOps((prev) => completeOp(prev, op));
           return;
         }
         const depth = parseInt(parts[1] || '0', 10);
@@ -398,12 +376,20 @@ export default function App() {
         // Depth 3+ = sub-stages — bubble to the message line so the user
         //            sees "what's happening *now*" inside the running step.
         if (depth <= 1) return;
-        setBusy((prev) => {
-          if (!prev) return prev;
+        setOps((prevOps) => {
+          // First progress line for this op IS its start — the backend
+          // announcing itself. No caller has to remember to register it.
+          const base = prevOps[opKey]
+            ? prevOps
+            : registerOp(prevOps, opKey, { message: '', steps: [], op });
+          const prev = base[opKey];
+          const patch = (next) => updateOp(base, opKey, {
+            ...next, progressAt: Date.now(),
+          });
           const steps = Array.isArray(prev.steps) ? prev.steps.slice() : [];
           // In-stage message: bubble to the headline.
           if (kind === 'msg' && message) {
-            return { ...prev, message };
+            return patch({ message });
           }
           // Sub-stage events (depth>=3) — don't disturb the depth-2 step list.
           // On start: prefix with parent depth-2 stage so the user can tell
@@ -414,9 +400,9 @@ export default function App() {
             if (kind === 'start') {
               const parent = steps.find((s) => s.status === 'running')?.label;
               const prefixed = parent ? `${parent} › ${leaf}` : leaf;
-              return { ...prev, message: prefixed };
+              return patch({ message: prefixed });
             }
-            return { ...prev, message: '' };
+            return patch({ message: '' });
           }
           // Top-level (depth 2) start/done events drive the step list.
           const idx = steps.findIndex((s) => s.label === leaf);
@@ -426,7 +412,7 @@ export default function App() {
             }
             if (idx === -1) steps.push({ label: leaf, status: 'running' });
             else steps[idx] = { ...steps[idx], status: 'running' };
-            return { ...prev, steps, message: leaf };
+            return patch({ steps, message: leaf });
           }
           if (kind === 'done' && idx >= 0) {
             // `done::<depth>::<leaf>[::<summary>]` — summary is the
@@ -438,13 +424,16 @@ export default function App() {
             // don't leave stale "Classifying chapter X/N" text in the
             // header. The next start::2 will repaint to the new stage name;
             // until then the consumer renders the neutral "Working…" fallback.
-            return { ...prev, steps, message: '' };
+            return patch({ steps, message: '' });
           }
-          return prev;
+          return base;
         });
-      });
-      if (cancelled) unlisten();
-      else unlistenFn = unlisten;
+      };
+      const uns = await Promise.all(
+        Object.values(OPS).map((op) => listen(progressChannel(op), makeHandler(op))),
+      );
+      if (cancelled) uns.forEach((u) => u());
+      else unlistenFn = () => uns.forEach((u) => u());
     })();
     return () => {
       cancelled = true;

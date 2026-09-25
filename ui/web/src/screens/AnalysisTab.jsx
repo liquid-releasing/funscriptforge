@@ -196,6 +196,9 @@ export default function AnalysisTab({
     setBusy?.({
       message: `${resume ? 'Resuming' : 'Analyzing'} ${project.title ?? 'project'}…`,
       steps: [],
+      // The analyze op's completion event releases this entry, so a lost
+      // invoke reply cannot leave the banner describing finished work.
+      waitingFor: OPS.ANALYZE,
     });
     try {
       // ★ Guard against a call that never settles. Measured 2026-09-25: the

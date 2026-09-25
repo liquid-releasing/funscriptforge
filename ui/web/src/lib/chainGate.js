@@ -13,7 +13,7 @@
 //
 // Extracted from App.jsx so it is testable: vitest never renders App, so a
 // rule left inline there is effectively unguarded — the same reason
-// busyOwner.js exists.
+// busyRegistry.js exists.
 
 // Tabs that come BEFORE Analysis in the chain. Kept as an explicit list
 // rather than an index comparison against TAB_CHAIN because the chain order
