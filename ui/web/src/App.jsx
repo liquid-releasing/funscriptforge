@@ -172,11 +172,17 @@ export default function App() {
   const busyTokenRef = useRef(0);
   const beginBusy = useCallback((next) => {
     const token = ++busyTokenRef.current;
-    setBusy({ ...next, token, owner: 'app' });
+    console.warn(`[ff-trace] busy SET by app#${token}:`, next?.message ?? '(no message)');
+    setBusy({ ...next, token, owner: 'app', startedAt: Date.now() });
     return token;
   }, []);
   const endBusy = useCallback((token) => {
-    setBusy((prev) => (prev && prev.token !== token ? prev : null));
+    setBusy((prev) => {
+      const keep = prev && prev.token !== token;
+      console.warn(`[ff-trace] busy CLEAR by app#${token} ->`,
+        keep ? `REFUSED (current token=${prev.token})` : 'cleared');
+      return keep ? prev : null;
+    });
   }, []);
   // Same hazard one level down. Child tabs each set and clear this banner
   // directly, and a tab that has UNMOUNTED can still resolve a promise and
@@ -194,13 +200,26 @@ export default function App() {
   const busySetterFor = useCallback((owner) => {
     if (!busySettersRef.current[owner]) {
       busySettersRef.current[owner] = (next) =>
-        setBusy((prev) => applyBusyUpdate(
-          prev,
-          // Stamp when this banner went up, so the abandoned-banner release
-          // has a baseline even if no progress event ever arrives.
-          next == null ? next : { startedAt: Date.now(), ...next },
-          owner,
-        ));
+        setBusy((prev) => {
+          const out = applyBusyUpdate(
+            prev,
+            // Stamp when this banner went up, so the abandoned-banner release
+            // has a baseline even if no progress event ever arrives.
+            next == null ? next : { startedAt: Date.now(), ...next },
+            owner,
+          );
+          // [ff-trace] The busy banner's whole lifecycle. Three rounds of
+          // fixing a stuck banner were aimed by inference; this says outright
+          // who set it, who tried to clear it, and whether the clear was
+          // refused because someone else owns it.
+          if (next == null) {
+            console.warn(`[ff-trace] busy CLEAR by ${owner} ->`,
+              out === prev && prev ? `REFUSED (owner=${prev.owner})` : 'cleared');
+          } else {
+            console.warn(`[ff-trace] busy SET by ${owner}:`, next.message ?? '(no message)');
+          }
+          return out;
+        });
     }
     return busySettersRef.current[owner];
   }, []);
