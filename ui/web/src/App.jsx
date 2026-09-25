@@ -350,6 +350,10 @@ export default function App() {
         // no next one. Without this the footer keeps a spinner on work that
         // has finished.
         if (kind === 'end') {
+          // [ff-trace] console.WARN, not debug: DevTools hides debug behind
+          // the Verbose filter, and this is the datum that says whether the
+          // completion event crosses the bridge at all.
+          console.warn('[ff-trace] end event received', parts[2], parts[3]);
           setBusy((prev) => {
             if (!prev || !Array.isArray(prev.steps)) return prev;
             if (!prev.steps.some((x) => x.status === 'running')) return prev;

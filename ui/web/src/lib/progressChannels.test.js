@@ -33,11 +33,15 @@ describe('progress channel names', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('covers all seven streaming commands', () => {
+  it('covers every streaming command', () => {
     // One per run_cli_with_progress call site in commands.rs. If a new
-    // streaming command lands without an op here, this catches it.
+    // streaming command lands without an op here, this catches it — which is
+    // exactly what happened: `refresh_project` shipped streaming progress
+    // while OPS still listed seven, so anything iterating OPS (or reading it
+    // to learn what channels exist) silently skipped refresh.
     expect(Object.values(OPS).sort()).toEqual([
       'analyze', 'audio', 'export', 'generate', 'import', 'phrases', 'polish',
+      'refresh',
     ]);
   });
 });

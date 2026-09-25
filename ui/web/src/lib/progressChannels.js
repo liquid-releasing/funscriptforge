@@ -48,6 +48,7 @@ export const OPS = Object.freeze({
   POLISH: 'polish',       // polish_apply
   EXPORT: 'export',       // export_write
   IMPORT: 'import',       // import_forge_bundle
+  REFRESH: 'refresh',     // refresh_project (re-stamp stations + bundle)
 });
 
 /** Event name for one operation's progress. */
