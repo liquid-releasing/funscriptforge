@@ -21,7 +21,7 @@ import {
   loadAudioPeaks, loadAudioSpectrogram, loadAudioBeats,
   revertWorkingFunscript, saveWorkingFunscript,
   countChapterClips, analyzeChaptersWithVideoflow,
-  analyzerVersionStale, projectStatus, refreshProject,
+  analyzerVersionStale, projectStatus, refreshProject, onOpComplete,
 } from './api/forge.js';
 import { deriveAnalysisState } from './lib/analysisState.js';
 import { chooseOpenPrompt, outputsNeedWork } from './lib/openPrompt.js';
@@ -29,6 +29,7 @@ import { chainArtifactFor, stemFromPath } from './lib/chainArtifact.js';
 import { analysisBlocksChain } from './lib/chainGate.js';
 import { applyBusyUpdate, isBusyAbandoned } from './lib/busyOwner.js';
 import { DEFAULT_STALL_MS } from './lib/stallWatchdog.js';
+import { withCompletionFallback } from './lib/completionFallback.js';
 import { probeMediaCached } from './hooks/useChapterClip.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
@@ -1008,7 +1009,18 @@ export default function App() {
     // starts next, and an unconditional clear would wipe theirs.
     const token = beginBusy({ message: 'Updating your device files…' });
     try {
-      await refreshProject(project.path);
+      // ★ The reply to this call is what went missing. Measured 2026-09-25:
+      // Rust logged `refresh returning 580 bytes` and this promise never
+      // settled, so `endBusy` below never ran and the banner stayed up until
+      // some other tab happened to set and clear it. Nothing here needs the
+      // result — only the settlement — so recovering is just "the backend
+      // told us it finished".
+      await withCompletionFallback(refreshProject(project.path), {
+        subscribe: (onComplete) => onOpComplete('refresh', onComplete),
+        recover: async () => ({ recovered: true }),
+        onRecover: () => console.warn(
+          'App: refresh reply was lost — released on the completion event'),
+      });
     } catch (err) {
       console.error('refresh outputs failed', err);
     } finally {

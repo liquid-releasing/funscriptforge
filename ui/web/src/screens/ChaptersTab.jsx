@@ -31,6 +31,7 @@ import {
   prewarmMediaRange,
   analyzePhrases,
   loadPhrasesSidecar,
+  onOpComplete,
   writeChaptersSidecar,
   extractChapterClip,
   transformApplyActions,
@@ -45,7 +46,7 @@ import { SCOPE, summarizeScope, SCOPE_DEFAULTS } from '../lib/toneScope.js';
 import { applyTone } from '../lib/toneCurve.js';
 import { withStallTimeout } from '../lib/stallWatchdog.js';
 import { progressChannel, OPS, parseProgressLine } from '../lib/progressChannels.js';
-import { withCompletionFallback, completionExitCode } from '../lib/completionFallback.js';
+import { withCompletionFallback } from '../lib/completionFallback.js';
 import {
   rebuildWorkingActions, nextBakeRecord, buildSelection,
 } from '../lib/toneBake.js';
@@ -608,18 +609,7 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
         // events stop, which no positive signal can cover.
         withStallTimeout(
           withCompletionFallback(analyzePhrases(project.path), {
-            subscribe: (onComplete) => {
-              let off = null, dead = false;
-              import('@tauri-apps/api/event')
-                .then(({ listen }) => listen(progressChannel(OPS.PHRASES), (e) => {
-                  const code = completionExitCode(
-                    parseProgressLine(e?.payload), OPS.PHRASES);
-                  if (code !== null) onComplete(code);
-                }))
-                .then((un) => { if (dead) un(); else off = un; })
-                .catch(() => {});
-              return () => { dead = true; off?.(); };
-            },
+            subscribe: (onComplete) => onOpComplete(OPS.PHRASES, onComplete),
             recover: () => loadPhrasesSidecar(project.path)
               .then((rows) => (Array.isArray(rows) ? rows : [])),
             onRecover: () => console.warn(

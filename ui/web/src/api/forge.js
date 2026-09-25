@@ -770,6 +770,44 @@ export function polishChannels(funscriptPath, station, startMs, endMs) {
 // flatten the motion track.
 export const OUTPUT_PIPELINE_VERSION = '3';
 
+/** Subscribe to an operation's COMPLETION announcement.
+ *
+ *  Rust emits `end::0::<op>::<exitCode>` on the op's progress channel once the
+ *  command has returned. This exists because the invoke REPLY is not reliable
+ *  (measured 2026-09-25: Rust logged "returning 5016 bytes" and the promise
+ *  never settled) while events from the same command were all delivered.
+ *
+ *  Shaped for `withCompletionFallback`'s `subscribe`: pass a handler, get an
+ *  unsubscribe back synchronously even though the listener attaches async.
+ *  Browser mode returns a no-op.
+ *
+ *  @param op  one of OPS from lib/progressChannels.js
+ *  @param onComplete  (exitCode:number) => void
+ */
+export function onOpComplete(op, onComplete) {
+  if (!isTauri()) return () => {};
+  let off = null;
+  let dead = false;
+  (async () => {
+    try {
+      const [{ listen }, chans, fallback] = await Promise.all([
+        import('@tauri-apps/api/event'),
+        import('../lib/progressChannels.js'),
+        import('../lib/completionFallback.js'),
+      ]);
+      const un = await listen(chans.progressChannel(op), (e) => {
+        const code = fallback.completionExitCode(
+          chans.parseProgressLine(e?.payload), op);
+        if (code !== null) onComplete(code);
+      });
+      if (dead) un(); else off = un;
+    } catch {
+      /* no listener — the caller's other safety nets still apply */
+    }
+  })();
+  return () => { dead = true; off?.(); off = null; };
+}
+
 /** What state a project's outputs are in.
  *
  *  Returns the full `project_status` record; the fields the open prompt uses:
