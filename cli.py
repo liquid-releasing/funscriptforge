@@ -6471,6 +6471,54 @@ def _read_bundle_manifest(bundle):
     return None
 
 
+def _authoring_mtime(funscript: str, fdir) -> float:
+    """Newest mtime across the files the user AUTHORS into a project.
+
+    Deliberately excludes `<stem>.polish.yml`: refresh re-stamps it after it
+    regenerates the channels, so counting it would make every refresh leave
+    the project instantly "behind" itself. Knob edits reach the outputs
+    through polish-apply, which rewrites the channel files anyway.
+    """
+    work = _work_funscript_for(funscript)
+    cands = [Path(work), Path(funscript)]
+    stem = Path(funscript).stem
+    for suffix in ("feel.yml", "chapters.json", "characters.json",
+                   "phrases.json", "tonebake.json"):
+        cands.append(Path(fdir) / f"{stem}.{suffix}")
+    out = 0.0
+    for c in cands:
+        try:
+            out = max(out, c.stat().st_mtime)
+        except OSError:
+            pass
+    return out
+
+
+def _output_mtime(bundle, fdir, accepted) -> float:
+    """OLDEST mtime across a project's rendered outputs.
+
+    Oldest, not newest: if any one station was left behind, the project is
+    behind. A newest-wins reading would let one freshly-written file vouch
+    for eight stale ones.
+    """
+    out = None
+    # A bundle is normally a zip, but _read_bundle_manifest also accepts an
+    # unzipped folder; a directory's own mtime says nothing about when its
+    # contents were written, so use the manifest inside it.
+    b = Path(bundle)
+    paths = [b / "manifest.ffmeta" if b.is_dir() else b]
+    for sid in accepted or []:
+        d = Path(fdir) / "polish" / sid
+        paths.extend(sorted(d.glob("*.funscript")) if d.is_dir() else [])
+    for c in paths:
+        try:
+            m = c.stat().st_mtime
+        except OSError:
+            continue
+        out = m if out is None else min(out, m)
+    return out or 0.0
+
+
 def project_status(funscript: str) -> dict:
     """What state a project's outputs are in, and why.
 
@@ -6478,10 +6526,18 @@ def project_status(funscript: str) -> dict:
     nag, `reasons` is what the user reads to decide. A version number alone
     does not answer "why should I care?".
 
-    Three states, deliberately distinct:
-      current       -- outputs match this build
+    Four states, deliberately distinct:
+      current       -- outputs match this build AND this project's edits
       stale         -- a fix changed what this project would produce
+      behind        -- right engine, but the outputs predate your own edits
       never-exported-- nothing to refresh yet
+
+    `behind` exists because "was this built by the current engine?" and "does
+    this reflect what I last did?" are different questions, and only the first
+    was being answered. Measured 2026-09-25: a chapter was set back to Untoned
+    in the app, and `--check` reported the project `current` while the undo
+    existed nowhere but the work funscript -- every device channel and the
+    bundle were still ~18 hours old.
     Stations added since the last stamp are reported separately in
     `stations_missing`: that is an opportunity, not a defect, and must not
     read as an error.
@@ -6493,6 +6549,7 @@ def project_status(funscript: str) -> dict:
     from forge import polish as _p
 
     stem = Path(funscript).stem
+    fdir = _forge_dir_for(funscript)
     bundle = _bundle_for(funscript)
     manifest = _read_bundle_manifest(bundle)
     stamped = manifest.get("pipeline_version") if manifest else None
@@ -6527,6 +6584,18 @@ def project_status(funscript: str) -> dict:
     else:
         state = "current"
 
+    # Right engine, but do the outputs reflect the user's latest edits?
+    # A 2s slack absorbs same-second writes within one refresh run.
+    authored = _authoring_mtime(funscript, fdir)
+    rendered = _output_mtime(bundle, fdir, accepted) if manifest is not None else 0.0
+    behind = bool(manifest is not None and rendered and authored > rendered + 2)
+    if state == "current" and behind:
+        state = "behind"
+        reasons.append(
+            "Your edits are newer than the exported outputs. The device "
+            "channels and the bundle were rendered before your most recent "
+            "change, so they do not include it yet.")
+
     work = _work_funscript_for(funscript)
     return {
         "funscript": str(funscript),
@@ -6542,6 +6611,9 @@ def project_status(funscript: str) -> dict:
         "stations_missing": missing,
         "work_funscript": work,
         "has_working_edits": work != funscript,
+        "authored_mtime": authored or None,
+        "rendered_mtime": rendered or None,
+        "outputs_behind_edits": behind,
     }
 
 
@@ -6648,7 +6720,11 @@ def cmd_refresh(args):
     targets = _projects_under(args.path)
     statuses = [project_status(t) for t in targets]
     if not args.all:
-        statuses = [st for st in statuses if st["state"] == "stale"]
+        # Both states mean "re-render me": `stale` is the wrong engine,
+        # `behind` is the right engine over older content. Refreshing is the
+        # same work either way, so a default refresh must pick up both or the
+        # user's own edits would need `--all` to reach their device files.
+        statuses = [st for st in statuses if st["state"] in ("stale", "behind")]
 
     if args.check:
         print(json.dumps({"checked": len(targets), "projects": statuses}, indent=2))

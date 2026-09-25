@@ -408,3 +408,106 @@ class TestReplaceRefusesToDeleteWhatItDoesNotRecognise(unittest.TestCase):
         self.assertIn("manifest.ffmeta", str(cm.exception))
         self.assertTrue((victim / "important.txt").exists(),
                         "a refused --replace must not have deleted anything")
+
+
+class TestOutputsBehindTheUsersEdits(unittest.TestCase):
+    """★ 'Built by the current engine' is not 'reflects what I last did'.
+
+    Only the first question was being answered. Measured 2026-09-25 during
+    dogfooding: a chapter was set back to Untoned in the app and accepted, and
+    `refresh --check` reported the project `current` — while the undo existed
+    nowhere but the work funscript. Every device channel and the bundle were
+    ~18 hours old. The user would have shipped, or played, output that did not
+    contain the edit they had just made and watched succeed on screen.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.src = self.tmp / "scene.funscript"
+        self.src.write_text(json.dumps({"actions": [{"at": 0, "pos": 0}]}),
+                            encoding="utf-8")
+        self.fdir = Path(ffcli._forge_dir_for(str(self.src)))
+        self.fdir.mkdir(parents=True, exist_ok=True)
+        # An exported, correctly-stamped bundle folder.
+        self.bundle = Path(ffcli._bundle_for(str(self.src)))
+        self.bundle.mkdir(parents=True, exist_ok=True)
+        (self.bundle / "manifest.ffmeta").write_text(
+            json.dumps({"stem": "scene",
+                        "pipeline_version": OUTPUT_PIPELINE_VERSION}),
+            encoding="utf-8")
+
+    def _age(self, path, seconds):
+        """Backdate a file so the comparison is deterministic rather than
+        dependent on how fast the test ran."""
+        t = os.path.getmtime(path) - seconds
+        os.utime(path, (t, t))
+
+    def test_fresh_outputs_are_current(self):
+        self._age(self.src, 600)
+        self.assertEqual(ffcli.project_status(str(self.src))["state"], "current")
+
+    def test_an_edit_after_the_export_reports_behind(self):
+        self._age(self.bundle / "manifest.ffmeta", 600)
+        st = ffcli.project_status(str(self.src))
+        self.assertEqual(st["state"], "behind")
+        self.assertTrue(st["outputs_behind_edits"])
+        self.assertTrue(any("newer than the exported outputs" in r
+                            for r in st["reasons"]))
+
+    def test_a_tone_bake_counts_as_an_edit(self):
+        # The undo that exposed this writes only the work funscript and the
+        # bake record; neither is the source funscript.
+        self._age(self.src, 600)
+        self._age(self.bundle / "manifest.ffmeta", 600)
+        (self.fdir / "scene.tonebake.json").write_text("{}", encoding="utf-8")
+        self.assertEqual(ffcli.project_status(str(self.src))["state"], "behind")
+
+    def test_the_oldest_station_governs(self):
+        # One freshly-written station must not vouch for eight stale ones.
+        self._age(self.src, 600)
+        for sid, age in (("estim3p", 0), ("handy", 6000)):
+            d = self.fdir / "polish" / sid
+            d.mkdir(parents=True, exist_ok=True)
+            f = d / "scene.x.funscript"
+            f.write_text("{}", encoding="utf-8")
+            self._age(f, age)
+        import yaml
+        ffcli._polish_path(str(self.src)).write_text(yaml.safe_dump(
+            {"pipeline_version": OUTPUT_PIPELINE_VERSION,
+             "passes": {"estim3p": {"accepted": True},
+                        "handy": {"accepted": True}}}), encoding="utf-8")
+        self.assertEqual(ffcli.project_status(str(self.src))["state"], "behind")
+
+    def test_stale_outranks_behind(self):
+        # Both are fixed by the same re-render; the version reason is the one
+        # that explains why the OUTPUT would differ, so it leads.
+        (self.bundle / "manifest.ffmeta").write_text(
+            json.dumps({"stem": "scene", "pipeline_version": "1"}),
+            encoding="utf-8")
+        self.assertEqual(ffcli.project_status(str(self.src))["state"], "stale")
+
+    def test_never_exported_is_not_behind(self):
+        import shutil as _sh
+        _sh.rmtree(self.bundle)
+        st = ffcli.project_status(str(self.src))
+        self.assertEqual(st["state"], "never-exported")
+        self.assertFalse(st["outputs_behind_edits"])
+
+    def test_polish_yml_is_not_counted_as_an_edit(self):
+        # ★ refresh re-stamps polish.yml AFTER writing the channels. Counting
+        # it would make every successful refresh leave the project instantly
+        # "behind" itself — a warning that reappears the moment you obey it.
+        self._age(self.src, 600)
+        self._age(self.bundle / "manifest.ffmeta", 600)
+        ffcli._restamp_polish_pipeline_version(str(self.src))
+        import yaml
+        ffcli._polish_path(str(self.src)).write_text(
+            yaml.safe_dump({"pipeline_version": OUTPUT_PIPELINE_VERSION,
+                            "passes": {}}), encoding="utf-8")
+        self.assertEqual(ffcli.project_status(str(self.src))["state"], "current")
+
+    def test_a_default_refresh_picks_up_behind_projects(self):
+        import inspect
+        src = inspect.getsource(ffcli.cmd_refresh)
+        self.assertIn('("stale", "behind")', src,
+                      "a default refresh must re-render behind projects too")
