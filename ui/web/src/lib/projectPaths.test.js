@@ -106,3 +106,42 @@ describe('ellipsizePath', () => {
     expect(ellipsizePath(null)).toBe('');
   });
 });
+
+describe('a video-only project still has a folder', () => {
+  // ★ Dogfood 2026-09-25. A project opened from a video has media but no
+  // `.path` — the funscript does not exist until Generate runs. Everything
+  // in the Project tab derived the folder from `.path`, so the folder row
+  // rendered nothing for exactly the projects where the user most needs to
+  // find the folder. The directory was never unknown; it was never asked for.
+  const videoOnly = {
+    title: "EroticonVI - Wildcat 'Totally Str[AI]ght'.forgeme",
+    path: null,
+    mediaPath: String.raw`D:\ai\_forge ready\New folder (2)\EroticonVI.forgeme.mp4`,
+  };
+
+  it('resolves nothing from the missing funscript path', () => {
+    expect(projectDirname(videoOnly)).toBeUndefined();
+  });
+
+  it('★ resolves the folder from the media file instead', () => {
+    expect(projectDirname(videoOnly.mediaPath))
+      .toBe(String.raw`D:\ai\_forge ready\New folder (2)`);
+  });
+
+  it('the fallback chain the tab uses lands on a real folder', () => {
+    const dirPath = undefined                      // no readdir result
+      ?? projectDirname(videoOnly)                 // no funscript
+      ?? projectDirname(videoOnly.mediaPath);      // media
+    expect(isRevealablePath(dirPath)).toBe(true);
+  });
+
+  it('and still shows nothing for a sample project', () => {
+    const sample = { path: 'sample://demo', mediaPath: 'sample://demo.mp4' };
+    const dirPath = undefined
+      ?? projectDirname(sample)
+      ?? projectDirname(sample.mediaPath);
+    expect(dirPath).toBeUndefined();
+    expect(isRevealablePath(dirPath)).toBe(false);
+  });
+});
+

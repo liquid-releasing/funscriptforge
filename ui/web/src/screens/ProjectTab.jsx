@@ -81,8 +81,16 @@ export default function ProjectTab({
   // Re-scan the active project's folder whenever the path changes —
   // gives us companions / sidecars / forge dir / "nearby funscripts"
   // straight from disk, instead of the hardcoded placeholder rows.
-  const activePath =
-    typeof openedProject === 'object' ? openedProject?.path : null;
+  // Scan by the funscript when there is one, else by the MEDIA file. A
+  // video-only project (media attached, funscript not generated yet) has no
+  // `.path`, so this used to be null and the whole readdir was skipped --
+  // leaving the tab with no folder row, no sidecar rows and no forge-dir row
+  // for exactly the projects where the user most needs to find the folder
+  // (dogfood 2026-09-25). Both files live in the same directory and share a
+  // stem, so either one answers the same question.
+  const activePath = typeof openedProject === 'object'
+    ? (openedProject?.path || openedProject?.mediaPath || null)
+    : null;
   useEffect(() => {
     let cancelled = false;
     if (!activePath || String(activePath).startsWith('sample://')) {
@@ -540,7 +548,6 @@ function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, on
               </Button>
             )
           )}
-          <Button kind="ghost" size="sm" icon="more-horizontal">More</Button>
         </div>
       </div>
 
@@ -602,7 +609,11 @@ function ActiveProject({ project, projectFiles, onAddOrReplace, onOpenScript, on
           never named the folder — the user's dogfood report was that there
           was no way to find the project's path from this tab. Full path in
           `title`, so truncation costs nothing. */}
-      <ProjectFolderRow dirPath={projectFiles?.dirPath ?? projectDirname(project)} />
+      <ProjectFolderRow
+        dirPath={projectFiles?.dirPath
+          ?? projectDirname(project)
+          ?? projectDirname(project?.mediaPath)}
+      />
 
       <div
         style={{
