@@ -4,29 +4,48 @@
 // the analysis is current and there's nothing to resume, it never appears —
 // we don't nag.
 //
-// Two modes, deliberately not mixed:
+// Three modes, deliberately not mixed, in this priority order:
 //   • stale analysis  → recalculate prompt (resume is suppressed because the
 //     consumer tabs are gated until the re-analyze finishes anyway).
+//   • stale OUTPUTS   → "update your device files" (see below).
 //   • resume          → "continue where you left off" → jump to that tab.
+//
+// Analysis outranks outputs because re-analyzing changes what the outputs
+// would be built FROM; updating outputs first would just be work thrown away.
+//
+// The outputs branch covers two backend states, which differ in cause but not
+// in remedy -- both are fixed by the same re-render, so they share one button:
+//   stale   built by an older pipeline than this build
+//   behind  right pipeline, but rendered before the user's latest edit
+// The distinction is carried in `reasons`, which is written Python-side in
+// user-facing terms; this component never composes that text itself, so a
+// pipeline bump needs no UI change.
 //
 // Session today = { tab } via lib/sessionStore (localStorage); the portable
 // `<stem>.forge/session.json` is the immediate follow-up. Version staleness
 // comes from forge.js analyzerVersionStale (chapters analyzer_version stamp).
 
 import { Button, Icon } from 'forgemoment';
+import { chooseOpenPrompt, PROMPT } from '../lib/openPrompt.js';
 
 export default function OpenProjectDialog({
   open,
   title,
   versionStale = false,
+  outputsState = null,          // 'stale' | 'behind' | null
+  outputsReasons = null,        // string[] from project_status
   resumeTab = null,
   resumeTabLabel = null,
   onResume,
   onRecalculate,
+  onRefreshOutputs,
   onDismiss,
 }) {
   if (!open) return null;
 
+  // One source of truth for which question gets asked; the ranking and
+  // its rationale live in lib/openPrompt.js, where they are tested.
+  const prompt = chooseOpenPrompt({ versionStale, outputsState, resumeTab });
   const close = () => onDismiss?.();
 
   return (
@@ -73,7 +92,7 @@ export default function OpenProjectDialog({
         </div>
 
         <div style={{ padding: '18px 20px' }}>
-          {versionStale ? (
+          {prompt === PROMPT.ANALYSIS ? (
             <>
               <Row
                 icon="alert-triangle" tint="#ffb547"
@@ -84,6 +103,32 @@ export default function OpenProjectDialog({
                 <Button kind="ghost" size="sm" onClick={close}>Later</Button>
                 <Button kind="primary" size="sm" icon="refresh-ccw" onClick={() => onRecalculate?.()}>
                   Recalculate
+                </Button>
+              </div>
+            </>
+          ) : prompt === PROMPT.OUTPUTS ? (
+            <>
+              <Row
+                icon="refresh-ccw" tint="#ffb547"
+                head={outputsState === 'behind'
+                  ? 'Your device files are older than your edits'
+                  : 'Your device files are out of date'}
+                body={(outputsReasons && outputsReasons[0])
+                  || 'Update them to pick up the latest changes.'}
+              />
+              {outputsReasons && outputsReasons.length > 1 && (
+                <ul style={{
+                  margin: '10px 0 0 46px', padding: 0, listStyle: 'disc',
+                  color: 'var(--text-dim)', fontSize: 12, lineHeight: 1.5,
+                }}>
+                  {outputsReasons.slice(1).map((r, i) => <li key={i}>{r}</li>)}
+                </ul>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+                <Button kind="ghost" size="sm" onClick={close}>Later</Button>
+                <Button kind="primary" size="sm" icon="refresh-ccw"
+                        onClick={() => onRefreshOutputs?.()}>
+                  Update outputs
                 </Button>
               </div>
             </>

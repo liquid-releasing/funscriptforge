@@ -4685,6 +4685,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_ref.add_argument("--out", metavar="PATH", help="Bundle output path (single project only).")
     p_ref.add_argument("--media", metavar="PATH", help="Media file for thumbnails (single project only).")
 
+    # --- project-status (what state are this project's outputs in?) ---
+    p_ps = sub.add_parser(
+        "project-status",
+        help="Report whether a project's outputs are current, stale (older "
+             "pipeline) or behind (older than your own edits)",
+    )
+    p_ps.add_argument("funscript", help="Path to the project's .funscript")
+
     # --- export (collect outputs into a loose folder or .forge zip) ---
     p_exp = sub.add_parser(
         "export",
@@ -6711,6 +6719,17 @@ def _restamp_polish_pipeline_version(src) -> str | None:
 
 
 @_cli_command
+def cmd_project_status(args):
+    """Report one project's output state, for the UI's open-project prompt.
+
+    `refresh --check` answers the same question for a whole library and
+    filters to what needs work; a UI opening ONE project wants that project's
+    record whatever its state, so it can stay silent on `current`.
+    """
+    print(json.dumps(project_status(args.funscript), indent=2))
+
+
+@_cli_command
 def cmd_refresh(args):
     """Re-render outputs for one project or a whole library."""
     import contextlib
@@ -7117,6 +7136,7 @@ def main():
         "polish-channels":  cmd_polish_channels,
         "polish-read":      cmd_polish_read,
         "polish-write":     cmd_polish_write,
+        "project-status":   cmd_project_status,
         "export":           cmd_export,
         "import":           cmd_import,
         "customize":        cmd_customize,

@@ -733,6 +733,58 @@ export function polishChannels(funscriptPath, station, startMs, endMs) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Output pipeline version
+//
+// MIRROR of `forge/pipeline_version.py OUTPUT_PIPELINE_VERSION`, kept for the
+// same reason ANALYZER_VERSION is mirrored: so the UI can name the version it
+// was built against. It is NOT used to decide staleness.
+//
+// ★ That decision lives in Python only, behind `projectStatus()`. Unlike the
+// analyzer's single stamp-vs-constant comparison, output state also depends on
+// whether the rendered files are older than the user's own edits — computed
+// from mtimes across every station's channel files. Re-deriving that here
+// would need data the UI does not have, and would drift the first time either
+// side changed. Ask the backend; do not reimplement the rule.
+//
+// ⚠ Unlike ANALYZER_VERSION, a MISSING stamp means STALE rather than
+// grandfathered: every unstamped bundle was built by a pipeline known to
+// flatten the motion track.
+export const OUTPUT_PIPELINE_VERSION = '3';
+
+/** What state a project's outputs are in.
+ *
+ *  Returns the full `project_status` record; the fields the open prompt uses:
+ *    state    'current' | 'stale' | 'behind' | 'never-exported'
+ *    reasons  string[] — user-facing text explaining why it matters
+ *
+ *  Browser mode → 'current', so mock UI never nags. */
+export function projectStatus(funscript) {
+  return call(
+    'project_status',
+    { funscript },
+    () => Promise.resolve({
+      state: 'current', reasons: [],
+      pipeline_version: OUTPUT_PIPELINE_VERSION,
+      current_pipeline_version: OUTPUT_PIPELINE_VERSION,
+      stations_missing: [],
+    }),
+  );
+}
+
+/** Re-render a project's outputs in place: regenerate every stamped station,
+ *  then replace the `.forge` bundle. Streams progress on `ff:progress:refresh`.
+ *
+ *  ⚠ `exportOnly` skips station regeneration — the cheap path when only the
+ *  export stage changed, and the wrong one for a generation-stage fix. */
+export function refreshProject(funscript, { exportOnly = false } = {}) {
+  return call(
+    'refresh_project',
+    { funscript, exportOnly },
+    () => Promise.resolve({ refreshed: 0, projects: [] }),
+  );
+}
+
 /** Read the `<stem>.polish.yml` stamp record. Returns
  *  {version, schema, current_hash, passes}. Browser mode → empty. */
 export function polishRead(input) {

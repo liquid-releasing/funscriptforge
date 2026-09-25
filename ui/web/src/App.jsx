@@ -21,9 +21,10 @@ import {
   loadAudioPeaks, loadAudioSpectrogram, loadAudioBeats,
   revertWorkingFunscript, saveWorkingFunscript,
   countChapterClips, analyzeChaptersWithVideoflow,
-  analyzerVersionStale,
+  analyzerVersionStale, projectStatus, refreshProject,
 } from './api/forge.js';
 import { deriveAnalysisState } from './lib/analysisState.js';
+import { outputsNeedWork } from './lib/openPrompt.js';
 import { analysisBlocksChain } from './lib/chainGate.js';
 import { applyBusyUpdate } from './lib/busyOwner.js';
 import { probeMediaCached } from './hooks/useChapterClip.js';
@@ -910,11 +911,48 @@ export default function App() {
     const session = loadSession(project.path);
     const resumeTab = (session?.tab && session.tab !== 'library' && session.tab !== tab)
       ? session.tab : null;
-    if (versionStale || resumeTab) {
-      const t = TABS.find((x) => x.id === resumeTab);
-      setOpenDialog({ title: project.title, versionStale, resumeTab, resumeTabLabel: t?.label || null });
-    }
+    const t = TABS.find((x) => x.id === resumeTab);
+    const base = {
+      title: project.title, versionStale, resumeTab, resumeTabLabel: t?.label || null,
+    };
+
+    // Output state is a backend round-trip, so show the decisions we already
+    // know about immediately rather than delaying the whole prompt on it.
+    if (versionStale || resumeTab) setOpenDialog(base);
+
+    // A stale analysis outranks stale outputs (re-analyzing changes what the
+    // outputs would be built from), so only ask when analysis is current.
+    if (versionStale) return;
+    let cancelled = false;
+    projectStatus(project.path)
+      .then((st) => {
+        if (cancelled) return;
+        if (!outputsNeedWork(st?.state)) return;
+        setOpenDialog({
+          ...base, outputsState: st.state, outputsReasons: st.reasons || [],
+        });
+      })
+      .catch(() => {});   // never block opening a project on a status probe
+    return () => { cancelled = true; };
   }, [project?.id, project?.path, project?.analyzerVersion]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // "Update outputs" — re-render every stamped station, then the bundle.
+  // NOT --export-only: a generation-stage fix does not reach the device files
+  // through the export stage alone.
+  const runRefreshOutputs = useCallback(async () => {
+    if (!project?.path) return;
+    setOpenDialog(null);
+    // Clear by token: a refresh can outlive the banner of whatever the user
+    // starts next, and an unconditional clear would wipe theirs.
+    const token = beginBusy({ message: 'Updating your device files…' });
+    try {
+      await refreshProject(project.path);
+    } catch (err) {
+      console.error('refresh outputs failed', err);
+    } finally {
+      endBusy(token);
+    }
+  }, [project?.path, beginBusy, endBusy]);
 
   // Write-through the active tab as this project's "where you left off." Only
   // after the open prompt has been considered for this project (promptedRef
@@ -1681,10 +1719,13 @@ export default function App() {
         open={!!openDialog}
         title={openDialog?.title}
         versionStale={!!openDialog?.versionStale}
+        outputsState={openDialog?.outputsState || null}
+        outputsReasons={openDialog?.outputsReasons || null}
         resumeTab={openDialog?.resumeTab}
         resumeTabLabel={openDialog?.resumeTabLabel}
         onResume={(t) => { if (t) setTab(t); setOpenDialog(null); }}
         onRecalculate={() => { setTab('analysis'); setOpenDialog(null); }}
+        onRefreshOutputs={runRefreshOutputs}
         onDismiss={() => setOpenDialog(null)}
       />
     </div>

@@ -2800,6 +2800,42 @@ pub async fn polish_channels(
     serde_json::from_str(&out).map_err(|e| format!("parse polish-channels: {}", e))
 }
 
+/// What state a project's outputs are in: `current`, `stale` (built by an
+/// older pipeline), `behind` (right pipeline, but older than the user's own
+/// edits) or `never-exported`. Returns the full `project_status` record,
+/// including `reasons` — the user-facing text the prompt shows.
+///
+/// The staleness rule deliberately lives in Python only. `behind` is computed
+/// from mtimes across every station's channel files, so mirroring the rule in
+/// JS would mean re-deriving it from data the UI does not have, and it would
+/// drift the first time either side changed.
+#[tauri::command]
+pub async fn project_status(funscript: String) -> Result<serde_json::Value, String> {
+    let out = run_cli(&["project-status", &funscript]).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse project-status: {}", e))
+}
+
+/// Re-render a project's outputs in place: regenerate every stamped station,
+/// then replace the `.forge` bundle. This is what the "outputs are out of
+/// date" prompt runs.
+///
+/// `export_only` skips the station regeneration. It is the cheap path when
+/// only the export stage changed — and the WRONG path for a generation-stage
+/// fix, which is why it is opt-in rather than the default.
+#[tauri::command]
+pub async fn refresh_project(
+    app: AppHandle,
+    funscript: String,
+    export_only: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let mut argv: Vec<&str> = vec!["refresh", &funscript];
+    if export_only.unwrap_or(false) {
+        argv.push("--export-only");
+    }
+    let out = run_cli_with_progress(&app, "refresh", &argv).await?;
+    serde_json::from_str(&out).map_err(|e| format!("parse refresh: {}", e))
+}
+
 /// Read the `<stem>.polish.yml` stamp record. Returns
 /// `{ version, schema, current_hash, passes }` (empty when absent).
 #[tauri::command]
