@@ -1,1 +1,1 @@
-Join [LiquidReleasing Discord](https://discord.gg/MHucAwwRc)
+Join [LiquidReleasing Discord](https://discord.gg/Eytatcx8Jm)

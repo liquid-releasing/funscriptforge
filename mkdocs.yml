@@ -73,6 +73,7 @@ nav:
     - Forging Legacy Scripts: guide/forging-legacy-scripts.md
     - Polish: guide/polish.md
     - Export: guide/export.md
+    - Updating a Project: guide/updating-a-project.md
     - Viewer: guide/viewer.md
     - Media Player: guide/media-player.md
     - Transforms: guide/transforms.md

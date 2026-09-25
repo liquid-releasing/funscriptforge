@@ -121,3 +121,62 @@ hit too, it will be added to this page. You're helping the next person by asking
 ---
 
 ← [Back to: Export and Use](../guide/export.md)
+
+---
+
+## E-stim volume drops and there is nothing in the audio
+
+*You might be searching for: "volume drops for no reason", "estim fades out",
+"goes blank for ages", "slow fade I didn't ask for", "long pause in the middle"*
+
+If you hear a long fade or a dead stretch that does not match anything in the
+sound, and there is no event at that point in the Events tab, your device files
+were built by an older version.
+
+A flat stretch just before an event used to be discarded when the channel was
+saved. Players draw a straight line between the points they are given, so they
+slid gradually into the event from wherever that flat stretch began — a
+two-second pause could play as a thirty-five-second fade.
+
+**Fix:** open the project and click **Update outputs** when prompted, or run
+`python cli.py refresh "<your project>.funscript"`. Re-exporting on its own is
+**not** enough — this was a generation-stage problem, so the device stations
+have to be re-stamped. See [Updating a Project](../guide/updating-a-project.md).
+
+A quick way to tell it apart from real authoring: a perfectly straight, smooth
+slide in a channel is almost always a player interpolating between two distant
+points, not something that was authored.
+
+---
+
+## Every chapter feels the same / the dynamics I authored are gone
+
+*You might be searching for: "chapters all feel identical", "no variation",
+"export flattened my script", "lost the depth", "boring after export"*
+
+Older versions applied **Blend seams** to every stroke instead of only the
+sharp transitions between phrases, which removed most of the stroke depth you
+authored and made all chapters feel alike.
+
+**Fix:** update the project (**Update outputs**, or `cli.py refresh`). To
+confirm, compare stroke depth per chapter: repaired output varies between
+chapters, where the old output was uniform across all of them.
+
+Separately, **Final smooth** is on by default and costs roughly 18% of stroke
+depth on dense scripts. That is doing what it says rather than a fault — but if
+you want maximum depth, turn it off in Export options.
+
+---
+
+## I updated the app — do I have to redo my projects?
+
+*You might be searching for: "do I lose my edits", "will updating overwrite",
+"how do I update old projects", "out of date prompt"*
+
+No. Your chapters, tones, events, phrases and edited funscript are the *inputs*
+to an update, so updating cannot lose them — it re-renders the device files
+from what you already authored.
+
+When a project's files are out of date, the app says so when you open it, and
+lists what changed. See [Updating a Project](../guide/updating-a-project.md).
+

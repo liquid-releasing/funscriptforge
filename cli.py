@@ -2310,6 +2310,37 @@ def cmd_import(args):
             except (OSError, json.JSONDecodeError):
                 manifest = {}
 
+        # ★ Provenance check. Import lays the bundle's motion track down as
+        # `<stem>.funscript` -- the project's SOURCE. So importing a bundle
+        # built by an older pipeline does not just give you stale outputs: it
+        # makes that pipeline's output your source of truth, and `refresh`
+        # cannot undo it, because refresh regenerates FROM the source.
+        #
+        # Concretely, a bundle from before pipeline 2 has a motion track whose
+        # stroke depth was flattened by blend_seams (measured 88 -> 25). Import
+        # it and every future export of that project inherits the flattening,
+        # with nothing on disk to say why.
+        #
+        # This warns rather than refuses: a user may well want the old data
+        # back, and an import they cannot perform is worse than one they were
+        # told about. The structured fields let the UI say so too.
+        from forge.pipeline_version import (
+            is_stale as _is_stale, changes_since as _changes,
+            OUTPUT_PIPELINE_VERSION as _cur_pipeline,
+        )
+        imported_version = manifest.get("pipeline_version")
+        imported_stale = bool(manifest) and _is_stale(imported_version)
+        stale_reasons = _changes(imported_version) if imported_stale else []
+        if imported_stale:
+            print(
+                f"warning: this bundle was built by an older output pipeline "
+                f"({imported_version or 'unstamped'}; current "
+                f"{_cur_pipeline}). Its motion track "
+                f"becomes this project's SOURCE funscript, so `refresh` cannot "
+                f"repair it -- re-generate from the original if you have it.",
+                file=sys.stderr,
+            )
+
         stem = args.stem or manifest.get("stem") or src.stem
         dest = Path(args.out) if args.out else src.parent
         dest.mkdir(parents=True, exist_ok=True)
@@ -2449,6 +2480,12 @@ def cmd_import(args):
             "imported": imported,
             "media": media,
             "media_expected": mmeta.get("filename"),
+            # Provenance of what was just imported. `source_is_stale` is the
+            # one a caller should act on: it says the SOURCE funscript came
+            # from an older pipeline, which no amount of re-rendering fixes.
+            "pipeline_version": imported_version,
+            "source_is_stale": imported_stale,
+            "stale_reasons": stale_reasons,
         }))
     finally:
         shutil.rmtree(staging, ignore_errors=True)

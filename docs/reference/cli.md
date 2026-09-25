@@ -245,6 +245,70 @@ Edit the output file and pass it back to override defaults.
 
 ---
 
+### `refresh`
+
+Re-render a project's outputs — every device station you stamped in Polish,
+then the `.forge` bundle — without re-authoring anything. Use it after
+updating FunscriptForge, or after editing a chapter/tone/event without
+re-exporting.
+
+```bash
+# What in this library needs updating? (changes nothing)
+python cli.py refresh "D:/my-library" --check
+
+# Update one project
+python cli.py refresh "D:/my-library/scene/scene.funscript"
+
+# Update everything that needs it
+python cli.py refresh "D:/my-library"
+```
+
+| Option | What it does |
+| --- | --- |
+| `--check` | Report state as JSON and exit. Changes nothing. |
+| `--all` | Include projects that are already current (with `--check`), or re-render them anyway. |
+| `--export-only` | Skip re-stamping the stations and only rebuild the bundle. See the warning below. |
+| `--out PATH` | Write the bundle somewhere other than in place. |
+| `--media PATH` | Override the media file used for thumbnails. |
+
+The bundle is replaced **in place**, keeping its filename, and inherits the
+options that built the previous one — so a refresh cannot ship less than it
+replaced. Your funscript and authoring sidecars are read, never rewritten.
+
+!!! warning "`--export-only` does not pick up generation changes"
+    Export is a packager: stamped station files are copied from disk as-is.
+    `--export-only` therefore produces a new bundle containing old channel
+    files. Use it only when the packaging step itself changed. The default
+    (no flag) re-stamps each station first, which is what you want after an
+    app update.
+
+Accepts a single `.funscript` path or a folder to walk.
+
+---
+
+### `project-status`
+
+Report one project's output state as JSON. This is what the app's
+"your device files are out of date" prompt reads.
+
+```bash
+python cli.py project-status "D:/my-library/scene/scene.funscript"
+```
+
+`state` is one of:
+
+| Value | Meaning |
+| --- | --- |
+| `current` | Outputs match this build **and** your latest edits. |
+| `stale` | A newer version would produce different files. |
+| `behind` | Right version, but the outputs predate your own edits. |
+| `never-exported` | No bundle yet. Normal while authoring — not a problem. |
+
+`reasons` carries the user-facing explanation for each item, so a caller can
+show why it matters rather than just reporting a version mismatch.
+
+---
+
 ### `validate-plugins`
 
 Validate all JSON recipes in `user_transforms/` and report the plugin gate status.
@@ -329,5 +393,6 @@ Use these keys with `--transform` in `phrase-transform`:
 
 ## Related
 
+- [Updating a Project →](../guide/updating-a-project.md) — the `refresh` workflow in the app
 - [Transforms →](../guide/transforms.md) — what every transform does
 - [Concepts →](../concepts.md) — pipeline vocabulary

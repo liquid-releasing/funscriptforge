@@ -511,3 +511,81 @@ class TestOutputsBehindTheUsersEdits(unittest.TestCase):
         src = inspect.getsource(ffcli.cmd_refresh)
         self.assertIn('("stale", "behind")', src,
                       "a default refresh must re-render behind projects too")
+
+
+class TestImportRefusesToHideStaleProvenance(unittest.TestCase):
+    """★ Importing a bundle makes its motion track the project's SOURCE.
+
+    `cmd_import` lays `motion.funscript` down as `<dest>/<stem>.funscript` —
+    the file the app opens and that everything downstream is regenerated FROM.
+    So importing a bundle built by an older pipeline is not a stale-output
+    problem, it is a stale-SOURCE problem, and `refresh` cannot repair it:
+    refresh regenerates from the source, and the source is now the old
+    pipeline's output.
+
+    Concretely, a bundle from before pipeline 2 carries a motion track whose
+    stroke depth blend_seams flattened (measured 88 -> 25 on a real project).
+    Import it and every future export inherits the flattening, with nothing on
+    disk to say why.
+
+    It warns rather than refuses — a user may want the old data back, and an
+    import you cannot perform is worse than one you were told about.
+    """
+
+    def _manifest(self, version):
+        m = {"schema": "ffmeta/v1", "stem": "scene"}
+        if version is not None:
+            m["pipeline_version"] = version
+        return m
+
+    def _run_import(self, version, with_manifest=True):
+        """Import a minimal unzipped bundle; returns the parsed JSON result."""
+        import contextlib, io as _io
+        tmp = Path(tempfile.mkdtemp())
+        bundle = tmp / "scene.forge"
+        bundle.mkdir()
+        (bundle / "motion.funscript").write_text(
+            json.dumps({"actions": [{"at": 0, "pos": 0}, {"at": 250, "pos": 90}]}),
+            encoding="utf-8")
+        if with_manifest:
+            (bundle / "manifest.ffmeta").write_text(
+                json.dumps(self._manifest(version)), encoding="utf-8")
+        dest = tmp / "out"
+        p = ffcli.build_parser()
+        args = p.parse_args(["import", str(bundle), "--out", str(dest)])
+        buf = _io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            ffcli.cmd_import.__wrapped__(args)
+        out = buf.getvalue()
+        return json.loads(out[out.index("{"):])
+
+    def test_a_current_bundle_imports_clean(self):
+        r = self._run_import(OUTPUT_PIPELINE_VERSION)
+        self.assertFalse(r["source_is_stale"])
+        self.assertEqual(r["stale_reasons"], [])
+        self.assertEqual(r["pipeline_version"], OUTPUT_PIPELINE_VERSION)
+
+    def test_an_older_bundle_is_flagged_with_reasons(self):
+        r = self._run_import("1")
+        self.assertTrue(r["source_is_stale"])
+        self.assertTrue(r["stale_reasons"],
+                        "a flag with no explanation is not actionable")
+
+    def test_an_unstamped_bundle_is_flagged(self):
+        # Every bundle predating the stamp was built by a pipeline known to
+        # flatten the motion track, so a MISSING stamp means stale here —
+        # deliberately unlike the analyzer, which grandfathers.
+        r = self._run_import(None)
+        self.assertTrue(r["source_is_stale"])
+        self.assertIsNone(r["pipeline_version"])
+
+    def test_a_bundle_with_no_manifest_at_all_is_not_flagged(self):
+        # Nothing to judge: not a FunscriptForge bundle shape we stamped.
+        # Claiming staleness we cannot substantiate would be a false alarm.
+        r = self._run_import(None, with_manifest=False)
+        self.assertFalse(r["source_is_stale"])
+
+    def test_the_import_still_happens(self):
+        # ★ It warns; it must not refuse. The funscript has to land on disk.
+        r = self._run_import("1")
+        self.assertTrue(Path(r["funscript_path"]).exists())

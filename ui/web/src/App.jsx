@@ -24,7 +24,7 @@ import {
   analyzerVersionStale, projectStatus, refreshProject,
 } from './api/forge.js';
 import { deriveAnalysisState } from './lib/analysisState.js';
-import { outputsNeedWork } from './lib/openPrompt.js';
+import { chooseOpenPrompt, outputsNeedWork } from './lib/openPrompt.js';
 import { chainArtifactFor, stemFromPath } from './lib/chainArtifact.js';
 import { analysisBlocksChain } from './lib/chainGate.js';
 import { applyBusyUpdate, isBusyAbandoned } from './lib/busyOwner.js';
@@ -955,23 +955,33 @@ export default function App() {
       title: project.title, versionStale, resumeTab, resumeTabLabel: t?.label || null,
     };
 
-    // Output state is a backend round-trip, so show the decisions we already
-    // know about immediately rather than delaying the whole prompt on it.
-    if (versionStale || resumeTab) setOpenDialog(base);
+    // ★ Exactly ONE dialog per open, decided once.
+    //
+    // This first showed the resume/analysis prompt immediately and then
+    // replaced it when the output-status round-trip landed, on the theory
+    // that a prompt sooner beats a prompt later. In practice the user saw the
+    // dialog twice: the first one appeared, they answered it, and the status
+    // arrived a moment later and opened a second one (reported 2026-09-25).
+    // Two prompts for one open is worse than one prompt a few hundred
+    // milliseconds later, so the decision now waits for every input it needs.
+    //
+    // A stale ANALYSIS is the exception: it outranks output staleness (a
+    // re-analyze changes what the outputs would be built from), so it needs
+    // no round-trip and shows straight away.
+    if (versionStale) { setOpenDialog(base); return undefined; }
 
-    // A stale analysis outranks stale outputs (re-analyzing changes what the
-    // outputs would be built from), so only ask when analysis is current.
-    if (versionStale) return;
     let cancelled = false;
     projectStatus(project.path)
+      .catch(() => null)          // never block opening a project on a probe
       .then((st) => {
         if (cancelled) return;
-        if (!outputsNeedWork(st?.state)) return;
+        const outputsState = outputsNeedWork(st?.state) ? st.state : null;
+        // Same ranking the dialog itself uses, from lib/openPrompt.js.
+        if (!chooseOpenPrompt({ versionStale, outputsState, resumeTab })) return;
         setOpenDialog({
-          ...base, outputsState: st.state, outputsReasons: st.reasons || [],
+          ...base, outputsState, outputsReasons: st?.reasons || [],
         });
-      })
-      .catch(() => {});   // never block opening a project on a status probe
+      });
     return () => { cancelled = true; };
   }, [project?.id, project?.path, project?.analyzerVersion]);  // eslint-disable-line react-hooks/exhaustive-deps
 

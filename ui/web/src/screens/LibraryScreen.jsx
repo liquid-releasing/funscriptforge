@@ -14,6 +14,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pill, Icon, Button } from 'forgemoment';
 import { toMediaUrl } from '../lib/mediaUrl.js';
 import {
+  loadLibraryPrefs, saveLibraryPrefs, reconcileActiveRoot,
+} from '../lib/libraryPrefs.js';
+import {
   getConfigPath,
   loadConfig,
   saveConfig,
@@ -45,10 +48,16 @@ export default function LibraryScreen({ onOpen, onOpenMedia, onAppError }) {
   // Set<rootPath> currently scanning
   const [scanning, setScanning] = useState(new Set());
   const [error, setError] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [sortKey, setSortKey] = useState('lastEdited');
+  // ★ Seeded from remembered prefs, not from constants. App renders this
+  // screen as `{tab === 'library' && <LibraryScreen/>}`, so leaving the tab
+  // unmounts it and plain useState defaults would throw away the root the
+  // user picked ("I go from viewer to the library, it does not remember that
+  // I had already chosen a library", 2026-09-25).
+  const [prefs] = useState(loadLibraryPrefs);
+  const [statusFilter, setStatusFilter] = useState(prefs.statusFilter);
+  const [sortKey, setSortKey] = useState(prefs.sortKey);
   // Active root in the rail; null = show all roots merged.
-  const [activeRootPath, setActiveRootPath] = useState(null);
+  const [activeRootPath, setActiveRootPath] = useState(prefs.activeRootPath);
 
   // ── Load config on mount ───────────────────────────────────────────
   // Reusable so the error state below can offer a Retry (a stuck config
@@ -69,6 +78,21 @@ export default function LibraryScreen({ onOpen, onOpenMedia, onAppError }) {
       });
     return () => { cancelled = true; };
   }, [reloadKey]);
+
+  // Write the view state through so it survives the unmount above. Cheap
+  // enough to do on every change; nothing else reads these.
+  useEffect(() => {
+    saveLibraryPrefs({ activeRootPath, statusFilter, sortKey });
+  }, [activeRootPath, statusFilter, sortKey]);
+
+  // ★ Drop a remembered root that is no longer configured — the user removed
+  // it, or it is an external drive that is not mounted today. Keeping it
+  // selected would render an empty library with nothing explaining why.
+  useEffect(() => {
+    if (!config) return;
+    const configured = (config.roots ?? []).map((r) => r.path);
+    setActiveRootPath((prev) => reconcileActiveRoot(prev, configured));
+  }, [config]);
 
   // ── Scan each configured root when the config changes ──────────────
   useEffect(() => {
