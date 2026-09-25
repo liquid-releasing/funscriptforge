@@ -344,6 +344,24 @@ export default function App() {
         lastProgressAtRef.current = Date.now();
         const parts = stripped.split('::');
         const kind = parts[0];
+        // `end::0::<op>::<code>` — the command returned. Close any step still
+        // showing as running: the last stage never gets its own `done`,
+        // because cli.py closes a stage when the NEXT one starts and there is
+        // no next one. Without this the footer keeps a spinner on work that
+        // has finished.
+        if (kind === 'end') {
+          setBusy((prev) => {
+            if (!prev || !Array.isArray(prev.steps)) return prev;
+            if (!prev.steps.some((x) => x.status === 'running')) return prev;
+            return {
+              ...prev,
+              steps: prev.steps.map((x) =>
+                (x.status === 'running' ? { ...x, status: 'done' } : x)),
+              message: '',
+            };
+          });
+          return;
+        }
         const depth = parseInt(parts[1] || '0', 10);
         const leaf = parts[2] || (parts.length === 1 ? parts[0] : '');
         // For `msg::<depth>::<leaf>::<message>` everything after parts[2]

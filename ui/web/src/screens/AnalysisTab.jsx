@@ -62,7 +62,8 @@ import {
 } from '../api/forge.js';
 import { deriveAnalysisState } from '../lib/analysisState.js';
 import { progressChannel, OPS, parseProgressLine } from '../lib/progressChannels.js';
-import { applyStageEvent } from '../lib/progressStages.js';
+import { applyStageEvent, completeAllStages } from '../lib/progressStages.js';
+import { completionExitCode } from '../lib/completionFallback.js';
 import { withStallTimeout } from '../lib/stallWatchdog.js';
 import { probeMediaCached } from '../hooks/useChapterClip.js';
 
@@ -272,6 +273,14 @@ export default function AnalysisTab({
         // is proof of life even though it maps to no panel. Filtering first
         // would let a long stage of pure sub-stage chatter look like silence.
         lastProgressAtRef.current = Date.now();
+        // The command finished: close any stage still showing as running. The
+        // LAST stage never gets its own `done` (cli.py closes a stage when the
+        // next one starts, and there is no next one), so without this the
+        // panel spins on "Classifying behaviours…" for work that is over.
+        if (ANALYSIS_OPS.some((o) => completionExitCode(parsed, o) !== null)) {
+          setStages((prev) => completeAllStages(prev));
+          return;
+        }
         const { kind, depth, leaf } = parsed;
         // Depth 1 = outer command wrapper; depth 3+ = sub-stages.
         // Depth 2 = the stages we map to panels.

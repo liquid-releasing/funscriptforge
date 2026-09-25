@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyStageEvent, runningStages } from './progressStages.js';
+import { applyStageEvent, runningStages, completeAllStages } from './progressStages.js';
 import { parseProgressLine, progressChannel, OPS } from './progressChannels.js';
 
 const ev = (line) => parseProgressLine(line);
@@ -174,5 +174,33 @@ describe('operation scoping (regression: "stuck in assessing phrases")', () => {
     emitRun(bus, OPS.AUDIO, ['progress: start::2::audio_peaks']);
     emitRun(bus, OPS.PHRASES, ['progress: start::2::assess']);
     expect(tab.get()).toEqual({});
+  });
+});
+
+describe('completeAllStages', () => {
+  it('★ closes the last stage, which never gets its own done', () => {
+    // The analyzer emits one event per stage START and cli.py closes a stage
+    // when the next begins — so the final stage is never closed by the
+    // protocol. Everything after it is silent, and the UI span a spinner for
+    // a command that had already returned.
+    const stages = { phases: 'done', behaviors: 'running' };
+    expect(completeAllStages(stages)).toEqual({ phases: 'done', behaviors: 'done' });
+  });
+
+  it('closes several at once', () => {
+    expect(completeAllStages({ a: 'running', b: 'running', c: 'done' }))
+      .toEqual({ a: 'done', b: 'done', c: 'done' });
+  });
+
+  it('returns the SAME reference when nothing is running', () => {
+    // Identity is the re-render guard the rest of this module relies on.
+    const stages = { a: 'done' };
+    expect(completeAllStages(stages)).toBe(stages);
+  });
+
+  it('is null-safe', () => {
+    expect(completeAllStages(null)).toBe(null);
+    expect(completeAllStages(undefined)).toBe(undefined);
+    expect(completeAllStages({})).toEqual({});
   });
 });

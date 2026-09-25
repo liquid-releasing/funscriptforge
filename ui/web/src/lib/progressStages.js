@@ -36,6 +36,32 @@ export function applyStageEvent(stages, parsed) {
   return stages;
 }
 
+/**
+ * Close every still-running stage, because the command itself has finished.
+ *
+ * ★ The analyzer emits one event per stage START, and cli.py closes a stage
+ * when the NEXT one begins. The LAST stage therefore never receives a `done`:
+ * there is no next stage to imply it. Everything after "Classifying
+ * behaviours…" — the classifier, the shape labeller, writing the sidecar — is
+ * silent, so the UI sat on a spinner for a command that had already returned
+ * (reported 2026-09-25: "the events load while classifying behaviors is up,
+ * still churning", with the process gone and 4855 bytes already returned).
+ *
+ * The completion announcement is the missing signal, and it is exact rather
+ * than a guess: the command has returned, so nothing is still running.
+ *
+ * Returns the same reference when there was nothing to close, so React can
+ * skip the re-render.
+ */
+export function completeAllStages(stages) {
+  const src = stages || {};
+  const running = Object.keys(src).filter((k) => src[k] === 'running');
+  if (!running.length) return stages;
+  const next = { ...src };
+  for (const k of running) next[k] = 'done';
+  return next;
+}
+
 /** Stage names still running — i.e. started with no matching `done`. */
 export function runningStages(stages) {
   return Object.keys(stages || {}).filter((k) => stages[k] === 'running');
