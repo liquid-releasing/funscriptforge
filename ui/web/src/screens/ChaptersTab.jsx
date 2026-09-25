@@ -25,6 +25,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pill, Icon, MediaViewer, Slider, Segmented, ChapterRibbon } from 'forgemoment';
 import FunscriptChart from '../components/FunscriptChart.jsx';
 import {
+  isTauri,
   createChaptersSidecar,
   analyzeChaptersWithVideoflow,
   prewarmMediaRange,
@@ -41,6 +42,8 @@ import {
 } from '../api/forge.js';
 import { SCOPE, summarizeScope, SCOPE_DEFAULTS } from '../lib/toneScope.js';
 import { applyTone } from '../lib/toneCurve.js';
+import { withStallTimeout } from '../lib/stallWatchdog.js';
+import { progressChannel, OPS } from '../lib/progressChannels.js';
 import {
   rebuildWorkingActions, nextBakeRecord, buildSelection,
 } from '../lib/toneBake.js';
@@ -527,11 +530,31 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
   // videoflow appear in the AcceptBar; the consumer can Cancel mid-run
   // and we discard the in-flight result.
   const analyzeCancelledRef = useRef(false);
+  // Liveness heartbeat for the stall watchdog. Subscribed to the SCOPED
+  // channels for the two operations this handler runs, so another tab's
+  // generate cannot vouch for an analyze that has actually gone quiet.
+  const lastProgressAtRef = useRef(0);
+  useEffect(() => {
+    if (!isTauri()) return undefined;
+    let unlistens = [];
+    let cancelled = false;
+    (async () => {
+      const { listen } = await import('@tauri-apps/api/event');
+      const beat = () => { lastProgressAtRef.current = Date.now(); };
+      for (const op of [OPS.ANALYZE, OPS.PHRASES]) {
+        const un = await listen(progressChannel(op), beat);
+        if (cancelled) { un(); return; }
+        unlistens.push(un);
+      }
+    })();
+    return () => { cancelled = true; unlistens.forEach((un) => un()); unlistens = []; };
+  }, []);
   const handleAnalyzeWithVideoflow = async () => {
     if (!project?.path || analyzing) return;
     setAnalyzeError(null);
     setAnalyzing(true);
     analyzeCancelledRef.current = false;
+    lastProgressAtRef.current = Date.now();
     setBusy?.({
       message: 'Analyzing chapters…',
       onCancel: () => {
@@ -541,7 +564,10 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       },
     });
     try {
-      const detected = await analyzeChaptersWithVideoflow(project.path, null, project.mediaPath || null);
+      const detected = await withStallTimeout(
+        analyzeChaptersWithVideoflow(project.path, null, project.mediaPath || null),
+        { getLastEventAt: () => lastProgressAtRef.current || null },
+      );
       if (analyzeCancelledRef.current) return;
       hydrateFromChapterList(detected);
       // auto_chapter writes peaks + spectrogram sidecars in the same
@@ -557,9 +583,22 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
         try {
           setBusy?.({
             message: 'Detecting phrases…',
-            onCancel: () => { analyzeCancelledRef.current = true; },
+            // Clears the banner itself. It used to only set the cancelled
+            // flag, and the `finally` below skips its clear when cancelled --
+            // so cancelling during THIS phase left the banner up forever.
+            onCancel: () => {
+              analyzeCancelledRef.current = true;
+              setAnalyzing(false);
+              setBusy?.(null);
+            },
           });
-          const phraseRows = await analyzePhrases(project.path);
+          // Same watchdog as the analyze above: a dropped IPC reply leaves an
+          // un-settleable Promise, and this await is what the stuck
+          // "Analyzing…" banner was waiting on (dogfood 2026-09-25).
+          const phraseRows = await withStallTimeout(
+            analyzePhrases(project.path),
+            { getLastEventAt: () => lastProgressAtRef.current || null },
+          );
           if (analyzeCancelledRef.current) return;
           setPhrasesByPath((prev) => ({
             ...prev,
@@ -578,10 +617,13 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       setAnalyzeError(String(err?.message ?? err));
       setAppError?.(`Auto-chapter failed: ${err?.message ?? err}`);
     } finally {
-      if (!analyzeCancelledRef.current) {
-        setAnalyzing(false);
-        setBusy?.(null);
-      }
+      // Always clear. This used to be skipped when cancelled, on the
+      // assumption that onCancel had already cleared -- true for the chapter
+      // phase, false for the phrase phase, which wedged the banner. A clear
+      // is idempotent and ownership-checked, so doing it unconditionally is
+      // strictly safer than relying on every cancel path to remember.
+      setAnalyzing(false);
+      setBusy?.(null);
     }
   };
 

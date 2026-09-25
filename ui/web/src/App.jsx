@@ -27,7 +27,8 @@ import { deriveAnalysisState } from './lib/analysisState.js';
 import { outputsNeedWork } from './lib/openPrompt.js';
 import { chainArtifactFor, stemFromPath } from './lib/chainArtifact.js';
 import { analysisBlocksChain } from './lib/chainGate.js';
-import { applyBusyUpdate } from './lib/busyOwner.js';
+import { applyBusyUpdate, isBusyAbandoned } from './lib/busyOwner.js';
+import { DEFAULT_STALL_MS } from './lib/stallWatchdog.js';
 import { probeMediaCached } from './hooks/useChapterClip.js';
 import LibraryScreen from './screens/LibraryScreen.jsx';
 import ProjectTab from './screens/ProjectTab.jsx';
@@ -185,14 +186,48 @@ export default function App() {
   // "skips into showing accept and chain ... no longer showing the
   // progress"). Tag each child's banner with its owner; a clear from anyone
   // else is ignored.
+  // Wall-clock of the last progress event on ANY channel — the liveness
+  // signal behind the abandoned-banner release below.
+  const lastProgressAtRef = useRef(0);
   const busySettersRef = useRef({});
   const busySetterFor = useCallback((owner) => {
     if (!busySettersRef.current[owner]) {
       busySettersRef.current[owner] = (next) =>
-        setBusy((prev) => applyBusyUpdate(prev, next, owner));
+        setBusy((prev) => applyBusyUpdate(
+          prev,
+          // Stamp when this banner went up, so the abandoned-banner release
+          // has a baseline even if no progress event ever arrives.
+          next == null ? next : { startedAt: Date.now(), ...next },
+          owner,
+        ));
     }
     return busySettersRef.current[owner];
   }, []);
+  // ★ Last-resort release for a banner nobody cleared.
+  //
+  // Ownership stops a late-landing operation from wiping someone else's
+  // banner, but it cannot guarantee a banner is ever cleared: the owner may
+  // never get the chance (a dropped IPC reply leaves an un-settleable
+  // Promise), or may have been superseded by a producer with nothing to
+  // clear. Both happened during dogfooding on 2026-09-25 — the footer read
+  // "in progress" on every tab until the app was restarted.
+  //
+  // Polls rather than sets one timer per banner: a banner can be REPLACED
+  // without clearing, and a per-banner timer would be orphaned by that.
+  // Clearing only removes a stale indicator — it cancels nothing and touches
+  // no data — so erring toward releasing is right.
+  useEffect(() => {
+    if (!busy) return undefined;
+    const id = setInterval(() => {
+      setBusy((prev) => (isBusyAbandoned(prev, {
+        lastProgressAt: lastProgressAtRef.current,
+        now: Date.now(),
+        stallMs: DEFAULT_STALL_MS,
+      }) ? null : prev));
+    }, 10_000);
+    return () => clearInterval(id);
+  }, [busy]);
+
   // True while the Analysis pipeline is actually running, reported up by
   // AnalysisTab. Deliberately independent of `busy`: the chain must not open
   // mid-analysis just because some other op's finally cleared the banner.
@@ -303,6 +338,9 @@ export default function App() {
         const raw = String(event?.payload ?? '');
         const stripped = raw.startsWith('progress: ') ? raw.slice('progress: '.length) : raw;
         if (!stripped) return;
+        // Liveness first: ANY progress line proves the backend is talking,
+        // whatever its depth or which operation it belongs to.
+        lastProgressAtRef.current = Date.now();
         const parts = stripped.split('::');
         const kind = parts[0];
         const depth = parseInt(parts[1] || '0', 10);
