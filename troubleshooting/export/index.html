@@ -830,6 +830,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../guide/updating-a-project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Updating a Project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../guide/viewer/" class="md-nav__link">
         
   
@@ -1382,6 +1410,39 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#e-stim-volume-drops-and-there-is-nothing-in-the-audio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        E-stim volume drops and there is nothing in the audio
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#every-chapter-feels-the-same-the-dynamics-i-authored-are-gone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Every chapter feels the same / the dynamics I authored are gone
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#i-updated-the-app-do-i-have-to-redo-my-projects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        I updated the app — do I have to redo my projects?
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1568,6 +1629,39 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#e-stim-volume-drops-and-there-is-nothing-in-the-audio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        E-stim volume drops and there is nothing in the audio
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#every-chapter-feels-the-same-the-dynamics-i-authored-are-gone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Every chapter feels the same / the dynamics I authored are gone
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#i-updated-the-app-do-i-have-to-redo-my-projects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        I updated the app — do I have to redo my projects?
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1668,6 +1762,46 @@ the <code>actions</code> array starts and ends at the correct timestamps.</p>
 hit too, it will be added to this page. You're helping the next person by asking.</p>
 <hr />
 <p>← <a href="../../guide/export/">Back to: Export and Use</a></p>
+<hr />
+<h2 id="e-stim-volume-drops-and-there-is-nothing-in-the-audio">E-stim volume drops and there is nothing in the audio<a class="headerlink" href="#e-stim-volume-drops-and-there-is-nothing-in-the-audio" title="Permanent link">&para;</a></h2>
+<p><em>You might be searching for: "volume drops for no reason", "estim fades out",
+"goes blank for ages", "slow fade I didn't ask for", "long pause in the middle"</em></p>
+<p>If you hear a long fade or a dead stretch that does not match anything in the
+sound, and there is no event at that point in the Events tab, your device files
+were built by an older version.</p>
+<p>A flat stretch just before an event used to be discarded when the channel was
+saved. Players draw a straight line between the points they are given, so they
+slid gradually into the event from wherever that flat stretch began — a
+two-second pause could play as a thirty-five-second fade.</p>
+<p><strong>Fix:</strong> open the project and click <strong>Update outputs</strong> when prompted, or run
+<code>python cli.py refresh "&lt;your project&gt;.funscript"</code>. Re-exporting on its own is
+<strong>not</strong> enough — this was a generation-stage problem, so the device stations
+have to be re-stamped. See <a href="../../guide/updating-a-project/">Updating a Project</a>.</p>
+<p>A quick way to tell it apart from real authoring: a perfectly straight, smooth
+slide in a channel is almost always a player interpolating between two distant
+points, not something that was authored.</p>
+<hr />
+<h2 id="every-chapter-feels-the-same-the-dynamics-i-authored-are-gone">Every chapter feels the same / the dynamics I authored are gone<a class="headerlink" href="#every-chapter-feels-the-same-the-dynamics-i-authored-are-gone" title="Permanent link">&para;</a></h2>
+<p><em>You might be searching for: "chapters all feel identical", "no variation",
+"export flattened my script", "lost the depth", "boring after export"</em></p>
+<p>Older versions applied <strong>Blend seams</strong> to every stroke instead of only the
+sharp transitions between phrases, which removed most of the stroke depth you
+authored and made all chapters feel alike.</p>
+<p><strong>Fix:</strong> update the project (<strong>Update outputs</strong>, or <code>cli.py refresh</code>). To
+confirm, compare stroke depth per chapter: repaired output varies between
+chapters, where the old output was uniform across all of them.</p>
+<p>Separately, <strong>Final smooth</strong> is on by default and costs roughly 18% of stroke
+depth on dense scripts. That is doing what it says rather than a fault — but if
+you want maximum depth, turn it off in Export options.</p>
+<hr />
+<h2 id="i-updated-the-app-do-i-have-to-redo-my-projects">I updated the app — do I have to redo my projects?<a class="headerlink" href="#i-updated-the-app-do-i-have-to-redo-my-projects" title="Permanent link">&para;</a></h2>
+<p><em>You might be searching for: "do I lose my edits", "will updating overwrite",
+"how do I update old projects", "out of date prompt"</em></p>
+<p>No. Your chapters, tones, events, phrases and edited funscript are the <em>inputs</em>
+to an update, so updating cannot lose them — it re-renders the device files
+from what you already authored.</p>
+<p>When a project's files are out of date, the app says so when you open it, and
+lists what changed. See <a href="../../guide/updating-a-project/">Updating a Project</a>.</p>
 
 
 
