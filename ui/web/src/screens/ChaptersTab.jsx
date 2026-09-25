@@ -30,6 +30,7 @@ import {
   analyzeChaptersWithVideoflow,
   prewarmMediaRange,
   analyzePhrases,
+  loadPhrasesSidecar,
   writeChaptersSidecar,
   extractChapterClip,
   transformApplyActions,
@@ -43,7 +44,8 @@ import {
 import { SCOPE, summarizeScope, SCOPE_DEFAULTS } from '../lib/toneScope.js';
 import { applyTone } from '../lib/toneCurve.js';
 import { withStallTimeout } from '../lib/stallWatchdog.js';
-import { progressChannel, OPS } from '../lib/progressChannels.js';
+import { progressChannel, OPS, parseProgressLine } from '../lib/progressChannels.js';
+import { withCompletionFallback, completionExitCode } from '../lib/completionFallback.js';
 import {
   rebuildWorkingActions, nextBakeRecord, buildSelection,
 } from '../lib/toneBake.js';
@@ -579,37 +581,65 @@ export default function ChaptersTab({ project, onAttachMedia, onChaptersChange, 
       // here are non-fatal — PhrasesTab still has its lazy hydrate path
       // so a transient error here doesn't break the editor; user can
       // re-enter Phrases tab to retry.
+      // ★ Phrase analysis is NOT awaited here.
+      //
+      // It is a bundled convenience: it warms the sidecar so Phrases and
+      // Patterns find it cached, and PhrasesTab has its own lazy hydrate, so
+      // a failure is explicitly non-fatal. Awaiting it inside the busy window
+      // made a non-essential extra hold the whole UI: the banner stayed on
+      // "Analyzing…" until the phrase pass replied, and if that reply never
+      // arrived the app looked wedged (dogfood 2026-09-25, "hangs when I
+      // click events before phrases is completed"). AnalysisTab decoupled its
+      // own phrase pass for the same reason; this is the matching change.
+      //
+      // The user is free the moment the CHAPTERS are ready, which is what
+      // they were waiting for. The sidecar lands when it lands.
       if (setPhrasesByPath) {
-        try {
-          setBusy?.({
-            message: 'Detecting phrases…',
-            // Clears the banner itself. It used to only set the cancelled
-            // flag, and the `finally` below skips its clear when cancelled --
-            // so cancelling during THIS phase left the banner up forever.
-            onCancel: () => {
-              analyzeCancelledRef.current = true;
-              setAnalyzing(false);
-              setBusy?.(null);
+        // ★ Two safety nets, in order of how good their evidence is.
+        //
+        // withCompletionFallback listens for the backend ANNOUNCING that the
+        // phrase pass finished. Measured 2026-09-25: Rust logged "returning
+        // 5016 bytes" and this promise never settled, while every progress
+        // event from that same command arrived. So when completion is
+        // announced and no reply follows, read the sidecar the command has
+        // already written — the data the lost reply contained.
+        //
+        // withStallTimeout stays underneath for the case where even the
+        // events stop, which no positive signal can cover.
+        withStallTimeout(
+          withCompletionFallback(analyzePhrases(project.path), {
+            subscribe: (onComplete) => {
+              let off = null, dead = false;
+              import('@tauri-apps/api/event')
+                .then(({ listen }) => listen(progressChannel(OPS.PHRASES), (e) => {
+                  const code = completionExitCode(
+                    parseProgressLine(e?.payload), OPS.PHRASES);
+                  if (code !== null) onComplete(code);
+                }))
+                .then((un) => { if (dead) un(); else off = un; })
+                .catch(() => {});
+              return () => { dead = true; off?.(); };
             },
+            recover: () => loadPhrasesSidecar(project.path)
+              .then((rows) => (Array.isArray(rows) ? rows : [])),
+            onRecover: () => console.warn(
+              'ChaptersTab: analyze_phrases reply was lost — recovered from the sidecar'),
+          }),
+          { getLastEventAt: () => lastProgressAtRef.current || null },
+        )
+          .then((phraseRows) => {
+            if (analyzeCancelledRef.current) return;
+            setPhrasesByPath((prev) => ({
+              ...prev,
+              [project.path]: {
+                phrases: Array.isArray(phraseRows) ? phraseRows : [],
+                loaded: true,
+              },
+            }));
+          })
+          .catch((err) => {
+            console.warn('ChaptersTab: bundled analyzePhrases failed (non-fatal)', err);
           });
-          // Same watchdog as the analyze above: a dropped IPC reply leaves an
-          // un-settleable Promise, and this await is what the stuck
-          // "Analyzing…" banner was waiting on (dogfood 2026-09-25).
-          const phraseRows = await withStallTimeout(
-            analyzePhrases(project.path),
-            { getLastEventAt: () => lastProgressAtRef.current || null },
-          );
-          if (analyzeCancelledRef.current) return;
-          setPhrasesByPath((prev) => ({
-            ...prev,
-            [project.path]: {
-              phrases: Array.isArray(phraseRows) ? phraseRows : [],
-              loaded: true,
-            },
-          }));
-        } catch (err) {
-          console.warn('ChaptersTab: bundled analyzePhrases failed (non-fatal)', err);
-        }
       }
     } catch (err) {
       if (analyzeCancelledRef.current) return;

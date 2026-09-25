@@ -798,17 +798,55 @@ async fn run_cli_with_progress(
     if let Some(p) = child_pid {
         register_child(p);
     }
+    // [ff-trace] Diagnostics for the stuck-"Analyzing…" report. A command that
+    // completes on disk while the UI waits forever has exactly two possible
+    // shapes, and they need different fixes:
+    //
+    //   * we never get here      -> wait_with_output is blocked. It reads the
+    //                               pipes to EOF, and a GRANDCHILD that
+    //                               inherited stdout holds them open after
+    //                               python itself exits.
+    //   * we log "returning" and the JS promise still never settles
+    //                            -> the IPC reply was lost (Tauri's event
+    //                               layer leaks listeners in 2.11).
+    //
+    // Cheap, and stderr-only, so it costs nothing in a packaged build.
+    eprintln!("[ff-trace] {} spawned pid={:?}", op, child_pid);
     let output = child
         .wait_with_output()
         .await
         .map_err(|e| format!("wait python failed: {}", e))?;
+    eprintln!("[ff-trace] {} child exited status={:?}", op, output.status.code());
     if let Some(p) = child_pid {
         deregister_child(p);
     }
 
     let _ = cancel_tx.send(());
     let _ = polling.await;
+    eprintln!("[ff-trace] {} poller joined", op);
     let _ = tokio::fs::remove_file(&temp_path).await;
+    eprintln!("[ff-trace] {} returning {} bytes", op, output.stdout.len());
+
+    // ★ Completion signal, because the invoke REPLY is not reliable.
+    //
+    // Measured 2026-09-25: this function logged "returning 5016 bytes" and the
+    // JS promise never settled — the UI sat on "Analyzing…" until a 3-minute
+    // watchdog released it. What DID arrive during that same command was every
+    // one of its progress events, which paint their stage ticks through
+    // Tauri's event system rather than the invoke callback.
+    //
+    // So the events channel was healthy while the reply was lost. Announcing
+    // completion there gives the frontend a positive signal it can act on —
+    // the results are already on disk, so a listener can read the sidecar
+    // instead of waiting for a reply that is never coming.
+    //
+    // Depth 0 keeps it invisible to every existing consumer: App skips
+    // `depth <= 1`, the stage maps require depth 2. Only a listener looking
+    // for it will see it.
+    let code = output.status.code().unwrap_or(-1);
+    for target in progress_targets(op) {
+        let _ = app.emit(target.as_str(), format!("end::0::{}::{}", op, code));
+    }
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

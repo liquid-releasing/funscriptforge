@@ -944,8 +944,21 @@ export default function App() {
   const promptedProjectRef = useRef(null);
   useEffect(() => {
     if (!project?.id || !project?.path) { promptedProjectRef.current = null; return; }
-    if (promptedProjectRef.current === project.id) return;  // prompt once per open
-    promptedProjectRef.current = project.id;
+    // ★ Keyed on PATH, and never on the placeholder.
+    //
+    // Opening a project sets `openedProject` TWICE: first a placeholder with
+    // `id: pending:<path>` so the header is right from the first frame, then
+    // the real record once load_project resolves — with a DIFFERENT id. Keying
+    // "prompt once" on the id therefore prompted once for the placeholder and
+    // again for the real project, which is why the out-of-date dialog appeared
+    // twice (reported 2026-09-25). The path is the identity that survives that
+    // transition.
+    //
+    // The placeholder is skipped outright: it carries no analyzerVersion and
+    // its outputs cannot be judged until the real record lands.
+    if (project._pending) return;
+    if (promptedProjectRef.current === project.path) return;  // once per open
+    promptedProjectRef.current = project.path;
     const versionStale = analyzerVersionStale(project?.analyzerVersion);
     const session = loadSession(project.path);
     const resumeTab = (session?.tab && session.tab !== 'library' && session.tab !== tab)
@@ -1007,7 +1020,7 @@ export default function App() {
   // after the open prompt has been considered for this project (promptedRef
   // set), so the trigger above always reads the prior session first.
   useEffect(() => {
-    if (!project?.path || promptedProjectRef.current !== project?.id) return;
+    if (!project?.path || promptedProjectRef.current !== project.path) return;
     saveSession(project.path, { tab, at: Date.now() });
   }, [tab, project?.path, project?.id]);
 
