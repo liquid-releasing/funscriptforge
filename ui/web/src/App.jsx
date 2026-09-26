@@ -166,6 +166,14 @@ export default function App() {
   // navigates while work runs, and every stuck-banner bug on 2026-09-25 came
   // from that mismatch. Each operation touches only its own entry, so there
   // is nothing to arbitrate and nothing to strand.
+  // [ff-trace] What is in flight, after every change. Three rounds of fixing
+  // a stuck banner were aimed by inference; this names the entries outright,
+  // so "which one is stuck" stops being a guess.
+  const traceOps = (why, next) => {
+    const keys = Object.keys(next);
+    console.warn(`[ff-trace] ops after ${why}:`,
+      keys.length ? keys.map((k) => `${k}(${next[k].message || '-'})`).join(', ') : '(none)');
+  };
   const [ops, setOps] = useState(emptyOps);
   const busy = useMemo(() => toBusy(ops), [ops]);
 
@@ -176,11 +184,19 @@ export default function App() {
   const beginBusy = useCallback((next) => {
     const token = ++busyTokenRef.current;
     const key = `app#${token}`;
-    setOps((prev) => registerOp(prev, key, { ...next, startedAt: Date.now() }));
+    setOps((prev) => {
+      const out = registerOp(prev, key, { ...next, startedAt: Date.now() });
+      traceOps(`begin ${key}`, out);
+      return out;
+    });
     return token;
   }, []);
   const endBusy = useCallback((token) => {
-    setOps((prev) => deregisterOp(prev, `app#${token}`));
+    setOps((prev) => {
+      const out = deregisterOp(prev, `app#${token}`);
+      traceOps(`end app#${token}`, out);
+      return out;
+    });
   }, []);
 
   // Child tabs keep the `setBusy(next | null)` signature they already use;
@@ -189,11 +205,13 @@ export default function App() {
   const busySettersRef = useRef({});
   const busySetterFor = useCallback((owner) => {
     if (!busySettersRef.current[owner]) {
-      busySettersRef.current[owner] = (next) => setOps((prev) => (
-        next == null
+      busySettersRef.current[owner] = (next) => setOps((prev) => {
+        const out = next == null
           ? deregisterOp(prev, owner)
-          : registerOp(prev, owner, { ...next, startedAt: Date.now() })
-      ));
+          : registerOp(prev, owner, { ...next, startedAt: Date.now() });
+        traceOps(`${next == null ? 'clear' : 'set'} ${owner}`, out);
+        return out;
+      });
     }
     return busySettersRef.current[owner];
   }, []);
@@ -353,14 +371,15 @@ export default function App() {
         // no next one. Without this the footer keeps a spinner on work that
         // has finished.
         if (kind === 'end') {
-          // [ff-trace] console.WARN, not debug: DevTools hides debug behind
-          // the Verbose filter, and this is the datum that says whether the
-          // completion event crosses the bridge at all.
           // The command returned: this operation is over, whatever its
           // invoke reply did or did not do. Also releases any tab entry that
           // declared it was waiting on this op, whose own `finally` is the
           // thing a lost reply prevents from running.
-          setOps((prev) => completeOp(prev, op));
+          setOps((prev) => {
+            const next = completeOp(prev, op);
+            traceOps(`end ${op}`, next);
+            return next;
+          });
           return;
         }
         const depth = parseInt(parts[1] || '0', 10);
