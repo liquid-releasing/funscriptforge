@@ -1610,17 +1610,54 @@ pub async fn write_chapters_sidecar(
     Ok(())
 }
 
+/// Read a sidecar's text, treating an EXISTING BUT EMPTY file as absent.
+///
+/// ★ Why empty is "not there yet" rather than "corrupt".
+///
+/// Reported from dogfood 2026-09-26:
+///
+///   could not parse beats sidecar at …beats.json:
+///   EOF while parsing a value at line 1 column 0
+///
+/// Column 0 of line 1 means the file was ZERO BYTES. It was not corrupt --
+/// checked on disk immediately after, it was a valid 5487-byte sidecar. It was
+/// caught MID-WRITE: videoflow's `audio_beats.write_sidecar` opens the final
+/// path with mode "w", which truncates to zero before a single byte of JSON is
+/// written, so any reader landing in that window sees an empty file.
+///
+/// The real fix is an atomic write in videoflow (build beside the target,
+/// `os.replace`), which is queued -- this repo already does exactly that for
+/// `export --replace`. But the reader should be honest regardless: a zero-byte
+/// file is never a valid sidecar, so the truthful answer is "absent", the same
+/// answer the caller already handles for a file that does not exist. It also
+/// matches videoflow's own Python reader, which returns None for anything
+/// unparseable.
+///
+/// A NON-empty file that fails to parse is still an error. That is real
+/// corruption and worth surfacing -- silently swallowing it would hide a
+/// genuine bug behind an empty screen.
+async fn read_sidecar_text(sp: &str, what: &str) -> Result<Option<String>, String> {
+    if !Path::new(sp).exists() {
+        return Ok(None);
+    }
+    let raw = tokio::fs::read_to_string(sp)
+        .await
+        .map_err(|e| format!("could not read {} sidecar at {}: {}", what, sp, e))?;
+    if raw.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(raw))
+}
+
 #[tauri::command]
 pub async fn read_stanzas_from_chapters_sidecar(
     media_path: String,
 ) -> Result<Vec<AutoChapterStanza>, String> {
     let sp = forge_sidecar_path(&media_path, ".chapters.json");
-    if !Path::new(&sp).exists() {
-        return Ok(Vec::new());
-    }
-    let raw = tokio::fs::read_to_string(&sp)
-        .await
-        .map_err(|e| format!("could not read chapters sidecar at {}: {}", sp, e))?;
+    let raw = match read_sidecar_text(&sp, "chapters").await? {
+        Some(raw) => raw,
+        None => return Ok(Vec::new()),
+    };
     // Tolerant parse — if the file exists but doesn't have a `stanzas`
     // array yet (e.g. read between chapters_sidecar and sidecar stages),
     // we return an empty Vec instead of erroring out.
@@ -1654,12 +1691,10 @@ pub struct MarkerRecord {
 #[tauri::command]
 pub async fn read_markers_sidecar(source_path: String) -> Result<Vec<MarkerRecord>, String> {
     let sp = forge_sidecar_path(&source_path, ".chapters.json");
-    if !Path::new(&sp).exists() {
-        return Ok(Vec::new());
-    }
-    let raw = tokio::fs::read_to_string(&sp)
-        .await
-        .map_err(|e| format!("could not read chapters sidecar at {}: {}", sp, e))?;
+    let raw = match read_sidecar_text(&sp, "chapters").await? {
+        Some(raw) => raw,
+        None => return Ok(Vec::new()),
+    };
     let payload: serde_json::Value =
         serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}));
     // Tolerant: a missing or malformed `markers` array reads as empty
@@ -1715,12 +1750,10 @@ pub async fn load_audio_peaks(
     media_path: String,
 ) -> Result<Option<LoadedAudioPeaks>, String> {
     let sp = peaks_sidecar_path(&media_path);
-    if !Path::new(&sp).exists() {
-        return Ok(None);
-    }
-    let raw = tokio::fs::read_to_string(&sp)
-        .await
-        .map_err(|e| format!("could not read peaks sidecar at {}: {}", sp, e))?;
+    let raw = match read_sidecar_text(&sp, "peaks").await? {
+        Some(raw) => raw,
+        None => return Ok(None),
+    };
     let parsed: DiskAudioPeaks = serde_json::from_str(&raw)
         .map_err(|e| format!("could not parse peaks sidecar at {}: {}", sp, e))?;
     let peak_count = if parsed.peak_count > 0 {
@@ -1794,12 +1827,10 @@ pub async fn load_audio_spectrogram(
     media_path: String,
 ) -> Result<Option<LoadedAudioSpectrogram>, String> {
     let sp = spectrogram_sidecar_path(&media_path);
-    if !Path::new(&sp).exists() {
-        return Ok(None);
-    }
-    let raw = tokio::fs::read_to_string(&sp)
-        .await
-        .map_err(|e| format!("could not read spectrogram sidecar at {}: {}", sp, e))?;
+    let raw = match read_sidecar_text(&sp, "spectrogram").await? {
+        Some(raw) => raw,
+        None => return Ok(None),
+    };
     let parsed: DiskAudioSpectrogram = serde_json::from_str(&raw)
         .map_err(|e| format!("could not parse spectrogram sidecar at {}: {}", sp, e))?;
     Ok(Some(LoadedAudioSpectrogram {
@@ -1860,12 +1891,10 @@ pub async fn load_audio_beats(
     media_path: String,
 ) -> Result<Option<LoadedAudioBeats>, String> {
     let sp = beats_sidecar_path(&media_path);
-    if !Path::new(&sp).exists() {
-        return Ok(None);
-    }
-    let raw = tokio::fs::read_to_string(&sp)
-        .await
-        .map_err(|e| format!("could not read beats sidecar at {}: {}", sp, e))?;
+    let raw = match read_sidecar_text(&sp, "beats").await? {
+        Some(raw) => raw,
+        None => return Ok(None),
+    };
     let parsed: DiskAudioBeats = serde_json::from_str(&raw)
         .map_err(|e| format!("could not parse beats sidecar at {}: {}", sp, e))?;
     Ok(Some(LoadedAudioBeats {
@@ -2079,12 +2108,10 @@ pub async fn load_phrases_sidecar(
     funscript_path: String,
 ) -> Result<Option<LoadedPhrases>, String> {
     let sp = phrases_sidecar_path(&funscript_path);
-    if !Path::new(&sp).exists() {
-        return Ok(None);
-    }
-    let raw = tokio::fs::read_to_string(&sp)
-        .await
-        .map_err(|e| format!("could not read phrases sidecar at {}: {}", sp, e))?;
+    let raw = match read_sidecar_text(&sp, "phrases").await? {
+        Some(raw) => raw,
+        None => return Ok(None),
+    };
     let parsed: DiskPhrasesSidecar = serde_json::from_str(&raw)
         .map_err(|e| format!("could not parse phrases sidecar at {}: {}", sp, e))?;
     Ok(Some(LoadedPhrases {
@@ -4157,4 +4184,73 @@ pub async fn load_original_actions(
     let mut actions = funscript.actions;
     actions.sort_by_key(|a| a.at);
     Ok(actions)
+}
+
+#[cfg(test)]
+mod sidecar_read_tests {
+    use super::read_sidecar_text;
+
+    /// A unique scratch path per test, so cases cannot collide.
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!("ff-sidecar-test-{}-{}.json", name, std::process::id()));
+        p
+    }
+
+    #[tokio::test]
+    async fn a_missing_file_is_absent() {
+        let p = scratch("missing");
+        let _ = std::fs::remove_file(&p);
+        let got = read_sidecar_text(p.to_str().unwrap(), "beats").await;
+        assert_eq!(got, Ok(None));
+    }
+
+    #[tokio::test]
+    async fn an_empty_file_is_absent_not_corrupt() {
+        // ★ The dogfood bug. videoflow's writer opens the final path with "w",
+        // which truncates to zero before any JSON is written; a reader landing
+        // in that window used to report
+        //   "EOF while parsing a value at line 1 column 0"
+        // for a file that was perfectly valid a moment later.
+        let p = scratch("empty");
+        std::fs::write(&p, "").unwrap();
+        let got = read_sidecar_text(p.to_str().unwrap(), "beats").await;
+        assert_eq!(got, Ok(None));
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[tokio::test]
+    async fn a_whitespace_only_file_is_absent_too() {
+        // A partially-flushed write can leave a newline and nothing else.
+        // Bytes rather than escapes: LF, space, CR, LF, TAB.
+        let p = scratch("blank");
+        let blank = String::from_utf8(vec![10, 32, 13, 10, 9]).unwrap();
+        std::fs::write(&p, blank).unwrap();
+        let got = read_sidecar_text(p.to_str().unwrap(), "beats").await;
+        assert_eq!(got, Ok(None));
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[tokio::test]
+    // ★ The narrowing must not cost us a real read.
+    async fn real_content_still_comes_back_verbatim() {
+        let p = scratch("real");
+        std::fs::write(&p, r#"{"bpm":128.0}"#).unwrap();
+        let got = read_sidecar_text(p.to_str().unwrap(), "beats").await;
+        assert_eq!(got, Ok(Some(r#"{"bpm":128.0}"#.to_string())));
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[tokio::test]
+    async fn non_empty_garbage_is_still_returned_for_the_caller_to_reject() {
+        // The narrowing that matters: only EMPTY is forgiven. A file with
+        // bytes in it that do not parse is real corruption, and the caller's
+        // `serde_json::from_str` still turns it into an error rather than an
+        // empty screen.
+        let p = scratch("garbage");
+        std::fs::write(&p, "{not json").unwrap();
+        let got = read_sidecar_text(p.to_str().unwrap(), "beats").await;
+        assert_eq!(got, Ok(Some("{not json".to_string())));
+        let _ = std::fs::remove_file(&p);
+    }
 }

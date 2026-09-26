@@ -41,6 +41,49 @@ events…' })` with a matching clear in a `finally` that is **not** gated on the
 effect cleanup's `cancelled` flag. That specific mistake is what stranded the
 phrases banner (see the 2026-09-25/26 entries below).
 
+### 2. ★ ROOT CAUSE, in videoflow: sidecar writes are not atomic
+
+Found 2026-09-26 from a dogfood console paste:
+
+    App: loadAudioBeats failed could not parse beats sidecar at
+    …\.averagejay … .forge\… .beats.json:
+    EOF while parsing a value at line 1 column 0
+
+**Column 0 of line 1 means the file was ZERO BYTES, not malformed.** Checked
+on disk seconds later: a valid 5487-byte sidecar, mtime 10:24. It was read
+mid-write.
+
+`videoflow/src/videoflow/audio_beats.py:66` —
+
+    def write_sidecar(media_path, data):
+        sp = sidecar_path(media_path)
+        Path(sp).parent.mkdir(parents=True, exist_ok=True)
+        with open(sp, "w") as f:            # ← truncates to 0 bytes HERE
+            json.dump(data, f, …)           # ← content arrives later
+
+`open(…, "w")` truncates the final path before a single byte of JSON is
+written, so any reader landing in that window sees an empty file. The same
+shape is at `videoflow/src/videoflow/sidecar.py:258` (`target.write_text(…)`),
+which is the bigger exposure — the spectrogram sidecar is 1.1 MB, so its
+truncation window is far wider than beats'.
+
+**Fix:** write beside the target and `os.replace` it in, which is atomic on
+both Windows and POSIX. funscriptforge already does exactly this for
+`export --replace` (`cli.py`, the `.part` + `os.replace` pattern) — the same
+reasoning applies to every sidecar.
+
+**Already mitigated on the reading side** (`commands.rs read_sidecar_text`,
+shipped here): all six sidecar readers now treat an existing-but-empty file
+as ABSENT rather than corrupt, so the error no longer reaches the console.
+That is correct behaviour on its own merits, but it is a second line of
+defence — with a non-atomic write a reader can still catch a *partially
+written* file, which parses as corrupt rather than empty. **The writer fix is
+the real one.**
+
+Deliberately not done in the same pass as the v0.6.20-alpha cut: it is a
+sibling repo, and funscriptforge's CI checks out videoflow's DEFAULT branch,
+so a change there lands in this repo's test results the moment it merges.
+
 ---
 
 ## Session 2026-08-09 (D22 verification dogfood — Madmartigan vol2/vol6)
