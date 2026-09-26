@@ -6,6 +6,43 @@ verify + commit) · ✅ committed.
 
 ---
 
+## ★ QUEUED FOR THE NEXT RELEASE (top of the list)
+
+Items promised for the version after v0.6.20-alpha. Newest request first.
+
+### 1. Footer should say "Loading events" with a progress ribbon (cosmetic)
+
+Requested 2026-09-26 during dogfood. Opening the Events tab reads its sidecar
+with **no footer feedback at all** — the tab simply sits there until the rows
+appear.
+
+**Verified, not assumed:** `ui/web/src/screens/EventsTab.jsx` contains no
+`setBusy` call of any kind. Every other long tab registers one; Events never
+did.
+
+**What makes this more than a one-liner:** there is no `events` operation to
+hang it on. `lib/progressChannels.js OPS` covers the eight *streaming CLI*
+commands, and loading events is a sidecar read (`feel.yml`) — no child
+process, so no `ff:progress:<op>` stream and nothing to drive a determinate
+ribbon from.
+
+So it needs a decision first:
+
+* **Indeterminate ribbon** — register a busy entry around the read and let the
+  footer show an unmeasured bar. Small, honest, and matches what the work
+  actually is. Recommended.
+* **Determinate ribbon** — only possible if the read is chunked (parse, then
+  count events, then hydrate) and reports its own fractions. More code, and
+  the read is usually fast enough that the bar would flash and vanish.
+
+Whichever is chosen, register through the busy registry
+(`lib/busyRegistry.js`) like everything else — `setBusy({ message: 'Loading
+events…' })` with a matching clear in a `finally` that is **not** gated on the
+effect cleanup's `cancelled` flag. That specific mistake is what stranded the
+phrases banner (see the 2026-09-25/26 entries below).
+
+---
+
 ## Session 2026-08-09 (D22 verification dogfood — Madmartigan vol2/vol6)
 
 Found while confirming the D22 audio-cache fix (which passed — see D22 above).
