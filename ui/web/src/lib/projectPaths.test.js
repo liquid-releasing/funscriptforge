@@ -129,7 +129,8 @@ describe('a video-only project still has a folder', () => {
   });
 
   it('the fallback chain the tab uses lands on a real folder', () => {
-    const dirPath = undefined                      // no readdir result
+    const fromReaddir = undefined;                 // no readdir result
+    const dirPath = fromReaddir
       ?? projectDirname(videoOnly)                 // no funscript
       ?? projectDirname(videoOnly.mediaPath);      // media
     expect(isRevealablePath(dirPath)).toBe(true);
@@ -137,7 +138,8 @@ describe('a video-only project still has a folder', () => {
 
   it('and still shows nothing for a sample project', () => {
     const sample = { path: 'sample://demo', mediaPath: 'sample://demo.mp4' };
-    const dirPath = undefined
+    const fromReaddir = undefined;
+    const dirPath = fromReaddir
       ?? projectDirname(sample)
       ?? projectDirname(sample.mediaPath);
     expect(dirPath).toBeUndefined();

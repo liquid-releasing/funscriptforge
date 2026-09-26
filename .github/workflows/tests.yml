@@ -156,6 +156,15 @@ jobs:
         working-directory: funscript-updater/ui/web
         run: npm ci
 
+      # Added 2026-09-26. `fdaafc6` shipped App.jsx calling `useMemo` without
+      # importing it: vite built it, vitest passed it (the suite never renders
+      # App), and the app booted to a white screen. `no-undef` and
+      # `react/jsx-no-undef` are errors here for exactly that class; style is
+      # not linted and warnings do not fail the build.
+      - name: eslint
+        working-directory: funscript-updater/ui/web
+        run: npx eslint .
+
       - name: vitest
         working-directory: funscript-updater/ui/web
         run: npx vitest run

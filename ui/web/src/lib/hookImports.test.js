@@ -10,14 +10,15 @@ import { fileURLToPath } from 'node:url';
 // and the whole vitest suite passed too, because vitest never renders App.
 // The app booted to a white screen with `useMemo is not defined`.
 //
-// There is no ESLint in this project, so nothing catches an undefined
-// identifier anywhere. A full lint setup is the real answer; until then this
-// covers the specific class that has bitten twice, costs no dependencies, and
-// runs in milliseconds.
+// ESLint now exists (added 2026-09-26) and `no-undef` is the real check --
+// it caught this exact case in a probe before the config was written, and it
+// runs in CI. This test is kept as a backstop underneath it: it fires during
+// `vitest run` with no lint step, needs no config to be correct, and costs
+// milliseconds.
 //
 // It is deliberately narrow: React hooks only, checked against what the file
 // imports from 'react'. It cannot catch every undefined name, and it is not
-// pretending to.
+// pretending to -- that is ESLint's job now.
 
 const REACT_HOOKS = [
   'useState', 'useEffect', 'useMemo', 'useCallback', 'useRef', 'useContext',

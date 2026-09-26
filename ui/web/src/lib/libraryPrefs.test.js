@@ -25,13 +25,13 @@ describe('library prefs round-trip', () => {
     });
   });
 
-  const useStorage = (s) => Object.defineProperty(globalThis, 'localStorage', {
+  const installStorage = (s) => Object.defineProperty(globalThis, 'localStorage', {
     value: s, configurable: true, writable: true,
   });
 
   it('remembers the chosen root across a remount', () => {
     const s = fakeStorage();
-    useStorage(s);
+    installStorage(s);
     saveLibraryPrefs({ activeRootPath: 'D:/lib', statusFilter: 'ready', sortKey: 'name' });
     expect(loadLibraryPrefs()).toEqual({
       activeRootPath: 'D:/lib', statusFilter: 'ready', sortKey: 'name',
@@ -39,7 +39,7 @@ describe('library prefs round-trip', () => {
   });
 
   it('defaults to all roots on first run', () => {
-    useStorage(fakeStorage());
+    installStorage(fakeStorage());
     expect(loadLibraryPrefs()).toEqual(DEFAULT_PREFS);
     expect(loadLibraryPrefs().activeRootPath).toBe(null);
   });
@@ -48,14 +48,14 @@ describe('library prefs round-trip', () => {
     // A screen that throws on mount because storage held junk is worse than
     // one that forgets a preference.
     for (const junk of ['{not json', 'null', '"a string"', '[]', '42']) {
-      useStorage(fakeStorage({ [KEY]: junk }));
+      installStorage(fakeStorage({ [KEY]: junk }));
       expect(() => loadLibraryPrefs()).not.toThrow();
       expect(loadLibraryPrefs().statusFilter).toBe(DEFAULT_PREFS.statusFilter);
     }
   });
 
   it('ignores wrong-typed fields rather than passing them through', () => {
-    useStorage(fakeStorage({
+    installStorage(fakeStorage({
       [KEY]: JSON.stringify({ activeRootPath: 42, statusFilter: [], sortKey: {} }),
     }));
     expect(loadLibraryPrefs()).toEqual(DEFAULT_PREFS);
@@ -64,7 +64,7 @@ describe('library prefs round-trip', () => {
   it('★ never throws when storage itself is unavailable', () => {
     // Private windows and blocked site data make the ACCESSOR throw, not just
     // return empty.
-    useStorage({
+    installStorage({
       getItem: () => { throw new Error('SecurityError'); },
       setItem: () => { throw new Error('SecurityError'); },
     });

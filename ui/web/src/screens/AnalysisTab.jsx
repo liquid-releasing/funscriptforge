@@ -537,6 +537,38 @@ export default function AnalysisTab({
     return () => { cancelled = true; };
   }, [project?.mediaPath, projectExists, isSample]);
 
+  // Cross-sidecar completeness check. The four tracked artifacts:
+  //   chapters, peaks, spectrogram, beats
+  // Each tracked prop is null when its sidecar is absent on disk
+  // (App's _doLoadAudioSidecars sets null on a missing/empty read),
+  // so prop presence is the honest "is this on disk?" signal.
+  // Phrases live downstream on the Phrases tab and don't surface here.
+  //
+  // We only surface the banner on 'partial' — everything else is
+  // already covered: 'loading' by the Header subtitle, 'error' by
+  // pipelineError on each panel, 'empty' by the Header no-media
+  // subtitle, 'complete' is the quiet success state.
+  const { analysisState, analysisSummary } = useMemo(
+    () => deriveAnalysisState({
+      hasMedia, analyzing, pipelineError,
+      chapterList, trackPeaks, trackSpectrogram, trackBeats,
+      chapterClipsPresent, directPlay: mediaDirectPlay,
+    }),
+    [hasMedia, analyzing, pipelineError,
+     chapterList, trackPeaks, trackSpectrogram, trackBeats,
+     chapterClipsPresent, mediaDirectPlay],
+  );
+
+  // ★ Hoisted above the early return below, not written here for style.
+  //
+  // It used to sit after `if (!projectExists) return …`, so rendering without
+  // a project ran one fewer hook than rendering with one. The moment a project
+  // opened while this tab was mounted, React's hook order changed under it --
+  // "rendered more hooks than during the previous render", which is a thrown
+  // error, not a degraded render. Every dependency is available by line 170,
+  // so there was never a reason for it to be down there. Found by
+  // `react-hooks/rules-of-hooks` on the day ESLint was added.
+
   // ── Empty state ─────────────────────────────────────────────────
   if (!projectExists) {
     return (
@@ -625,28 +657,6 @@ export default function AnalysisTab({
   // and no media, source stays null and the panel renders empty.
   const scriptSource = deriveScriptSource(project, trackPeaks);
   const pitchSource  = derivePitchSource(project, trackSpectrogram, trackPeaks);
-
-  // Cross-sidecar completeness check. The four tracked artifacts:
-  //   chapters, peaks, spectrogram, beats
-  // Each tracked prop is null when its sidecar is absent on disk
-  // (App's _doLoadAudioSidecars sets null on a missing/empty read),
-  // so prop presence is the honest "is this on disk?" signal.
-  // Phrases live downstream on the Phrases tab and don't surface here.
-  //
-  // We only surface the banner on 'partial' — everything else is
-  // already covered: 'loading' by the Header subtitle, 'error' by
-  // pipelineError on each panel, 'empty' by the Header no-media
-  // subtitle, 'complete' is the quiet success state.
-  const { analysisState, analysisSummary } = useMemo(
-    () => deriveAnalysisState({
-      hasMedia, analyzing, pipelineError,
-      chapterList, trackPeaks, trackSpectrogram, trackBeats,
-      chapterClipsPresent, directPlay: mediaDirectPlay,
-    }),
-    [hasMedia, analyzing, pipelineError,
-     chapterList, trackPeaks, trackSpectrogram, trackBeats,
-     chapterClipsPresent, mediaDirectPlay],
-  );
 
   // deriveAnalysisState reports 'loading' whenever chapters are missing, on the
   // assumption that the auto-trigger is about to run — so 'empty' never occurs
