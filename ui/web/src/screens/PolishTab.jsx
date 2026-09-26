@@ -233,7 +233,7 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
       : d.tcode
         ? `Forging ${d.label} — generating the multi-axis TCode set…`
         : `Forging ${d.label} — clamping the whole track…`;
-    setBusy({ message: forgingMsg });
+    setBusy({ message: forgingMsg, waitingFor: OPS.POLISH });
     // The forge streams per-chapter progress over this op's OWN channel
     // (run_cli_with_progress(&app, "polish", ...)). Pipe each line straight
     // into the footer message so a 13-chapter / ~30s forge advances
@@ -325,7 +325,7 @@ export default function PolishTab({ project, setAppError = () => {}, setBusy = (
     for (const d of targets) {
       setStamping(d.id);
       setStampError((e) => ({ ...e, [d.id]: null }));
-      setBusy({ message: `Forging ${d.label}…` });
+      setBusy({ message: `Forging ${d.label}…`, waitingFor: OPS.POLISH });
       try {
         const res = await polishApply(path, d.id, knobs[d.id]); // eslint-disable-line no-await-in-loop
         if (!res || res.error) {

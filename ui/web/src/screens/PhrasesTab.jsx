@@ -49,7 +49,12 @@ import { BEHAVIOR_TAGS } from '../data/transforms.js';
 import { useTransformCatalog } from '../data/useTransformCatalog.js';
 import { useTransformPreview } from '../api/useTransformPreview.js';
 import { SHAPE_TYPES, findShape } from '../data/shapes.js';
-import { analyzePhrases, loadPhrasesSidecar, transformApplyActions, saveWorkingFunscript } from '../api/forge.js';
+import {
+  analyzePhrases, loadPhrasesSidecar, transformApplyActions, saveWorkingFunscript,
+  onOpComplete,
+} from '../api/forge.js';
+import { OPS } from '../lib/progressChannels.js';
+import { withCompletionFallback } from '../lib/completionFallback.js';
 
 // Phrase helpers — duplicated from PatternsTab today. When a third
 // consumer appears, lift these into `src/lib/phrase_slice.js` or
@@ -426,6 +431,12 @@ export default function PhrasesTab({
     assessCancelledRef.current = false;
     setBusy?.({
       message: 'Assessing phrases…',
+      // ★ Declares the backend op this label is waiting on, so the op's
+      // completion event releases this entry. Without it the entry survived
+      // the op finishing — keyed `phrases`, which is neither `op:phrases` nor
+      // anything with `waitingFor` — and the stale banner gated the Channels
+      // tab's character/mechanical controls (dogfood 2026-09-26).
+      waitingFor: OPS.PHRASES,
       onCancel: () => {
         assessCancelledRef.current = true;
         cancelled = true;
@@ -441,7 +452,16 @@ export default function PhrasesTab({
       },
     });
     setAppError?.(null);
-    analyzePhrases(project.path)
+    // If the invoke reply is lost, recover from the sidecar this command has
+    // already written — otherwise `loaded` never becomes true and the tab
+    // re-runs assess on every remount.
+    withCompletionFallback(analyzePhrases(project.path), {
+      subscribe: (onComplete) => onOpComplete(OPS.PHRASES, onComplete),
+      recover: () => loadPhrasesSidecar(project.path)
+        .then((data) => (Array.isArray(data?.slices) ? data.slices : [])),
+      onRecover: () => console.warn(
+        'PhrasesTab: analyze_phrases reply was lost — recovered from the sidecar'),
+    })
       .then((rows) => {
         if (cancelled) return;
         setPhrasesByPath((prev) => ({
@@ -461,7 +481,12 @@ export default function PhrasesTab({
         }));
       })
       .finally(() => {
-        if (!cancelled) setBusy?.(null);
+        // ★ NOT gated on `cancelled`. Leaving the tab sets that flag in the
+        // cleanup below, so the gated version simply never cleared — the
+        // documented useEffect-cleanup/finally pitfall, and a second
+        // independent way this banner stranded. Clearing is idempotent and
+        // only ever removes this tab's own entry, so it is always safe.
+        setBusy?.(null);
       });
     return () => { cancelled = true; };
   }, [project?.path]);

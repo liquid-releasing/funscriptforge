@@ -241,7 +241,10 @@ export default function ExportTab({
   const doWrite = async () => {
     if (!canWrite || !modes.length) return;
     setWriting(true); setWriteError(null); setResults(null);
-    setBusy({ message: `Export — packaging ${modes.map(shapeLabel).join(' + ')}…` });
+    setBusy({
+      message: `Export — packaging ${modes.map(shapeLabel).join(' + ')}…`,
+      waitingFor: OPS.EXPORT,
+    });
     // Export streams per-step progress over its OWN channel (motion → stations
     // → thumbnails → audio → packaging). Pipe each line into the footer so a
     // slow export (unstamped-station generation, stim-audio render) visibly
