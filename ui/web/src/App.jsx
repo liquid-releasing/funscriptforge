@@ -7,7 +7,7 @@
 //   - Env badge: Tauri vs browser
 //   - Bridge ping: confirms the platform adapter is wired
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   TopBar, AcceptBar, StatusBar,
   Button, Pill,
