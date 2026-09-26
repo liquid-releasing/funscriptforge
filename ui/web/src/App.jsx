@@ -1056,7 +1056,12 @@ export default function App() {
     setOpenDialog(null);
     // Clear by token: a refresh can outlive the banner of whatever the user
     // starts next, and an unconditional clear would wipe theirs.
-    const token = beginBusy({ message: 'Updating your device files…' });
+    // `waitingFor` so the refresh op's completion event releases this entry
+    // directly, rather than relying on the reply-loss fallback below to
+    // settle first. Belt and braces for the headline feature.
+    const token = beginBusy({
+      message: 'Updating your device files…', waitingFor: OPS.REFRESH,
+    });
     try {
       // ★ The reply to this call is what went missing. Measured 2026-09-25:
       // Rust logged `refresh returning 580 bytes` and this promise never
