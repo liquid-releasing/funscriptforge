@@ -147,6 +147,7 @@ from pattern_catalog.phrase_transforms import (
 from pattern_catalog.transformer import FunscriptTransformer
 from user_customization.config import CustomizerConfig
 from user_customization.customizer import WindowCustomizer
+from forge.atomic_write import write_json_atomic
 from utils import ms_to_timestamp
 # visualizations.motion is imported LAZILY, inside cmd_visualize.
 #
@@ -778,8 +779,7 @@ def cmd_phrase_transform(args):
     # --- save ---
     data["actions"] = result
     output = args.output or _default_path(args.funscript, "_phrase_transformed.funscript")
-    with open(output, "w") as f:
-        json.dump(data, f, indent=2)
+    write_json_atomic(output, data, indent=2)
     print(f"\nSaved: {output}")
 
 
@@ -903,8 +903,7 @@ def cmd_transform_apply(args):
 
     data["actions"] = merged
     output = args.output or _default_path(args.funscript, "_transform_applied.funscript")
-    with open(output, "w") as f:
-        json.dump(data, f, indent=2)
+    write_json_atomic(output, data, indent=2)
     print(json.dumps({"saved": output, "transform": key, "spans": len(spans)}))
 
 
@@ -948,8 +947,7 @@ def cmd_finalize(args):
 
     data["actions"] = result
     output = args.output or _default_path(args.funscript, "_finalized.funscript")
-    with open(output, "w") as f:
-        json.dump(data, f, indent=2)
+    write_json_atomic(output, data, indent=2)
     print(f"\nSaved: {output}")
 
 
@@ -1855,7 +1853,7 @@ def cmd_export(args):
         # Always read the motion (duration + waveform need it) but only PACK
         # motion.funscript when the Strokers target is kept.
         if inc_strokers:
-            (staging / "motion.funscript").write_text(json.dumps(main), encoding="utf-8")
+            write_json_atomic(staging / "motion.funscript", main)
             artifacts.append({"path": "motion.funscript", "kind": "funscript", "role": "stroke", "axis": "L0"})
 
         # 2. Polish stations (accepted) -> stations/<id>/...
@@ -2755,8 +2753,7 @@ def cmd_export_plan(args):
 
     fs_data["actions"] = result
     output = args.output or _default_path(args.funscript, "_export.funscript")
-    with open(output, "w") as f:
-        json.dump(fs_data, f, indent=2)
+    write_json_atomic(output, fs_data, indent=2)
     print(f"Saved: {output}")
 
 
@@ -5481,8 +5478,7 @@ def cmd_device_aware(args):
         data["actions"] = fixed_actions
         out = args.output or _default_path(args.input, ".device-aware.funscript")
 
-    with open(out, "w", encoding="utf-8") as f:
-        json.dump(data, f)
+    write_json_atomic(out, data)
     print(f"Written: {out}")
 
 
@@ -5625,7 +5621,7 @@ def _write_funscript_like(path: Path, source_data: dict, actions: list) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     out = dict(source_data)
     out["actions"] = actions
-    path.write_text(json.dumps(out), encoding="utf-8")
+    write_json_atomic(path, out)
 
 
 # The 9-channel 3-phase e-stim set funscript-tools emits (same as
@@ -5683,8 +5679,7 @@ def _bake_events_into_channels(funscript_path: str, stem: str, raw: dict,
         for axis, acts in raw.items():
             doc = {k: v for k, v in templates.get(axis, {}).items()}
             doc["actions"] = sorted(acts, key=lambda a: a["at"])
-            (evdir / f"{stem}.{axis}.funscript").write_text(
-                json.dumps(doc), encoding="utf-8")
+            write_json_atomic(evdir / f"{stem}.{axis}.funscript", doc)
         ev_path = evdir / f"{stem}.events.yml"
         ev_path.write_text(events_body, encoding="utf-8")
 
@@ -5854,8 +5849,8 @@ def _polish_generate_estim(
                 )
             ramp_slice = slice_ramp(full_ramp, plo, phi)
             if ramp_slice:
-                (wdir / f"{stem}.ramp.funscript").write_text(
-                    json.dumps({"actions": ramp_slice}), encoding="utf-8")
+                write_json_atomic(wdir / f"{stem}.ramp.funscript",
+                                  {"actions": ramp_slice})
             # process() logs to stdout; keep our stdout JSON-clean.
             with contextlib.redirect_stdout(sys.stderr):
                 result = process(str(in_path), config, None)
@@ -6045,8 +6040,8 @@ def _polish_preview_estim_channels(funscript_path: str, start_ms: int, end_ms: i
                 )
             ramp_slice = slice_ramp(full_ramp, plo, phi)
             if ramp_slice:
-                (wdir / f"{stem}.ramp.funscript").write_text(
-                    json.dumps({"actions": ramp_slice}), encoding="utf-8")
+                write_json_atomic(wdir / f"{stem}.ramp.funscript",
+                                  {"actions": ramp_slice})
             with contextlib.redirect_stdout(sys.stderr):
                 result = process(str(in_path), config, None)
             if not result.get("success"):

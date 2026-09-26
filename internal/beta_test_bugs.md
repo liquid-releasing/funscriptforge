@@ -41,7 +41,7 @@ events…' })` with a matching clear in a `finally` that is **not** gated on the
 effect cleanup's `cancelled` flag. That specific mistake is what stranded the
 phrases banner (see the 2026-09-25/26 entries below).
 
-### 2. ★ ROOT CAUSE, in videoflow: sidecar writes are not atomic
+### 2. ✅ DONE — ROOT CAUSE, in videoflow: sidecar writes were not atomic
 
 Found 2026-09-26 from a dogfood console paste:
 
@@ -80,9 +80,31 @@ defence — with a non-atomic write a reader can still catch a *partially
 written* file, which parses as corrupt rather than empty. **The writer fix is
 the real one.**
 
-Deliberately not done in the same pass as the v0.6.20-alpha cut: it is a
-sibling repo, and funscriptforge's CI checks out videoflow's DEFAULT branch,
-so a change there lands in this repo's test results the moment it merges.
+**✅ FIXED 2026-09-26** — videoflow `0341a05`, on `main` and pushed.
+`videoflow/src/videoflow/atomic_write.py` publishes via a sibling temp file
+and `os.replace`; nine writers use it. Gated on funscriptforge's full Python
+suite first (1212 passed, unchanged), since CI checks out videoflow's default
+branch.
+
+★ **The concurrency test found what reasoning did not.** On Windows
+`os.replace` fails with `PermissionError` (WinError 5) when the DESTINATION is
+open without FILE_SHARE_DELETE -- exactly how Python's `open()` reads a file.
+POSIX does not care. So on the shipping platform the contended case is the
+NORMAL case, and a naive atomic write trades an occasional bad read for an
+occasional hard write FAILURE -- which would have shipped, because CI runs on
+Linux where the test passes either way. The replace now retries on a bounded
+deadline and RAISES rather than falling back to a truncating write.
+
+**Follow-up, same pass:** funscriptforge's own funscript writers had the same
+problem, where truncation means losing the user's edits rather than a cache.
+`forge/atomic_write.py` (a deliberate mirror of videoflow's) now backs nine
+`cli.py` funscript writes.
+
+**Still open, deliberately:** the AUTHORED sidecars in `cli.py` -- `feel.yml`,
+`characters.json`, `passages.json`, `polish.yml`, `<stem>.ffmeta.json` -- are
+still written with `write_text`. They are user data too, so they are the next
+tier; they were left out to keep the release-eve diff to the class that was
+actually reported.
 
 ---
 
