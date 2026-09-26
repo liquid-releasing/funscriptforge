@@ -11,6 +11,8 @@
 // configured, calls fall back to mock data and UI iteration can proceed
 // without the Rust toolchain.
 
+import { trace, traceEnabled } from '../lib/trace.js';
+
 export function isTauri() {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
@@ -37,26 +39,29 @@ export function analyzerVersionStale(stampedVersion) {
 // unset, browser mode falls through to mocks.
 const HTTP_BASE = import.meta.env?.VITE_API_BASE_URL || null;
 
-// [ff-trace] Which commands to time end-to-end in the console. Pairs with the
+// Times every invoke end-to-end when tracing is on, and pairs with the
 // `[ff-trace]` lines Rust prints for the same command, so a stuck UI can be
 // attributed: Rust logging "returning" with no matching JS "settled" means the
 // IPC reply was lost; no Rust "child exited" means the command never finished.
-const TRACED = new Set(['analyze_phrases', 'analyze_chapters_with_videoflow']);
+//
+// This used to be a hardcoded set of two commands, which meant the next
+// investigation started by editing this file to add whatever was stuck. Now it
+// covers everything and is simply off by default -- see lib/trace.js.
 let _traceSeq = 0;
 
 async function call(command, args, mockFn) {
   if (isTauri()) {
     const { invoke } = await import('@tauri-apps/api/core');
-    if (!TRACED.has(command)) return invoke(command, args);
+    if (!traceEnabled()) return invoke(command, args);
     const n = ++_traceSeq;
     const t0 = Date.now();
-    console.debug(`[ff-trace] #${n} ${command} invoked`);
+    trace(`#${n} ${command} invoked`);
     try {
       const out = await invoke(command, args);
-      console.debug(`[ff-trace] #${n} ${command} settled ok in ${Date.now() - t0}ms`);
+      trace(`#${n} ${command} settled ok in ${Date.now() - t0}ms`);
       return out;
     } catch (err) {
-      console.debug(`[ff-trace] #${n} ${command} REJECTED in ${Date.now() - t0}ms`, err);
+      trace(`#${n} ${command} REJECTED in ${Date.now() - t0}ms`, err);
       throw err;
     }
   }

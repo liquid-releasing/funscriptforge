@@ -554,6 +554,35 @@ fn cli_command(args: &[&str]) -> Command {
 // forge-cli + ffmpeg children — they kept burning CPU AND held a lock on the
 // source video, so the next open couldn't touch the file. In-process so it
 // survives webview reloads (the Rust side outlives them).
+/// Whether to print `[ff-trace]` process-lifecycle lines. Off unless
+/// `FF_TRACE=1` is in the environment.
+///
+/// ★ Why this is a gate and not a delete.
+///
+/// These lines ended a multi-round stuck-banner hunt: they are what proved a
+/// command had returned 5016 bytes while the JS promise never settled, which
+/// is the difference between "python is hung" and "the IPC reply was lost" --
+/// two faults with completely different fixes. Removing them would mean
+/// rebuilding them from memory the next time something hangs.
+///
+/// They are also not free. stderr is invisible in a packaged GUI build, but a
+/// user running the binary from a console gets four lines per command, and
+/// noise like that makes a real message harder to see. The JS half has the
+/// same switch (`ffTrace(true)` -- see `src/lib/trace.js`).
+static TRACE: OnceLock<bool> = OnceLock::new();
+
+fn trace_enabled() -> bool {
+    *TRACE.get_or_init(|| std::env::var("FF_TRACE").as_deref() == Ok("1"))
+}
+
+macro_rules! ff_trace {
+    ($($arg:tt)*) => {
+        if trace_enabled() {
+            eprintln!("[ff-trace] {}", format!($($arg)*));
+        }
+    };
+}
+
 static ACTIVE_CHILDREN: OnceLock<Mutex<HashSet<u32>>> = OnceLock::new();
 fn active_children() -> &'static Mutex<HashSet<u32>> {
     ACTIVE_CHILDREN.get_or_init(|| Mutex::new(HashSet::new()))
@@ -810,22 +839,22 @@ async fn run_cli_with_progress(
     //                            -> the IPC reply was lost (Tauri's event
     //                               layer leaks listeners in 2.11).
     //
-    // Cheap, and stderr-only, so it costs nothing in a packaged build.
-    eprintln!("[ff-trace] {} spawned pid={:?}", op, child_pid);
+    // Off unless FF_TRACE=1 -- see `trace_enabled` for why it is kept.
+    ff_trace!("{} spawned pid={:?}", op, child_pid);
     let output = child
         .wait_with_output()
         .await
         .map_err(|e| format!("wait python failed: {}", e))?;
-    eprintln!("[ff-trace] {} child exited status={:?}", op, output.status.code());
+    ff_trace!("{} child exited status={:?}", op, output.status.code());
     if let Some(p) = child_pid {
         deregister_child(p);
     }
 
     let _ = cancel_tx.send(());
     let _ = polling.await;
-    eprintln!("[ff-trace] {} poller joined", op);
+    ff_trace!("{} poller joined", op);
     let _ = tokio::fs::remove_file(&temp_path).await;
-    eprintln!("[ff-trace] {} returning {} bytes", op, output.stdout.len());
+    ff_trace!("{} returning {} bytes", op, output.stdout.len());
 
     // ★ Completion signal, because the invoke REPLY is not reliable.
     //

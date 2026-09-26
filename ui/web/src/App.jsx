@@ -28,6 +28,7 @@ import { chooseOpenPrompt, outputsNeedWork } from './lib/openPrompt.js';
 import { chainArtifactFor, stemFromPath } from './lib/chainArtifact.js';
 import { analysisBlocksChain } from './lib/chainGate.js';
 import { DEFAULT_STALL_MS } from './lib/stallWatchdog.js';
+import { trace, traceEnabled } from './lib/trace.js';
 import {
   emptyOps, registerOp, deregisterOp, updateOp, expireStaleOps, toBusy,
   completeOp,
@@ -166,12 +167,13 @@ export default function App() {
   // navigates while work runs, and every stuck-banner bug on 2026-09-25 came
   // from that mismatch. Each operation touches only its own entry, so there
   // is nothing to arbitrate and nothing to strand.
-  // [ff-trace] What is in flight, after every change. Three rounds of fixing
-  // a stuck banner were aimed by inference; this names the entries outright,
-  // so "which one is stuck" stops being a guess.
+  // What is in flight, after every change. Three rounds of fixing a stuck
+  // banner were aimed by inference; this names the entries outright, so
+  // "which one is stuck" stops being a guess. Off unless `ffTrace(true)`.
   const traceOps = (why, next) => {
+    if (!traceEnabled()) return;
     const keys = Object.keys(next);
-    console.warn(`[ff-trace] ops after ${why}:`,
+    trace(`ops after ${why}:`,
       keys.length ? keys.map((k) => `${k}(${next[k].message || '-'})`).join(', ') : '(none)');
   };
   const [ops, setOps] = useState(emptyOps);
