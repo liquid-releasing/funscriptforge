@@ -6,6 +6,36 @@ Items are loosely ordered by dependency and value. Move to DONE when shipped.
 
 ## Open — v1 Ship
 
+### `.forge` bundle — renditions and completion
+
+Two additions to the `ffmeta` manifest, specified in
+`internal/DESIGN_forge_bundle_renditions_and_completion.md`. FunscriptForge
+authors the format, so the schema change belongs here even though
+ForgeAssembler is the app that needs it first.
+
+1. **`renditions`** — one scene, several video files at different sizes
+   (4K to keep, 1080p to share). A sibling of `media`, not a retype of it.
+   Each entry carries its own relink key plus width/height/fps so ForgePlayer
+   can offer a quality picker without opening files. The list is
+   **candidates, not promises**: ship the 1080p to someone and their bundle
+   references a 4K they do not have, which must be normal rather than an
+   error.
+
+2. **`completion`** — `{state, at, by}`. The Viewer's red checkmark marks a
+   real moment ("yep, I am finished") and currently that moment evaporates
+   when the app closes. Record it in the `.forge` and show it on Home /
+   recents, so a finished project looks finished next session.
+   **FunscriptForge should do this too**, not just ForgeAssembler — FSF's
+   accept button is where the idea comes from.
+
+   It must gate nothing. It is a note the author left themselves.
+
+⚠ **Do it while breaking is cheap.** As of 2026-09-28 the author is the only
+user of FSF and ForgeAssembler, and `.forge` files have not been released to
+ForgePlayer users. That window closes.
+
+---
+
 ### Desktop app — native file picker for funscript input
 
 When running as the desktop app, replace Streamlit's drag-and-drop uploader
