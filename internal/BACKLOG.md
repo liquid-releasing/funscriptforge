@@ -6,6 +6,42 @@ Items are loosely ordered by dependency and value. Move to DONE when shipped.
 
 ## Open — v1 Ship
 
+### Say which channels a mechanical style will NOT produce
+
+Choosing a multi-axis style silently decides which axes a scene will ever
+have. Measured from `MULTIAXIS_PRESETS`:
+
+| Style | Axes emitted |
+| ----- | ------------ |
+| Riding, Random | twist, roll, pitch, **surge, sway** |
+| Cowgirl | twist, roll, pitch |
+| Missionary | roll, pitch |
+| Doggy | **pitch only** |
+
+`surge` and `sway` exist for exactly two styles. Nothing says so at the
+point of choosing, so the absence is invisible until much later — in
+ForgeAssembler, which compares scenes against each other and reports every
+difference as a gap. A compilation mixing a Riding scene with a Doggy one
+shows four missing channels on the Doggy scene, and the author has no way to
+tell whether that was a decision they made or something that went wrong.
+
+**The ask:** at the point the style is picked, say what it produces and what
+it does not. A line under the picker is enough — "Doggy generates pitch only;
+no twist, roll, surge or sway". Same idea for stations: if a station is not
+selected, the scene will never carry its channels, and that should be
+visible while authoring rather than discovered in another app.
+
+This is about making a CHOICE legible, not about generating more. The user's
+position (2026-09-28): *"surge and sway aren't really gaps... when a forge is
+created the user picks the devices / stations. should we call it out. i think
+we should. but no fix is needed."*
+
+ForgeAssembler's side is done — the gap badge is documented there as a
+difference rather than a fault (`docs/guide/channels.md`, "A gap is a
+difference, not a fault").
+
+---
+
 ### `.forge` bundle — renditions and completion
 
 Two additions to the `ffmeta` manifest, specified in
