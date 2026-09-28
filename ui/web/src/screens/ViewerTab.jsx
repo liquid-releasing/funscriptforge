@@ -5,52 +5,23 @@
 // + intensity arc on top, every channel below) so inconsistencies pop — e.g.
 // a soft intro vs. a hot body. A right-panel monitor + one big baton tie the
 // lanes to the source frame. No comparison, no editing — pure review.
+//
+// The surface itself is forgemoment's `ViewerPanel`, shared with
+// ForgeAssembler and ForgePlayer. What stays here is everything that is
+// FunscriptForge's: where the output lives (`viewer_load` scans
+// `<stem>.output/` or a `.forge` bundle beside the media), how a path becomes
+// a URL this webview can load, and the vocabulary of the empty state — "export
+// it on the Export tab" means nothing in the other two apps.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MediaViewer } from 'forgemoment';
-import ChannelStack from './ChannelStack.jsx';
+import { useCallback, useEffect, useState } from 'react';
+import { ViewerPanel } from 'forgemoment';
 import { viewerLoad } from '../api/forge.js';
-import { analyzeChannels, livelinessInWindow, posAt } from '../lib/forgeStats.js';
 import { toMediaUrl } from '../lib/mediaUrl.js';
-import { resolveMonitorFunscript } from '../lib/monitorChannel.js';
-
-// Intensity arc: prefer the felt `volume` channel; else a normalized velocity
-// envelope of the device's primary channel. Returns [{ at, v:0..1 }].
-function computeIntensity(channels, durationMs, bins = 320) {
-  if (!channels.length || durationMs <= 0) return [];
-  const vol = channels.find((c) => c.name === 'volume' || c.name === 'volume-prostate');
-  const step = durationMs / bins;
-  if (vol && vol.actions.length > 1) {
-    return Array.from({ length: bins + 1 }, (_, i) => {
-      const at = i * step;
-      return { at, v: Math.max(0, Math.min(1, posAt(vol.actions, at) / 100)) };
-    });
-  }
-  // velocity envelope of the densest channel
-  const ch = channels.reduce((a, b) => (b.actions.length > a.actions.length ? b : a), channels[0]);
-  const a = ch.actions;
-  const binMax = new Array(bins + 1).fill(0);
-  let gmax = 0;
-  for (let i = 1; i < a.length; i += 1) {
-    const dt = Math.max(1, a[i].at - a[i - 1].at);
-    const v = Math.abs(a[i].pos - a[i - 1].pos) / dt;
-    const bi = Math.min(bins, Math.floor(a[i].at / step));
-    if (v > binMax[bi]) binMax[bi] = v;
-    if (v > gmax) gmax = v;
-  }
-  if (gmax === 0) gmax = 1;
-  return binMax.map((v, i) => ({ at: i * step, v: v / gmax }));
-}
 
 export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram = null }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [deviceName, setDeviceName] = useState(null);
-  const [selectedChannel, setSelectedChannel] = useState(null);
-  const [currentMs, setCurrentMs] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [loadErr, setLoadErr] = useState(null);
-  const videoElRef = useRef(null);
 
   const loadKey = project?.mediaPath || project?.path || null;
 
@@ -65,45 +36,6 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
     return () => { live = false; };
   }, [loadKey]);
 
-  const devices = data?.devices || [];
-  // Default to the first device (E-Stim sorts first) once data lands.
-  useEffect(() => {
-    if (devices.length && !devices.find((d) => d.name === deviceName)) {
-      setDeviceName(devices[0].name);
-    }
-  }, [devices, deviceName]);
-
-  const device = devices.find((d) => d.name === deviceName) || devices[0] || null;
-  const durationMs = data?.durationMs || project?.durationMs || 0;
-  const channels = device?.channels || [];
-
-  // The monitor windows down to a few seconds, so the center lane's decimated
-  // min/max envelope reads as a zigzag there. Fetch the SELECTED channel at full
-  // resolution (time-uniform) so the monitor shows real strokes.
-  const monitorChannelName = selectedChannel || channels[0]?.name || null;
-  const [monitorActions, setMonitorActions] = useState([]);
-  useEffect(() => {
-    if (!loadKey || !device || !monitorChannelName) { setMonitorActions([]); return undefined; }
-    let live = true;
-    viewerLoad(loadKey, { channel: `${device.name}/${monitorChannelName}` })
-      .then((res) => { if (live) setMonitorActions(res?.actions?.length ? res.actions : []); })
-      .catch(() => { if (live) setMonitorActions([]); });
-    return () => { live = false; };
-  }, [loadKey, device, monitorChannelName]);
-
-  // Fall back to the decimated center-lane actions until the full-res fetch
-  // lands — but only ever for the SAME channel. The previous shape ended in
-  // `|| channels[0]`, so an unresolved name (device switch, or before
-  // `channels` reloaded) rendered a DIFFERENT channel's curve while the label
-  // still named the selected one. See lib/monitorChannel.js.
-  const monitorResolved = useMemo(
-    () => resolveMonitorFunscript(monitorActions, channels, monitorChannelName),
-    [monitorActions, channels, monitorChannelName],
-  );
-  const monitorFunscript = useMemo(
-    () => ({ actions: monitorResolved.actions }), [monitorResolved],
-  );
-
   // The 16k audio is fine for the full-timeline lane (it re-bins to pixel
   // width) but blocky in the monitor's ~12s window. Fetch a high-res envelope
   // once per project for the monitor only.
@@ -117,42 +49,10 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
     return () => { live = false; };
   }, [loadKey]);
 
-  const intensity = useMemo(() => computeIntensity(channels, durationMs), [channels, durationMs]);
-  const summary = useMemo(() => analyzeChannels(channels, durationMs), [channels, durationMs]);
-
-  // Per-chapter liveliness — where the output sags vs. peaks. Reflects the
-  // selected channel when one is picked, else the whole device. This is what
-  // surfaces a soft intro as a number, not just a dip in the arc.
-  const chaptersData = data?.chapters || [];
-  const perChapter = useMemo(() => {
-    if (!chaptersData.length || !channels.length) return [];
-    const scope = selectedChannel
-      ? channels.filter((c) => c.name === selectedChannel)
-      : channels;
-    return chaptersData.map((ch, i) => ({
-      ...ch,
-      idx: i + 1,
-      ...livelinessInWindow(scope, ch.start, ch.end),
-    }));
-  }, [chaptersData, channels, selectedChannel]);
-  const liveValues = perChapter.map((c) => c.liveliness).filter((v) => v != null);
-  const liveMax = liveValues.length ? Math.max(...liveValues) : 1;
-  const screech = data?.screech || null;
-  const screechRegions = screech?.source_screech_regions || [];
-  const capCount = screech?.generation_cap_regions?.length || 0;
-
-  // Prefer the live-analysis peaks if the project was analyzed this session;
-  // otherwise use the peaks the loader pulled from the export/.forge so the
-  // audio lane works on a finished, unanalyzed project too.
-  const audioWaveform = (trackPeaks?.peaks?.length ? trackPeaks : null)
-    || (data?.audio?.peaks?.length ? data.audio : null);
-  const events = data?.events || [];
-  const beats = data?.beats || null;
-  const spectrogramUrl = data?.spectrogramPng ? toMediaUrl(data.spectrogramPng) : null;
-  const getLiveMs = useCallback(() => {
-    const v = videoElRef.current;
-    return v ? v.currentTime * 1000 : null;
-  }, []);
+  const loadChannel = useCallback(
+    (device, channel) => viewerLoad(loadKey, { channel: `${device}/${channel}` }),
+    [loadKey],
+  );
 
   // The Viewer reviews the EXPORTED output, not the working funscript — so it
   // must NOT require project.path. A finished/media-only project has no working
@@ -171,6 +71,7 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
     return <section style={{ padding: 24 }}><h2>Viewer</h2><p>Loading output…</p></section>;
   }
 
+  const devices = data?.devices || [];
   if (!data?.available || !devices.length) {
     return (
       <section className="ff-placeholder" style={{ padding: 24 }}>
@@ -188,183 +89,32 @@ export default function ViewerTab({ project, trackPeaks = null, trackSpectrogram
     );
   }
 
+  // Prefer the live-analysis peaks if the project was analyzed this session;
+  // otherwise use the peaks the loader pulled from the export/.forge so the
+  // audio lane works on a finished, unanalyzed project too.
+  const audio = (trackPeaks?.peaks?.length ? trackPeaks : null)
+    || (data?.audio?.peaks?.length ? data.audio : null);
+
   return (
-    <section style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      {/* Header — device picker + screech note */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
-                    borderBottom: '1px solid var(--border, #2d3148)', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase',
-                       color: 'var(--text-muted, #9ba3c4)', marginRight: 4 }}>Device</span>
-        {devices.map((d) => (
-          <button key={d.name} type="button" onClick={() => { setDeviceName(d.name); setSelectedChannel(null); }}
-            style={{
-              padding: '5px 12px', borderRadius: 999, cursor: 'pointer', fontSize: 13,
-              border: '1px solid var(--border, #2d3148)',
-              background: d.name === deviceName ? 'var(--accent, #ff4b4b)' : 'transparent',
-              color: d.name === deviceName ? '#fff' : 'var(--text, #fafafa)',
-            }}>
-            {d.name} <span style={{ opacity: 0.6, fontSize: 11 }}>· {d.channels.length}</span>
-          </button>
-        ))}
-        <span style={{ flex: 1 }} />
-        {(screechRegions.length > 0 || capCount > 0) && (
-          <span title="A screech was detected and tamed at generation"
-                style={{ fontSize: 12, color: 'var(--warn, #ffb547)' }}>
-            ⚠ {screechRegions.length} screech tamed{capCount ? ` · ${capCount} caps` : ''}
-          </span>
-        )}
-      </div>
-
-      {/* Body — stats | lanes | monitor */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        {/* Left — whole-device stats */}
-        <aside style={{ width: 200, flexShrink: 0, padding: '12px 14px', overflowY: 'auto',
-                        borderRight: '1px solid var(--border, #2d3148)' }}>
-          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
-                        color: 'var(--text-muted, #9ba3c4)', marginBottom: 8 }}>{device?.name}</div>
-          <StatRow label="Liveliness" value={summary.liveliness} big />
-          <StatRow label="Channels" value={summary.channelCount} />
-          <StatRow label="Actions" value={summary.totalActions.toLocaleString()} />
-          <StatRow label="Density" value={`${summary.actionsPerSec.toFixed(2)}/s`} />
-          <StatRow label="Usable range" value={`${Math.round(summary.usableRange)}`} />
-          <StatRow label="Avg velocity" value={`${Math.round(summary.avgVelocity)}`} />
-          <StatRow label="Avg stroke" value={`${Math.round(summary.avgStroke)}`} />
-          {selectedChannel && (
-            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border, #2d3148)' }}>
-              <div style={{ fontSize: 11, color: 'var(--accent, #ff4b4b)', marginBottom: 6 }}>{selectedChannel}</div>
-              {(() => {
-                const pc = summary.perChannel.find((p) => p.name === selectedChannel);
-                if (!pc) return <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>—</div>;
-                return <>
-                  <StatRow label="Liveliness" value={pc.liveliness} />
-                  <StatRow label="Density" value={`${pc.actionsPerSec.toFixed(2)}/s`} />
-                  <StatRow label="Range" value={`${Math.round(pc.usableRange)}`} />
-                </>;
-              })()}
-            </div>
-          )}
-
-          {/* Per-chapter liveliness — click a chapter to seek there. Reflects
-              the selected channel when one is picked, else the whole device. */}
-          {perChapter.length > 0 && (
-            <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid var(--border, #2d3148)' }}>
-              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
-                            color: 'var(--text-muted, #9ba3c4)', marginBottom: 6 }}>
-                Per chapter{selectedChannel ? ` · ${selectedChannel}` : ''}
-              </div>
-              {perChapter.map((c) => {
-                const v = c.liveliness;
-                const pct = v != null ? Math.max(3, (v / Math.max(1, liveMax)) * 100) : 0;
-                // Warm where lively, dim where it sags — a soft chapter reads cool.
-                const hot = v != null ? v / Math.max(1, liveMax) : 0;
-                const bar = v == null ? 'var(--border, #2d3148)'
-                  : `hsl(${20 + hot * 20}, ${40 + hot * 45}%, ${42 + hot * 10}%)`;
-                return (
-                  <button key={c.idx} type="button"
-                    onClick={() => setCurrentMs(Math.max(0, Math.min(durationMs, c.start)))}
-                    title={`${c.name}${c.tone ? ` · ${c.tone}` : ''} — liveliness ${v ?? '—'}`}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-                             padding: '3px 0', background: 'none', border: 'none', cursor: 'pointer',
-                             textAlign: 'left' }}>
-                    <span style={{ width: 16, flexShrink: 0, fontSize: 10, fontFamily: 'var(--font-mono, monospace)',
-                                   color: 'var(--text-dim, #6b7390)' }}>{c.idx}</span>
-                    <span style={{ flex: 1, height: 8, borderRadius: 3, overflow: 'hidden',
-                                   background: 'rgba(255,255,255,0.06)' }}>
-                      <span style={{ display: 'block', height: '100%', width: `${pct}%`, background: bar }} />
-                    </span>
-                    <span style={{ width: 20, flexShrink: 0, textAlign: 'right', fontSize: 11,
-                                   fontFamily: 'var(--font-mono, monospace)', color: 'var(--text, #fafafa)' }}>
-                      {v ?? '—'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </aside>
-
-        {/* Center — the lane stack (the star) */}
-        <main style={{ flex: 1, minWidth: 0, padding: '8px 12px', overflowY: 'auto' }}>
-          <ChannelStack
-            channels={channels}
-            waveform={audioWaveform}
-            spectrogram={trackSpectrogram}
-            spectrogramUrl={spectrogramUrl}
-            intensity={intensity}
-            events={events}
-            beats={beats}
-            screechRegions={screechRegions}
-            durationMs={durationMs}
-            currentMs={currentMs}
-            getLiveMs={getLiveMs}
-            onSeek={(ms) => setCurrentMs(Math.max(0, Math.min(durationMs, ms)))}
-            selectedChannel={selectedChannel}
-            onSelectChannel={setSelectedChannel}
-          />
-        </main>
-
-        {/* Right — reference monitor, synced to the same baton. Kept narrow so
-            the lane stack (the star) gets the width. */}
-        <aside style={{ width: 272, flexShrink: 0, padding: 12,
-                        borderLeft: '1px solid var(--border, #2d3148)' }}>
-          <MediaViewer
-            width="100%"
-            videoElRef={videoElRef}
-            thumbnailAspect="16/9"
-            videoSrc={toMediaUrl(project?.mediaPath)}
-            media={{ kind: project?.mediaKind ?? 'video', title: 'Full timeline' }}
-            funscript={monitorFunscript}
-            audioWaveform={monitorAudio || audioWaveform}
-            spectrogram={trackSpectrogram}
-            hideEmptySpectro
-            beats={beats}
-            batonColorByBeat
-            batonWidth={4}
-            currentMs={currentMs}
-            totalMs={durationMs}
-            isPlaying={isPlaying}
-            onPlayPause={() => setIsPlaying((p) => !p)}
-            onSeek={(ms) => setCurrentMs(Math.max(0, Math.min(durationMs, ms)))}
-            onTimeChange={(ms) => setCurrentMs(Math.max(0, Math.min(durationMs, ms)))}
-            controls={['back1', 'frame-back', 'play', 'frame-forward', 'forward1']}
-            showSpeed
-            showMark={false}
-            modeToggleAlign="start"
-            modeToggleSize="sm"
-          />
-        </aside>
-      </div>
-
-      {/* Footer — which output we're reviewing. With the sibling fallback you
-          may open the 4K but be reading the 1080p .output; this tells you so. */}
-      <div title={data?.sourcePath || ''}
-           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 14px',
-                    borderTop: '1px solid var(--border, #2d3148)', fontSize: 11,
-                    color: 'var(--text-dim, #6b7390)', fontFamily: 'var(--font-mono, monospace)',
-                    whiteSpace: 'nowrap', overflow: 'hidden' }}>
-        <span style={{ textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0,
-                       color: 'var(--text-muted, #9ba3c4)' }}>
-          {data?.source === 'forge' ? 'Bundle' : 'Output'}
-        </span>
-        <span style={{ flexShrink: 0, color: 'var(--text, #fafafa)' }}>
-          {data?.sourceName || '—'}
-        </span>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', opacity: 0.7 }}>
-          {data?.sourcePath || ''}
-        </span>
-      </div>
-    </section>
-  );
-}
-
-function StatRow({ label, value, big = false }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                  padding: '3px 0' }}>
-      <span style={{ fontSize: 12, color: 'var(--text-muted, #9ba3c4)' }}>{label}</span>
-      <span style={{ fontSize: big ? 20 : 13, fontWeight: big ? 700 : 600,
-                     color: big ? 'var(--accent-warm-2, #ffb547)' : 'var(--text, #fafafa)',
-                     fontFamily: 'var(--font-mono, monospace)' }}>{value}</span>
-    </div>
+    <ViewerPanel
+      devices={devices}
+      durationMs={data?.durationMs || project?.durationMs || 0}
+      chapters={data?.chapters || []}
+      audio={audio}
+      monitorAudio={monitorAudio}
+      beats={data?.beats || null}
+      events={data?.events || []}
+      spectrogram={trackSpectrogram}
+      spectrogramUrl={data?.spectrogramPng ? toMediaUrl(data.spectrogramPng) : null}
+      screech={data?.screech || null}
+      mediaUrl={toMediaUrl(project?.mediaPath)}
+      mediaKind={project?.mediaKind ?? 'video'}
+      loadChannel={loadChannel}
+      source={{
+        label: data?.source === 'forge' ? 'Bundle' : 'Output',
+        name: data?.sourceName,
+        path: data?.sourcePath,
+      }}
+    />
   );
 }
